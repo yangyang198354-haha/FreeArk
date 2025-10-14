@@ -1,0 +1,19 @@
+﻿Sub AddHeaderToExcel()
+    ' Add header row
+    Rows(1).Insert Shift:=xlDown, CopyOrigin:=xlFormatFromLeftOrAbove
+    Range("A1").Value = "Building"
+    Range("B1").Value = "IP Address"
+    Range("C1").Value = "MAC Address"
+    
+    ' Set header style
+    Range("A1:C1").Font.Bold = True
+    Range("A1:C1").HorizontalAlignment = xlCenter
+    
+    ' Auto-fit columns
+    Columns("A:C").AutoFit
+    
+    ' Save file
+    ActiveWorkbook.Save
+    
+    MsgBox "Header added successfully!"
+End Sub

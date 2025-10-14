@@ -1,0 +1,2 @@
+C:\Program Files\Python312\python.exe
+C:\Program Files\Python312\Lib\venv\scripts\nt\python.exe

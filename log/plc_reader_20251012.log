@@ -1,0 +1,41 @@
+2025-10-12 20:53:53,527 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 20:53:54,037 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 20:53:54,038 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 20:53:54,042 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 21:02:47,237 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 21:02:47,541 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:02:47,541 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:02:47,558 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 21:08:16,425 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 21:08:16,538 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:08:16,538 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:08:16,547 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 21:41:57,922 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 21:41:58,039 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:41:58,040 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:41:58,049 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 21:44:50,617 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 21:44:50,708 - plc_reader - INFO - ✅ 成功连接PLC：192.168.3.27
+2025-10-12 21:44:50,717 - plc_reader - INFO - ✅ 已断开PLC连接：192.168.3.27
+2025-10-12 21:44:53,650 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.27 - b' ISO : An error occurred during recv TCP : Connection timed out'
+2025-10-12 21:44:54,043 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 21:44:54,052 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 22:22:15,612 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 22:22:15,789 - plc_reader - INFO - ✅ 成功连接PLC：192.168.3.27
+2025-10-12 22:22:15,802 - plc_reader - INFO - ✅ 已断开PLC连接：192.168.3.27
+2025-10-12 22:22:16,039 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.27 - b' TCP : Unreachable peer'
+2025-10-12 22:22:16,544 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.26 - b' TCP : Unreachable peer'
+2025-10-12 22:22:16,550 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 22:44:40,768 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 22:44:41,038 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.27 - b' TCP : Unreachable peer'
+2025-10-12 22:44:41,038 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.27 - b' TCP : Unreachable peer'
+2025-10-12 22:44:41,042 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 22:52:28,424 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 22:52:28,502 - plc_reader - INFO - ✅ 成功连接PLC：192.168.3.27
+2025-10-12 22:52:28,510 - plc_reader - INFO - ✅ 已断开PLC连接：192.168.3.27
+2025-10-12 22:52:28,540 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.27 - b' TCP : Unreachable peer'
+2025-10-12 22:52:28,548 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
+2025-10-12 23:05:49,804 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-12 23:05:49,884 - plc_reader - INFO - ✅ 成功连接PLC：192.168.3.27
+2025-10-12 23:05:49,904 - plc_reader - INFO - ✅ 已断开PLC连接：192.168.3.27
+2025-10-12 23:05:49,913 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭

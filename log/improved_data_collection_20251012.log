@@ -1,0 +1,90 @@
+2025-10-12 21:44:50,617 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已启动，线程池大小：10
+2025-10-12 21:44:50,619 - improved_data_collection - INFO - 🔍 开始测试数据收集：使用测试文件 3#_data_keyvalue_test.json
+2025-10-12 21:44:50,622 - improved_data_collection - INFO - ✅ 成功加载楼栋JSON文件：3#_data_keyvalue_test.json，共1条记录
+2025-10-12 21:44:50,623 - improved_data_collection - INFO - ✅ 成功加载PLC配置文件，包含2个参数
+2025-10-12 21:44:50,626 - improved_data_collection - INFO - ✅ 成功加载房间与PLC IP映射文件，共634条映射关系
+2025-10-12 21:44:50,626 - improved_data_collection - INFO - 🚀 开始为楼栋 3#_data_keyvalue_test.json 收集数据，共2个读取任务，涉及1个PLC设备...
+2025-10-12 21:44:53,650 - improved_data_collection - INFO - 🔄 PLC IP连接失败，尝试使用设备原始IP: 192.168.3.26
+2025-10-12 21:44:54,044 - improved_data_collection - INFO - 📊 数据收集结果统计：成功 1/2 个参数读取任务
+2025-10-12 21:44:54,045 - improved_data_collection - INFO - ⏱️  数据收集完成，耗时：3.42 秒
+2025-10-12 21:44:54,047 - improved_data_collection - INFO - ✅ 改进版结果已保存到：C:\Users\yanggyan\TRAE\FreeArk\output\3#_data_keyvalue_test_improved_data_collected_20251012_214454.json
+2025-10-12 21:44:54,048 - improved_data_collection - INFO - 📋 收集到的数据:
+2025-10-12 21:44:54,049 - improved_data_collection - INFO -   设备ID: 3-1-7-702
+2025-10-12 21:44:54,050 - improved_data_collection - INFO -   基本信息: 成都乐府（二仙桥）-3-1-702, IP: 192.168.3.26
+2025-10-12 21:44:54,050 - improved_data_collection - INFO -   PLC IP: 192.168.3.27
+2025-10-12 21:44:54,051 - improved_data_collection - INFO -   收集状态: partial_success
+2025-10-12 21:44:54,051 - improved_data_collection - INFO -   数据内容: {'total_heating_quantity': {'value': 0.0, 'success': True, 'message': '读取成功'}, 'total_hot_quantity': {'value': None, 'success': False, 'message': 'PLC和设备IP连接均失败'}}
+2025-10-12 21:44:54,052 - improved_data_collection - INFO -   ----------
+2025-10-12 21:44:54,053 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已停止
+2025-10-12 22:22:15,613 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已启动，线程池大小：10
+2025-10-12 22:22:15,614 - improved_data_collection - INFO - 🔍 开始测试数据收集：使用测试文件 3#_data_keyvalue_test.json
+2025-10-12 22:22:15,650 - improved_data_collection - INFO - ✅ 成功加载楼栋JSON文件：3#_data_keyvalue_test.json，共1条记录
+2025-10-12 22:22:15,683 - improved_data_collection - INFO - ✅ 成功加载PLC配置文件，包含2个参数
+2025-10-12 22:22:15,726 - improved_data_collection - INFO - ✅ 成功加载房间与PLC IP映射文件，共634条映射关系
+2025-10-12 22:22:15,727 - improved_data_collection - INFO - 🚀 开始为楼栋 3#_data_keyvalue_test.json 收集数据，共2个读取任务，涉及1个PLC设备...
+2025-10-12 22:22:16,039 - improved_data_collection - INFO - 🔄 PLC IP连接失败，尝试使用设备原始IP: 192.168.3.26
+2025-10-12 22:22:16,544 - improved_data_collection - INFO - 📊 数据收集结果统计：成功 1/2 个参数读取任务
+2025-10-12 22:22:16,545 - improved_data_collection - INFO - ⏱️  数据收集完成，耗时：0.82 秒
+2025-10-12 22:22:16,546 - improved_data_collection - INFO - ✅ 改进版结果已保存到：C:\Users\yanggyan\TRAE\FreeArk\output\3#_data_keyvalue_test_improved_data_collected_20251012_222216.json
+2025-10-12 22:22:16,547 - improved_data_collection - INFO - 📋 收集到的数据:
+2025-10-12 22:22:16,547 - improved_data_collection - INFO -   设备ID: 3-1-7-702
+2025-10-12 22:22:16,547 - improved_data_collection - INFO -   基本信息: 成都乐府（二仙桥）-3-1-702, IP: 192.168.3.26
+2025-10-12 22:22:16,549 - improved_data_collection - INFO -   PLC IP: 192.168.3.27
+2025-10-12 22:22:16,549 - improved_data_collection - INFO -   收集状态: partial_success
+2025-10-12 22:22:16,549 - improved_data_collection - INFO -   数据内容: {'total_heating_quantity': {'value': 16232, 'success': True, 'message': '读取成功'}, 'total_hot_quantity': {'value': None, 'success': False, 'message': 'PLC和设备IP连接均失败'}}
+2025-10-12 22:22:16,549 - improved_data_collection - INFO -   ----------
+2025-10-12 22:22:16,550 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已停止
+2025-10-12 22:44:40,768 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已启动，线程池大小：10
+2025-10-12 22:44:40,769 - improved_data_collection - INFO - 🔍 开始测试数据收集：使用测试文件 3#_data_keyvalue_test.json
+2025-10-12 22:44:40,769 - improved_data_collection - INFO - ✅ 成功加载楼栋JSON文件：3#_data_keyvalue_test.json，共1条记录
+2025-10-12 22:44:40,770 - improved_data_collection - INFO - ✅ 成功加载PLC配置文件，包含2个参数
+2025-10-12 22:44:40,781 - improved_data_collection - INFO - ✅ 成功加载房间与PLC IP映射文件，共634条映射关系
+2025-10-12 22:44:40,782 - improved_data_collection - INFO - 🚀 开始为楼栋 3#_data_keyvalue_test.json 收集数据，共2个读取任务，涉及1个PLC设备...
+2025-10-12 22:44:41,038 - improved_data_collection - INFO - ❌ PLC IP连接失败: 192.168.3.27
+2025-10-12 22:44:41,039 - improved_data_collection - INFO - ❌ PLC IP连接失败: 192.168.3.27
+2025-10-12 22:44:41,039 - improved_data_collection - INFO - 📊 数据收集结果统计：成功 0/2 个参数读取任务
+2025-10-12 22:44:41,039 - improved_data_collection - INFO - ⏱️  数据收集完成，耗时：0.26 秒
+2025-10-12 22:44:41,040 - improved_data_collection - INFO - ✅ 改进版结果已保存到：C:\Users\yanggyan\TRAE\FreeArk\output\3#_data_keyvalue_test_improved_data_collected_20251012_224441.json
+2025-10-12 22:44:41,040 - improved_data_collection - INFO - 📋 收集到的数据:
+2025-10-12 22:44:41,040 - improved_data_collection - INFO -   设备ID: 3-1-7-702
+2025-10-12 22:44:41,041 - improved_data_collection - INFO -   基本信息: 成都乐府（二仙桥）-3-1-702, IP: 192.168.3.26
+2025-10-12 22:44:41,041 - improved_data_collection - INFO -   PLC IP: 192.168.3.27
+2025-10-12 22:44:41,041 - improved_data_collection - INFO -   收集状态: failed
+2025-10-12 22:44:41,041 - improved_data_collection - INFO -   数据内容: {'total_hot_quantity': {'value': None, 'success': False, 'message': 'PLC IP连接失败'}, 'total_cold_quantity': {'value': None, 'success': False, 'message': 'PLC IP连接失败'}}
+2025-10-12 22:44:41,041 - improved_data_collection - INFO -   ----------
+2025-10-12 22:44:41,042 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已停止
+2025-10-12 22:52:28,425 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已启动，线程池大小：10
+2025-10-12 22:52:28,426 - improved_data_collection - INFO - 🔍 开始测试数据收集：使用测试文件 3#_data_keyvalue_test.json
+2025-10-12 22:52:28,428 - improved_data_collection - INFO - ✅ 成功加载楼栋JSON文件：3#_data_keyvalue_test.json，共1条记录
+2025-10-12 22:52:28,430 - improved_data_collection - INFO - ✅ 成功加载PLC配置文件，包含2个参数
+2025-10-12 22:52:28,432 - improved_data_collection - INFO - ✅ 成功加载房间与PLC IP映射文件，共634条映射关系
+2025-10-12 22:52:28,433 - improved_data_collection - INFO - 🚀 开始为楼栋 3#_data_keyvalue_test.json 收集数据，共2个读取任务，涉及1个PLC设备...
+2025-10-12 22:52:28,540 - improved_data_collection - INFO - ❌ PLC IP连接失败: 192.168.3.27
+2025-10-12 22:52:28,541 - improved_data_collection - INFO - 📊 数据收集结果统计：成功 1/2 个参数读取任务
+2025-10-12 22:52:28,541 - improved_data_collection - INFO - ⏱️  数据收集完成，耗时：0.11 秒
+2025-10-12 22:52:28,543 - improved_data_collection - INFO - ✅ 改进版结果已保存到：C:\Users\yanggyan\TRAE\FreeArk\output\3#_data_keyvalue_test_improved_data_collected_20251012_225228.json
+2025-10-12 22:52:28,544 - improved_data_collection - INFO - 📋 收集到的数据:
+2025-10-12 22:52:28,545 - improved_data_collection - INFO -   设备ID: 3-1-7-702
+2025-10-12 22:52:28,545 - improved_data_collection - INFO -   基本信息: 成都乐府（二仙桥）-3-1-702, IP: 192.168.3.26
+2025-10-12 22:52:28,546 - improved_data_collection - INFO -   PLC IP: 192.168.3.27
+2025-10-12 22:52:28,546 - improved_data_collection - INFO -   收集状态: partial_success
+2025-10-12 22:52:28,547 - improved_data_collection - INFO -   数据内容: {'total_cold_quantity': {'value': 16232, 'success': True, 'message': '读取成功'}, 'total_hot_quantity': {'value': None, 'success': False, 'message': 'PLC IP连接失败'}}
+2025-10-12 22:52:28,547 - improved_data_collection - INFO -   ----------
+2025-10-12 22:52:28,548 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已停止
+2025-10-12 23:05:49,805 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已启动，线程池大小：10
+2025-10-12 23:05:49,805 - improved_data_collection - INFO - 🔍 开始测试数据收集：使用测试文件 3#_data_keyvalue_test.json
+2025-10-12 23:05:49,807 - improved_data_collection - INFO - ✅ 成功加载楼栋JSON文件：3#_data_keyvalue_test.json，共1条记录
+2025-10-12 23:05:49,809 - improved_data_collection - INFO - ✅ 成功加载PLC配置文件，包含2个参数
+2025-10-12 23:05:49,810 - improved_data_collection - INFO - ✅ 成功加载房间与PLC IP映射文件，共634条映射关系
+2025-10-12 23:05:49,810 - improved_data_collection - INFO - 🚀 开始为楼栋 3#_data_keyvalue_test.json 收集数据，共2个读取任务，涉及1个PLC设备...
+2025-10-12 23:05:49,905 - improved_data_collection - INFO - 📊 数据收集结果统计：成功 2/2 个参数读取任务
+2025-10-12 23:05:49,906 - improved_data_collection - INFO - ⏱️  数据收集完成，耗时：0.09 秒
+2025-10-12 23:05:49,909 - improved_data_collection - INFO - ✅ 改进版结果已保存到：c:\Users\yanggyan\TRAE\FreeArk\output\3#_data_keyvalue_test_improved_data_collected_20251012_230549.json
+2025-10-12 23:05:49,909 - improved_data_collection - INFO - 📋 收集到的数据:
+2025-10-12 23:05:49,910 - improved_data_collection - INFO -   设备ID: 3-1-7-702
+2025-10-12 23:05:49,911 - improved_data_collection - INFO -   基本信息: 成都乐府（二仙桥）-3-1-702, IP: 192.168.3.26
+2025-10-12 23:05:49,911 - improved_data_collection - INFO -   PLC IP: 192.168.3.27
+2025-10-12 23:05:49,912 - improved_data_collection - INFO -   收集状态: success
+2025-10-12 23:05:49,912 - improved_data_collection - INFO -   数据内容: {'total_hot_quantity': {'value': 9455, 'success': True, 'message': '读取成功'}, 'total_cold_quantity': {'value': 16232, 'success': True, 'message': '读取成功'}}
+2025-10-12 23:05:49,913 - improved_data_collection - INFO -   ----------
+2025-10-12 23:05:49,914 - improved_data_collection - INFO - ✅ 改进版数据收集管理器已停止

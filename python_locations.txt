@@ -1,0 +1,10 @@
+C:\Program Files\Python312\python.exe
+C:\Program Files\Python312\Lib\venv\scripts\nt\python.exe
+C:\Users\yanggyan\AppData\Local\Microsoft\WindowsApps\python.exe
+C:\Users\yanggyan\AppData\Local\Microsoft\WindowsApps\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\python.exe
+C:\Users\yanggyan\AppData\Local\Programs\Python\Python313\python.exe
+C:\Users\yanggyan\AppData\Local\Programs\Python\Python314\python.exe
+C:\Users\yanggyan\miniconda3\python.exe
+C:\Users\yanggyan\miniconda3\Lib\venv\scripts\nt\python.exe
+C:\Users\yanggyan\miniconda3\pkgs\python-3.12.4-h14ffc60_1\python.exe
+C:\Users\yanggyan\miniconda3\pkgs\python-3.12.4-h14ffc60_1\Lib\venv\scripts\nt\python.exe
