@@ -2,7 +2,7 @@
   "output": {
     "type": "Excel",
     "excel": {
-      "enabled": false,
+      "enabled": true,
       "file_name": "累计用量",
       "directory": "c:/Users/yanggyan/TRAE/FreeArk/output/",
       "include_all_params": false
