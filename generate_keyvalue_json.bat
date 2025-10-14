@@ -26,7 +26,7 @@ REM 检查执行结果
 if %errorlevel% equ 0 (
     echo.
     echo 转换完成！键值对格式的JSON文件已保存到resource目录
-    echo 文件名格式：楼栋号_data_keyvalue.json
+    echo 文件名格式：楼栋号_data.json
     echo.
     echo 键值对格式特点：
 echo 1. 使用"楼栋-单元-楼层-户号"作为唯一标识符键，格式为纯数字+'-'（如'1-1-2-201'）

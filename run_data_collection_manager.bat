@@ -149,7 +149,7 @@ if "%MODE_INPUT%" == "" (
 REM 根据选择修改脚本
 if "%MODE%" == "2" (
     REM 为单个楼栋收集数据
-    set /p "BUILDING_FILE=请输入楼栋文件名（例如：1#_data_keyvalue.json）: "
+    set /p "BUILDING_FILE=请输入楼栋文件名（例如：1#_data.json）: "
     if "%BUILDING_FILE%" == "" (
         echo ===============================================================================
         echo ❌ 错误：未输入楼栋文件名！
@@ -196,7 +196,9 @@ if "%MODE%" == "2" (
         
         # 注释掉单个楼栋收集的代码
         $pattern_single = '^\s*building_file = .*$\s*results = manager\.collect_data_for_building\(building_file\)$\s*manager\.save_results_to_json\(building_file\)' 
-        $replacement_single = '# building_file = "1#_data_keyvalue.json"\n    # results = manager.collect_data_for_building(building_file)\n    # manager.save_results_to_json(building_file)'
+        $replacement_single = '# building_file = "1#_data.json"
+    # results = manager.collect_data_for_building(building_file)
+    # manager.save_results_to_json(building_file)'
         $content = $content -replace $pattern_single, $replacement_single
         
         $content | Set-Content -Path '%TEMP_SCRIPT_MODE%' -Encoding UTF8

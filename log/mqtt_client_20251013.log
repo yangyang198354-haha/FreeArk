@@ -1,0 +1,24 @@
+2025-10-13 22:17:33,535 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 22:17:33,632 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 22:17:33,637 - mqtt_client - INFO - 📤 消息发布成功，消息ID: 1
+2025-10-13 22:17:33,638 - mqtt_client - INFO - 🔌 已从MQTT服务器断开连接，返回代码: 0
+2025-10-13 22:17:33,639 - mqtt_client - INFO - ✅ MQTT客户端已停止
+2025-10-13 22:18:51,574 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 22:18:51,672 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 22:18:51,695 - mqtt_client - INFO - 📤 消息发布成功，消息ID: 1
+2025-10-13 22:18:51,695 - mqtt_client - INFO - 🔌 已从MQTT服务器断开连接，返回代码: 0
+2025-10-13 22:18:51,697 - mqtt_client - INFO - ✅ MQTT客户端已停止
+2025-10-13 22:46:01,883 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 22:46:01,981 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 22:51:28,546 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 22:51:28,645 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 23:01:36,270 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 23:01:36,369 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 23:08:35,321 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 23:08:35,420 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 23:08:35,423 - mqtt_client - INFO - 📤 消息发布成功，消息ID: 1
+2025-10-13 23:09:12,070 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 23:09:12,167 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1
+2025-10-13 23:09:12,173 - mqtt_client - INFO - 📤 消息发布成功，消息ID: 1
+2025-10-13 23:16:11,580 - mqtt_client - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-13 23:16:11,677 - mqtt_client - INFO - 📤 正在发布消息 - 主题: /datacollection/plc/to/collector/c5d29c52a237ade5, QoS: 1

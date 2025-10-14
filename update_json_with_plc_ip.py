@@ -24,8 +24,8 @@ print("\n开始处理resource目录下的JSON文件...")
 
 try:
     for filename in os.listdir(resource_dir):
-        # 只处理形如X#_data_keyvalue.json和X#_data_keyvalue_test.json的文件
-        if (filename.endswith('_data_keyvalue.json') or filename.endswith('_data_keyvalue_test.json')) and '#' in filename:
+        # 只处理形如X#_data.json和X#_data_test.json的文件
+        if ((filename.endswith('_data.json') or filename.endswith('_data_test.json')) and '#' in filename) and not (filename.endswith('_improved_data_collected_') and filename.endswith('.json')):
             # 提取楼栋号
             building_num = filename.split('#')[0]
             

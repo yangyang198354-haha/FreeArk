@@ -1,12 +1,20 @@
 import os
+import sys
 import json
 import time
 from typing import Dict, List, Any
 import concurrent.futures
 import logging
+import pandas as pd
+import copy
+
+# 添加FreeArk目录到Python路径，确保模块可以正确导入
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入已有的PLC读取相关类
-from multi_thread_plc_reader import PLCReader, PLCManager
+from datacollection.multi_thread_plc_reader import PLCReader, PLCManager
+# 导入MQTT客户端
+from datacollection.mqtt_client import MQTTClient
 
 # 配置日志
 def setup_logger():
@@ -66,6 +74,22 @@ class ImprovedDataCollectionManager:
         """停止数据收集管理器"""
         self.plc_manager.stop()
         logger.info("✅ 改进版数据收集管理器已停止")
+    
+    def _format_timestamp(self, timestamp_ms):
+        """将毫秒级时间戳转换为人类可读格式
+        Args:
+            timestamp_ms: 毫秒级时间戳整数
+        Returns:
+            str: 格式化后的时间字符串，格式为：YYYY-MM-DD HH:MM:SS.fff
+        """
+        if timestamp_ms is None:
+            return ''
+        # 提取毫秒部分
+        ms = timestamp_ms % 1000
+        # 提取秒部分
+        timestamp_sec = timestamp_ms // 1000
+        # 格式化为可读时间字符串，包含毫秒
+        return f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp_sec))}.{ms:03d}"
 
     def load_building_json(self, building_file: str) -> Dict[str, Dict[str, Any]]:
         """加载楼栋的JSON文件"""
@@ -114,6 +138,78 @@ class ImprovedDataCollectionManager:
         except Exception as e:
             logger.info(f"❌ 加载房间与PLC IP映射文件失败：{str(e)}")
             return {}
+    
+    def load_output_config(self) -> Dict[str, Any]:
+        """加载输出配置文件"""
+        config_path = os.path.join(self.resource_dir, 'output_config.json')
+        # 默认配置
+        default_config = {
+            "output": {
+                "type": "Excel",
+                "excel": {
+                    "file_name": "累计用量",
+                    "directory": self.output_dir,
+                    "include_all_params": True
+                },
+                "json": {
+                    "enabled": True
+                },
+                "mqtt": {
+                    "enabled": False,
+                    "server": {
+                        "host": "localhost",
+                        "port": 1883,
+                        "username": "",
+                        "password": "",
+                        "tls_enabled": False
+                    },
+                    "topic": {
+                        "prefix": "/datacollection/plc/to/collector/"
+                    },
+                    "qos": 1,
+                    "retain": False
+                }
+            }
+        }
+        
+        if not os.path.exists(config_path):
+            logger.info(f"⚠️  输出配置文件不存在，使用默认配置：{config_path}")
+            return default_config
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                logger.info(f"✅ 成功加载输出配置文件")
+                # 合并默认配置和文件配置
+                if 'output' not in config:
+                    config['output'] = default_config['output']
+                else:
+                    if 'excel' not in config['output']:
+                        config['output']['excel'] = default_config['output']['excel']
+                    else:
+                        config['output']['excel'] = {**default_config['output']['excel'], **config['output']['excel']}
+                    if 'json' not in config['output']:
+                        config['output']['json'] = default_config['output']['json']
+                    else:
+                        config['output']['json'] = {**default_config['output']['json'], **config['output']['json']}
+                    if 'mqtt' not in config['output']:
+                        config['output']['mqtt'] = default_config['output']['mqtt']
+                    else:
+                        # 合并MQTT配置，确保所有必需的子项都存在
+                        if 'server' not in config['output']['mqtt']:
+                            config['output']['mqtt']['server'] = default_config['output']['mqtt']['server']
+                        else:
+                            config['output']['mqtt']['server'] = {**default_config['output']['mqtt']['server'], **config['output']['mqtt']['server']}
+                        if 'topic' not in config['output']['mqtt']:
+                            config['output']['mqtt']['topic'] = default_config['output']['mqtt']['topic']
+                        else:
+                            config['output']['mqtt']['topic'] = {**default_config['output']['mqtt']['topic'], **config['output']['mqtt']['topic']}
+                        # 合并其他MQTT配置项
+                        config['output']['mqtt'] = {**default_config['output']['mqtt'], **config['output']['mqtt']}
+                return config
+        except Exception as e:
+            logger.info(f"❌ 加载输出配置文件失败，使用默认配置：{str(e)}")
+            return default_config
 
     def collect_data_for_building(self, building_file: str) -> Dict[str, Dict[str, Any]]:
         """为指定楼栋收集数据，使用PLC IP地址而不是设备IP地址"""
@@ -191,8 +287,35 @@ class ImprovedDataCollectionManager:
         # 保存结果
         self.results[building_file] = organized_results
         
-        # 调用save_results_to_json保存结果到output目录
-        self.save_results_to_json(building_file)
+        # 获取输出配置
+        output_config = self.load_output_config()
+        output_type = output_config['output'].get('type', 'Excel')
+        
+        # 获取各种输出方式的enabled配置
+        json_config = output_config['output'].get('json', {})
+        json_enabled = json_config.get('enabled', True)
+        
+        excel_config = output_config['output'].get('excel', {})
+        excel_enabled = excel_config.get('enabled', True)
+        
+        mqtt_config = output_config['output'].get('mqtt', {})
+        mqtt_enabled = mqtt_config.get('enabled', False)
+        
+        # 根据配置保存结果
+        # 如果输出类型为Json或者JSON输出已启用，则保存为JSON文件
+        if output_type == 'Json' or json_enabled:
+            # 保存为JSON文件
+            self.save_results_to_json(building_file)
+        
+        # 如果输出类型为Excel或者Excel输出已启用，则保存为Excel文件
+        if output_type == 'Excel' or excel_enabled:
+            # 保存为Excel文件
+            self.save_results_to_excel(building_file)
+        
+        # 如果输出类型为MQTT或者MQTT输出已启用，则通过MQTT发送数据
+        if output_type == 'MQTT' or mqtt_enabled:
+            # 通过MQTT发送数据
+            self.send_results_to_mqtt(building_file)
         
         return organized_results
 
@@ -245,13 +368,16 @@ class ImprovedDataCollectionManager:
                 # 只连接PLC IP，如果失败直接标记为失败
                 logger.info(f"❌ PLC IP连接失败: {plc_ip}")
                 for config in configs:
+                    # 获取当前时间戳（精确到毫秒）
+                    timestamp = int(time.time() * 1000)
                     results.append({
                         'ip': plc_ip,
                         'device_id': config.get('device_id'),
                         'param_key': config.get('param_key'),
                         'success': False,
                         'message': "PLC IP连接失败",
-                        'value': None
+                        'value': None,
+                        'timestamp': timestamp
                     })
                 return results
             
@@ -266,15 +392,18 @@ class ImprovedDataCollectionManager:
                 
                 # 读取数据
                 success, message, value = reader.read_db_data(db_num, offset, length, data_type)
+                # 获取当前时间戳（精确到毫秒）
+                timestamp = int(time.time() * 1000)
                 results.append({
                     'ip': plc_ip,
                     'device_id': device_id,
                     'param_key': param_key,
                     'success': success,
                     'message': message,
-                    'value': value
+                    'value': value,
+                    'timestamp': timestamp
                 })
-            
+                
             return results
         finally:
             # 确保断开连接
@@ -322,7 +451,7 @@ class ImprovedDataCollectionManager:
 
     def _organize_results(self, results: List[Dict], building_data: Dict, plc_config: Dict) -> Dict[str, Dict[str, Any]]:
         """组织结果数据"""
-        organized_results = {}
+        organized_results = {} 
         success_count = 0
         total_count = len(results)
         
@@ -338,19 +467,25 @@ class ImprovedDataCollectionManager:
         for result in results:
             device_id = result.get('device_id')
             param_key = result.get('param_key')
+            timestamp = result.get('timestamp')  # 获取时间戳
             
             if device_id and device_id in organized_results and param_key:
-                # 存储参数结果
+                # 存储参数结果，包含时间戳
                 organized_results[device_id]['data'][param_key] = {
                     'value': result.get('value'),
                     'success': result.get('success'),
-                    'message': result.get('message')
+                    'message': result.get('message'),
+                    'timestamp': timestamp  # 添加时间戳到结果中
                 }
                 
                 # 更新设备状态
                 if result.get('success'):
                     organized_results[device_id]['status'] = 'success'
                     success_count += 1
+                    # 打印成功读取的日志，包含时间戳
+                    if timestamp:
+                        timestamp_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp/1000))
+                        logger.info(f"✅ 设备 {device_id} 参数 {param_key} 读取成功，值：{result.get('value')}，时间：{timestamp_str}.{timestamp%1000:03d}")
                 else:
                     organized_results[device_id]['status'] = 'partial_success' if organized_results[device_id]['status'] == 'success' else 'failed'
         
@@ -360,6 +495,16 @@ class ImprovedDataCollectionManager:
 
     def save_results_to_json(self, building_file: str, output_file: str = None) -> bool:
         """保存结果到JSON文件"""
+        # 获取输出配置
+        output_config = self.load_output_config()
+        json_config = output_config['output'].get('json', {})
+        json_enabled = json_config.get('enabled', True)
+        
+        # 检查JSON输出是否启用
+        if not json_enabled:
+            logger.info(f"⚠️  JSON输出未启用")
+            return False
+            
         if building_file not in self.results:
             logger.info(f"❌ 没有找到楼栋 {building_file} 的结果数据")
             return False
@@ -375,12 +520,203 @@ class ImprovedDataCollectionManager:
         output_path = os.path.join(self.output_dir, output_file)
         
         try:
+            # 深拷贝结果数据，避免修改原始数据
+            results_copy = copy.deepcopy(self.results[building_file])
+            
+            # 将每个参数的时间戳转换为人类可读格式
+            for device_id, device_info in results_copy.items():
+                if 'data' in device_info:
+                    for param_key, param_value in device_info['data'].items():
+                        if 'timestamp' in param_value:
+                            # 保留原始时间戳，添加格式化后的时间戳
+                            timestamp_ms = param_value['timestamp']
+                            param_value['timestamp_readable'] = self._format_timestamp(timestamp_ms)
+            
             with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(self.results[building_file], f, ensure_ascii=False, indent=2)
+                json.dump(results_copy, f, ensure_ascii=False, indent=2)
             logger.info(f"✅ 改进版结果已保存到：{output_path}")
             return True
         except Exception as e:
             logger.info(f"❌ 保存改进版结果失败：{str(e)}")
+            return False
+    
+    def send_results_to_mqtt(self, building_file: str) -> bool:
+        """通过MQTT发送结果数据"""
+        # 获取输出配置
+        output_config = self.load_output_config()
+        mqtt_config = output_config['output'].get('mqtt', {})
+        
+        # 检查MQTT是否启用
+        mqtt_enabled = mqtt_config.get('enabled', False)
+        if not mqtt_enabled:
+            logger.info(f"⚠️  MQTT输出未启用")
+            return False
+            
+        if building_file not in self.results:
+            logger.info(f"❌ 没有找到楼栋 {building_file} 的结果数据")
+            return False
+        
+        # 获取MQTT服务器配置
+        server_config = mqtt_config.get('server', {})
+        host = server_config.get('host', 'localhost')
+        port = server_config.get('port', 1883)
+        username = server_config.get('username', '')
+        password = server_config.get('password', '')
+        tls_enabled = server_config.get('tls_enabled', False)
+        pool_size = server_config.get('pool_size', 5)
+        
+        # 获取MQTT主题配置
+        topic_config = mqtt_config.get('topic', {})
+        topic_prefix = topic_config.get('prefix', '/datacollection/plc/to/collector/')
+        
+        # 获取其他MQTT配置
+        qos = mqtt_config.get('qos', 1)
+        retain = mqtt_config.get('retain', False)
+        
+        try:
+            # 获取结果数据
+            results = self.results[building_file]
+            
+            # 深拷贝结果数据，避免修改原始数据
+            results_copy = copy.deepcopy(results)
+            
+            # 将每个参数的时间戳转换为人类可读格式
+            for device_id, device_info in results_copy.items():
+                if 'data' in device_info:
+                    for param_key, param_value in device_info['data'].items():
+                        if 'timestamp' in param_value:
+                            # 保留原始时间戳，添加格式化后的时间戳
+                            timestamp_ms = param_value['timestamp']
+                            param_value['timestamp_readable'] = self._format_timestamp(timestamp_ms)
+            
+            # 提取唯一标识符（从第一个设备中获取）
+            unique_identifier = ""
+            for device_id, device_info in results_copy.items():
+                if '唯一标识符' in device_info:
+                    unique_identifier = device_info['唯一标识符']
+                    break
+            
+            # 如果没有找到唯一标识符，使用当前时间戳作为备选
+            if not unique_identifier:
+                unique_identifier = str(int(time.time()))
+                logger.info(f"⚠️  未找到唯一标识符，使用时间戳代替: {unique_identifier}")
+            
+            # 构建完整的MQTT主题
+            mqtt_topic = f"{topic_prefix}{unique_identifier}"
+            
+            # 创建连接池配置
+            pool_config = {
+                'host': host,
+                'port': port,
+                'username': username if username else None,
+                'password': password if password else None,
+                'tls_enabled': tls_enabled,
+                'pool_size': pool_size
+            }
+            
+            # 使用MQTT客户端管理器获取连接池
+            import sys
+            import os
+            # 添加项目根目录到Python路径
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from datacollection.mqtt_client_pool import MQTTClientManager
+            mqtt_manager = MQTTClientManager.get_instance(pool_config)
+            
+            mqtt_client = None
+            try:
+                # 从连接池获取客户端
+                mqtt_client = mqtt_manager.get_client()
+                
+                # 发送数据
+                success = mqtt_client.publish(mqtt_topic, results_copy, qos=qos, retain=retain)
+                
+                if success:
+                    logger.info(f"✅ 数据已成功发送到MQTT主题: {mqtt_topic}")
+                    return True
+                else:
+                    logger.info(f"❌ 发送数据到MQTT主题失败: {mqtt_topic}")
+                    return False
+            finally:
+                # 确保将客户端归还到连接池
+                if mqtt_client:
+                    mqtt_manager.return_client(mqtt_client)
+        except Exception as e:
+            logger.info(f"❌ 通过MQTT发送数据异常: {str(e)}")
+            return False
+    
+    def save_results_to_excel(self, building_file: str) -> bool:
+        """保存结果到Excel文件"""
+        # 获取输出配置
+        output_config = self.load_output_config()
+        excel_config = output_config['output'].get('excel', {})
+        
+        # 检查Excel输出是否启用
+        excel_enabled = excel_config.get('enabled', True)
+        if not excel_enabled:
+            logger.info(f"⚠️  Excel输出未启用")
+            return False
+            
+        if building_file not in self.results:
+            logger.info(f"❌ 没有找到楼栋 {building_file} 的结果数据")
+            return False
+        
+        file_name = excel_config.get('file_name', '累计用量')
+        directory = excel_config.get('directory', self.output_dir)
+        
+        # 确保输出目录存在
+        os.makedirs(directory, exist_ok=True)
+        
+        # 生成文件名，包含时间戳
+        timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        output_file = f"{file_name}_{timestamp}.xlsx"
+        output_path = os.path.join(directory, output_file)
+        
+        try:
+            # 准备Excel数据
+            excel_data = []
+            results = self.results[building_file]
+            
+            # 遍历每个设备的结果
+            for device_id, device_info in results.items():
+                # 基础信息
+                device_data = device_info.copy()
+                data_section = device_data.pop('data', {})
+                
+                # 提取每个参数的值
+                for param_key, param_value in data_section.items():
+                    # 获取时间戳
+                    timestamp_value = param_value.get('timestamp')
+                    timestamp_str = ''
+                    if timestamp_value:
+                        # 格式化为可读时间字符串，包含毫秒
+                        timestamp_ms = timestamp_value % 1000
+                        timestamp_sec = timestamp_value // 1000
+                        timestamp_str = f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp_sec))}.{timestamp_ms:03d}"
+                    
+                    row = {
+                        'device_id': device_id,
+                        'param_key': param_key,
+                        'value': param_value.get('value'),
+                        'success': param_value.get('success'),
+                        'message': param_value.get('message'),
+                        'timestamp': timestamp_str,  # 添加时间戳信息到Excel行
+                        'timestamp_ms': timestamp_value  # 也保存原始的毫秒级时间戳
+                    }
+                    
+                    # 添加设备基本信息
+                    for key, value in device_data.items():
+                        row[key] = value
+                    
+                    excel_data.append(row)
+            
+            # 创建DataFrame并保存为Excel
+            df = pd.DataFrame(excel_data)
+            df.to_excel(output_path, index=False, engine='openpyxl')
+            
+            logger.info(f"✅ 结果已保存到Excel文件：{output_path}")
+            return True
+        except Exception as e:
+            logger.info(f"❌ 保存结果到Excel文件失败：{str(e)}")
             return False
 
     def collect_data_for_all_buildings(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
@@ -388,7 +724,7 @@ class ImprovedDataCollectionManager:
         # 获取所有楼栋JSON文件
         building_files = []
         for file in os.listdir(self.resource_dir):
-            if file.endswith('_data_keyvalue.json'):
+            if file.endswith('_data.json') and not file.endswith('_improved_data_collected_'):
                 building_files.append(file)
         
         logger.info(f"🚀 开始为所有楼栋收集数据，共{len(building_files)}个楼栋")
@@ -415,7 +751,7 @@ if __name__ == "__main__":
     
     try:
         # 使用测试文件进行数据收集
-        building_file = '3#_data_keyvalue_test.json'
+        building_file = '3#_data_test.json'
         logger.info(f"🔍 开始测试数据收集：使用测试文件 {building_file}")
         results = manager.collect_data_for_building(building_file)
         

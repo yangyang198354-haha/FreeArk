@@ -1,10 +1,10 @@
 import struct
 import time
+import threading
 from typing import Optional, List, Dict, Tuple
 import concurrent.futures
 import logging
 import os
-import struct 
 
 # 尝试导入snap7模块
 try:
@@ -80,30 +80,36 @@ class PLCReader:
             self.connected = False
             logger.info(f"✅ 已断开PLC连接：{self.plc_ip}")
 
-    def read_db_data(self, db_num: int, offset: int, length: int, data_type: str) -> Optional[Tuple[bool, str, any]]:
-        """读取指定DB块、偏移量、长度和类型的数据"""
-        if not self.connected:
-            return False, f"未连接到PLC：{self.plc_ip}", None
+    def read_db_data(self, db_num: int, offset: int, length: int, data_type: str, max_retries: int = 2) -> Optional[Tuple[bool, str, any]]:
+        """读取指定DB块、偏移量、长度和类型的数据，支持重试"""
+        retries = 0
+        while retries <= max_retries:
+            try:
+                if not self.connected:
+                    return False, f"未连接到PLC：{self.plc_ip}", None
 
-        try:
-            # 检查偏移量+长度是否超出DB块最大范围（64KB限制）
-            max_possible_offset = offset + length - 1
-            if max_possible_offset > 65535:
-                return False, f"读取范围越界（最大允许偏移量+长度≤65535）", None
+                # 检查偏移量+长度是否超出DB块最大范围（64KB限制）
+                max_possible_offset = offset + length - 1
+                if max_possible_offset > 65535:
+                    return False, f"读取范围越界（最大允许偏移量+长度≤65535）", None
 
-            # 读取原始数据
-            raw_data = self.client.db_read(db_num, offset, length)
-            if len(raw_data) != length:
-                return False, f"数据长度不匹配（预期{length}字节，实际{len(raw_data)}字节）", None
+                # 读取原始数据
+                raw_data = self.client.db_read(db_num, offset, length)
+                if len(raw_data) != length:
+                    return False, f"数据长度不匹配（预期{length}字节，实际{len(raw_data)}字节）", None
 
-            # 根据数据类型解析
-            parsed_value = self._parse_data(raw_data, data_type)
-            if parsed_value is None:
-                return False, f"数据类型解析失败：{data_type}", None
+                # 根据数据类型解析
+                parsed_value = self._parse_data(raw_data, data_type)
+                if parsed_value is None:
+                    return False, f"数据类型解析失败：{data_type}", None
 
-            return True, "读取成功", parsed_value
-        except Exception as e:
-            return False, f"读取异常：{str(e)}", None
+                return True, "读取成功", parsed_value
+            except Exception as e:
+                retries += 1
+                if retries > max_retries:
+                    return False, f"读取异常（已重试{max_retries}次）：{str(e)}", None
+                logger.info(f"⚠️  读取异常，第{retries}次重试：{str(e)}")
+                time.sleep(0.1 * retries)  # 指数退避策略
 
     def _parse_data(self, raw_data: bytes, data_type: str) -> Optional[any]:
         """根据数据类型解析原始数据"""
@@ -154,7 +160,15 @@ class PLCManager:
         """关闭线程池"""
         if self.thread_pool:
             self.thread_pool.shutdown(wait=True)
-            logger.info("✅ PLC管理器已停止，线程池已关闭")
+        logger.info("✅ PLC管理器已停止，线程池已关闭")
+    
+    def set_max_workers(self, max_workers: int):
+        """动态调整线程池大小"""
+        if self.thread_pool and not self.thread_pool._shutdown:
+            logger.warning("⚠️  线程池已启动，无法直接调整大小。请先stop()再start()")
+            return False
+        self.max_workers = max_workers
+        return True
 
     def read_multiple_plcs(self, plc_configs: List[Dict]) -> List[Dict]:
         """
@@ -164,32 +178,100 @@ class PLCManager:
         if not self.thread_pool:
             logger.info("❌ 线程池未启动，请先调用start()方法")
             return []
-
-        # 提交所有任务到线程池
-        future_to_config = {
-            self.thread_pool.submit(self._read_single_plc, config): config 
-            for config in plc_configs
-        }
-
+        
+        # 按PLC IP对参数配置进行分组
+        ip_to_configs = {}
+        for config in plc_configs:
+            plc_ip = config['ip']
+            if plc_ip not in ip_to_configs:
+                ip_to_configs[plc_ip] = []
+            ip_to_configs[plc_ip].append(config)
+        
+        # 为每个PLC IP创建一个任务
+        future_to_ip = {}
+        for plc_ip, configs in ip_to_configs.items():
+            future = self.thread_pool.submit(self._read_single_plc_multiple_params, plc_ip, configs)
+            future_to_ip[future] = (plc_ip, configs)
+        
         # 收集结果
         results = []
-        for future in concurrent.futures.as_completed(future_to_config):
-            config = future_to_config[future]
+        for future in concurrent.futures.as_completed(future_to_ip):
+            plc_ip, configs = future_to_ip[future]
             try:
-                result = future.result()
-                results.append(result)
+                ip_results = future.result()
+                results.extend(ip_results)
             except Exception as e:
-                logger.info(f"❌ PLC任务执行异常：{config['ip']} - {str(e)}")
+                logger.info(f"❌ PLC任务执行异常：{plc_ip} - {str(e)}")
+                # 为该IP下的所有配置添加失败结果
+                for config in configs:
+                    results.append({
+                        'ip': config['ip'],
+                        'db_num': config['db_num'],
+                        'offset': config['offset'],
+                        'success': False,
+                        'message': f"任务执行异常：{str(e)}",
+                        'value': None
+                    })
+        
+        return results
+
+    def _read_single_plc_multiple_params(self, plc_ip: str, configs: List[Dict]) -> List[Dict]:
+        """读取单个PLC的多个参数，读取完成后立即释放连接"""
+        results = []
+        
+        # 创建新的PLC读取器实例，而不是从连接池获取
+        reader = PLCReader(plc_ip)
+        
+        try:
+            # 确保已连接
+            if not reader.connect():
+                # 连接失败，为所有配置添加失败结果
+                for config in configs:
+                    results.append({
+                        'ip': plc_ip,
+                        'db_num': config['db_num'],
+                        'offset': config['offset'],
+                        'success': False,
+                        'message': "PLC连接失败",
+                        'value': None
+                    })
+                return results
+            
+            # 依次读取每个参数
+            for config in configs:
+                db_num = config['db_num']
+                offset = config['offset']
+                length = config['length']
+                data_type = config['data_type']
+                
+                # 读取数据
+                success, message, value = reader.read_db_data(db_num, offset, length, data_type)
                 results.append({
-                    'ip': config['ip'],
+                    'ip': plc_ip,
+                    'db_num': db_num,
+                    'offset': offset,
+                    'success': success,
+                    'message': message,
+                    'value': value
+                })
+            
+            return results
+        except Exception as e:
+            logger.info(f"❌ PLC多参数读取异常：{plc_ip} - {str(e)}")
+            # 为所有配置添加异常结果
+            for config in configs:
+                results.append({
+                    'ip': plc_ip,
                     'db_num': config['db_num'],
                     'offset': config['offset'],
                     'success': False,
-                    'message': f"任务执行异常：{str(e)}",
+                    'message': f"读取异常：{str(e)}",
                     'value': None
                 })
-
-        return results
+            return results
+        finally:
+            # 确保断开连接
+            reader.disconnect()
 
     def _read_single_plc(self, config: Dict) -> Dict:
         """读取单个PLC的数据"""

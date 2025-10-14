@@ -1,0 +1,3 @@
+2025-10-14 10:55:21,385 - plc_reader - INFO - ✅ PLC管理器已启动，线程池大小：10
+2025-10-14 10:55:21,666 - plc_reader - INFO - ❌ PLC连接异常：192.168.3.27 - b' TCP : Unreachable peer'
+2025-10-14 10:55:32,188 - plc_reader - INFO - ✅ PLC管理器已停止，线程池已关闭
