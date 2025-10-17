@@ -1,0 +1,29 @@
+{
+  "log_levels": {
+    "global": {
+      "level": "INFO",
+      "description": "全局默认日志级别"
+    },
+    "improved_data_collection": {
+      "level": "INFO",
+      "description": "改进版数据收集管理器日志级别，记录主要业务信息"
+    },
+    "plc_reader": {
+      "level": "DEBUG",
+      "description": "PLC读取器日志级别，方便定位连接和数据读取问题"
+    },
+    "mqtt_client": {
+      "level": "DEBUG",
+      "description": "MQTT客户端日志级别，方便定位连接和消息传输问题"
+    },
+    "quantity_statistics": {
+      "level": "INFO",
+      "description": "用量统计日志级别，记录主要业务信息"
+    }
+  },
+  "config_info": {
+    "version": "1.0",
+    "create_time": "2025-10-14",
+    "description": "日志配置文件，控制各个模块的日志输出级别"
+  }
+}

@@ -1,57 +1,26 @@
 import os
+import os
 import sys
 import json
 import time
 from typing import Dict, List, Any
 import concurrent.futures
-import logging
 import pandas as pd
 import copy
 
 # 添加FreeArk目录到Python路径，确保模块可以正确导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 导入统一的日志配置管理器
+from datacollection.log_config_manager import get_logger
+
 # 导入已有的PLC读取相关类
 from datacollection.multi_thread_plc_reader import PLCReader, PLCManager
 # 导入MQTT客户端
 from datacollection.mqtt_client import MQTTClient
 
-# 配置日志
-def setup_logger():
-    # 创建logger对象
-    logger = logging.getLogger('improved_data_collection')
-    logger.setLevel(logging.INFO)
-    
-    # 检查是否已经存在处理器，避免重复添加
-    if not logger.handlers:
-        # 创建控制台处理器
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        
-        # 创建文件处理器，日志存储在log目录下
-        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'log')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        
-        # 为日志文件添加日期
-        log_filename = f"improved_data_collection_{time.strftime('%Y%m%d')}.log"
-        log_path = os.path.join(log_dir, log_filename)
-        file_handler = logging.FileHandler(log_path, encoding='utf-8')
-        file_handler.setLevel(logging.INFO)
-        
-        # 设置日志格式
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(formatter)
-        file_handler.setFormatter(formatter)
-        
-        # 添加处理器到logger
-        logger.addHandler(console_handler)
-        logger.addHandler(file_handler)
-    
-    return logger
-
-# 初始化日志记录器
-logger = setup_logger()
+# 获取logger，日志级别从配置文件读取
+logger = get_logger('improved_data_collection')
 
 class ImprovedDataCollectionManager:
     def __init__(self, max_workers: int = 10):
@@ -75,22 +44,6 @@ class ImprovedDataCollectionManager:
         self.plc_manager.stop()
         logger.info("✅ 改进版数据收集管理器已停止")
     
-    def _format_timestamp(self, timestamp_ms):
-        """将毫秒级时间戳转换为人类可读格式
-        Args:
-            timestamp_ms: 毫秒级时间戳整数
-        Returns:
-            str: 格式化后的时间字符串，格式为：YYYY-MM-DD HH:MM:SS.fff
-        """
-        if timestamp_ms is None:
-            return ''
-        # 提取毫秒部分
-        ms = timestamp_ms % 1000
-        # 提取秒部分
-        timestamp_sec = timestamp_ms // 1000
-        # 格式化为可读时间字符串，包含毫秒
-        return f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp_sec))}.{ms:03d}"
-
     def load_building_json(self, building_file: str) -> Dict[str, Dict[str, Any]]:
         """加载楼栋的JSON文件"""
         file_path = os.path.join(self.resource_dir, building_file)
@@ -368,16 +321,13 @@ class ImprovedDataCollectionManager:
                 # 只连接PLC IP，如果失败直接标记为失败
                 logger.info(f"❌ PLC IP连接失败: {plc_ip}")
                 for config in configs:
-                    # 获取当前时间戳（精确到毫秒）
-                    timestamp = int(time.time() * 1000)
                     results.append({
                         'ip': plc_ip,
                         'device_id': config.get('device_id'),
                         'param_key': config.get('param_key'),
                         'success': False,
                         'message': "PLC IP连接失败",
-                        'value': None,
-                        'timestamp': timestamp
+                        'value': None
                     })
                 return results
             
@@ -392,16 +342,13 @@ class ImprovedDataCollectionManager:
                 
                 # 读取数据
                 success, message, value = reader.read_db_data(db_num, offset, length, data_type)
-                # 获取当前时间戳（精确到毫秒）
-                timestamp = int(time.time() * 1000)
                 results.append({
                     'ip': plc_ip,
                     'device_id': device_id,
                     'param_key': param_key,
                     'success': success,
                     'message': message,
-                    'value': value,
-                    'timestamp': timestamp
+                    'value': value
                 })
                 
             return results
@@ -455,37 +402,38 @@ class ImprovedDataCollectionManager:
         success_count = 0
         total_count = len(results)
         
+        # 获取当前格式化的时间字符串，用于所有参数
+        current_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        
         # 初始化所有设备的结果
         for device_id, device_info in building_data.items():
             organized_results[device_id] = {
                 **device_info,  # 复制原始设备信息
                 'data': {},  # 添加数据字段
-                'status': 'pending'  # 初始状态
+                'status': 'pending',  # 初始状态
+                'timestamp': current_time_str  # 为设备添加时间戳
             }
         
         # 处理每个结果
         for result in results:
             device_id = result.get('device_id')
             param_key = result.get('param_key')
-            timestamp = result.get('timestamp')  # 获取时间戳
             
             if device_id and device_id in organized_results and param_key:
-                # 存储参数结果，包含时间戳
+                # 存储参数结果，添加时间戳
                 organized_results[device_id]['data'][param_key] = {
                     'value': result.get('value'),
                     'success': result.get('success'),
                     'message': result.get('message'),
-                    'timestamp': timestamp  # 添加时间戳到结果中
+                    'timestamp': current_time_str  # 为每个参数添加时间戳
                 }
                 
                 # 更新设备状态
                 if result.get('success'):
                     organized_results[device_id]['status'] = 'success'
                     success_count += 1
-                    # 打印成功读取的日志，包含时间戳
-                    if timestamp:
-                        timestamp_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp/1000))
-                        logger.info(f"✅ 设备 {device_id} 参数 {param_key} 读取成功，值：{result.get('value')}，时间：{timestamp_str}.{timestamp%1000:03d}")
+                    # 打印成功读取的日志
+                    logger.info(f"✅ 设备 {device_id} 参数 {param_key} 读取成功，值：{result.get('value')}")
                 else:
                     organized_results[device_id]['status'] = 'partial_success' if organized_results[device_id]['status'] == 'success' else 'failed'
         
@@ -523,14 +471,16 @@ class ImprovedDataCollectionManager:
             # 深拷贝结果数据，避免修改原始数据
             results_copy = copy.deepcopy(self.results[building_file])
             
-            # 将每个参数的时间戳转换为人类可读格式
+            # 处理时间戳：移除大整数timestamp字段，将timestamp_readable重命名为timestamp
             for device_id, device_info in results_copy.items():
                 if 'data' in device_info:
-                    for param_key, param_value in device_info['data'].items():
-                        if 'timestamp' in param_value:
-                            # 保留原始时间戳，添加格式化后的时间戳
-                            timestamp_ms = param_value['timestamp']
-                            param_value['timestamp_readable'] = self._format_timestamp(timestamp_ms)
+                    for param_key, param_data in device_info['data'].items():
+                        if 'timestamp_readable' in param_data:
+                            # 保留timestamp_readable并将其重命名为timestamp
+                            param_data['timestamp'] = param_data.pop('timestamp_readable', '')
+                        elif 'timestamp' in param_data:
+                            # 只保留timestamp字段
+                            pass  # 如果没有timestamp_readable，则保持原timestamp不变
             
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(results_copy, f, ensure_ascii=False, indent=2)
@@ -579,15 +529,6 @@ class ImprovedDataCollectionManager:
             
             # 深拷贝结果数据，避免修改原始数据
             results_copy = copy.deepcopy(results)
-            
-            # 将每个参数的时间戳转换为人类可读格式
-            for device_id, device_info in results_copy.items():
-                if 'data' in device_info:
-                    for param_key, param_value in device_info['data'].items():
-                        if 'timestamp' in param_value:
-                            # 保留原始时间戳，添加格式化后的时间戳
-                            timestamp_ms = param_value['timestamp']
-                            param_value['timestamp_readable'] = self._format_timestamp(timestamp_ms)
             
             # 提取唯一标识符（从第一个设备中获取）
             unique_identifier = ""
@@ -645,7 +586,7 @@ class ImprovedDataCollectionManager:
             return False
     
     def save_results_to_excel(self, building_file: str) -> bool:
-        """保存结果到Excel文件"""
+        """保存结果到Excel文件，将成功结果输出到success工作表，失败结果输出到failure工作表"""
         # 获取输出配置
         output_config = self.load_output_config()
         excel_config = output_config['output'].get('excel', {})
@@ -672,11 +613,15 @@ class ImprovedDataCollectionManager:
         output_path = os.path.join(directory, output_file)
         
         try:
-            # 准备Excel数据
-            excel_data = []
+            # 准备成功和失败的数据列表
+            success_data = []
+            failure_data = []
             results = self.results[building_file]
             
-            # 遍历每个设备的结果
+            # 获取当前格式化的时间字符串
+            current_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            
+            # 遍历每个设备的结果，分离成功和失败的数据
             for device_id, device_info in results.items():
                 # 基础信息
                 device_data = device_info.copy()
@@ -684,40 +629,100 @@ class ImprovedDataCollectionManager:
                 
                 # 提取每个参数的值
                 for param_key, param_value in data_section.items():
-                    # 获取时间戳
-                    timestamp_value = param_value.get('timestamp')
-                    timestamp_str = ''
-                    if timestamp_value:
-                        # 格式化为可读时间字符串，包含毫秒
-                        timestamp_ms = timestamp_value % 1000
-                        timestamp_sec = timestamp_value // 1000
-                        timestamp_str = f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp_sec))}.{timestamp_ms:03d}"
-                    
                     row = {
                         'device_id': device_id,
                         'param_key': param_key,
                         'value': param_value.get('value'),
                         'success': param_value.get('success'),
                         'message': param_value.get('message'),
-                        'timestamp': timestamp_str,  # 添加时间戳信息到Excel行
-                        'timestamp_ms': timestamp_value  # 也保存原始的毫秒级时间戳
+                        'timestamp': current_time_str  # 使用当前格式化的时间字符串，不含毫秒
                     }
                     
                     # 添加设备基本信息
                     for key, value in device_data.items():
                         row[key] = value
                     
-                    excel_data.append(row)
+                    # 根据成功状态分别添加到不同的数据列表
+                    if param_value.get('success'):
+                        success_data.append(row)
+                    else:
+                        failure_data.append(row)
             
-            # 创建DataFrame并保存为Excel
-            df = pd.DataFrame(excel_data)
-            df.to_excel(output_path, index=False, engine='openpyxl')
+            # 使用ExcelWriter来应用格式
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                # 导入openpyxl样式类
+                from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+                
+                # 定义样式
+                header_font = Font(bold=True, color="FFFFFF", size=11)
+                header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+                header_alignment = Alignment(horizontal="center", vertical="center")
+                thin_border = Border(
+                    left=Side(style='thin'),
+                    right=Side(style='thin'),
+                    top=Side(style='thin'),
+                    bottom=Side(style='thin')
+                )
+                normal_alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                
+                # 保存成功数据到success工作表
+                if success_data:
+                    success_df = pd.DataFrame(success_data)
+                    success_df.to_excel(writer, index=False, sheet_name='success')
+                    success_ws = writer.sheets['success']
+                    self._apply_excel_formatting(success_ws, header_font, header_fill, header_alignment, thin_border, normal_alignment)
+                
+                # 保存失败数据到failure工作表
+                if failure_data:
+                    failure_df = pd.DataFrame(failure_data)
+                    failure_df.to_excel(writer, index=False, sheet_name='failure')
+                    failure_ws = writer.sheets['failure']
+                    self._apply_excel_formatting(failure_ws, header_font, header_fill, header_alignment, thin_border, normal_alignment)
+                
+                # 如果没有成功数据，至少创建一个工作表避免Excel文件为空
+                if not success_data and not failure_data:
+                    empty_df = pd.DataFrame(columns=['提示'])
+                    empty_df.loc[0] = ['无数据']
+                    empty_df.to_excel(writer, index=False, sheet_name='数据')
             
-            logger.info(f"✅ 结果已保存到Excel文件：{output_path}")
+            logger.info(f"✅ 结果已保存到Excel文件，成功数据在success工作表，失败数据在failure工作表：{output_path}")
             return True
         except Exception as e:
             logger.info(f"❌ 保存结果到Excel文件失败：{str(e)}")
             return False
+    
+    def _apply_excel_formatting(self, worksheet, header_font, header_fill, header_alignment, thin_border, normal_alignment):
+        """应用Excel格式到工作表"""
+        # 设置表头格式
+        for cell in worksheet[1]:  # 第一行为表头
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        
+        # 设置所有单元格的边框和对齐方式
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+            for cell in row:
+                cell.border = thin_border
+                cell.alignment = normal_alignment
+        
+        # 调整列宽以适应内容
+        for col in worksheet.columns:
+            max_length = 0
+            column = col[0].column_letter  # 获取列字母
+            
+            for cell in col:
+                try:
+                    if cell.value is not None:
+                        cell_length = len(str(cell.value))
+                        if cell_length > max_length:
+                            max_length = cell_length
+                except:
+                    pass
+            
+            # 设置列宽，添加一些额外空间
+            adjusted_width = min(max_length + 2, 50)  # 限制最大宽度为50
+            worksheet.column_dimensions[column].width = adjusted_width
 
     def collect_data_for_all_buildings(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
         """为所有楼栋收集数据"""
@@ -745,30 +750,76 @@ class ImprovedDataCollectionManager:
 
 # 示例用法
 if __name__ == "__main__":
+    import argparse
+    import glob
+    
+    # 创建参数解析器
+    parser = argparse.ArgumentParser(description='数据收集管理器 - 收集PLC累计制热制冷量数据')
+    parser.add_argument('-f', '--file', type=str, help='指定resource目录下的文件名，支持通配符，例如：1* 或 *data.json')
+    
+    # 解析命令行参数
+    args = parser.parse_args()
+    
     # 创建数据收集管理器，设置线程池大小
     manager = ImprovedDataCollectionManager(max_workers=10)
     manager.start()
     
     try:
-        # 使用测试文件进行数据收集
-        building_file = '3#_data_test.json'
-        logger.info(f"🔍 开始测试数据收集：使用测试文件 {building_file}")
-        results = manager.collect_data_for_building(building_file)
+        # 确定要处理的文件列表
+        if args.file:
+            # 使用通配符匹配文件
+            pattern = os.path.join(manager.resource_dir, args.file)
+            building_files = glob.glob(pattern)
+            
+            # 提取文件名部分（不包含路径）
+            building_files = [os.path.basename(f) for f in building_files]
+            
+            # 过滤，只保留以_data.json结尾的文件
+            building_files = [f for f in building_files if f.endswith('_data.json')]
+            
+            if not building_files:
+                logger.info(f"❌ 未找到匹配的文件: {args.file}")
+                # 显示帮助信息
+                parser.print_help()
+        else:
+            # 如果没有指定文件，默认使用3#_data.json
+            building_files = ['1#_data.json']
+            logger.info("⚠️  未指定文件名，默认使用3#_data.json")
+            logger.info("💡 使用 -f 参数指定文件名，例如: python improved_data_collection_manager.py -f 1* 或 python improved_data_collection_manager.py -f *data.json")
         
-        if results:
-            logger.info("📋 收集到的数据:")
-            for device_id, device_data in results.items():
-                logger.info(f"  设备ID: {device_id}")
-                logger.info(f"  基本信息: {device_data['专有部分坐落']}, IP: {device_data['IP地址']}")
-                logger.info(f"  PLC IP: {device_data.get('PLC IP地址', 'N/A')}")
-                logger.info(f"  收集状态: {device_data['status']}")
-                logger.info(f"  数据内容: {device_data['data']}")
-                logger.info("  ----------")
+        # 处理每个匹配的文件
+        logger.info(f"🚀 开始处理文件列表：{building_files}")
+        for building_file in building_files:
+            logger.info(f"\n🔄 处理文件：{building_file}")
+            results = manager.collect_data_for_building(building_file)
+            
+            if results:
+                logger.info("📋 收集到的数据概览:")
+                success_count = sum(1 for device_data in results.values() if device_data['status'] == 'success')
+                partial_count = sum(1 for device_data in results.values() if device_data['status'] == 'partial_success')
+                failed_count = sum(1 for device_data in results.values() if device_data['status'] == 'failed')
+                
+                logger.info(f"  总设备数: {len(results)}")
+                logger.info(f"  成功: {success_count}, 部分成功: {partial_count}, 失败: {failed_count}")
+                
+                # 只打印第一个设备的详细信息作为示例
+                first_device = next(iter(results.items()), None)
+                if first_device:
+                    device_id, device_data = first_device
+                    logger.info(f"  示例设备ID: {device_id}")
+                    logger.info(f"  基本信息: {device_data['专有部分坐落']}, IP: {device_data['IP地址']}")
+                    logger.info(f"  PLC IP: {device_data.get('PLC IP地址', 'N/A')}")
+                    logger.info(f"  收集状态: {device_data['status']}")
+                    logger.info(f"  数据参数数量: {len(device_data['data'])}")
+                    logger.info("  ----------")
         
     except KeyboardInterrupt:
         logger.info("\n✅ 用户手动终止程序")
     except Exception as e:
         logger.info(f"\n❌ 程序异常：{str(e)}")
+        # 打印完整的错误堆栈
+        import traceback
+        logger.info(traceback.format_exc())
     finally:
         # 确保停止线程池
         manager.stop()

@@ -3,6 +3,7 @@
     "type": "Excel",
     "excel": {
       "enabled": true,
+
       "file_name": "累计用量",
       "directory": "c:/Users/yanggyan/TRAE/FreeArk/output/",
       "include_all_params": false
@@ -11,10 +12,10 @@
       "enabled": true
     },
     "mqtt": {
-      "enabled": true,
+      "enabled": false,
       "server": {
         "host": "192.168.31.141",
-        "port": 1883,
+        "port": 11883,
         "username": "",
         "password": "",
         "tls_enabled": false,

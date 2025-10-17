@@ -1,0 +1,103 @@
+2025-10-15 01:21:55 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:21:55 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:21:55 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/
+2025-10-15 01:21:56 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:26:32 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:26:32 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:26:32 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/
+2025-10-15 01:26:33 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:32:21 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:32:21 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:32:21 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/device123
+2025-10-15 01:32:23 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:33:10 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:33:10 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:33:10 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/device123
+2025-10-15 01:33:11 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:34:12 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:34:12 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:34:12 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/device123
+2025-10-15 01:34:13 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:36:50 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:36:50 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:36:50 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/device123
+2025-10-15 01:36:51 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:39:18 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:39:18 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:39:18 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5QoS
+2025-10-15 01:39:19 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:43:51 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:43:51 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:43:51 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5QoS
+2025-10-15 01:43:52 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:52:52 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:52:52 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:52:52 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5QoS
+2025-10-15 01:52:53 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:53:53 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:53:53 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:53:53 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5QoS
+2025-10-15 01:53:54 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:55:33 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:55:33 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 192.168.31.141:1883
+2025-10-15 01:55:33 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5QoS
+2025-10-15 01:55:34 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:55:58 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:55:58 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 1883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 01:56:03 - publish_system_mode - ERROR - ❌ 连接MQTT服务器失败: 47.117.41.184:1883
+2025-10-15 01:56:03 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:56:48 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:56:48 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 01:56:49 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 01:56:49 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5QoS
+2025-10-15 01:56:51 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 01:58:20 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 01:58:20 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 01:58:20 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 01:58:20 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5
+2025-10-15 01:58:21 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 02:01:16 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 02:01:16 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 02:01:16 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 02:01:16 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5
+2025-10-15 02:01:17 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 02:05:32 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 02:05:32 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 02:05:33 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 02:05:33 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: wind，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5
+2025-10-15 02:05:34 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 02:10:53 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 02:10:53 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 02:10:53 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 02:10:53 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5
+2025-10-15 02:10:54 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 02:14:28 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 02:14:28 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 02:14:28 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 02:14:28 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5
+2025-10-15 02:14:29 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 02:15:26 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 02:15:26 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': 'c5d29c52a237ade5'}
+2025-10-15 02:15:27 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 02:15:27 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/c5d29c52a237ade5
+2025-10-15 02:15:28 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 23:04:05 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 23:04:05 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': '2860fae9a34ab8a9'}
+2025-10-15 23:04:05 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 23:04:05 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/2860fae9a34ab8a9
+2025-10-15 23:04:06 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 23:05:32 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 23:05:32 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': '2860fae9a34ab8a9'}
+2025-10-15 23:05:32 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 23:05:32 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/2860fae9a34ab8a9
+2025-10-15 23:05:33 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 23:13:23 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 23:13:23 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': '2860fae9a34ab8a9'}
+2025-10-15 23:13:24 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 23:13:24 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/2860fae9a34ab8a9
+2025-10-15 23:13:25 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接
+2025-10-15 23:16:46 - publish_system_mode - INFO - ✅ 成功加载配置文件: C:\Users\yanggyan\TRAE\FreeArk\resource\mqtt_config.json
+2025-10-15 23:16:46 - publish_system_mode - INFO - 🔧 加载的配置内容: {'host': '47.117.41.184', 'port': 11883, 'username': '', 'password': '', 'tls_enabled': False, 'topic': '/screen/service/cloud/to/screen/', 'qos': 0, 'retain': False, 'screenMac': '2860fae9a34ab8a9'}
+2025-10-15 23:16:46 - publish_system_mode - INFO - ✅ 成功连接到MQTT服务器: 47.117.41.184:11883
+2025-10-15 23:16:46 - publish_system_mode - INFO - ✅ 系统模式消息发布成功，模式: code，主题: /screen/service/cloud/to/screen/2860fae9a34ab8a9
+2025-10-15 23:16:47 - publish_system_mode - INFO - ✅ 已断开与MQTT服务器的连接

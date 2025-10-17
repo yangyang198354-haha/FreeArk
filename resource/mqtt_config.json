@@ -1,0 +1,11 @@
+{
+  "host": "47.117.41.184",
+  "port": 11883,
+  "username": "",
+  "password": "",
+  "tls_enabled": false,
+  "topic": "/screen/service/cloud/to/screen/",
+  "qos": 0,
+  "retain": false,
+  "screenMac": "2860fae9a34ab8a9"
+}

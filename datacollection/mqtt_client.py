@@ -1,49 +1,21 @@
 import paho.mqtt.client as mqtt
 import json
-import logging
 import time
 import os
+import sys
 from typing import Dict, Any, Callable, Optional
+
+# 添加FreeArk目录到Python路径，确保模块可以正确导入
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 导入统一的日志配置管理器
+from datacollection.log_config_manager import get_logger
 
 # 导入paho.mqtt.client模块
 import paho.mqtt.client as mqtt
 
-# 配置日志
-def setup_logger():
-    # 创建logger对象
-    logger = logging.getLogger('mqtt_client')
-    logger.setLevel(logging.INFO)
-    
-    # 检查是否已经存在处理器，避免重复添加
-    if not logger.handlers:
-        # 创建控制台处理器
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        
-        # 创建文件处理器，日志存储在log目录下
-        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'log')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        
-        # 为日志文件添加日期
-        log_filename = f"mqtt_client_{time.strftime('%Y%m%d')}.log"
-        log_path = os.path.join(log_dir, log_filename)
-        file_handler = logging.FileHandler(log_path, encoding='utf-8')
-        file_handler.setLevel(logging.INFO)
-        
-        # 设置日志格式
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(formatter)
-        file_handler.setFormatter(formatter)
-        
-        # 添加处理器到logger
-        logger.addHandler(console_handler)
-        logger.addHandler(file_handler)
-    
-    return logger
-
-# 初始化logger
-logger = setup_logger()
+# 获取logger，日志级别从配置文件读取
+logger = get_logger('mqtt_client')
 
 class MQTTClient:
     """MQTT客户端类，提供订阅和推送消息的基本方法"""
