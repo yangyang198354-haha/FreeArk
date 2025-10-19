@@ -429,6 +429,8 @@ class PLCDataViewerGUI:
             # 使用默认值
             location = "未知坐落"
             room_number = room_id or "未知房间"
+            # 使用传入的楼栋名称作为默认值
+            actual_building = building_name
             hot_quantity = "-"
             cold_quantity = "-"
             status = "未知"
@@ -437,8 +439,10 @@ class PLCDataViewerGUI:
             # 提取房间信息
             location = room_info.get("专有部分坐落", "未知坐落")
             room_number = room_id or room_info.get("户号", "未知房间")
+            # 从房间信息中提取楼栋字段，如果不存在则使用传入的building_name作为默认值
+            actual_building = room_info.get("楼栋", building_name)
             
-            logger.debug(f"🔍 处理房间数据: {building_name}-{room_number}, 坐落: {location}")
+            logger.debug(f"🔍 处理房间数据: {actual_building}-{room_number}, 坐落: {location}")
             
             # 提取热冷量数据
             data_section = room_info.get("data", {})
@@ -478,8 +482,8 @@ class PLCDataViewerGUI:
             status = room_info.get("status", "未知")
             timestamp = room_info.get("timestamp", "")
         
-        # 在GUI线程中添加数据到表格
-        self.root.after(0, self.add_item_to_tree, building_name, room_number, location, hot_quantity, cold_quantity, status, timestamp)
+        # 在GUI线程中添加数据到表格，使用从JSON中提取的楼栋信息
+        self.root.after(0, self.add_item_to_tree, actual_building, room_number, location, hot_quantity, cold_quantity, status, timestamp)
     
     def add_item_to_tree(self, building, room, location, hot, cold, status, timestamp):
         # 插入数据到表格
@@ -573,8 +577,9 @@ class PLCDataViewerGUI:
         btn_frame.pack(pady=10, anchor=tk.E)
         
         # 取消按钮在左，确认按钮在右，符合Windows规范
-        ttk.Button(btn_frame, text="取消", command=export_window.destroy).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="确认", command=do_export).pack(side=tk.LEFT, padx=5)
+        # 使用标准tk.Button代替ttk.Button以确保按钮文本正确显示
+        tk.Button(btn_frame, text="取消", width=8, command=export_window.destroy).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="确认", width=8, command=do_export).pack(side=tk.LEFT, padx=5)
     
     def _export_to_json(self):
         try:
@@ -642,31 +647,41 @@ class PLCDataViewerGUI:
             )
             
             if file_path:
-                # 保存数据到Excel文件
-                with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False, sheet_name='PLC数据')
-                    
-                    # 获取xlsxwriter工作簿和工作表对象
-                    workbook = writer.book
-                    worksheet = writer.sheets['PLC数据']
-                    
-                    # 设置列宽
-                    worksheet.set_column('A:A', 10)  # 楼栋
-                    worksheet.set_column('B:B', 10)  # 房间号
-                    worksheet.set_column('C:C', 25)  # 专有部分坐落
-                    worksheet.set_column('D:G', 15)  # 其他列
-                    
-                    # 添加表头样式
-                    header_format = workbook.add_format({
-                        'bold': True,
-                        'text_wrap': True,
-                        'valign': 'top',
-                        'fg_color': '#D7E4BC',
-                        'border': 1})
-                    
-                    # 应用表头样式
-                    for col_num, value in enumerate(df.columns.values):
-                        worksheet.write(0, col_num, value, header_format)
+                # 简化Excel导出，避免可能的xlsxwriter问题
+                try:
+                    # 尝试使用xlsxwriter引擎
+                    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+                        df.to_excel(writer, index=False, sheet_name='PLC数据')
+                        
+                        # 获取xlsxwriter工作簿和工作表对象
+                        workbook = writer.book
+                        worksheet = writer.sheets['PLC数据']
+                        
+                        # 设置列宽
+                        worksheet.set_column('A:A', 10)  # 楼栋
+                        worksheet.set_column('B:B', 10)  # 房间号
+                        worksheet.set_column('C:C', 25)  # 专有部分坐落
+                        worksheet.set_column('D:G', 15)  # 其他列
+                        
+                        # 添加表头样式
+                        header_format = workbook.add_format({
+                            'bold': True,
+                            'text_wrap': True,
+                            'valign': 'top',
+                            'fg_color': '#D7E4BC',
+                            'border': 1})
+                        
+                        # 应用表头样式
+                        for col_num, value in enumerate(df.columns.values):
+                            worksheet.write(0, col_num, value, header_format)
+                except ImportError:
+                    # 如果xlsxwriter不可用，使用默认引擎
+                    logger.warning("⚠️ xlsxwriter不可用，使用默认引擎导出Excel")
+                    df.to_excel(file_path, index=False, sheet_name='PLC数据')
+                except Exception as e:
+                    # 捕获其他可能的异常
+                    logger.error(f"导出Excel时出错: {str(e)}")
+                    df.to_excel(file_path, index=False, sheet_name='PLC数据')
             
             self.status_var.set(f"数据已成功导出到: {file_path}")
             messagebox.showinfo("成功", f"数据已成功导出到:\n{file_path}")

@@ -7,6 +7,18 @@ import concurrent.futures
 import pandas as pd
 import copy
 
+# 处理PyInstaller打包后的资源文件路径
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径，支持PyInstaller打包环境"""
+    try:
+        # PyInstaller打包后的临时目录
+        base_path = sys._MEIPASS
+    except Exception:
+        # 正常开发环境
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    return os.path.join(base_path, relative_path)
+
 # 添加FreeArk目录到Python路径，确保模块可以正确导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
