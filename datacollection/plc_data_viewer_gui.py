@@ -12,8 +12,14 @@ import platform
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 导入统一的日志配置管理器
+from datacollection.log_config_manager import get_logger
+
 # 导入数据收集管理器
 from datacollection.improved_data_collection_manager import ImprovedDataCollectionManager
+
+# 获取logger，日志级别从配置文件读取
+logger = get_logger('plc_data_viewer')
 
 class PLCDataViewerGUI:
     def __init__(self, root):
@@ -21,6 +27,7 @@ class PLCDataViewerGUI:
         self.root.title("朗诗乐府自由方舟累计用量采集程序")
         self.root.geometry("1000x600")
         self.root.minsize(800, 500)
+        logger.info("✅ PLC数据查看器GUI已初始化")
         
         # 配置Windows风格
         self.configure_windows_style()
@@ -84,11 +91,15 @@ class PLCDataViewerGUI:
     
     def initialize_manager(self):
         try:
+            logger.info("🔄 正在初始化数据收集管理器...")
             # 初始化数据收集管理器
             self.data_collection_manager = ImprovedDataCollectionManager(max_workers=5)
             self.data_collection_manager.start()
+            logger.info("✅ 数据收集管理器初始化成功")
         except Exception as e:
-            messagebox.showerror("初始化错误", f"无法初始化数据收集管理器: {str(e)}")
+            error_msg = f"无法初始化数据收集管理器: {str(e)}"
+            logger.error(error_msg)
+            messagebox.showerror("初始化错误", error_msg)
     
     def create_widgets(self):
         # 创建主框架，使用Windows标准的内边距
@@ -189,6 +200,7 @@ class PLCDataViewerGUI:
                              command=lambda _col=col: self.treeview_sort_column(_col, False))
     
     def select_files(self):
+        logger.info("📁 打开文件选择对话框")
         # 打开文件选择对话框
         file_paths = filedialog.askopenfilenames(
             title="选择JSON配置文件",
@@ -198,31 +210,40 @@ class PLCDataViewerGUI:
         
         if file_paths:
             self.selected_files = list(file_paths)
-            # 更新文件列表显示
             file_count = len(self.selected_files)
+            logger.info(f"✅ 成功选择 {file_count} 个配置文件")
+            # 更新文件列表显示
             if file_count <= 3:
                 file_names = ", ".join([os.path.basename(f) for f in self.selected_files])
+                logger.debug(f"选中的文件: {file_names}")
             else:
                 file_names = f"已选择 {file_count} 个文件: {os.path.basename(self.selected_files[0])} 等"
             self.file_list_label.config(text=file_names)
             self.status_var.set(f"已选择 {file_count} 个配置文件")
+        else:
+            logger.info("❌ 用户取消了文件选择")
     
     def start_data_collection(self):
         if self.is_processing:
+            logger.warning("⏳ 重复请求处理数据，操作被忽略")
             messagebox.showinfo("提示", "正在处理数据，请稍候...")
             return
         
         if not self.selected_files:
+            logger.warning("❌ 未选择配置文件")
             messagebox.showwarning("警告", "请先选择配置文件")
             return
         
         if not self.data_collection_manager:
+            logger.error("❌ 数据收集管理器未初始化")
             messagebox.showerror("错误", "数据收集管理器未初始化")
             return
         
+        logger.info("🚀 开始数据收集处理")
         # 清空表格
         for item in self.tree.get_children():
             self.tree.delete(item)
+        logger.debug("✅ 表格已清空")
         
         # 禁用按钮
         self.select_files_btn.config(state=tk.DISABLED)
@@ -232,55 +253,71 @@ class PLCDataViewerGUI:
         
         # 在新线程中处理数据
         threading.Thread(target=self.process_files, daemon=True).start()
+        logger.info("🔄 数据处理线程已启动")
     
     def process_files(self):
         try:
             total_files = len(self.selected_files)
             processed_files = 0
+            logger.info(f"📊 开始处理 {total_files} 个配置文件")
             
             for file_path in self.selected_files:
                 processed_files += 1
                 file_name = os.path.basename(file_path)
+                logger.info(f"📄 处理文件 {processed_files}/{total_files}: {file_name}")
                 self.status_var.set(f"正在处理文件 {processed_files}/{total_files}: {file_name}")
                 
                 # 调用数据收集管理器实时读取PLC数据
+                logger.info(f"🔌 正在从PLC读取数据: {file_name}")
                 self.status_var.set(f"正在从PLC读取数据: {file_name}")
                 # 直接使用文件名调用collect_data_for_building方法
                 plc_data = self.data_collection_manager.collect_data_for_building(file_name)
                 
                 if plc_data:
+                    logger.info(f"✅ 成功获取 {file_name} 的PLC数据")
                     # 提取楼栋信息
                     building_name = file_name.split('_')[0] if '_' in file_name else "未知楼栋"
                     
                     # 处理从PLC读取的数据
                     self.process_file_content(plc_data, building_name)
                 else:
+                    logger.warning(f"❌ 无法从PLC读取数据: {file_name}")
                     self.status_var.set(f"无法从PLC读取数据: {file_name}")
             
-            self.status_var.set(f"处理完成，共 {processed_files} 个文件，表格中显示 {len(self.tree.get_children())} 条记录")
+            record_count = len(self.tree.get_children())
+            logger.info(f"✅ 所有文件处理完成，共处理 {processed_files} 个文件，表格中显示 {record_count} 条记录")
+            self.status_var.set(f"处理完成，共 {processed_files} 个文件，表格中显示 {record_count} 条记录")
         
         except Exception as e:
-            self.status_var.set(f"处理出错: {str(e)}")
-            self.root.after(0, lambda: messagebox.showerror("错误", f"处理文件时出错: {str(e)}"))
+            error_msg = str(e)
+            logger.error(f"💥 处理过程中发生错误: {error_msg}", exc_info=True)
+            self.status_var.set(f"处理出错: {error_msg}")
+            self.root.after(0, lambda msg=error_msg: messagebox.showerror("错误", f"处理文件时出错: {msg}"))
         
         finally:
+            logger.info("🔄 恢复UI状态")
             # 恢复按钮状态
             self.root.after(0, lambda: self.select_files_btn.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL))
             self.is_processing = False
     
     def process_file_content(self, file_data, building_name):
+        logger.debug(f"📋 处理文件内容，数据类型: {type(file_data).__name__}, 楼栋: {building_name}")
         # 检查数据格式并处理
         if isinstance(file_data, dict):
+            logger.debug(f"📊 处理字典格式数据，键数量: {len(file_data)}")
             # 检查是否是合并后的all_onwer.json格式
             if 'buildings' in file_data:
+                logger.debug("🏢 处理多楼栋格式数据")
                 for building in file_data['buildings']:
                     building_content = building.get('content', {})
                     self._process_room_data(building_content, building_name)
             else:
                 # 单个建筑的数据文件格式
+                logger.debug("🏠 处理单楼栋格式数据")
                 self._process_room_data(file_data, building_name)
         elif isinstance(file_data, list):
+            logger.debug(f"📝 处理列表格式数据，元素数量: {len(file_data)}")
             # 列表格式数据
             for item in file_data:
                 if isinstance(item, dict):
@@ -288,51 +325,73 @@ class PLCDataViewerGUI:
                     self._process_single_room_data(item, building_name)
     
     def _process_room_data(self, room_data, building_name):
-        for room_id, room_info in room_data.items():
-            self._process_single_room_data(room_info, building_name, room_id)
+        # 确保room_data是字典类型
+        if isinstance(room_data, dict):
+            room_count = len(room_data)
+            logger.debug(f"🚪 处理 {room_count} 个房间数据，楼栋: {building_name}")
+            for room_id, room_info in room_data.items():
+                self._process_single_room_data(room_info, building_name, room_id)
+        else:
+            # 如果不是字典，记录错误日志
+            error_msg = f"警告: 房间数据格式不正确，期望字典类型，实际类型: {type(room_data).__name__}"
+            logger.warning(error_msg)
     
     def _process_single_room_data(self, room_info, building_name, room_id=None):
-        # 提取房间信息
-        location = room_info.get("专有部分坐落", "未知坐落")
-        room_number = room_id or room_info.get("户号", "未知房间")
-        
-        # 提取热冷量数据
-        data_section = room_info.get("data", {})
-        hot_quantity = "-"
-        cold_quantity = "-"
-        status = "未知"
-        timestamp = ""
-        
-        if isinstance(data_section, dict):
-            # 处理累计制热量 - 支持不同的参数键名
-            hot_keys = ["total_hot_quantity", "累计制热量", "累计热量"]
-            for key in hot_keys:
-                if key in data_section:
-                    hot_data = data_section[key]
-                    if isinstance(hot_data, dict) and hot_data.get("success", False):
-                        hot_quantity = str(hot_data.get("value", "-"))
-                    elif not isinstance(hot_data, dict):
-                        hot_quantity = str(hot_data)
-                    else:
-                        hot_quantity = "失败"
-                    break
+        # 确保room_info是字典类型
+        if not isinstance(room_info, dict):
+            error_msg = f"警告: 房间信息格式不正确，期望字典类型，实际类型: {type(room_info).__name__}"
+            logger.warning(error_msg)
+            # 使用默认值
+            location = "未知坐落"
+            room_number = room_id or "未知房间"
+            hot_quantity = "-"
+            cold_quantity = "-"
+            status = "未知"
+            timestamp = ""
+        else:
+            # 提取房间信息
+            location = room_info.get("专有部分坐落", "未知坐落")
+            room_number = room_id or room_info.get("户号", "未知房间")
             
-            # 处理累计制冷量 - 支持不同的参数键名
-            cold_keys = ["total_cold_quantity", "累计制冷量", "累计冷量"]
-            for key in cold_keys:
-                if key in data_section:
-                    cold_data = data_section[key]
-                    if isinstance(cold_data, dict) and cold_data.get("success", False):
-                        cold_quantity = str(cold_data.get("value", "-"))
-                    elif not isinstance(cold_data, dict):
-                        cold_quantity = str(cold_data)
-                    else:
-                        cold_quantity = "失败"
-                    break
-        
-        # 提取状态和时间戳
-        status = room_info.get("status", "未知")
-        timestamp = room_info.get("timestamp", "")
+            logger.debug(f"🔍 处理房间数据: {building_name}-{room_number}, 坐落: {location}")
+            
+            # 提取热冷量数据
+            data_section = room_info.get("data", {})
+            hot_quantity = "-"
+            cold_quantity = "-"
+            status = "未知"
+            timestamp = ""
+            
+            if isinstance(data_section, dict):
+                # 处理累计制热量 - 支持不同的参数键名
+                hot_keys = ["total_hot_quantity", "累计制热量", "累计热量"]
+                for key in hot_keys:
+                    if key in data_section:
+                        hot_data = data_section[key]
+                        if isinstance(hot_data, dict) and hot_data.get("success", False):
+                            hot_quantity = str(hot_data.get("value", "-"))
+                        elif not isinstance(hot_data, dict):
+                            hot_quantity = str(hot_data)
+                        else:
+                            hot_quantity = "失败"
+                        break
+                
+                # 处理累计制冷量 - 支持不同的参数键名
+                cold_keys = ["total_cold_quantity", "累计制冷量", "累计冷量"]
+                for key in cold_keys:
+                    if key in data_section:
+                        cold_data = data_section[key]
+                        if isinstance(cold_data, dict) and cold_data.get("success", False):
+                            cold_quantity = str(cold_data.get("value", "-"))
+                        elif not isinstance(cold_data, dict):
+                            cold_quantity = str(cold_data)
+                        else:
+                            cold_quantity = "失败"
+                        break
+            
+            # 提取状态和时间戳
+            status = room_info.get("status", "未知")
+            timestamp = room_info.get("timestamp", "")
         
         # 在GUI线程中添加数据到表格
         self.root.after(0, self.add_item_to_tree, building_name, room_number, location, hot_quantity, cold_quantity, status, timestamp)
@@ -360,12 +419,15 @@ class PLCDataViewerGUI:
         self.tree.heading(col, command=lambda: self.treeview_sort_column(col, not reverse))
     
     def export_data(self):
+        logger.info("📤 开始导出数据")
         # 获取表格中的所有数据
         items = self.tree.get_children()
         if not items:
+            logger.warning("❌ 表格中没有数据可导出")
             messagebox.showinfo("提示", "表格中没有数据可导出")
             return
         
+        logger.info(f"📊 准备导出 {len(items)} 条记录")
         # 显示导出格式选择对话框，使用Windows风格的对话框
         export_window = tk.Toplevel(self.root)
         export_window.title("导出数据")

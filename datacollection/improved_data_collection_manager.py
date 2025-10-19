@@ -76,21 +76,7 @@ class ImprovedDataCollectionManager:
             logger.info(f"❌ 加载PLC配置文件失败：{str(e)}")
             return {}
 
-    def load_room_plc_map(self) -> Dict[str, str]:
-        """加载房间与PLC IP的映射关系"""
-        map_path = os.path.join(self.resource_dir, 'room_plc_map.json')
-        if not os.path.exists(map_path):
-            logger.info(f"❌ 房间与PLC IP映射文件不存在：{map_path}")
-            return {}
-        
-        try:
-            with open(map_path, 'r', encoding='utf-8') as f:
-                room_plc_map = json.load(f)
-                logger.info(f"✅ 成功加载房间与PLC IP映射文件，共{len(room_plc_map)}条映射关系")
-                return room_plc_map
-        except Exception as e:
-            logger.info(f"❌ 加载房间与PLC IP映射文件失败：{str(e)}")
-            return {}
+    # 移除了load_room_plc_map方法，因为房间与PLC IP映射文件已不存在
     
     def load_output_config(self) -> Dict[str, Any]:
         """加载输出配置文件"""
@@ -175,28 +161,15 @@ class ImprovedDataCollectionManager:
         if not plc_config:
             return {}
         
-        # 加载房间与PLC IP映射关系
-        room_plc_map = self.load_room_plc_map()
-        
         # 创建PLC读取配置列表
         plc_read_configs = []
         ip_to_device_map = {}
         
         # 为每个设备的每个参数创建读取配置
         for device_id, device_info in building_data.items():
+                
             # 优先使用设备信息中的PLC IP地址
             plc_ip = device_info.get('PLC IP地址')
-            
-            # 如果设备信息中没有PLC IP，尝试从映射文件中获取
-            if not plc_ip and room_plc_map:
-                # 从device_id提取房间号（格式：X-X-X-XXX 或 X-X-XXX）
-                room_number = device_id.replace('-', '')[-7:].replace('-', '')  # 提取最后7位数字作为房间标识
-                # 尝试精确匹配或模糊匹配
-                for key in room_plc_map:
-                    if room_number in key.replace('-', ''):
-                        plc_ip = room_plc_map[key]
-                        logger.info(f"🔍 为设备 {device_id} 从映射文件中找到PLC IP: {plc_ip}")
-                        break
             
             if not plc_ip:
                 # 如果仍然没有PLC IP，使用设备的IP地址作为后备方案
