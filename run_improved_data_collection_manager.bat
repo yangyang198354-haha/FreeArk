@@ -1,32 +1,33 @@
-@echo off
+﻿@echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
 
-REM 查找Python解释器
-set "python_exe="
-for /f "tokens=* usebackq" %%i in (`where python 2^>nul`) do (
-    set "python_exe=%%i"
-    goto :found_python
-)
+echo ===============================================================================
+echo FreeArk 数据收集管理器
 
-REM 如果没有找到Python，尝试从Python安装目录查找
-if not defined python_exe (
-    echo 正在搜索Python安装目录...
-    for /d "tokens=*" %%i in ("%ProgramFiles%\Python*", "%ProgramFiles(x86)%\Python*") do (
-        if exist "%%i\python.exe" (
-            set "python_exe=%%i\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-:found_python
-if defined python_exe (
-    echo 找到Python解释器: %python_exe%
-    echo 正在启动改进版数据收集管理器...
-    "%python_exe%" "%~dp0datacollection\improved_data_collection_manager.py" -f all_onwer.json
-) else (
-    echo 错误: 未找到Python解释器，请先安装Python。
+echo 检查Python环境...
+where python >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+    echo  错误：未找到Python！
+    echo 请先安装Python 3.8或更高版本。
     pause
     exit /b 1
 )
 
+:: 确保在正确的目录下运行
+cd /d %~dp0
+
+:: 尝试导入依赖，如果缺少则提示安装
+echo 检查依赖...
+python -c "import pandas; import snap7; import paho.mqtt.client; print(' 依赖检查通过')" >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+    echo   警告：缺少部分依赖！请先运行 install_and_use.bat 安装依赖。
+    echo 正在尝试直接运行，可能会失败...
+)
+
+:: 运行主程序
+echo 启动数据收集管理器...
+python datacollection\improved_data_collection_manager.py
+
 pause
+endlocal
