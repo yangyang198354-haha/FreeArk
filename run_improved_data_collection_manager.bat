@@ -1,9 +1,10 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 echo ===============================================================================
 echo FreeArk 数据收集管理器
+echo ===============================================================================
 
 echo 检查Python环境...
 where python >nul 2>nul
@@ -27,7 +28,7 @@ if %ERRORLEVEL% neq 0 (
 
 :: 运行主程序
 echo 启动数据收集管理器...
-python datacollection\improved_data_collection_manager.py
+python datacollection\improved_data_collection_manager.py -f *data.json
 
 pause
 endlocal
