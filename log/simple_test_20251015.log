@@ -1,5 +1,0 @@
-2025-10-15 00:19:54 - simple_test - DEBUG - 这是一条调试信息 - Debug message
-2025-10-15 00:19:54 - simple_test - INFO - 这是一条信息日志 - Info message
-2025-10-15 00:19:54 - simple_test - WARNING - 这是一条警告日志 - Warning message
-2025-10-15 00:19:54 - simple_test - ERROR - 这是一条错误日志 - Error message
-2025-10-15 00:19:54 - simple_test - CRITICAL - 这是一条严重错误日志 - Critical message
