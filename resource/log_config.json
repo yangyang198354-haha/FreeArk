@@ -19,6 +19,10 @@
     "quantity_statistics": {
       "level": "INFO",
       "description": "用量统计日志级别，记录主要业务信息"
+    },
+    "plc_data_viewer": {
+      "level": "INFO",
+      "description": "PLC数据查看器日志级别，记录GUI操作和数据展示信息"
     }
   },
   "config_info": {

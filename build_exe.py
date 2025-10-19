@@ -14,13 +14,62 @@ from pathlib import Path
 def ensure_pyinstaller_installed():
     """确保PyInstaller已安装"""
     try:
-        subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pyinstaller'], 
+        # 安装最新稳定版的PyInstaller
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pyinstaller==5.13.2'], 
                       check=True, capture_output=True, text=True)
         print("✅ PyInstaller 安装成功")
+        
+        # 安装主要依赖包，明确包含numpy和snap7
+        critical_packages = ['numpy', 'pandas', 'openpyxl', 'matplotlib']
+        for package in critical_packages:
+            try:
+                subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', package], 
+                              check=True, capture_output=True, text=True)
+                print(f"✅ {package} 安装/更新成功")
+            except subprocess.CalledProcessError as e:
+                print(f"⚠️  {package} 安装/更新失败，错误信息: {e.stderr}")
+                print(f"   将继续尝试，确保系统已安装相应的编译工具")
+        
+        # 尝试安装snap7包（Windows环境）
+        print("🔄 尝试安装python-snap7包...")
+        try:
+            # 对于Windows环境，尝试安装python-snap7包
+            subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'python-snap7'], 
+                          check=True, capture_output=True, text=True)
+            print("✅ python-snap7包安装成功")
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️  python-snap7包安装失败: {e.stderr}")
+            print("   尝试使用snap7包名称...")
+            try:
+                subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'snap7'], 
+                              capture_output=True, text=True)
+                print("✅ snap7包安装尝试完成")
+            except Exception as e2:
+                print(f"⚠️  snap7包安装也失败: {e2}")
+                print("   注意: snap7包可能需要手动编译安装")
+                print("   请参考以下步骤安装snap7:")
+                print("   1. 下载snap7源码: http://snap7.sourceforge.net/")
+                print("   2. 编译C库文件")
+                print("   3. pip install python-snap7 或从源码安装python封装")
+        
+        # 尝试安装项目依赖（如果存在）
+        requirements_file = get_project_root() / "requirements.txt"
+        if requirements_file.exists():
+            print("🔄 尝试安装项目requirements.txt中的依赖...")
+            try:
+                subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)], 
+                              capture_output=True, text=True)
+                print("✅ requirements.txt 依赖安装成功")
+            except Exception:
+                print("⚠️  requirements.txt 安装过程中有错误，但将继续打包")
+        
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ 安装PyInstaller失败: {e}")
         print(e.stderr)
+        return False
+    except Exception as e:
+        print(f"❌ 安装过程中出现其他错误: {e}")
         return False
 
 def get_project_root():
@@ -30,7 +79,7 @@ def get_project_root():
     return script_dir
 
 def prepare_build_directory():
-    """准备构建目录"""
+    """准备构建目录，添加异常处理"""
     project_root = get_project_root()
     build_dir = project_root / "build"
     dist_dir = project_root / "dist"
@@ -38,13 +87,34 @@ def prepare_build_directory():
     # 清理旧的构建目录
     if build_dir.exists():
         print(f"🧹 清理旧的构建目录: {build_dir}")
-        shutil.rmtree(build_dir)
+        try:
+            shutil.rmtree(build_dir)
+        except Exception as e:
+            print(f"⚠️  清理构建目录失败: {e}，将继续尝试")
     
+    # 清理旧的发布目录，处理可能的权限错误
     if dist_dir.exists():
-        print(f"🧹 清理旧的发布目录: {dist_dir}")
-        shutil.rmtree(dist_dir)
+        print(f"🧹 尝试清理旧的发布目录: {dist_dir}")
+        try:
+            # 首先尝试逐个删除文件，特别是可执行文件
+            for item in dist_dir.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        print(f"✅ 删除文件: {item.name}")
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        print(f"✅ 删除目录: {item.name}")
+                except Exception as e:
+                    print(f"⚠️  删除 {item.name} 失败: {e}")
+            
+            # 如果目录还在，尝试删除整个目录
+            if dist_dir.exists():
+                shutil.rmtree(dist_dir)
+        except Exception as e:
+            print(f"⚠️  清理发布目录时出错: {e}，但将继续构建")
     
-    # 创建新的目录
+    # 创建新的目录，忽略已存在的情况
     build_dir.mkdir(exist_ok=True)
     dist_dir.mkdir(exist_ok=True)
     
@@ -58,9 +128,38 @@ def copy_resources(project_root):
     
     if resource_src.exists():
         print(f"📁 复制资源文件到发布目录: {resource_src} -> {resource_dst}")
-        shutil.copytree(resource_src, resource_dst, dirs_exist_ok=True)
+        # 确保目标目录存在
+        resource_dst.mkdir(exist_ok=True, parents=True)
+        # 使用更可靠的复制方法
+        try:
+            # 先删除目标目录，避免权限问题
+            if resource_dst.exists():
+                shutil.rmtree(resource_dst)
+            shutil.copytree(resource_src, resource_dst)
+            print(f"✅ 资源文件复制成功")
+        except Exception as e:
+            print(f"⚠️  复制资源文件时出错: {e}")
+            # 尝试逐个文件复制
+            try:
+                for item in resource_src.iterdir():
+                    target = resource_dst / item.name
+                    if item.is_file():
+                        shutil.copy2(item, target)
+                        print(f"✅ 复制文件: {item.name}")
+            except Exception as e2:
+                print(f"❌ 逐个复制文件也失败: {e2}")
     else:
         print(f"⚠️  资源目录不存在: {resource_src}")
+    
+    # 复制配置文件到根目录，兼容不同运行方式
+    try:
+        for config_file in ['plc_config.json', 'output_config.json', 'log_config.json']:
+            src_file = resource_src / config_file
+            if src_file.exists():
+                shutil.copy2(src_file, project_root / "dist")
+                print(f"✅ 复制配置文件到根目录: {config_file}")
+    except Exception as e:
+        print(f"⚠️  复制配置文件到根目录失败: {e}")
 
 def build_executable():
     """使用PyInstaller构建可执行文件"""
@@ -87,10 +186,36 @@ def build_executable():
         '--onefile',            # 生成单一可执行文件
         '--windowed',           # 窗口模式，不显示命令行
         '--add-data', f'{str(project_root / "resource")};resource',  # 添加资源文件
+        '--collect-all', 'numpy',    # 收集所有numpy相关模块
+        '--collect-all', 'pandas',   # 收集所有pandas相关模块
+        '--collect-all', 'openpyxl', # 收集所有openpyxl相关模块
+        '--collect-all', 'tkinter',  # 收集所有tkinter相关模块
+        '--collect-all', 'matplotlib', # 收集所有matplotlib相关模块
+        '--collect-all', 'snap7',      # 收集所有snap7相关模块
+        '--hidden-import=numpy',     # 明确导入numpy
+        '--hidden-import=numpy._globals',
+        '--hidden-import=numpy.core._methods',
+        '--hidden-import=numpy.lib.format',
         '--hidden-import=pandas._libs.tslibs.timedeltas',  # 隐藏导入，解决pandas相关问题
         '--hidden-import=pandas._libs.tslibs.nattype',
         '--hidden-import=pandas._libs.skiplist',
+        '--hidden-import=pandas._libs.tslibs.parsing',
+        '--hidden-import=pandas._libs.tslibs.conversion',
+        '--hidden-import=pandas._libs.tslibs.offsets',
+        '--hidden-import=pandas._libs.tslibs.tzconversion',
+        '--hidden-import=pandas._libs.tslibs.timezones',
+        '--hidden-import=openpyxl',
+        '--hidden-import=tkinter',
+        '--hidden-import=tkinter.ttk',
+        '--hidden-import=tkinter.filedialog',
+        '--hidden-import=tkinter.messagebox',
+        '--hidden-import=snap7',       # 明确导入snap7
         '--clean',              # 清理临时文件
+        '--log-level=DEBUG',    # 设置更详细的日志级别
+        '--noupx',              # 禁用UPX压缩，避免某些兼容性问题
+        '--noconfirm',          # 自动覆盖现有文件
+        '--copy-metadata=numpy', # 复制numpy元数据
+        '--copy-metadata=pandas', # 复制pandas元数据
         str(main_script)        # 主脚本路径
     ]
     
@@ -169,7 +294,7 @@ if %errorlevel% neq 0 (
 )
 
 echo 打包成功！
-echo 可执行文件位置: dist\PLC数据查看器.exe
+echo 可执行文件位置: dist/PLC数据查看器.exe
 echo 运行前请确保resource目录与可执行文件在同一目录下
 
 echo.  

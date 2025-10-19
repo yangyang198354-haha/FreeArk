@@ -51,7 +51,8 @@ class LogConfigManager:
                         'improved_data_collection': {'level': 'INFO'},
                         'plc_reader': {'level': 'INFO'},
                         'mqtt_client': {'level': 'INFO'},
-                        'quantity_statistics': {'level': 'INFO'}
+                        'quantity_statistics': {'level': 'INFO'},
+                        'plc_data_viewer': {'level': 'INFO'}
                     }
                 }
 

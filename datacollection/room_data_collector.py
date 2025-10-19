@@ -176,7 +176,15 @@ class RoomDataCollector:
                     if 'excel' not in config['output']:
                         config['output']['excel'] = default_config['output']['excel']
                     else:
-                        config['output']['excel'] = {**default_config['output']['excel'], **config['output']['excel']}
+                        # 合并配置，但保留配置文件中的目录设置
+                        excel_config = {**default_config['output']['excel'], **config['output']['excel']}
+                        # 处理相对路径
+                        if 'directory' in config['output']['excel']:
+                            directory = config['output']['excel']['directory']
+                            if not os.path.isabs(directory):
+                                # 使用项目的output目录作为基准
+                                excel_config['directory'] = os.path.join(self.output_dir, directory.lstrip('./\\'))
+                        config['output']['excel'] = excel_config
                     if 'json' not in config['output']:
                         config['output']['json'] = default_config['output']['json']
                     else:

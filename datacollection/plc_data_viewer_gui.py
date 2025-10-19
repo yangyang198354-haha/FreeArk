@@ -8,6 +8,85 @@ import time
 import pandas as pd
 from datetime import datetime
 import platform
+import shutil
+
+# 处理PyInstaller打包后的资源文件路径
+def get_resource_path(relative_path):
+    """
+    获取资源文件的绝对路径，兼容PyInstaller打包后的环境
+    """
+    try:
+        # PyInstaller会创建临时文件夹，_MEIPASS是该文件夹的路径
+        base_path = sys._MEIPASS
+    except AttributeError:
+        # 未打包时使用当前目录
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # 尝试从临时目录获取
+    temp_path = os.path.join(base_path, relative_path)
+    if os.path.exists(temp_path):
+        return temp_path
+    
+    # 尝试从当前工作目录获取
+    current_path = os.path.join(os.getcwd(), relative_path)
+    if os.path.exists(current_path):
+        return current_path
+    
+    # 尝试从resource目录获取
+    resource_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource', relative_path)
+    if os.path.exists(resource_path):
+        return resource_path
+    
+    # 尝试从上级目录获取
+    parent_path = os.path.join(os.path.dirname(os.getcwd()), relative_path)
+    if os.path.exists(parent_path):
+        return parent_path
+    
+    # 如果都不存在，返回原始路径
+    return temp_path
+
+# 在应用启动时准备资源文件
+def prepare_resources():
+    """
+    确保资源文件在正确的位置，特别是在PyInstaller打包后
+    """
+    try:
+        # 获取资源目录
+        try:
+            base_path = sys._MEIPASS
+            resource_src = os.path.join(base_path, 'resource')
+        except AttributeError:
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            resource_src = os.path.join(base_path, 'resource')
+        
+        # 目标资源目录
+        resource_dst = os.path.join(os.getcwd(), 'resource')
+        
+        # 如果目标目录不存在，尝试创建并复制资源
+        if not os.path.exists(resource_dst) and os.path.exists(resource_src):
+            os.makedirs(resource_dst, exist_ok=True)
+            # 尝试复制必要的配置文件
+            for config_file in ['plc_config.json', 'output_config.json', 'log_config.json']:
+                src_file = os.path.join(resource_src, config_file)
+                dst_file = os.path.join(resource_dst, config_file)
+                if os.path.exists(src_file) and not os.path.exists(dst_file):
+                    try:
+                        shutil.copy2(src_file, dst_file)
+                    except:
+                        pass
+                
+                # 同时复制到当前目录作为备份
+                current_dst = os.path.join(os.getcwd(), config_file)
+                if os.path.exists(src_file) and not os.path.exists(current_dst):
+                    try:
+                        shutil.copy2(src_file, current_dst)
+                    except:
+                        pass
+    except Exception:
+        pass
+
+# 预先准备资源文件
+prepare_resources()
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -92,6 +171,7 @@ class PLCDataViewerGUI:
     def initialize_manager(self):
         try:
             logger.info("🔄 正在初始化数据收集管理器...")
+            
             # 初始化数据收集管理器
             self.data_collection_manager = ImprovedDataCollectionManager(max_workers=5)
             self.data_collection_manager.start()
@@ -100,6 +180,7 @@ class PLCDataViewerGUI:
             error_msg = f"无法初始化数据收集管理器: {str(e)}"
             logger.error(error_msg)
             messagebox.showerror("初始化错误", error_msg)
+            raise
     
     def create_widgets(self):
         # 创建主框架，使用Windows标准的内边距

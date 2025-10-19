@@ -1,5 +1,4 @@
 import os
-import os
 import sys
 import json
 import time
@@ -14,7 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 导入统一的日志配置管理器
 from datacollection.log_config_manager import get_logger
 
-# 导入已有的PLC读取相关类
+# 导入PLC读取相关类
 from datacollection.multi_thread_plc_reader import PLCReader, PLCManager
 # 导入MQTT客户端
 from datacollection.mqtt_client import MQTTClient
@@ -23,15 +22,55 @@ from datacollection.mqtt_client import MQTTClient
 logger = get_logger('improved_data_collection')
 
 class ImprovedDataCollectionManager:
+    def _get_resource_dir(self):
+        """获取资源目录，支持多种运行环境"""
+        # 尝试从多个位置获取资源目录
+        possible_dirs = [
+            os.path.join(os.getcwd(), 'resource'),  # 当前工作目录下的resource
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),  # 项目resource目录
+        ]
+        
+        # 优先选择存在的目录
+        for dir_path in possible_dirs:
+            if os.path.exists(dir_path) and os.path.isdir(dir_path):
+                return dir_path
+        
+        # 如果都不存在，返回当前工作目录
+        return os.getcwd()
+    
+    def _get_output_dir(self):
+        """获取输出目录"""
+        possible_dirs = [
+            os.path.join(os.getcwd(), 'output'),  # 当前工作目录下的output
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'output'),  # 项目output目录
+        ]
+        
+        # 优先选择存在的目录
+        for dir_path in possible_dirs:
+            try:
+                if not os.path.exists(dir_path):
+                    os.makedirs(dir_path)
+                return dir_path
+            except:
+                continue
+        
+        # 如果都不行，使用临时目录
+        import tempfile
+        return tempfile.gettempdir()
+        
     def __init__(self, max_workers: int = 10):
         """初始化改进的数据收集管理器"""
         self.max_workers = max_workers
         self.plc_manager = PLCManager(max_workers=max_workers)
-        self.resource_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource')
-        self.output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'output')
+        # 使用辅助方法获取目录
+        self.resource_dir = self._get_resource_dir()
+        self.output_dir = self._get_output_dir()
         # 确保output目录存在
         if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
+            try:
+                os.makedirs(self.output_dir)
+            except:
+                pass
         self.results = {}
 
     def start(self):
@@ -46,35 +85,108 @@ class ImprovedDataCollectionManager:
     
     def load_building_json(self, building_file: str) -> Dict[str, Dict[str, Any]]:
         """加载楼栋的JSON文件"""
-        file_path = os.path.join(self.resource_dir, building_file)
-        if not os.path.exists(file_path):
-            logger.info(f"❌ 楼栋JSON文件不存在：{file_path}")
-            return {}
+        # 尝试多种路径
+        possible_paths = [
+            os.path.join(self.resource_dir, building_file),  # 资源目录
+            get_resource_path(building_file),  # 使用通用路径函数
+            get_resource_path(os.path.join('resource', building_file)),  # resource子目录
+            building_file  # 直接使用传入的路径
+        ]
         
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                logger.info(f"✅ 成功加载楼栋JSON文件：{building_file}，共{len(data)}条记录")
-                return data
-        except Exception as e:
-            logger.info(f"❌ 加载楼栋JSON文件失败：{str(e)}")
-            return {}
+        # 尝试从可能的路径加载文件
+        for file_path in possible_paths:
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        logger.info(f"✅ 成功加载楼栋JSON文件：{building_file}，共{len(data)}条记录")
+                        return data
+                except Exception as e:
+                    logger.info(f"❌ 从{file_path}加载楼栋JSON文件失败：{str(e)}")
+                    continue
+        
+        logger.info(f"❌ 未找到楼栋JSON文件：{building_file}")
+        return {}
 
     def load_plc_config(self) -> Dict[str, Dict[str, Any]]:
         """加载PLC配置文件"""
-        config_path = os.path.join(self.resource_dir, 'plc_config.json')
-        if not os.path.exists(config_path):
-            logger.info(f"❌ PLC配置文件不存在：{config_path}")
-            return {}
+        # 尝试多种路径
+        possible_paths = [
+            os.path.join(self.resource_dir, 'plc_config.json'),  # 资源目录
+            get_resource_path('plc_config.json'),  # 使用通用路径函数
+            get_resource_path(os.path.join('resource', 'plc_config.json')),  # resource子目录
+            os.path.join(os.getcwd(), 'plc_config.json')  # 当前工作目录
+        ]
         
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                logger.info(f"✅ 成功加载PLC配置文件，包含{len(config.get('parameters', {}))}个参数")
-                return config.get('parameters', {})
-        except Exception as e:
-            logger.info(f"❌ 加载PLC配置文件失败：{str(e)}")
-            return {}
+        # 尝试从可能的路径加载文件
+        for config_path in possible_paths:
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                        logger.info(f"✅ 成功加载PLC配置文件，包含{len(config.get('parameters', {}))}个参数")
+                        return config.get('parameters', {})
+                except Exception as e:
+                    logger.info(f"❌ 从{config_path}加载PLC配置文件失败：{str(e)}")
+                    continue
+        
+        logger.info(f"❌ 未找到PLC配置文件")
+        # 返回默认配置
+        return {}
+    
+    def load_output_config(self) -> Dict[str, Any]:
+        """加载输出配置文件"""
+        # 尝试多种路径
+        possible_paths = [
+            os.path.join(self.resource_dir, 'output_config.json'),  # 资源目录
+            get_resource_path('output_config.json'),  # 使用通用路径函数
+            get_resource_path(os.path.join('resource', 'output_config.json')),  # resource子目录
+            os.path.join(os.getcwd(), 'output_config.json')  # 当前工作目录
+        ]
+        
+        # 默认配置
+        default_config = {
+            "output": {
+                "type": "Excel",
+                "excel": {
+                    "file_name": "累计用量",
+                    "directory": self.output_dir,
+                    "include_all_params": True
+                },
+                "json": {
+                    "enabled": True
+                },
+                "mqtt": {
+                    "enabled": False,
+                    "server": {
+                        "host": "localhost",
+                        "port": 1883
+                    }
+                }
+            }
+        }
+        
+        # 尝试从可能的路径加载文件
+        for config_path in possible_paths:
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                        logger.info(f"✅ 成功加载输出配置文件")
+                        # 处理相对路径，确保指向正确的输出目录
+                        if 'output' in config and 'excel' in config['output'] and 'directory' in config['output']['excel']:
+                            directory = config['output']['excel']['directory']
+                            # 如果是相对路径，转换为绝对路径
+                            if not os.path.isabs(directory):
+                                # 使用项目的output目录作为基准
+                                config['output']['excel']['directory'] = os.path.join(self.output_dir, directory.lstrip('./\\'))
+                        return config
+                except Exception as e:
+                    logger.info(f"❌ 从{config_path}加载输出配置文件失败：{str(e)}")
+                    continue
+        
+        logger.info(f"❌ 未找到输出配置文件，使用默认配置")
+        return default_config
 
     # 移除了load_room_plc_map方法，因为房间与PLC IP映射文件已不存在
     
