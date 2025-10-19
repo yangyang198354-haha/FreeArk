@@ -1,21 +1,26 @@
 # Python 临时文件和缓存
+# __pycache__文件夹 - Python解释器生成的字节码缓存目录
 __pycache__/
+# 已编译的Python文件 - 字节码文件
 *.py[cod]
 *$py.class
+# 编译后的扩展模块
 *.so
+*.pyd
+# Python安装目录标记
 .Python
+# 虚拟环境目录
 venv/
 env/
-# 确保所有虚拟环境都被忽略
+
+# 确保所有虚拟环境都被忽略（递归匹配任何层级）
 **/venv/
 **/env/
 
-# 确保所有Python缓存文件都被忽略
-**/__pycache__/
-**/*.py[cod]
-*$py.class
-**/*.so
-**/*.pyd
+# 确保所有Python缓存文件都被忽略（递归匹配任何层级）
+**/__pycache__/       # 忽略所有层级的__pycache__目录
+**/*.py[cod]          # 忽略所有层级的编译Python文件
+*$py.class            # 忽略Jython生成的类文件
 
 # 构建文件
 build/
