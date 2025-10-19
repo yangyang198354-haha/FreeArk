@@ -28,8 +28,13 @@ log/
 logs/
 *.log
 
-# 输出文件
-output/
+# 输出文件（保留文件夹结构，忽略内容）
+# output/
+# 忽略output目录中的所有文件，但保留目录结构
+output/*
+# 但不忽略.gitkeep文件，这样可以保留目录结构
+!output/.gitkeep
+
 
 # 操作系统文件
 .DS_Store
