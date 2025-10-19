@@ -21,24 +21,27 @@ FreeArk/
 │   ├── mqtt_client.py                       # MQTT客户端实现
 │   ├── mqtt_client_pool.py                  # MQTT客户端池管理
 │   ├── log_config_manager.py                # 日志配置管理器
-│   └── plc_data_viewer_gui.py               # PLC数据可视化界面
+│   ├── plc_data_viewer_gui.py               # PLC数据可视化界面
+│   └── quantity_statistics.py               # 用量统计模块
 ├── resource/
 │   ├── *_data.json                          # 楼栋数据文件（包含设备信息）
 │   ├── plc_config.json                      # PLC参数配置文件
 │   ├── output_config.json                   # 输出配置文件
-│   └── log_config.json                      # 日志配置文件
+│   ├── log_config.json                      # 日志配置文件
+│   └── mqtt_config.json                     # MQTT配置文件
 ├── output/                                  # 数据输出目录
 ├── log/                                     # 日志文件目录
 ├── run_improved_data_collection_manager.bat # 启动批处理脚本
-└── README_Improved_Data_Collection.md       # 本说明文档
+└── requirements.txt                         # 项目依赖文件
 ```
 
 ## 安装与配置
 
 ### 环境要求
 
-- Python 3.6+
-- 依赖库：snap7（用于PLC通信）、pandas（用于Excel输出）、paho-mqtt（用于MQTT通信）
+- Python 3.7+
+- 依赖库：通过`pip install -r requirements.txt`安装所有依赖
+- 主要依赖包括：snap7（用于PLC通信）、pandas（用于Excel输出）、paho-mqtt（用于MQTT通信）
 
 ### 配置文件说明
 
@@ -80,6 +83,11 @@ FreeArk/
 
 3. **日志配置文件** (`resource/log_config.json`)
    - 集中管理所有模块的日志级别和输出格式
+   - 支持独立配置每个模块的日志级别
+
+4. **MQTT配置文件** (`resource/mqtt_config.json`)
+   - 配置MQTT服务器连接参数
+   - 支持认证、TLS加密等高级功能
 
 ## 使用方法
 
@@ -88,7 +96,7 @@ FreeArk/
 直接双击运行`run_improved_data_collection_manager.bat`批处理文件，系统会自动：
 
 1. 搜索并找到已安装的Python解释器
-2. 默认处理所有符合`*data.json`模式的数据文件
+2. 默认处理所有符合`*_data.json`模式的数据文件
 3. 启动改进版数据收集管理器并显示运行状态
 
 ### 命令行参数
@@ -101,7 +109,7 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 ```
 
 参数说明：
-- `-f` 或 `--file`：指定要处理的数据文件，可以使用通配符（如`*data.json`）
+- `-f` 或 `--file`：指定要处理的数据文件，可以使用通配符（如`*_data.json`）
 
 ## 系统工作原理
 
@@ -150,6 +158,14 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
    - 单独记录每个参数的读取状态
    - 设备状态分为：success、partial_success、failed、pending
 
+4. **线程安全设计**
+   - 使用可重入锁（RLock）确保并发操作的安全性
+   - 避免多线程环境下的数据竞争问题
+
+5. **资源路径自适应**
+   - 智能识别运行环境（开发环境或PyInstaller打包环境）
+   - 自动适配不同环境下的资源文件路径
+
 ## 输出说明
 
 ### JSON输出
@@ -163,12 +179,14 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 - 文件位置：`output/累计用量_YYYYMMDD_HHMMSS.xlsx`
 - 自动汇总收集到的数据
 - 支持配置是否包含所有参数
+- 包含success和failure工作表，分别记录成功和失败的数据
 
 ### MQTT输出
 
 - 可配置的MQTT服务器地址和认证信息
 - 支持主题前缀自定义
 - 可配置消息质量级别（QoS）
+- 使用客户端池管理连接，提高并发性能
 
 ## 日志系统
 
@@ -184,6 +202,12 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 
 3. **MQTT日志** (`log/mqtt_client_YYYYMMDD.log`)
    - 记录MQTT连接和消息发送状态
+
+4. **PLC查看器日志** (`log/plc_data_viewer_YYYYMMDD.log`)
+   - 记录GUI操作和数据展示相关的日志
+
+5. **用量统计日志** (`log/quantity_statistics_YYYYMMDD.log`)
+   - 记录用量统计过程中的日志信息
 
 ## 故障排查
 
@@ -205,8 +229,12 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
    - 查看日志确认是否有写入错误
 
 4. **Python模块缺失**
-   - 安装所需依赖：`pip install python-snap7 pandas paho-mqtt`
-   - 确认Python版本符合要求（3.6+）
+   - 安装所需依赖：`pip install -r requirements.txt`
+   - 确认Python版本符合要求（3.7+）
+
+5. **中文显示异常**
+   - 确保所有文件使用UTF-8编码
+   - 检查日志文件的编码设置
 
 ## 性能优化建议
 
@@ -214,6 +242,24 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 2. **批量处理**：使用通配符处理多个数据文件，提高处理效率
 3. **合理配置输出**：只启用必要的输出格式，避免不必要的资源消耗
 4. **监控连接状态**：定期检查PLC连接状态，及时发现网络问题
+5. **优化日志级别**：生产环境可适当降低日志级别，减少I/O开销
+
+## 高级功能
+
+### 用量统计
+
+系统提供了专门的用量统计模块，可以：
+- 从历史数据文件中提取和分析能源用量数据
+- 支持累计制热和累计制冷数据的统计
+- 生成结构化的统计报表
+
+### PLC数据可视化
+
+PLC数据查看器提供了图形界面，可以：
+- 可视化展示PLC数据
+- 支持JSON数据文件的导入和查看
+- 提供数据导出为Excel或JSON的功能
+- 支持数据排序和筛选
 
 ## 未来改进方向
 
@@ -221,3 +267,5 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 2. 添加数据缓存机制，提高频繁访问数据的响应速度
 3. 开发Web管理界面，实现配置的可视化管理
 4. 支持更多工业协议，扩展系统兼容性
+5. 添加数据异常检测和报警功能
+6. 实现数据历史趋势分析和图表展示

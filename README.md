@@ -7,11 +7,24 @@ FreeArk是一个用于PLC数据收集、处理和可视化的综合解决方案�
 ```
 FreeArk/
 ├── datacollection/          # 数据收集核心模块
+│   ├── improved_data_collection_manager.py  # 改进版数据收集管理器
+│   ├── multi_thread_plc_reader.py           # 多线程PLC读取器
+│   ├── mqtt_client.py                       # MQTT客户端
+│   ├── log_config_manager.py                # 日志配置管理器
+│   ├── plc_data_viewer_gui.py               # PLC数据可视化界面
+│   ├── quantity_statistics.py               # 用量统计模块
+│   └── mqtt_client_pool.py                  # MQTT客户端池管理
 ├── resource/                # 配置文件目录
+│   ├── *_data.json                          # 楼栋数据文件
+│   ├── plc_config.json                      # PLC参数配置
+│   ├── output_config.json                   # 输出配置
+│   ├── log_config.json                      # 日志配置
+│   └── mqtt_config.json                     # MQTT配置
 ├── output/                  # 数据输出目录
 ├── log/                     # 日志文件目录
 ├── reference/               # 参考代码和工具
-└── *.bat                    # 批处理运行脚本
+├── *.bat                    # 批处理运行脚本
+└── requirements.txt         # 项目依赖
 ```
 
 ## 安装配置
@@ -20,7 +33,7 @@ FreeArk/
 - Python 3.7+
 - 所需依赖包（通过pip安装）：
   ```bash
-  pip install snap7 pandas paho-mqtt openpyxl
+  pip install -r requirements.txt
   ```
 
 ### 配置文件说明
@@ -42,6 +55,7 @@ FreeArk/
 - plc_reader：PLC读取器日志级别
 - mqtt_client：MQTT客户端日志级别
 - quantity_statistics：用量统计日志级别
+- plc_data_viewer：PLC查看器日志级别
 
 #### 3. MQTT配置
 文件：`resource/mqtt_config.json`
@@ -54,7 +68,7 @@ FreeArk/
 #### 4. 输出配置
 文件：`resource/output_config.json`
 
-配置数据输出参数。
+配置数据输出参数，支持JSON、Excel和MQTT三种输出格式。
 
 #### 5. 楼栋数据配置
 文件：`resource/*#_data.json`
@@ -123,6 +137,7 @@ run_quantity_statistics.bat
 - 基于Snap7库的PLC通信
 - 多线程并发读取
 - 连接池管理和错误重试
+- 线程安全的数据读取操作
 
 ### 3. PLC数据查看器GUI
 
@@ -132,6 +147,7 @@ run_quantity_statistics.bat
 - 图形界面展示PLC数据
 - 实时数据监控
 - 数据可视化和图表展示
+- 支持JSON和Excel数据导出
 
 ### 4. MQTT客户端
 
@@ -160,6 +176,7 @@ run_quantity_statistics.bat
 - 计算和统计能源用量数据
 - 生成Excel报表
 - 数据分析和汇总
+- 支持从多个历史文件提取数据
 
 ## 工作流程
 
@@ -193,6 +210,9 @@ run_quantity_statistics.bat
    - 确保使用UTF-8编码打开日志文件
    - 检查配置文件的编码格式
 
+4. **依赖模块缺失**
+   - 运行`pip install -r requirements.txt`安装所有依赖
+
 ## 开发指南
 
 ### 添加新的PLC数据点
@@ -212,9 +232,14 @@ run_quantity_statistics.bat
 - 实现自定义的输出格式
 - 集成其他通信协议或设备类型
 
-## 许可证
+## 技术特点
 
-[MIT License](LICENSE)
+1. **模块化设计**：各功能模块松耦合，易于维护和扩展
+2. **线程安全**：使用锁机制确保并发操作的安全性
+3. **错误处理**：完善的异常捕获和错误日志记录
+4. **灵活配置**：通过JSON配置文件实现参数自定义
+5. **多格式输出**：支持JSON、Excel和MQTT多种输出方式
+6. **打包支持**：兼容PyInstaller打包，可生成独立可执行文件
 
 ## 联系方式
 
