@@ -948,7 +948,7 @@
       function saveUser() {
         // 验证用户权限
         const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-        const userId = document.getElementById('editUserId').value;
+        // 已经在上面声明过userId变量
         
         // 只有管理员可以编辑任何用户，普通用户只能编辑自己的资料
         if (!userInfo || (userInfo.role !== 'admin' && userInfo.id.toString() !== userId)) {
@@ -956,7 +956,7 @@
           return;
         }
         
-        const userId = document.getElementById('editUserId').value;
+        // 已经在上面声明过userId变量
         const username = document.getElementById('editUsername').value;
         const email = document.getElementById('editEmail').value;
         const firstName = document.getElementById('editFirstName').value;
