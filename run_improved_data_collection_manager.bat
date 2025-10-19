@@ -22,7 +22,7 @@ if not defined python_exe (
 if defined python_exe (
     echo 找到Python解释器: %python_exe%
     echo 正在启动改进版数据收集管理器...
-    "%python_exe%" "%~dp0datacollection\improved_data_collection_manager.py" -f *data.json
+    "%python_exe%" "%~dp0datacollection\improved_data_collection_manager.py" -f all_onwer.json
 ) else (
     echo 错误: 未找到Python解释器，请先安装Python。
     pause
