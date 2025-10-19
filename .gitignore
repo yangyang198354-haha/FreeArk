@@ -6,6 +6,16 @@ __pycache__/
 .Python
 venv/
 env/
+# 确保所有虚拟环境都被忽略
+**/venv/
+**/env/
+
+# 确保所有Python缓存文件都被忽略
+**/__pycache__/
+**/*.py[cod]
+*$py.class
+**/*.so
+**/*.pyd
 
 # 构建文件
 build/
