@@ -201,11 +201,15 @@ class PLCDataViewerGUI:
     
     def select_files(self):
         logger.info("📁 打开文件选择对话框")
+        # 设置初始目录为基于脚本位置的相对路径
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        resource_dir = os.path.join(os.path.dirname(script_dir), "resource/")
+        
         # 打开文件选择对话框
         file_paths = filedialog.askopenfilenames(
             title="选择JSON配置文件",
             filetypes=[("JSON文件", "*.json"), ("所有文件", "*.*")],
-            initialdir="c:/Users/yanggyan/TRAE/FreeArk/resource/"
+            initialdir=resource_dir
         )
         
         if file_paths:

@@ -115,8 +115,9 @@ class QuantityStatistics:
         print(f"统计结果已保存至 {output_file}")
 
 if __name__ == "__main__":
-    # 设置输出目录
-    output_directory = "c:/Users/yanggyan/TRAE/FreeArk/output/"
+    # 设置输出目录为相对路径
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_directory = os.path.join(os.path.dirname(script_dir), "output/")
     
     # 创建QuantityStatistics实例
     statistics = QuantityStatistics(output_directory)
