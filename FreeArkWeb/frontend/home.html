@@ -7,6 +7,12 @@
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 添加jQuery库 -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- 添加daterangepicker库 -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
     <style>
       * {
         margin: 0;
@@ -381,13 +387,16 @@
                     <option value="gas">燃气</option>
                   </select>
                 </div>
-                <div class="form-group" style="flex: 1; min-width: 150px;">
-                  <label for="startTimeQuery">开始时间</label>
-                  <input type="date" class="form-control" id="startTimeQuery">
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 150px;">
-                  <label for="endTimeQuery">结束时间</label>
-                  <input type="date" class="form-control" id="endTimeQuery">
+                <div class="form-group" style="flex: 2; min-width: 300px;">
+                  <label>时间段</label>
+                  <!-- 添加daterangepicker库的引用 -->
+                  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+                  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+                  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+                  <!-- 单一的时间段选择器 -->
+                  <input type="text" class="form-control" id="dateRangePicker" style="cursor: pointer;">
+                  <input type="hidden" id="startTimeQuery">
+                  <input type="hidden" id="endTimeQuery">
                 </div>
                 <div class="form-group" style="display: flex; gap: 10px;">
                   <button type="button" class="btn btn-primary" onclick="searchUsageData()">查询</button>
@@ -401,8 +410,9 @@
           <div class="card" style="margin: 20px;">
             <div class="card-body">
               <h3>用量趋势图表</h3>
-              <div class="chart-container" style="position: relative; height: 400px; width: 100%;">
-                <canvas id="usageChart"></canvas>
+              <div class="chart-container" style="position: relative; height: 300px; width: 100%;">
+                <canvas id="usageChart" style="display: none;"></canvas>
+                <div id="chartNoData" class="alert alert-info text-center" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; margin: 0; display: block;">暂无数据</div>
               </div>
             </div>
           </div>
@@ -615,6 +625,51 @@
     </div>
     
     <script>
+      // 初始化日期范围选择器
+      document.addEventListener('DOMContentLoaded', function() {
+        // 初始化daterangepicker
+        $('#dateRangePicker').daterangepicker({
+          opens: 'right',
+          showDropdowns: true,
+          minYear: 2020,
+          maxYear: parseInt(moment().format('YYYY'), 10),
+          startDate: moment().subtract(7, 'days'),
+          endDate: moment(),
+          maxSpan: { days: 60 }, // 最大跨度限制为60天
+          locale: {
+            format: 'YYYY-MM-DD',
+            separator: ' - ',
+            applyLabel: '确定',
+            cancelLabel: '取消',
+            fromLabel: '开始',
+            toLabel: '结束',
+            customRangeLabel: '自定义',
+            weekLabel: 'W',
+            daysOfWeek: ['日', '一', '二', '三', '四', '五', '六'],
+            monthNames: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
+            firstDay: 1
+          },
+          ranges: {
+            '今天': [moment(), moment()],
+            '昨天': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+            '近7天': [moment().subtract(6, 'days'), moment()],
+            '近30天': [moment().subtract(29, 'days'), moment()],
+            '本月': [moment().startOf('month'), moment().endOf('month')],
+            '上月': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+          }
+        }, function(start, end, label) {
+          // 当用户选择日期范围时更新隐藏字段
+          document.getElementById('startTimeQuery').value = start.format('YYYY-MM-DD');
+          document.getElementById('endTimeQuery').value = end.format('YYYY-MM-DD');
+        });
+        
+        // 初始化时设置默认值到隐藏字段
+        const defaultStart = moment().subtract(7, 'days');
+        const defaultEnd = moment();
+        document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
+        document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
+      });
+      
       // 检查用户是否已登录
       function checkAuthentication() {
         const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
@@ -732,6 +787,16 @@
       // 重置查询表单
       function resetQueryForm() {
         document.getElementById('usageQueryForm').reset();
+        // 重置日期范围选择器为默认值（近7天）
+        if ($('#dateRangePicker').data('daterangepicker')) {
+          const defaultStart = moment().subtract(7, 'days');
+          const defaultEnd = moment();
+          $('#dateRangePicker').data('daterangepicker').setStartDate(defaultStart);
+          $('#dateRangePicker').data('daterangepicker').setEndDate(defaultEnd);
+          // 更新隐藏字段
+          document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
+          document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
+        }
       }
       
       // 搜索用量数据
@@ -743,13 +808,66 @@
         const startTime = document.getElementById('startTimeQuery').value;
         const endTime = document.getElementById('endTimeQuery').value;
         
-        // 调用加载数据函数，传入查询条件
+        // 表单验证
+        if (!roomNumber) {
+          alert('请输入户号');
+          document.getElementById('roomNumberQuery').focus();
+          return;
+        }
+        
+        if (!startTime) {
+          alert('请选择开始时间');
+          document.getElementById('startTimeQuery').focus();
+          return;
+        }
+        
+        if (!endTime) {
+          alert('请选择结束时间');
+          document.getElementById('endTimeQuery').focus();
+          return;
+        }
+        
+        // 验证时间范围不超过60天
+        const startDate = new Date(startTime);
+        const endDate = new Date(endTime);
+        const timeDiff = endDate - startDate;
+        const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        
+        if (dayDiff < 0) {
+          alert('结束时间不能早于开始时间');
+          document.getElementById('endTimeQuery').focus();
+          return;
+        }
+        
+        if (dayDiff > 60) {
+          alert('时间范围不能超过60天');
+          document.getElementById('endTimeQuery').focus();
+          return;
+        }
+        
+        // 验证通过，调用加载数据函数
         loadUsageData(roomNumber, specificPart, energyMode, startTime, endTime);
       }
       
       // 绘制用量趋势图表
       function drawUsageChart(data) {
         console.log('开始绘制图表，接收到的数据:', data);
+        
+        // 获取图表和无数据提示元素
+        const usageChart = document.getElementById('usageChart');
+        const chartNoData = document.getElementById('chartNoData');
+        
+        // 检查数据是否为空
+        if (!data || data.length === 0) {
+          console.log('数据为空，显示暂无数据提示');
+          if (usageChart) usageChart.style.display = 'none';
+          if (chartNoData) chartNoData.style.display = 'block';
+          return;
+        }
+        
+        // 有数据时显示图表，隐藏暂无数据提示
+        if (usageChart) usageChart.style.display = 'block';
+        if (chartNoData) chartNoData.style.display = 'none';
         // 按日期和供能模式分组数据
         const groupedData = {};
         const dates = new Set();
@@ -1053,9 +1171,28 @@
         // 显示选中的页面
         document.getElementById(`${pageId}Page`).style.display = 'block';
         
-        // 如果切换到用量查询页面，直接加载所有用量数据
+        // 切换到用量查询页面时不再自动加载数据，只在用户点击查询按钮时加载
         if (pageId === 'usage') {
-          loadUsageData();
+          // 确保表格和图表初始状态为空
+          const usageTable = document.getElementById('usageTable');
+          const tableBody = document.getElementById('usageTableBody');
+          const noDataMessage = document.getElementById('noDataMessage');
+          const usageChart = document.getElementById('usageChart');
+          const chartNoData = document.getElementById('chartNoData');
+          
+          if (usageTable) usageTable.style.display = 'none';
+          if (tableBody) tableBody.innerHTML = '';
+          if (noDataMessage) noDataMessage.style.display = 'none';
+          
+          // 隐藏图表，显示暂无数据提示
+          if (usageChart) usageChart.style.display = 'none';
+          if (chartNoData) chartNoData.style.display = 'block';
+          
+          // 销毁可能存在的图表实例
+          if (window.usageChartInstance) {
+            window.usageChartInstance.destroy();
+            window.usageChartInstance = null;
+          }
         }
         
         // 更新导航项的活动状态
@@ -1551,17 +1688,9 @@
           }
         });
         
-        // 页面加载后自动切换到用量查询页面并设置默认户号
+        // 页面加载后自动切换到用量查询页面，不自动加载数据
         setTimeout(() => {
           switchPage('usage');
-          // 设置默认户号为1239，以便自动加载数据
-          setTimeout(() => {
-            const roomNumberInput = document.getElementById('roomNumberQuery');
-            if (roomNumberInput) {
-              roomNumberInput.value = '1239';
-              searchUsageData();
-            }
-          }, 100);
         }, 500);
         
         // 绑定用户下拉菜单点击事件
