@@ -6,6 +6,7 @@
     <title>自由方舟能耗采集平台 - 主页</title>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       * {
         margin: 0;
@@ -357,7 +358,83 @@
           <div class="page-header">
             <h2>用量查询</h2>
           </div>
-          <!-- 空白内容区域 -->
+          
+          <!-- 查询条件表单 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <h3>查询条件</h3>
+              <form id="usageQueryForm" class="form-row">
+                <div class="form-group col-md-4">
+                  <label for="roomNumberQuery">户号</label>
+                  <input type="text" class="form-control" id="roomNumberQuery" placeholder="请输入户号">
+                </div>
+                <div class="form-group col-md-4">
+                  <label for="specificPartQuery">专有部分</label>
+                  <input type="text" class="form-control" id="specificPartQuery" placeholder="请输入专有部分">
+                </div>
+                <div class="form-group col-md-4">
+                  <label for="energyModeQuery">供能模式</label>
+                  <select class="form-control" id="energyModeQuery">
+                    <option value="">全部</option>
+                    <option value="electricity">电力</option>
+                    <option value="water">水</option>
+                    <option value="gas">燃气</option>
+                  </select>
+                </div>
+                <div class="form-group col-md-6">
+                  <label for="startTimeQuery">开始时间</label>
+                  <input type="date" class="form-control" id="startTimeQuery">
+                </div>
+                <div class="form-group col-md-6">
+                  <label for="endTimeQuery">结束时间</label>
+                  <input type="date" class="form-control" id="endTimeQuery">
+                </div>
+                <div class="form-group col-md-12">
+                  <button type="button" class="btn btn-primary" onclick="searchUsageData()">查询</button>
+                  <button type="button" class="btn btn-secondary ml-2" onclick="resetQueryForm()">重置</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <!-- 用量数据图表 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <h3>用量趋势图表</h3>
+              <div class="chart-container" style="position: relative; height: 400px; width: 100%;">
+                <canvas id="usageChart"></canvas>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 用量数据表格 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <h3>用量数据</h3>
+              <div class="table-responsive">
+                <table id="usageTable" class="table table-striped" style="display: none;">
+                  <thead>
+                    <tr>
+                      <th>专有部分</th>
+                      <th>楼栋</th>
+                      <th>单元</th>
+                      <th>房号</th>
+                      <th>供能模式</th>
+                      <th>初期能耗(kWh)</th>
+                      <th>末期能耗(kWh)</th>
+                      <th>使用量(kWh)</th>
+                      <th>时间段</th>
+                    </tr>
+                  </thead>
+                  <tbody id="usageTableBody">
+                    <!-- 数据将通过JavaScript动态填充 -->
+                  </tbody>
+                </table>
+              </div>
+              <div id="noDataMessage" class="alert alert-info" style="display: none; margin-top: 20px;">暂无数据</div>
+              <div id="loadingIndicator" class="text-center" style="display: none; margin-top: 20px;">加载中...</div>
+            </div>
+          </div>
         </div>
         
         <!-- 服务管理页面 -->
@@ -569,12 +646,25 @@
             }
             
             // 根据用户角色显示或隐藏用户管理导航项
-            const userManagementDropdown = document.querySelector('.nav-item.dropdown');
-            if (userManagementDropdown) {
+            // 使用更精确的选择器，确保找到正确的元素
+            const userManagementLi = document.querySelector('li.nav-item.dropdown');
+            if (userManagementLi) {
               if (userInfo && userInfo.role === 'admin') {
-                userManagementDropdown.style.display = 'block';
+                userManagementLi.style.display = 'block';
               } else {
-                userManagementDropdown.style.display = 'none';
+                userManagementLi.style.display = 'none';
+              }
+            }
+            
+            // 额外安全检查：如果用户尝试直接访问用户管理页面的URL
+            // 检查当前URL参数或哈希
+            const currentHash = window.location.hash;
+            if (!userInfo || userInfo.role !== 'admin') {
+              if (currentHash.includes('createUser') || currentHash.includes('userList')) {
+                // 重定向到系统看板
+                window.location.hash = '#dashboard';
+                switchPage('dashboard');
+                alert('您没有权限访问用户管理页面');
               }
             }
           } catch (e) {
@@ -635,15 +725,246 @@
         window.location.href = 'index.html';
       }
       
+      // 原loadBuildingData函数已移除，不再需要
+      // 原renderBuildingTree函数已移除，不再需要
+      // 原所有级联菜单相关函数已移除，不再需要
+      
+      // 重置查询表单
+      function resetQueryForm() {
+        document.getElementById('usageQueryForm').reset();
+      }
+      
+      // 搜索用量数据
+      function searchUsageData() {
+        // 获取查询条件
+        const roomNumber = document.getElementById('roomNumberQuery').value.trim();
+        const specificPart = document.getElementById('specificPartQuery').value.trim();
+        const energyMode = document.getElementById('energyModeQuery').value;
+        const startTime = document.getElementById('startTimeQuery').value;
+        const endTime = document.getElementById('endTimeQuery').value;
+        
+        // 调用加载数据函数，传入查询条件
+        loadUsageData(roomNumber, specificPart, energyMode, startTime, endTime);
+      }
+      
+      // 绘制用量趋势图表
+      function drawUsageChart(data) {
+        console.log('开始绘制图表，接收到的数据:', data);
+        // 按日期和供能模式分组数据
+        const groupedData = {};
+        const dates = new Set();
+        const modes = new Set(['制冷', '制热']); // 假设只有这两种供能模式
+        
+        data.forEach(item => {
+          const date = item.time_period;
+          const mode = item.energy_mode;
+          const usage = parseFloat(item.usage_quantity) || 0;
+          
+          dates.add(date);
+          modes.add(mode);
+          
+          if (!groupedData[date]) {
+            groupedData[date] = {};
+          }
+          groupedData[date][mode] = (groupedData[date][mode] || 0) + usage;
+        });
+        
+        // 排序日期
+        const sortedDates = Array.from(dates).sort();
+        
+        // 准备图表数据
+        const datasets = [];
+        const modeColors = {
+          '制冷': 'rgb(75, 192, 192)',
+          '制热': 'rgb(255, 99, 132)',
+          'electricity': 'rgb(54, 162, 235)',
+          'water': 'rgb(153, 102, 255)',
+          'gas': 'rgb(255, 159, 64)'
+        };
+        
+        modes.forEach(mode => {
+          const dataPoints = sortedDates.map(date => groupedData[date]?.[mode] || 0);
+          datasets.push({
+            label: mode,
+            data: dataPoints,
+            borderColor: modeColors[mode] || 'rgb(201, 203, 207)',
+            tension: 0.1
+          });
+        });
+        
+        // 获取或创建图表
+        const ctx = document.getElementById('usageChart').getContext('2d');
+        
+        // 如果已有图表实例，销毁它
+        if (window.usageChartInstance) {
+          window.usageChartInstance.destroy();
+        }
+        
+        // 再次确认Chart对象可用
+        console.log('创建图表前Chart对象是否可用:', typeof Chart !== 'undefined');
+        console.log('图表配置:', {labels: sortedDates, datasets: datasets});
+        
+        // 创建新图表
+        window.usageChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: sortedDates,
+            datasets: datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: '不同供能模式下的每日使用量'
+              },
+              legend: {
+                display: true,
+                position: 'top'
+              }
+            },
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: '日期'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: '使用量 (kWh)'
+                },
+                beginAtZero: true
+              }
+            }
+          }
+        });
+      }
+      
+      // 加载用量数据，支持查询条件
+      function loadUsageData(roomNumber = '', specificPart = '', energyMode = '', startTime = '', endTime = '') {
+        console.log('开始加载用量数据，查询条件:', { roomNumber, specificPart, energyMode, startTime, endTime });
+        
+        // 显示加载指示器
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const usageTable = document.getElementById('usageTable');
+        const noDataMessage = document.getElementById('noDataMessage');
+        
+        if (loadingIndicator) loadingIndicator.style.display = 'block';
+        if (usageTable) usageTable.style.display = 'none';
+        if (noDataMessage) noDataMessage.style.display = 'none';
+        
+        // 构建带查询参数的API URL
+        const baseUrl = 'http://localhost:8000/api/usage/quantity/';
+        const params = new URLSearchParams();
+        
+        if (roomNumber) params.append('room_number', roomNumber);
+        if (specificPart) params.append('specific_part', specificPart);
+        if (energyMode) params.append('energy_mode', energyMode);
+        if (startTime) params.append('start_time', startTime);
+        if (endTime) params.append('end_time', endTime);
+        
+        const apiUrl = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+        console.log('API请求URL:', apiUrl);
+        
+        // 调用API获取数据
+        fetch(apiUrl)
+            .then(response => {
+                console.log('API响应状态:', response.status);
+                console.log('API响应头:', Array.from(response.headers.entries()));
+                
+                if (!response.ok) {
+                    throw new Error(`网络响应异常: ${response.status} ${response.statusText}`);
+                }
+                return response.json().then(data => {
+                    console.log('API响应数据:', data);
+                    return data;
+                });
+            })
+            .then(data => {
+                // 隐藏加载指示器
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                
+                console.log('处理响应数据，是否成功:', data.success, '数据长度:', data.data ? data.data.length : 0);
+                
+                if (data.success && data.data && data.data.length > 0) {
+                    // 显示表格
+                    if (usageTable) usageTable.style.display = 'table';
+                    
+                    // 绘制图表
+                    drawUsageChart(data.data);
+                    
+                    // 填充表格数据
+                    const tableBody = document.getElementById('usageTableBody');
+                    if (tableBody) {
+                        tableBody.innerHTML = '';
+                        console.log('开始填充表格数据，共', data.data.length, '条记录');
+                        
+                        data.data.forEach((item, index) => {
+                            const row = tableBody.insertRow();
+                            row.insertCell(0).textContent = item.specific_part || '';
+                            row.insertCell(1).textContent = item.building || '';
+                            row.insertCell(2).textContent = item.unit || '';
+                            row.insertCell(3).textContent = item.room_number || '';
+                            row.insertCell(4).textContent = item.energy_mode || '';
+                            row.insertCell(5).textContent = item.initial_energy || 0;
+                            row.insertCell(6).textContent = item.final_energy || 0;
+                            row.insertCell(7).textContent = item.usage_quantity || 0;
+                            row.insertCell(8).textContent = item.time_period || '';
+                            console.log(`填充第${index+1}条数据:`, item);
+                        });
+                    }
+                } else {
+                    // 显示无数据提示
+                    if (noDataMessage) noDataMessage.style.display = 'block';
+                    console.log('没有数据可显示');
+                }
+            })
+            .catch(error => {
+                console.error('加载数据失败:', error);
+                console.error('错误详情:', error.stack);
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                if (noDataMessage) noDataMessage.style.display = 'block';
+                alert('加载数据失败，请检查控制台日志获取详细信息');
+            });
+      }
+      
+      // 过滤房间函数已不再需要，但保留注释
+      // function filterRooms() {
+      //   const searchTerm = document.getElementById('roomSearch').value.toLowerCase();
+      //   const roomItems = document.querySelectorAll('.room-item');
+      //   
+      //   roomItems.forEach(item => {
+      //     const roomName = item.querySelector('label').textContent.toLowerCase();
+      //     item.style.display = roomName.includes(searchTerm) ? 'block' : 'none';
+      //   });
+      // }
+      
       // 页面切换函数
       function switchPage(pageId) {
-        // 检查用户是否尝试访问用户管理相关页面
-        if (pageId === 'createUser' || pageId === 'userList') {
-          const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        // 首先获取用户信息
+        const userInfoStr = localStorage.getItem('userInfo');
+        let userInfo = null;
+        try {
+          userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+        } catch (e) {
+          console.error('解析用户信息失败:', e);
+        }
+        
+        // 严格的权限检查：普通用户绝对不能访问用户管理页面
+        const isUserManagementPage = pageId === 'createUser' || pageId === 'userList';
+        if (isUserManagementPage) {
           if (!userInfo || userInfo.role !== 'admin') {
             // 普通用户尝试访问用户管理，重定向到系统看板
             pageId = 'dashboard';
             alert('您没有权限访问用户管理页面');
+            // 同时确保用户管理菜单被隐藏
+            const userManagementLi = document.querySelector('li.nav-item.dropdown');
+            if (userManagementLi) {
+              userManagementLi.style.display = 'none';
+            }
           }
         }
         // editUser页面允许普通用户访问，但只能编辑自己的资料
@@ -661,10 +982,26 @@
         const pages = ['dashboardPage', 'usagePage', 'servicesPage', 'createUserPage', 'userListPage', 'editUserPage'];
         pages.forEach(id => {
           document.getElementById(id).style.display = 'none';
+          
+          // 如果是切换到用量查询页面，重置表格状态
+          if (id === 'usagePage' && pageId === 'usagePage') {
+            if (document.getElementById('usageTable')) {
+              document.getElementById('usageTable').style.display = 'none';
+              document.getElementById('noDataMessage').style.display = 'none';
+              document.getElementById('loadingIndicator').style.display = 'none';
+              const tableBody = document.getElementById('usageTableBody');
+              if (tableBody) tableBody.innerHTML = '';
+            }
+          }
         });
         
         // 显示选中的页面
         document.getElementById(`${pageId}Page`).style.display = 'block';
+        
+        // 如果切换到用量查询页面，直接加载所有用量数据
+        if (pageId === 'usage') {
+          loadUsageData();
+        }
         
         // 更新导航项的活动状态
         const navLinks = document.querySelectorAll('.nav-link, .dropdown-item');
@@ -1106,9 +1443,71 @@
       
       // 页面切换时加载对应内容 - 已在前面定义
       
+      // 立即执行权限检查，在DOM内容加载之前就隐藏用户管理菜单
+      // 这样可以防止菜单在权限检查完成前闪烁显示
+      const earlyPermissionCheck = () => {
+        // 使用更精确的选择器，确保找到正确的用户管理菜单项
+        const userManagementLi = document.querySelector('li.nav-item.dropdown');
+        if (userManagementLi) {
+          // 默认隐藏，只有管理员登录后才显示
+          userManagementLi.style.display = 'none';
+        }
+        
+        // 移除无条件隐藏所有下拉菜单的代码
+        // 这样管理员登录后能够正常看到二级子菜单
+      };
+      
+      // 立即执行早期权限检查
+      if (typeof document !== 'undefined' && document.querySelector) {
+        earlyPermissionCheck();
+      }
+      
       // 页面加载时检查认证状态
       document.addEventListener('DOMContentLoaded', () => {
+        // 再次执行权限检查，确保完全隐藏菜单
+        earlyPermissionCheck();
+        
         checkAuthentication();
+        
+        // 确保Chart对象已加载
+        console.log('Chart对象是否可用:', typeof Chart !== 'undefined');
+        
+        // 检查图表容器是否存在
+        console.log('图表容器是否存在:', document.getElementById('usageChart') !== null);
+        
+        // 监听哈希变化，防止用户直接通过URL访问受限页面
+        window.addEventListener('hashchange', () => {
+          const currentHash = window.location.hash;
+          const userInfoStr = localStorage.getItem('userInfo');
+          let userInfo = null;
+          try {
+            userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+          } catch (e) {
+            console.error('解析用户信息失败:', e);
+          }
+          
+          // 检查是否尝试访问用户管理页面
+          if (!userInfo || userInfo.role !== 'admin') {
+            if (currentHash.includes('createUser') || currentHash.includes('userList')) {
+              window.location.hash = '#dashboard';
+              switchPage('dashboard');
+              alert('您没有权限访问用户管理页面');
+            }
+          }
+        });
+        
+        // 页面加载后自动切换到用量查询页面并设置默认户号
+        setTimeout(() => {
+          switchPage('usage');
+          // 设置默认户号为1239，以便自动加载数据
+          setTimeout(() => {
+            const roomNumberInput = document.getElementById('roomNumberQuery');
+            if (roomNumberInput) {
+              roomNumberInput.value = '1239';
+              searchUsageData();
+            }
+          }, 100);
+        }, 500);
         
         // 绑定用户下拉菜单点击事件
         document.getElementById('userName').addEventListener('click', function(e) {

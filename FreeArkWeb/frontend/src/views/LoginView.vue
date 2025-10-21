@@ -51,7 +51,7 @@ export default {
           this.loading = true
           this.error = ''
           try {
-            const response = await axios.post('/api/auth/login/', this.loginForm, {
+            const response = await axios.post('http://localhost:8000/api/auth/login/', this.loginForm, {
               headers: {
                 'Content-Type': 'application/json'
               },

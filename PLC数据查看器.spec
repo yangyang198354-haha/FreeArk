@@ -61,4 +61,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['C:\\Users\\yanggyan\\TRAE\\FreeArk\\resource\\GUI icon.jpg'],
 )

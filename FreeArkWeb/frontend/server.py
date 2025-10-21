@@ -7,8 +7,17 @@ import time
 
 PORT = 8080
 
-# 确保在前端目录下
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# 获取当前脚本所在目录
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 检查是否存在dist目录（构建输出目录），如果存在则切换到该目录
+dist_dir = os.path.join(script_dir, 'dist')
+if os.path.exists(dist_dir) and os.path.isdir(dist_dir):
+    print(f"切换到构建输出目录: {dist_dir}")
+    os.chdir(dist_dir)
+else:
+    print(f"dist目录不存在，使用源码目录: {script_dir}")
+    os.chdir(script_dir)
 
 Handler = http.server.SimpleHTTPRequestHandler
 

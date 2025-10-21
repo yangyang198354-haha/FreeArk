@@ -26,9 +26,22 @@ class LogConfigManager:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(LogConfigManager, cls).__new__(cls)
-                # 获取配置文件路径
-                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                cls._instance._config_path = os.path.join(base_dir, 'resource', 'log_config.json')
+                # 获取配置文件路径，兼容PyInstaller打包后的环境
+                try:
+                    # 优先尝试从当前工作目录获取
+                    current_dir = os.getcwd()
+                    config_path = os.path.join(current_dir, 'resource', 'log_config.json')
+                    if not os.path.exists(config_path):
+                        # 尝试从当前目录直接获取
+                        config_path = os.path.join(current_dir, 'log_config.json')
+                    # 最后尝试从传统路径获取
+                    if not os.path.exists(config_path):
+                        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        config_path = os.path.join(base_dir, 'resource', 'log_config.json')
+                    cls._instance._config_path = config_path
+                except Exception:
+                    # 如果获取路径失败，使用默认路径
+                    cls._instance._config_path = os.path.join(os.getcwd(), 'log_config.json')
                 # 加载配置
                 cls._instance._load_config()
             return cls._instance
@@ -85,10 +98,24 @@ class LogConfigManager:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(log_level)
         
-        # 创建文件处理器，日志存储在log目录下
-        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'log')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        # 创建文件处理器，日志存储在可写的位置，兼容PyInstaller打包后的环境
+        # 优先使用当前工作目录下的log目录（确保可写）
+        log_dir = os.path.join(os.getcwd(), 'log')
+        try:
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+        except Exception as e:
+            # 如果无法在当前目录创建，尝试使用用户目录
+            user_home = os.path.expanduser('~')
+            log_dir = os.path.join(user_home, 'PLC_Viewer_Logs')
+            try:
+                if not os.path.exists(log_dir):
+                    os.makedirs(log_dir)
+            except Exception:
+                # 如果都失败，至少输出到控制台，不创建文件日志
+                print(f"警告: 无法创建日志目录，仅输出到控制台。错误: {str(e)}")
+                logger.addHandler(console_handler)
+                return logger
         
         # 为日志文件添加日期
         log_filename = f"{name}_{time.strftime('%Y%m%d')}.log"

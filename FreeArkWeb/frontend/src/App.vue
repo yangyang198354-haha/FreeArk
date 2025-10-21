@@ -6,8 +6,7 @@
           <h1>FreeArk Web</h1>
           <div class="nav-links">
             <router-link v-if="isLoggedIn" to="/">首页</router-link>
-            <router-link v-if="isLoggedIn" to="/devices">设备管理</router-link>
-            <router-link v-if="isLoggedIn" to="/data-points">数据管理</router-link>
+            <router-link v-if="isLoggedIn" to="/usage-query">用量查询</router-link>
             <router-link v-if="!isLoggedIn" to="/login">登录</router-link>
             <button v-if="isLoggedIn" @click="handleLogout" class="logout-btn">
               登出

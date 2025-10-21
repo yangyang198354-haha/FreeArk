@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import CustomUser
+from .models import CustomUser, UsageQuantityDaily
 
 class UserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
@@ -60,3 +60,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = CustomUser.objects.create_user(**validated_data)
         return user
+
+
+class UsageQuantityDailySerializer(serializers.ModelSerializer):
+    """每日用量数据序列化器"""
+    class Meta:
+        model = UsageQuantityDaily
+        fields = [
+            'id', 'specific_part', 'building', 'unit', 'room_number', 
+            'energy_mode', 'initial_energy', 'final_energy', 'usage_quantity', 'time_period'
+        ]
+        read_only_fields = ['id']

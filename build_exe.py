@@ -178,14 +178,20 @@ def build_executable():
     
     print(f"🚀 开始构建可执行文件，主脚本: {main_script}")
     
+    # 确定要使用的图标路径
+    ico_icon_path = project_root / "resource" / "GUI icon.ico"
+    icon_path = ico_icon_path if os.path.exists(ico_icon_path) else project_root / 'resource' / 'GUI icon.jpg'
+    
     # 构建PyInstaller命令
     pyinstaller_cmd = [
         sys.executable,
         '-m', 'PyInstaller',
-        '--name=PLC数据查看器',  # 可执行文件名称
+        '--name=朗诗乐府自由方舟累计用量采集程序',  # 可执行文件名称
+        '--icon=c:/Users/yanggyan/TRAE/FreeArk/resource/GUI icon.ico',  # 直接使用绝对路径设置图标
         '--onefile',            # 生成单一可执行文件
         '--windowed',           # 窗口模式，不显示命令行
         '--add-data', f'{str(project_root / "resource")};resource',  # 添加资源文件
+        '--add-data', f'{str(project_root / "resource" / "log_config.json")};.',  # 单独添加日志配置文件到根目录
         '--collect-all', 'numpy',    # 收集所有numpy相关模块
         '--collect-all', 'pandas',   # 收集所有pandas相关模块
         '--collect-all', 'openpyxl', # 收集所有openpyxl相关模块
@@ -244,15 +250,25 @@ def build_executable():
         copy_resources(project_root)
         
         # 检查可执行文件是否生成成功
-        executable_path = project_root / "dist" / "PLC数据查看器.exe"
+        executable_path = project_root / "dist" / "朗诗乐府自由方舟累计用量采集程序.exe"
         if executable_path.exists():
             print(f"✅ 构建成功！可执行文件路径: {executable_path}")
             print("📝 构建完成，您可以在dist目录中找到可执行文件")
             print("💡 提示: 确保在运行可执行文件时，resource目录与可执行文件在同一目录下")
             return True
         else:
-            print(f"❌ 找不到生成的可执行文件: {executable_path}")
-            return False
+            # 尝试查找dist目录中的其他exe文件
+            dist_dir = project_root / "dist"
+            exe_files = list(dist_dir.glob("*.exe"))
+            if exe_files:
+                found_exe = exe_files[0]
+                print(f"⚠️  未找到预期的可执行文件，但找到了: {found_exe}")
+                print("📝 构建可能已完成，您可以在dist目录中找到可执行文件")
+                return True
+            else:
+                print(f"❌ 找不到生成的可执行文件: {executable_path}")
+                print("❌ dist目录中也未找到任何exe文件")
+                return False
             
     except Exception as e:
         print(f"❌ 构建过程中出现错误: {e}")

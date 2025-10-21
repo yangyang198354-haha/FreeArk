@@ -3,10 +3,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
-from .models import CustomUser
+from .models import CustomUser, UsageQuantityDaily
 from .serializers import (
     UserSerializer,
-    UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer
+    UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
+    UsageQuantityDailySerializer
 )
 
 # 自定义权限类
@@ -50,6 +51,7 @@ def user_login(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
 def user_logout(request):
     """用户登出视图"""
     # 删除Token
@@ -59,21 +61,20 @@ def user_logout(request):
     return Response({'success': True, 'message': '成功登出'})
 
 @api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def get_current_user(request):
     """获取当前登录用户信息"""
-    if request.user.is_authenticated:
-        user = request.user
-        return Response({
-            'id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'role': user.role,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'department': user.department,
-            'position': user.position
-        })
-    return Response({'error': '用户未登录'}, status=status.HTTP_401_UNAUTHORIZED)
+    user = request.user
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'role': user.role,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'department': user.department,
+        'position': user.position
+    })
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -135,3 +136,45 @@ class AdminUserCreate(generics.CreateAPIView):
 def health_check(request):
     """健康检查接口（允许未认证访问）"""
     return Response({'status': 'ok', 'message': 'FreeArk Web API 服务正常运行'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_usage_quantity(request):
+    """
+    获取每日用量数据
+    支持按多个条件过滤：房号、专有部分、供能模式、开始时间和结束时间
+    """
+    # 构建基础查询集
+    queryset = UsageQuantityDaily.objects.all()
+    
+    # 获取查询参数
+    room_number = request.GET.get('room_number')
+    specific_part = request.GET.get('specific_part')
+    energy_mode = request.GET.get('energy_mode')
+    start_time = request.GET.get('start_time')
+    end_time = request.GET.get('end_time')
+    
+    # 应用过滤条件
+    if room_number:
+        queryset = queryset.filter(room_number=room_number)
+    if specific_part:
+        queryset = queryset.filter(specific_part=specific_part)
+    if energy_mode:
+        queryset = queryset.filter(energy_mode=energy_mode)
+    if start_time:
+        queryset = queryset.filter(time_period__gte=start_time)
+    if end_time:
+        queryset = queryset.filter(time_period__lte=end_time)
+    
+    # 按时间降序排序
+    queryset = queryset.order_by('-time_period')
+    
+    # 序列化数据
+    serializer = UsageQuantityDailySerializer(queryset, many=True)
+    
+    return Response({
+        'success': True,
+        'data': serializer.data,
+        'total': len(serializer.data)
+    })

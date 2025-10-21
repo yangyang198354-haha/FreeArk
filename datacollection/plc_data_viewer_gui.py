@@ -106,6 +106,36 @@ class PLCDataViewerGUI:
         self.root.title("朗诗乐府自由方舟累计用量采集程序")
         self.root.geometry("1000x600")
         self.root.minsize(800, 500)
+        
+        # 设置窗口图标
+        try:
+            # 使用绝对路径确保能找到图标文件
+            icon_path = "c:/Users/yanggyan/TRAE/FreeArk/resource/GUI icon.ico"
+            if os.path.exists(icon_path):
+                # 尝试使用iconbitmap方法
+                self.root.iconbitmap(default=icon_path)
+                logger.info(f"✅ 成功设置窗口图标: {icon_path}")
+            else:
+                # 如果找不到指定的图标文件，尝试使用相对路径查找
+                icon_path = get_resource_path("GUI icon.ico")
+                if os.path.exists(icon_path):
+                    self.root.iconbitmap(default=icon_path)
+                    logger.info(f"✅ 使用相对路径成功设置窗口图标: {icon_path}")
+                else:
+                    logger.warning(f"❌ 未找到图标文件: c:/Users/yanggyan/TRAE/FreeArk/resource/GUI icon.ico 或 GUI icon.ico")
+        except Exception as e:
+            logger.warning(f"❌ 无法设置窗口图标: {str(e)}")
+            # 尝试使用备用方法设置图标
+            try:
+                from tkinter import PhotoImage
+                icon_path = "c:/Users/yanggyan/TRAE/FreeArk/resource/GUI icon.ico"
+                if os.path.exists(icon_path):
+                    self.icon = PhotoImage(file=icon_path)
+                    self.root.iconphoto(True, self.icon)
+                    logger.info(f"✅ 使用备用方法成功设置窗口图标")
+            except Exception as e2:
+                logger.warning(f"❌ 备用图标设置方法也失败: {str(e2)}")
+            
         logger.info("✅ PLC数据查看器GUI已初始化")
         
         # 配置Windows风格

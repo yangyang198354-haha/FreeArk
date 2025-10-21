@@ -8,11 +8,16 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/usage-query',
+    name: 'UsageQuery',
+    component: () => import('../views/UsageQueryView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')
-  }
-]
+  }]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
