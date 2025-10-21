@@ -133,7 +133,7 @@
       
       /* 左侧导航栏 */
       .sidebar {
-        width: 200px;
+        width: 240px;
         background-color: #304156;
         color: #fff;
         position: fixed;
@@ -160,6 +160,7 @@
         border-radius: 4px;
         transition: all 0.3s;
         margin-bottom: 0.25rem;
+        font-size: 16px;
       }
       
       .nav-link:hover {
@@ -220,6 +221,7 @@
         border: 0;
         cursor: pointer;
         transition: all 0.3s ease;
+        font-size: 14px;
       }
       
       .dropdown-item:hover, .dropdown-item:focus {
@@ -334,8 +336,11 @@
           <li class="nav-item">
             <a href="#dashboard" class="nav-link active" onclick="switchPage('dashboard')">系统看板</a>
           </li>
-          <li class="nav-item">
-            <a href="#usage" class="nav-link" onclick="switchPage('usage')">用量查询</a>
+          <li class="nav-item dropdown">
+            <a href="#usage" class="nav-link dropdown-toggle collapsed" id="usageDropdown" onclick="expandUsageDropdown(event)">用量查询</a>
+            <div class="dropdown-menu">
+              <a href="#energyReport" class="dropdown-item" onclick="switchPage('usage')">能耗日用量报表</a>
+            </div>
           </li>
           <li class="nav-item">
             <a href="#services" class="nav-link" onclick="switchPage('services')">服务管理</a>
@@ -1115,6 +1120,17 @@
       //   });
       // }
       
+      // 展开用量查询下拉菜单函数
+      function expandUsageDropdown(event) {
+        event.preventDefault();
+        const dropdownMenu = document.getElementById('usageDropdown').nextElementSibling;
+        if (dropdownMenu) {
+          dropdownMenu.classList.toggle('show');
+          // 切换按钮的collapsed类来改变图标方向
+          document.getElementById('usageDropdown').classList.toggle('collapsed');
+        }
+      }
+      
       // 页面切换函数
       function switchPage(pageId) {
         // 首先获取用户信息
@@ -1212,6 +1228,16 @@
           dropdownItem.classList.add('active');
           // 同时将下拉按钮也设为活动状态
           dropdownItem.closest('.dropdown').querySelector('.nav-link').classList.add('active');
+        }
+        
+        // 特殊处理：当页面是usage时，确保能耗日用量报表菜单项被正确设置为active
+        if (pageId === 'usage') {
+          const energyReportItem = document.querySelector('.dropdown-item[href="#energyReport"]');
+          if (energyReportItem) {
+            energyReportItem.classList.add('active');
+            // 确保用量查询下拉按钮也设为活动状态
+            energyReportItem.closest('.dropdown').querySelector('.nav-link').classList.add('active');
+          }
         }
         
         // 加载用户列表（如果切换到用户列表页面）
