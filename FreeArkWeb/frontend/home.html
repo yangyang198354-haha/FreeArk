@@ -22,6 +22,7 @@
         min-height: 100vh;
         display: flex;
         flex-direction: column;
+        font-size: 14px;
       }
       
       .header {
@@ -356,23 +357,22 @@
         <!-- 用量查询页面 -->
         <div id="usagePage" class="page-container" style="display: none;">
           <div class="page-header">
-            <h2>用量查询</h2>
+            <h2>能耗日用量报表</h2>
           </div>
           
           <!-- 查询条件表单 -->
           <div class="card" style="margin: 20px;">
             <div class="card-body">
-              <h3>查询条件</h3>
-              <form id="usageQueryForm" class="form-row">
-                <div class="form-group col-md-4">
+              <form id="usageQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="roomNumberQuery">户号</label>
                   <input type="text" class="form-control" id="roomNumberQuery" placeholder="请输入户号">
                 </div>
-                <div class="form-group col-md-4">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="specificPartQuery">专有部分</label>
                   <input type="text" class="form-control" id="specificPartQuery" placeholder="请输入专有部分">
                 </div>
-                <div class="form-group col-md-4">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="energyModeQuery">供能模式</label>
                   <select class="form-control" id="energyModeQuery">
                     <option value="">全部</option>
@@ -381,17 +381,17 @@
                     <option value="gas">燃气</option>
                   </select>
                 </div>
-                <div class="form-group col-md-6">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="startTimeQuery">开始时间</label>
                   <input type="date" class="form-control" id="startTimeQuery">
                 </div>
-                <div class="form-group col-md-6">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="endTimeQuery">结束时间</label>
                   <input type="date" class="form-control" id="endTimeQuery">
                 </div>
-                <div class="form-group col-md-12">
+                <div class="form-group" style="display: flex; gap: 10px;">
                   <button type="button" class="btn btn-primary" onclick="searchUsageData()">查询</button>
-                  <button type="button" class="btn btn-secondary ml-2" onclick="resetQueryForm()">重置</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetQueryForm()">重置</button>
                 </div>
               </form>
             </div>
@@ -804,6 +804,49 @@
         console.log('创建图表前Chart对象是否可用:', typeof Chart !== 'undefined');
         console.log('图表配置:', {labels: sortedDates, datasets: datasets});
         
+        // 为每个数据集添加点样式和点半径配置
+        datasets.forEach(dataset => {
+          dataset.pointRadius = 5; // 设置点的大小
+          dataset.pointHoverRadius = 7; // 设置鼠标悬停时点的大小
+          dataset.pointBackgroundColor = dataset.borderColor; // 设置点的背景颜色
+          dataset.pointBorderColor = '#fff'; // 设置点的边框颜色
+          dataset.pointBorderWidth = 2; // 设置点的边框宽度
+        });
+        
+        // 定义一个显示数据点数值的插件
+        const dataLabelsPlugin = {
+          id: 'dataLabelsPlugin',
+          afterDatasetsDraw: function(chart) {
+            const ctx = chart.ctx;
+            chart.data.datasets.forEach(function(dataset, datasetIndex) {
+              const meta = chart.getDatasetMeta(datasetIndex);
+              if (!meta.hidden) {
+                meta.data.forEach(function(element, index) {
+                  // 只在有数据点的位置显示标签
+                  if (chart.data.labels[index] && dataset.data[index] !== null && dataset.data[index] !== undefined && dataset.data[index] > 0) {
+                    // 保存当前上下文状态
+                    ctx.save();
+                    // 设置字体样式
+                    ctx.font = Chart.helpers.fontString(10, 'bold', Chart.defaults.font.family);
+                    ctx.fillStyle = dataset.borderColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    
+                    // 获取数据点位置
+                    const position = element.tooltipPosition();
+                    
+                    // 绘制数值标签
+                    ctx.fillText(dataset.data[index].toFixed(2), position.x, position.y - 5);
+                    
+                    // 恢复上下文状态
+                    ctx.restore();
+                  }
+                });
+              }
+            });
+          }
+        };
+        
         // 创建新图表
         window.usageChartInstance = new Chart(ctx, {
           type: 'line',
@@ -822,6 +865,16 @@
               legend: {
                 display: true,
                 position: 'top'
+              },
+              // 配置Tooltip，确保数据点显示数值
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                  label: function(context) {
+                    return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' kWh';
+                  }
+                }
               }
             },
             scales: {
@@ -839,7 +892,9 @@
                 beginAtZero: true
               }
             }
-          }
+          },
+          // 注册自定义插件
+          plugins: [dataLabelsPlugin]
         });
       }
       
