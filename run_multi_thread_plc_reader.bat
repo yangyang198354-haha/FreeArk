@@ -11,7 +11,7 @@ setlocal enabledelayedexpansion
 :: ========================================================
 
 REM 配置参数
-set "SCRIPT_NAME=multi_thread_plc_reader.py"
+set "SCRIPT_NAME=multi_thread_plc_handler.py"
 set "DEFAULT_THREAD_COUNT=5"
 
 REM 清屏

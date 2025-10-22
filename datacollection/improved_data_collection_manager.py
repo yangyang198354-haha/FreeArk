@@ -26,7 +26,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datacollection.log_config_manager import get_logger
 
 # 导入PLC读取相关类
-from datacollection.multi_thread_plc_reader import PLCReader, PLCManager
+from datacollection.multi_thread_plc_handler import PLCReadWriter, PLCManager
 # 导入MQTT客户端
 from datacollection.mqtt_client import MQTTClient
 
@@ -412,7 +412,7 @@ class ImprovedDataCollectionManager:
         results = []
         
         # 创建一个PLC读取器并连接
-        reader = PLCReader(plc_ip)
+        reader = PLCReadWriter(plc_ip)
         try:
             if not reader.connect():
                 # 只连接PLC IP，如果失败直接标记为失败
@@ -464,8 +464,10 @@ class ImprovedDataCollectionManager:
         device_id = config.get('device_id')
         param_key = config.get('param_key')
         
+        # 导入PLC读取器类
+        from datacollection.multi_thread_plc_handler import PLCReadWriter
         # 创建PLC读取器并连接
-        reader = PLCReader(plc_ip)
+        reader = PLCReadWriter(plc_ip)
         try:
             if not reader.connect():
                 # 只连接PLC IP，如果失败直接标记为失败

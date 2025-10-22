@@ -13,12 +13,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datacollection.log_config_manager import get_logger
 
 # 导入已有的PLC读取相关类
-from datacollection.multi_thread_plc_reader import PLCReader
+from datacollection.multi_thread_plc_handler import PLCReadWriter
 
 # 获取logger，日志级别从配置文件读取
 logger = get_logger('room_data_collector')
 
-# PLCReader类已从multi_thread_plc_reader.py导入，无需重复定义
+# PLCReader类已从multi_thread_plc_handler.py导入，无需重复定义
 
 class RoomDataCollector:
     """房间数据收集器，根据户号自动获取PLC地址并读取数据"""
@@ -231,7 +231,7 @@ class RoomDataCollector:
             return {}
         
         # 连接PLC并读取数据
-        reader = PLCReader(plc_ip)
+        reader = PLCReadWriter(plc_ip)
         try:
             if not reader.connect():
                 logger.info(f"❌ 无法连接到PLC {plc_ip}")

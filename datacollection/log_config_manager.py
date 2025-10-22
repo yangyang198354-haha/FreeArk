@@ -65,7 +65,8 @@ class LogConfigManager:
                         'plc_reader': {'level': 'INFO'},
                         'mqtt_client': {'level': 'INFO'},
                         'quantity_statistics': {'level': 'INFO'},
-                        'plc_data_viewer': {'level': 'INFO'}
+                        'plc_data_viewer': {'level': 'INFO'},
+                        'plc_write_manager': {'level': 'INFO'}
                     }
                 }
 

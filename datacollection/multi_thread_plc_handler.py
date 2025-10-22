@@ -2,7 +2,7 @@ import struct
 import sys
 import time
 import threading
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Any
 import concurrent.futures
 import os
 from collections import defaultdict
@@ -28,7 +28,7 @@ except ImportError:
     logger = get_logger('plc_reader')
     logger.warning("❌ snap7模块未找到，PLC读取功能将不可用")
 
-class PLCReader:
+class PLCReadWriter:
     def __init__(self, plc_ip: str, rack: int = 0, slot: int = 1):
         """初始化PLC读取器 - 线程安全版本"""
         if not snap7_available:
@@ -116,7 +116,11 @@ class PLCReader:
     def _parse_data(self, raw_data: bytes, data_type: str) -> Optional[any]:
         """根据数据类型解析原始数据"""
         try:
-            if data_type == "uint16":
+            if data_type == "int8":
+                if len(raw_data) != 1:
+                    return None
+                return struct.unpack('>b', raw_data)[0]  # 大端模式8位有符号整数
+            elif data_type == "uint16":
                 if len(raw_data) != 2:
                     return None
                 return struct.unpack('>H', raw_data)[0]  # 大端模式16位无符号整数
@@ -146,6 +150,57 @@ class PLCReader:
         except Exception as e:
             logger.info(f"❌ 数据解析异常：{str(e)}")
             return None
+            
+    def _pack_data(self, value: any, data_type: str) -> Optional[bytes]:
+        """根据数据类型打包原始数据"""
+        try:
+            if data_type == "int8":
+                return struct.pack('>b', value)  # 大端模式8位有符号整数
+            elif data_type == "uint16":
+                return struct.pack('>H', value)  # 大端模式16位无符号整数
+            elif data_type == "int16":
+                return struct.pack('>h', value)  # 大端模式16位有符号整数
+            elif data_type == "uint32":
+                return struct.pack('>I', value)  # 大端模式32位无符号整数
+            elif data_type == "int32":
+                return struct.pack('>i', value)  # 大端模式32位有符号整数
+            elif data_type == "float32":
+                return struct.pack('>f', value)  # 大端模式32位浮点数
+            elif data_type == "float64":
+                return struct.pack('>d', value)  # 大端模式64位浮点数
+            else:
+                logger.info(f"❌ 不支持的数据类型：{data_type}")
+                return None
+        except Exception as e:
+            logger.info(f"❌ 数据打包异常：{str(e)}")
+            return None
+    
+    def write_db_data(self, db_num: int, offset: int, value: any, data_type: str, max_retries: int = 2) -> Optional[Tuple[bool, str]]:
+        """写入指定DB块、偏移量、值和类型的数据，支持重试"""
+        retries = 0
+        while retries <= max_retries:
+            try:
+                if not self.connected:
+                    return False, f"未连接到PLC：{self.plc_ip}"
+
+                # 检查偏移量是否超出DB块最大范围（64KB限制）
+                if offset > 65535:
+                    return False, f"写入偏移量越界（最大允许偏移量≤65535）"
+
+                # 根据数据类型打包数据
+                packed_data = self._pack_data(value, data_type)
+                if packed_data is None:
+                    return False, f"数据类型打包失败：{data_type}"
+
+                # 写入数据
+                self.client.db_write(db_num, offset, packed_data)
+                return True, "写入成功"
+            except Exception as e:
+                retries += 1
+                if retries > max_retries:
+                    return False, f"写入异常（已重试{max_retries}次）：{str(e)}"
+                logger.info(f"⚠️  写入异常，第{retries}次重试：{str(e)}")
+                time.sleep(0.1 * retries)  # 指数退避策略
 
 class PLCManager:
     def __init__(self, max_workers: int = 5):
@@ -228,12 +283,12 @@ class PLCManager:
         logger.info(f"✅ PLC管理器线程池大小已成功调整为: {self.max_workers}")
         return True
         
-    def _get_or_create_reader(self, plc_ip: str) -> PLCReader:
+    def _get_or_create_reader(self, plc_ip: str) -> PLCReadWriter:
         """获取或创建PLC读取器 - 线程安全的客户端缓存管理"""
         with self.clients_lock:
             if plc_ip not in self.clients_cache:
                 # 创建新的读取器
-                reader = PLCReader(plc_ip)
+                reader = PLCReadWriter(plc_ip)
                 self.clients_cache[plc_ip] = reader
                 logger.debug(f"🎯 创建新的PLC读取器: {plc_ip}, 当前缓存大小: {len(self.clients_cache)}")
             else:
@@ -488,6 +543,112 @@ class PLCManager:
         avg_read_time = (total_read_time / success_count) * 1000 if success_count > 0 else 0
         logger.info("=" * 85)
         logger.info(f"📋 统计：成功 {success_count}/{len(results)} 个任务, 平均读取耗时: {avg_read_time:.1f}ms")
+        logger.info("=" * 85)
+    
+    def write_single_plc_param(self, config: Dict, value: Any) -> Dict:
+        """写入单个PLC参数 - 使用线程安全的客户端缓存
+        
+        Args:
+            config: PLC配置字典，包含ip、db_num、offset和data_type
+            value: 要写入的值
+            
+        Returns:
+            写入结果字典
+        """
+        plc_ip = config['ip']
+        db_num = config['db_num']
+        offset = config['offset']
+        data_type = config['data_type']
+        
+        # 获取或创建PLC读取器
+        reader = self._get_or_create_reader(plc_ip)
+        try:
+            # 确保已连接
+            if not reader.connect():
+                return {
+                    'ip': plc_ip,
+                    'db_num': db_num,
+                    'offset': offset,
+                    'value': value,
+                    'data_type': data_type,
+                    'success': False,
+                    'message': "PLC连接失败"
+                }
+            
+            # 更新活跃连接统计
+            with self.stats_lock:
+                self.connection_stats[plc_ip]['active_connections'] = 1
+            
+            # 写入数据
+            start_write_time = time.time()
+            success, message = reader.write_db_data(db_num, offset, value, data_type)
+            write_duration = time.time() - start_write_time
+            
+            result = {
+                'ip': plc_ip,
+                'db_num': db_num,
+                'offset': offset,
+                'value': value,
+                'data_type': data_type,
+                'success': success,
+                'message': message,
+                'write_time': write_duration
+            }
+            
+            # 记录详细的写入日志
+            if success:
+                logger.debug(f"✅ 成功写入PLC数据: {plc_ip}, DB{db_num}, 偏移量{offset}, 值: {value}, 数据类型: {data_type}, 耗时: {write_duration:.3f}秒")
+            else:
+                logger.debug(f"❌ 写入PLC数据失败: {plc_ip}, DB{db_num}, 偏移量{offset}, 原因: {message}")
+            
+            return result
+        except Exception as e:
+            logger.error(f"❌ 写入单个PLC数据异常: {plc_ip}, DB{db_num}, 偏移量{offset} - {str(e)}")
+            return {
+                'ip': plc_ip,
+                'db_num': db_num,
+                'offset': offset,
+                'value': value,
+                'data_type': data_type,
+                'success': False,
+                'message': f"写入异常: {str(e)}",
+                'write_time': 0
+            }
+    
+    def print_write_results(self, results: List[Dict]) -> None:
+        """打印写入结果 - 显示写入耗时"""
+        if not results:
+            logger.info("📊 没有PLC数据写入结果可供显示")
+            return
+            
+        logger.info("\n" + "=" * 85)
+        logger.info(f"📊 PLC数据写入结果汇总 - 总任务数: {len(results)}")
+        logger.info("=" * 85)
+        logger.info(f"{'IP地址':<15} {'DB块':<6} {'偏移量':<8} {'结果':<8} {'写入值':<15} {'数据类型':<10} {'写入耗时(ms)':<12} {'消息':<20}")
+        logger.info("-" * 85)
+        
+        success_count = 0
+        total_write_time = 0
+        
+        for result in results:
+            success_str = "✅ 成功" if result.get('success', False) else "❌ 失败"
+            value_str = str(result.get('value')) if result.get('value') is not None else "-"
+            data_type = result.get('data_type', '-')
+            write_time_str = f"{result.get('write_time', 0) * 1000:.1f}" if 'write_time' in result else "-"
+            
+            if result.get('success', False):
+                success_count += 1
+                total_write_time += result.get('write_time', 0)
+            
+            message = result.get('message', '')
+            # 限制消息长度，避免日志过长
+            message = message[:20] + '...' if len(message) > 20 else message
+            
+            logger.info(f"{result.get('ip', '未知'):<15} {result.get('db_num', '未知'):<6} {result.get('offset', '未知'):<8} {success_str:<8} {value_str:<15} {data_type:<10} {write_time_str:<12} {message:<20}")
+        
+        avg_write_time = (total_write_time / success_count) * 1000 if success_count > 0 else 0
+        logger.info("=" * 85)
+        logger.info(f"📋 统计：成功 {success_count}/{len(results)} 个任务, 平均写入耗时: {avg_write_time:.1f}ms")
         logger.info("=" * 85)
 
 

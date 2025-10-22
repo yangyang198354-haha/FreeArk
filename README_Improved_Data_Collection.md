@@ -17,7 +17,7 @@
 FreeArk/
 ├── datacollection/
 │   ├── improved_data_collection_manager.py  # 改进版数据收集管理器（核心模块）
-│   ├── multi_thread_plc_reader.py           # 多线程PLC读取器
+│   ├── multi_thread_plc_handler.py           # 多线程PLC处理器
 │   ├── mqtt_client.py                       # MQTT客户端实现
 │   ├── mqtt_client_pool.py                  # MQTT客户端池管理
 │   ├── log_config_manager.py                # 日志配置管理器

@@ -8,7 +8,7 @@ FreeArk是一个用于PLC数据收集、处理和可视化的综合解决方案�
 FreeArk/
 ├── datacollection/          # 数据收集核心模块
 │   ├── improved_data_collection_manager.py  # 改进版数据收集管理器
-│   ├── multi_thread_plc_reader.py           # 多线程PLC读取器
+│   ├── multi_thread_plc_handler.py           # 多线程PLC处理器
 │   ├── mqtt_client.py                       # MQTT客户端
 │   ├── log_config_manager.py                # 日志配置管理器
 │   ├── plc_data_viewer_gui.py               # PLC数据可视化界面
@@ -131,7 +131,7 @@ run_quantity_statistics.bat
 
 ### 2. 多线程PLC读取器 (MultiThreadPLCReader)
 
-**文件**：`datacollection/multi_thread_plc_reader.py`
+**文件**：`datacollection/multi_thread_plc_handler.py`
 
 **功能**：
 - 基于Snap7库的PLC通信

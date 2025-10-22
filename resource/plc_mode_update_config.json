@@ -1,0 +1,25 @@
+{
+  "parameters": {
+    "mode": {
+      "name": "mode",
+      "description": "运行模式",
+      "db_num": 14,
+      "offset": 89,
+      "length": 8,
+      "data_type": "int8"
+    },
+    "central energy supply": {
+      "name": "central energy supply",
+      "description": "为集中能源供应",
+      "db_num": 14,
+      "offset": 103,
+      "length": 8,
+      "data_type": "int8"
+    }
+  },
+  "config_info": {
+    "version": "1.0",
+    "create_time": "2024-10-21",
+    "description": "PLC运行模式配置文件"
+  }
+}
