@@ -186,7 +186,7 @@ def build_executable():
     pyinstaller_cmd = [
         sys.executable,
         '-m', 'PyInstaller',
-        '--name=朗诗乐府自由方舟累计用量采集程序',  # 可执行文件名称
+        '--name=朗诗乐府自由方舟小工具',  # 可执行文件名称
         '--icon=c:/Users/yanggyan/TRAE/FreeArk/resource/GUI icon.ico',  # 直接使用绝对路径设置图标
         '--onefile',            # 生成单一可执行文件
         '--windowed',           # 窗口模式，不显示命令行
@@ -250,7 +250,7 @@ def build_executable():
         copy_resources(project_root)
         
         # 检查可执行文件是否生成成功
-        executable_path = project_root / "dist" / "朗诗乐府自由方舟累计用量采集程序.exe"
+        executable_path = project_root / "dist" / "朗诗乐府自由方舟小工具.exe"
         if executable_path.exists():
             print(f"✅ 构建成功！可执行文件路径: {executable_path}")
             print("📝 构建完成，您可以在dist目录中找到可执行文件")

@@ -10,7 +10,7 @@
     },
     "central energy supply": {
       "name": "central energy supply",
-      "description": "为集中能源供应",
+      "description": "集中能源供应",
       "db_num": 14,
       "offset": 103,
       "length": 8,

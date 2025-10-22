@@ -20,14 +20,27 @@ def get_resource_path(relative_path):
 # 添加FreeArk目录到Python路径，确保模块可以正确导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 尝试导入snap7模块，如果不存在则记录警告
+SNAP7_AVAILABLE = False
+try:
+    import snap7
+    SNAP7_AVAILABLE = True
+except ImportError:
+    # 模块不存在，记录警告
+    pass
+
 # 导入统一的日志配置管理器
 from datacollection.log_config_manager import get_logger
 
-# 导入PLC读取相关类（用于写入功能）
-from datacollection.multi_thread_plc_handler import PLCReadWriter, PLCManager
-
 # 获取logger，日志级别从配置文件读取
 logger = get_logger('plc_write_manager')
+
+# 如果snap7模块不可用，记录警告
+if not SNAP7_AVAILABLE:
+    logger.warning("❌ snap7模块未找到，PLC读取功能将不可用")
+
+# 导入PLC读取相关类（用于写入功能）
+from datacollection.multi_thread_plc_handler import PLCReadWriter, PLCManager
 
 class PLCWriteManager:
     # 运行模式常量定义
@@ -143,12 +156,6 @@ class PLCWriteManager:
         if not plc_mode_config:
             return {}
         
-        # 获取模式参数配置
-        mode_param = plc_mode_config.get('mode')
-        if not mode_param:
-            logger.error("❌ PLC模式配置中未找到mode参数")
-            return {}
-        
         # 创建PLC写入配置列表
         plc_write_configs = []
         ip_to_device_map = {}
@@ -166,16 +173,21 @@ class PLCWriteManager:
                         continue
                     logger.info(f"⚠️  设备 {device_id} 没有PLC IP，使用设备IP: {plc_ip}")
                 
-                # 创建写入配置
-                config = {
-                    'ip': plc_ip,
-                    'db_num': mode_param.get('db_num'),
-                    'offset': mode_param.get('offset'),
-                    'data_type': mode_param.get('data_type'),
-                    'value': mode,
-                    'device_id': device_id
-                }
-                plc_write_configs.append(config)
+                # 为每个参数创建写入配置
+                for param_name, param_config in plc_mode_config.items():
+                    # 将同一个mode值写入所有配置的参数（mode和central energy supply）
+                    value = mode
+                    
+                    config = {
+                        'ip': plc_ip,
+                        'db_num': param_config.get('db_num'),
+                        'offset': param_config.get('offset'),
+                        'data_type': param_config.get('data_type'),
+                        'value': value,
+                        'device_id': device_id,
+                        'param_name': param_name
+                    }
+                    plc_write_configs.append(config)
                 
                 # 记录PLC IP到设备的映射
                 if plc_ip not in ip_to_device_map:
@@ -200,10 +212,14 @@ class PLCWriteManager:
         organized_results = self._organize_write_results(results, building_data)
         
         elapsed_time = time.time() - start_time
-        success_count = sum(1 for device_results in organized_results.values() 
-                          for result in device_results.values() 
-                          if result.get('success', False))
-        total_count = sum(len(device_results) for device_results in organized_results.values())
+        # 统计成功和失败的参数
+        success_count = 0
+        total_count = 0
+        for device_info in organized_results.values():
+            for result in device_info.get('results', {}).values():
+                total_count += 1
+                if result.get('success', False):
+                    success_count += 1
         
         logger.info(f"⏱️  模式写入完成，耗时：{elapsed_time:.2f} 秒，成功: {success_count}/{total_count}")
         
@@ -273,7 +289,8 @@ class PLCWriteManager:
                         'device_id': config.get('device_id'),
                         'value': config.get('value'),
                         'success': False,
-                        'message': "PLC IP连接失败"
+                        'message': "PLC IP连接失败",
+                        'param_name': config.get('param_name', 'mode')
                     })
                 return results
             
@@ -284,6 +301,7 @@ class PLCWriteManager:
                 data_type = config['data_type']
                 value = config['value']  # 直接从config中获取value
                 device_id = config.get('device_id')
+                param_name = config.get('param_name', 'mode')  # 获取参数名
                 
                 # 写入数据
                 success, message = reader.write_db_data(db_num, offset, value, data_type)
@@ -292,15 +310,16 @@ class PLCWriteManager:
                     'device_id': device_id,
                     'success': success,
                     'message': message,
-                    'value': value
+                    'value': value,
+                    'param_name': param_name  # 确保结果中包含参数名
                 }
                 results.append(result)
                 
                 # 记录详细日志
                 if success:
-                    logger.info(f"✅ 成功写入PLC模式: IP={plc_ip}, DB={db_num}, 偏移量={offset}, 值={value}, 设备ID={device_id}")
+                    logger.info(f"✅ 成功写入PLC参数: IP={plc_ip}, DB={db_num}, 偏移量={offset}, 参数={param_name}, 值={value}, 设备ID={device_id}")
                 else:
-                    logger.error(f"❌ 写入PLC模式失败: IP={plc_ip}, DB={db_num}, 偏移量={offset}, 设备ID={device_id}, 原因: {message}")
+                    logger.error(f"❌ 写入PLC参数失败: IP={plc_ip}, DB={db_num}, 偏移量={offset}, 参数={param_name}, 设备ID={device_id}, 原因: {message}")
             
             return results
         finally:
@@ -318,11 +337,12 @@ class PLCWriteManager:
                 if device_id not in organized:
                     organized[device_id] = {
                         'device_info': building_data[device_id],
-                        'mode_result': result
+                        'results': {}
                     }
-                else:
-                    # 如果有多个结果，保留最后一个
-                    organized[device_id]['mode_result'] = result
+                
+                # 按参数名组织结果
+                param_name = result.get('param_name', 'mode')
+                organized[device_id]['results'][param_name] = result
         
         return organized
     
@@ -343,24 +363,33 @@ class PLCWriteManager:
         
         results = self.write_results[building_file]
         total_devices = len(results)
-        success_count = sum(1 for device_info in results.values() 
-                          if device_info.get('mode_result', {}).get('success', False))
+        total_params = 0
+        success_count = 0
+        
+        # 统计成功和失败的参数
+        for device_id, device_info in results.items():
+            for param_name, result in device_info.get('results', {}).items():
+                total_params += 1
+                if result.get('success', False):
+                    success_count += 1
         
         logger.info(f"📊 楼栋 {building_file} 写入结果摘要")
         logger.info(f"🔢 总设备数: {total_devices}")
+        logger.info(f"📝 总参数数: {total_params}")
         logger.info(f"✅ 成功写入: {success_count}")
-        logger.info(f"❌ 写入失败: {total_devices - success_count}")
+        logger.info(f"❌ 写入失败: {total_params - success_count}")
         
         # 打印失败的设备信息
-        failed_devices = [device_id for device_id, device_info in results.items() 
-                         if not device_info.get('mode_result', {}).get('success', False)]
-        
-        if failed_devices:
-            logger.info(f"📝 写入失败的设备列表:")
-            for device_id in failed_devices:
-                device_info = results[device_id]
-                message = device_info.get('mode_result', {}).get('message', '未知错误')
-                logger.info(f"   - 设备ID: {device_id}, 原因: {message}")
+        for device_id, device_info in results.items():
+            failed_params = [param_name for param_name, result in device_info.get('results', {}).items() 
+                           if not result.get('success', False)]
+            
+            if failed_params:
+                logger.info(f"📝 设备 {device_id} 写入失败的参数:")
+                for param_name in failed_params:
+                    result = device_info['results'][param_name]
+                    message = result.get('message', '未知错误')
+                    logger.info(f"   - 参数: {param_name}, 原因: {message}")
 
 # 示例用法
 if __name__ == "__main__":
@@ -372,8 +401,8 @@ if __name__ == "__main__":
         write_manager.start()
         
         # 示例：为1#楼写入制冷模式
-        building_file = "1#_data.json"
-        mode = PLCWriteManager.MODE_COOLING  # 制冷模式
+        building_file = "3#_data_test.json"
+        mode = PLCWriteManager.MODE_VENTILATION  # 通风模式
         
         # 执行写入
         results = write_manager.write_mode_for_building(building_file, mode)

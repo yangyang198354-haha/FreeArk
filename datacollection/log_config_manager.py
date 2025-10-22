@@ -101,7 +101,7 @@ class LogConfigManager:
         
         # 创建文件处理器，日志存储在可写的位置，兼容PyInstaller打包后的环境
         # 优先使用当前工作目录下的log目录（确保可写）
-        log_dir = os.path.join(os.getcwd(), 'log')
+        log_dir = os.path.join(os.getcwd(), 'logs')
         try:
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)

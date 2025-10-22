@@ -18,14 +18,16 @@ try:
     import snap7
     import sys
     snap7_available = True
-    # 获取logger，日志级别从配置文件读取
-    logger = get_logger('plc_reader')
 except ImportError:
     snap7_available = False
     # 导入必要模块
     import logging
-    # 获取logger，日志级别从配置文件读取
-    logger = get_logger('plc_reader')
+    
+# 获取logger，日志级别从配置文件读取
+logger = get_logger('multi_thread_plc_handler')
+
+# 如果snap7模块未找到，记录警告
+if not snap7_available:
     logger.warning("❌ snap7模块未找到，PLC读取功能将不可用")
 
 class PLCReadWriter:

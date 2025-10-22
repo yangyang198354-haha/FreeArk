@@ -217,8 +217,35 @@ class PLCDataViewerGUI:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # 创建状态条，使用Windows标准样式
+        self.status_var = tk.StringVar()
+        self.status_var.set("就绪")
+        self.status_bar = ttk.Label(self.root, textvariable=self.status_var, 
+                                   relief=tk.SUNKEN, anchor=tk.W, 
+                                   padding=(5, 2))
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # 创建标签页控件
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # 创建累计用量查询标签页
+        self.tab_query = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_query, text="累计用量查询")
+        
+        # 创建模式下发标签页
+        self.tab_mode = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_mode, text="模式下发")
+        
+        # 在累计用量查询标签页中创建原有UI
+        self.create_query_tab_widgets()
+        
+        # 在模式下发标签页中创建空白UI
+        self.create_mode_tab_widgets()
+    
+    def create_query_tab_widgets(self):
         # 创建顶部控制区域，使用分组框样式
-        group_frame = ttk.LabelFrame(main_frame, text="操作区", padding="8")
+        group_frame = ttk.LabelFrame(self.tab_query, text="操作区", padding="8")
         group_frame.pack(fill=tk.X, side=tk.TOP, pady=(0, 10))
         
         # 控制按钮区域，使用水平分隔布局
@@ -247,16 +274,8 @@ class PLCDataViewerGUI:
         self.file_list_label = ttk.Label(file_info_frame, text="无", font=self.default_font)
         self.file_list_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        # 创建状态条，使用Windows标准样式
-        self.status_var = tk.StringVar()
-        self.status_var.set("就绪")
-        self.status_bar = ttk.Label(self.root, textvariable=self.status_var, 
-                                   relief=tk.SUNKEN, anchor=tk.W, 
-                                   padding=(5, 2))
-        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-        
         # 创建数据展示区域，使用分组框样式
-        data_frame = ttk.LabelFrame(main_frame, text="数据展示", padding="8")
+        data_frame = ttk.LabelFrame(self.tab_query, text="数据展示", padding="8")
         data_frame.pack(fill=tk.BOTH, expand=True)
         
         # 创建表格框架，包含滚动条
@@ -309,6 +328,261 @@ class PLCDataViewerGUI:
         for col in columns:
             self.tree.heading(col, text=self.tree.heading(col)["text"], 
                              command=lambda _col=col: self.treeview_sort_column(_col, False))
+    
+    def create_mode_tab_widgets(self):
+        # 导入PLC写入管理器
+        from datacollection.plc_write_manager import PLCWriteManager
+        
+        # 创建PLC写入管理器实例
+        self.plc_write_manager = PLCWriteManager(max_workers=10)
+        self.plc_write_manager.start()
+        
+        # 创建顶部控制区域
+        control_frame = ttk.LabelFrame(self.tab_mode, text="模式下发控制", padding="10")
+        control_frame.pack(fill=tk.X, side=tk.TOP, pady=(0, 10))
+        
+        # 第一排：所有控制控件放在同一行
+        # 配置文件标签
+        ttk.Label(control_frame, text="配置文件:", font=self.default_font).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 配置文件显示
+        self.mode_file_var = tk.StringVar(value="未选择文件")
+        file_label = ttk.Label(control_frame, textvariable=self.mode_file_var, font=self.default_font, width=30)
+        file_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        # 选择JSON配置文件按钮
+        self.select_mode_file_btn = ttk.Button(control_frame, text="选择JSON配置文件", command=self.select_mode_file)
+        self.select_mode_file_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 运行模式标签 - 设置与其他控件一致的字体
+        ttk.Label(control_frame, text="运行模式:", font=self.default_font).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 运行模式下拉框 - 设置与其他控件一致的字体
+        self.mode_var = tk.StringVar()
+        # 注意：PLCWriteManager中只有制冷(1)、制热(2)、通风(3)三种模式
+        # 除湿模式可能需要额外处理
+        mode_values = ["制冷", "制热", "通风", "除湿"]
+        mode_combobox = ttk.Combobox(control_frame, textvariable=self.mode_var, values=mode_values, state="readonly", width=10, font=self.default_font)
+        mode_combobox.current(0)  # 默认选择制冷模式
+        mode_combobox.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 确认下发按钮
+        self.submit_mode_btn = ttk.Button(control_frame, text="确认下发", command=self.submit_mode)
+        self.submit_mode_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 创建结果展示区域
+        result_frame = ttk.LabelFrame(self.tab_mode, text="下发结果", padding="10")
+        result_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 创建表格框架，包含滚动条
+        table_frame = ttk.Frame(result_frame)
+        table_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 创建垂直滚动条
+        y_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL)
+        y_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 创建水平滚动条
+        x_scrollbar = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL)
+        x_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # 创建结果表格
+        self.mode_result_tree = ttk.Treeview(table_frame, 
+                                           yscrollcommand=y_scrollbar.set, 
+                                           xscrollcommand=x_scrollbar.set, 
+                                           selectmode='extended')
+        self.mode_result_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # 配置滚动条
+        y_scrollbar.config(command=self.mode_result_tree.yview)
+        x_scrollbar.config(command=self.mode_result_tree.xview)
+        
+        # 定义表格列
+        columns = ("building", "device_id", "ip", "param_name", "value", "mode", "status", "message")
+        self.mode_result_tree["columns"] = columns
+        
+        # 设置列宽和标题
+        self.mode_result_tree.column("#0", width=0, stretch=tk.NO)  # 隐藏第一列
+        self.mode_result_tree.column("building", width=80, anchor=tk.CENTER)
+        self.mode_result_tree.column("device_id", width=100, anchor=tk.CENTER)
+        self.mode_result_tree.column("ip", width=120, anchor=tk.CENTER)
+        self.mode_result_tree.column("param_name", width=150, anchor=tk.CENTER)
+        self.mode_result_tree.column("value", width=80, anchor=tk.CENTER)
+        self.mode_result_tree.column("mode", width=80, anchor=tk.CENTER)
+        self.mode_result_tree.column("status", width=80, anchor=tk.CENTER)
+        self.mode_result_tree.column("message", width=200, anchor=tk.W)
+        
+        # 设置列标题
+        self.mode_result_tree.heading("building", text="楼栋")
+        self.mode_result_tree.heading("device_id", text="房间号")
+        self.mode_result_tree.heading("ip", text="PLC IP")
+        self.mode_result_tree.heading("param_name", text="参数名称")
+        self.mode_result_tree.heading("value", text="下发值")
+        self.mode_result_tree.heading("mode", text="下发模式")
+        self.mode_result_tree.heading("status", text="状态")
+        self.mode_result_tree.heading("message", text="消息")
+        
+        # 初始化选中文件变量
+        self.selected_mode_file = None
+    
+    def select_mode_file(self):
+        """选择模式下发的配置文件"""
+        logger.info("📁 打开模式下发配置文件选择对话框")
+        
+        # 默认从resource目录打开，使用相对路径
+        # 获取当前脚本所在目录的父目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(current_dir)
+        resource_dir = os.path.join(parent_dir, "resource")
+        
+        # 如果默认目录不存在，使用当前工作目录
+        if not os.path.exists(resource_dir):
+            resource_dir = os.getcwd()
+        
+        # 打开文件选择对话框
+        file_path = filedialog.askopenfilename(
+            title="选择JSON配置文件",
+            filetypes=[("JSON文件", "*.json"), ("所有文件", "*.*")],
+            initialdir=resource_dir
+        )
+        
+        if file_path:
+            self.selected_mode_file = file_path
+            file_name = os.path.basename(file_path)
+            logger.info(f"✅ 成功选择模式下发配置文件: {file_name}")
+            self.mode_file_var.set(file_name)
+            self.status_var.set(f"已选择模式下发配置文件: {file_name}")
+        else:
+            logger.info("❌ 用户取消了文件选择")
+    
+    def submit_mode(self):
+        """提交模式下发"""
+        if not self.selected_mode_file:
+            logger.warning("❌ 未选择配置文件")
+            messagebox.showwarning("警告", "请先选择配置文件")
+            return
+        
+        # 获取选择的模式
+        mode_str = self.mode_var.get()
+        # 转换模式字符串为对应的数值
+        mode_mapping = {
+            "制冷": 1,
+            "制热": 2,
+            "通风": 3,
+            # PLCWriteManager中没有除湿模式(4)，这里保留映射但可能需要额外处理
+            "除湿": 4
+        }
+        mode_value = mode_mapping.get(mode_str, 1)
+        
+        # 如果是除湿模式，需要特别处理
+        if mode_value == 4:
+            logger.warning("⚠️  除湿模式在PLCWriteManager中未定义，将使用制冷模式替代")
+            # 弹出提示
+            messagebox.showinfo("提示", "除湿模式在当前版本中未实现，将使用制冷模式替代")
+            mode_value = 1  # 暂时使用制冷模式替代
+        
+        logger.info(f"🚀 开始下发模式: {mode_str} (值: {mode_value}) 到文件: {os.path.basename(self.selected_mode_file)}")
+        
+        # 清空结果表格
+        for item in self.mode_result_tree.get_children():
+            self.mode_result_tree.delete(item)
+        
+        # 禁用按钮
+        self.select_mode_file_btn.config(state=tk.DISABLED)
+        self.submit_mode_btn.config(state=tk.DISABLED)
+        self.status_var.set(f"正在下发{mode_str}模式，请稍候...")
+        
+        # 在新线程中处理下发
+        threading.Thread(target=self._process_mode_submission, 
+                        args=(os.path.basename(self.selected_mode_file), mode_value, mode_str), 
+                        daemon=True).start()
+    
+    def _process_mode_submission(self, building_file, mode_value, mode_str):
+        """处理模式下发的线程函数"""
+        try:
+            logger.info(f"📊 调用PLCWriteManager写入{mode_str}模式")
+            
+            # 调用write_mode_for_building方法
+            results = self.plc_write_manager.write_mode_for_building(building_file, mode_value)
+            
+            if results:
+                logger.info(f"✅ 成功获取模式下发结果，共{len(results)}个设备")
+                # 显示结果到表格
+                self._display_mode_results(results, mode_str)
+            else:
+                logger.warning("❌ 未获取到模式下发结果")
+                self.root.after(0, lambda: messagebox.showwarning("警告", "未获取到模式下发结果"))
+                
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"💥 模式下发过程中发生错误: {error_msg}", exc_info=True)
+            self.root.after(0, lambda msg=error_msg: messagebox.showerror("错误", f"模式下发失败: {msg}"))
+        finally:
+            # 恢复按钮状态
+            self.root.after(0, lambda: self.select_mode_file_btn.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.submit_mode_btn.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.status_var.set("模式下发操作完成"))
+    
+    def _display_mode_results(self, results, mode_str):
+        """显示模式下发结果到表格"""
+        for device_id, device_info in results.items():
+            device_data = device_info.get('device_info', {})
+            # 获取参数级别的结果
+            params_results = device_info.get('results', {})
+            
+            # 获取设备信息
+            plc_ip = device_data.get('PLC IP地址', device_data.get('IP地址', '未知'))
+            
+            # 从房间号中提取楼栋信息（格式：1-1-6-602 -> 1栋）
+            building_info = ""
+            if device_id and isinstance(device_id, str) and '-' in device_id:
+                building_number = device_id.split('-')[0]
+                building_info = f"{building_number}栋"
+            
+            # 为每个参数单独添加一行
+            for param_name, param_result in params_results.items():
+                success = param_result.get('success', False)
+                message = param_result.get('message', '无消息')
+                value = param_result.get('value', '')
+                
+                # 设置状态显示
+                status = "成功" if success else "失败"
+                
+                # 添加到表格
+                self.root.after(0, lambda bid=device_id, binfo=building_info, pip=plc_ip, pname=param_name, val=value, mstr=mode_str, stat=status, msg=message:
+                    self.mode_result_tree.insert('', tk.END, values=(
+                        binfo,
+                        bid,
+                        pip,
+                        pname,
+                        val,
+                        mstr,
+                        stat,
+                        msg
+                    ))
+                )
+        
+        # 统计成功和失败数量
+        success_count = 0
+        total_count = 0
+        for device_info in results.values():
+            for result in device_info.get('results', {}).values():
+                total_count += 1
+                if result.get('success', False):
+                    success_count += 1
+        
+        logger.info(f"📊 模式下发统计: 成功{success_count}/{total_count}")
+        self.root.after(0, lambda: self.status_var.set(f"模式下发完成: 成功{success_count}/{total_count}"))
+    
+    def __del__(self):
+        """析构函数，释放资源"""
+        # 停止PLC写入管理器
+        if hasattr(self, 'plc_write_manager'):
+            try:
+                self.plc_write_manager.stop()
+                logger.info("✅ PLC写入管理器已停止")
+            except:
+                pass
     
     def select_files(self):
         logger.info("📁 打开文件选择对话框")

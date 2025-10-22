@@ -12,6 +12,10 @@
       "level": "DEBUG",
       "description": "PLC读取器日志级别，方便定位连接和数据读取问题"
     },
+    "multi_thread_plc_handler": {
+      "level": "DEBUG",
+      "description": "多线程PLC处理器日志级别，方便定位连接和数据读写问题"
+    },
     "mqtt_client": {
       "level": "DEBUG",
       "description": "MQTT客户端日志级别，方便定位连接和消息传输问题"
