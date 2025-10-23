@@ -151,15 +151,8 @@ def copy_resources(project_root):
     else:
         print(f"⚠️  资源目录不存在: {resource_src}")
     
-    # 复制配置文件到根目录，兼容不同运行方式
-    try:
-        for config_file in ['plc_config.json', 'output_config.json', 'log_config.json']:
-            src_file = resource_src / config_file
-            if src_file.exists():
-                shutil.copy2(src_file, project_root / "dist")
-                print(f"✅ 复制配置文件到根目录: {config_file}")
-    except Exception as e:
-        print(f"⚠️  复制配置文件到根目录失败: {e}")
+    # 不再将配置文件复制到根目录，只保留在resource目录中
+    print("✅ 配置文件将只保留在resource目录中，不再复制到根目录")
 
 def build_executable():
     """使用PyInstaller构建可执行文件"""

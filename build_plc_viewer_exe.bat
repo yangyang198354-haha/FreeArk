@@ -31,6 +31,7 @@ if %errorlevel% neq 0 (
 echo 打包成功！
 echo 可执行文件位置: dist/PLC数据查看器.exe
 echo 运行前请确保resource目录与可执行文件在同一目录下
+ echo 配置文件将只保留在resource目录中，不再复制到根目录
 
 echo.  
 echo ====================================================
