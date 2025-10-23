@@ -12,10 +12,23 @@ __pycache__/
 # 虚拟环境目录
 venv/
 env/
+.venv/
+
+# Visual Studio Code 配置文件
+.vscode/
 
 # 确保所有虚拟环境都被忽略（递归匹配任何层级）
 **/venv/
 **/env/
+**/.env/
+
+# 项目特定的构建输出
+*.exe
+dist.zip
+1.5.0/
+
+# PyInstaller配置文件
+*.spec
 
 # 确保所有Python缓存文件都被忽略（递归匹配任何层级）
 **/__pycache__/       # 忽略所有层级的__pycache__目录

@@ -114,7 +114,7 @@ class SystemModePublisher:
         
         try:
             # 获取screenMac值
-            screen_mac = self.config.get('screenMac', 'c5d29c52a237ade5')
+            screen_mac = self.config.get('screenMac', '9e1f3fca84e43404')
             
             # 获取当前消息ID并递增计数器
             message_id = str(SystemModePublisher._message_id_counter)
@@ -136,8 +136,9 @@ class SystemModePublisher:
                             "attrTag": "mode",
                             "attrValue": mode
                         }],
-                        "productCode": product_code
-                        # "systemFlag": 2
+                        "productCode": product_code,
+                        # "systemFlag": 
+                        "systemFlag": 2
                     }
                 }
             }
@@ -170,9 +171,9 @@ if __name__ == "__main__":
         if publisher.connect():
             # 发布系统模式消息，添加identifier参数
             # 从配置中获取screenMac值并添加QoS后缀
-            screen_mac = publisher.config.get('screenMac', '2860fae9a34ab8a9')
+            screen_mac = publisher.config.get('screenMac', 'c5d29c52a237ade5')
             identifier = f"{screen_mac}"  # 使用screenMac值，不添加QoS后缀
-            publisher.publish_system_mode("code", identifier)
+            publisher.publish_system_mode("cold", identifier)
             
             # 等待消息发送完成
             time.sleep(1)
