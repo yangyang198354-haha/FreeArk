@@ -460,8 +460,9 @@
                 <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="cascadingSelector">楼栋-单元-户号</label>
                   <div class="cascading-selector-container">
-                    <div id="cascadingSelector" class="cascading-selector">
+                    <div id="cascadingSelector" class="cascading-selector" style="position: relative;">
                       <input type="text" class="cascading-selector-input" placeholder="可直接输入，例:1-2-101">
+                      <button type="button" class="cascading-clear-btn" style="display: none; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #999; font-size: 16px;">×</button>
                       <input type="hidden" id="selectedBuilding" name="selectedBuilding">
                       <input type="hidden" id="selectedUnit" name="selectedUnit">
                       <input type="hidden" id="selectedRoom" name="selectedRoom">
@@ -1244,14 +1245,20 @@
                    'room:', document.getElementById('selectedRoom').value);
         
         // 更新输入框显示
-        const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
-        if (roomValue) {
-          input.value = `${buildingLabel}${unitLabel}${roomLabel}`;
-        } else if (unitValue) {
-          input.value = `${buildingLabel}${unitLabel}`;
-        } else if (buildingValue) {
-          input.value = buildingLabel;
-        }
+            const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
+            const clearBtn = document.getElementById('cascadingSelector').querySelector('.cascading-clear-btn');
+            if (roomValue) {
+              input.value = `${buildingLabel}${unitLabel}${roomLabel}`;
+            } else if (unitValue) {
+              input.value = `${buildingLabel}${unitLabel}`;
+            } else if (buildingValue) {
+              input.value = buildingLabel;
+            }
+            
+            // 更新清空按钮显示状态
+            if (clearBtn) {
+              clearBtn.style.display = input.value ? 'block' : 'none';
+            }
         
         // 关闭菜单
         document.getElementById('cascadingSelector').querySelector('.cascading-menu').style.display = 'none';
@@ -1260,9 +1267,40 @@
       // 设置级联菜单的搜索功能
       function setupCascadingSearch() {
         const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
+        const clearBtn = document.getElementById('cascadingSelector').querySelector('.cascading-clear-btn');
+        
+        // 更新清空按钮显示状态的函数
+        function updateClearButtonVisibility() {
+          clearBtn.style.display = input.value ? 'block' : 'none';
+        }
+        
+        // 清空按钮点击事件
+        clearBtn.addEventListener('click', function(event) {
+          event.stopPropagation(); // 阻止冒泡，避免触发input的点击事件
+          
+          // 清空输入框和隐藏字段
+          input.value = '';
+          document.getElementById('selectedBuilding').value = '';
+          document.getElementById('selectedUnit').value = '';
+          document.getElementById('selectedRoom').value = '';
+          
+          // 隐藏清空按钮
+          clearBtn.style.display = 'none';
+          
+          // 关闭菜单
+          const menu = document.getElementById('cascadingSelector').querySelector('.cascading-menu');
+          menu.style.display = 'none';
+          
+          // 重置菜单结构
+          menu.innerHTML = '';
+          generateMenuStructure(_buildingData, menu);
+        });
         
         input.addEventListener('input', function() {
           const searchTerm = this.value.toLowerCase().trim();
+          // 更新清空按钮显示状态
+          updateClearButtonVisibility();
+          
           const menu = this.nextElementSibling.nextElementSibling.nextElementSibling; // 获取菜单元素
           
           // 检查是否为"building-unit-room"格式（如"1-1-201"）
