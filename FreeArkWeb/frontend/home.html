@@ -461,7 +461,7 @@
                   <label for="cascadingSelector">楼栋-单元-户号</label>
                   <div class="cascading-selector-container">
                     <div id="cascadingSelector" class="cascading-selector">
-                      <input type="text" class="cascading-selector-input" placeholder="请选择或输入户号" readonly>
+                      <input type="text" class="cascading-selector-input" placeholder="请选择或输入户号">
                       <input type="hidden" id="selectedBuilding" name="selectedBuilding">
                       <input type="hidden" id="selectedUnit" name="selectedUnit">
                       <input type="hidden" id="selectedRoom" name="selectedRoom">
@@ -1262,11 +1262,43 @@
         const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
         
         input.addEventListener('input', function() {
-          // 移除readonly属性以允许输入
-          this.removeAttribute('readonly');
-          
           const searchTerm = this.value.toLowerCase().trim();
           const menu = this.nextElementSibling.nextElementSibling.nextElementSibling; // 获取菜单元素
+          
+          // 检查是否为"building-unit-room"格式（如"1-1-201"）
+          const formatMatch = searchTerm.match(/^(\d+)-(\d+)-(\d+)$/);
+          if (formatMatch) {
+            const [, building, unit, room] = formatMatch;
+            
+            // 确保_flattenedRooms已加载
+            let searchRooms = _flattenedRooms;
+            if (!Array.isArray(searchRooms) || searchRooms.length === 0) {
+              searchRooms = typeof window.flattenedBuildingData !== 'undefined' ? window.flattenedBuildingData : [];
+            }
+            
+            // 查找完全匹配的房间
+            const exactMatch = searchRooms.find(item => 
+              item.building === building && 
+              item.unit === unit && 
+              item.room === room
+            );
+            
+            if (exactMatch) {
+              // 自动选中匹配的项
+              document.getElementById('selectedBuilding').value = building;
+              document.getElementById('selectedUnit').value = unit;
+              document.getElementById('selectedRoom').value = room;
+              
+              // 更新输入框显示
+              const fullLabel = exactMatch.fullLabel || 
+                               `${exactMatch.buildingLabel || exactMatch.building}${exactMatch.unitLabel || exactMatch.unit}${exactMatch.roomLabel || exactMatch.room}`;
+              input.value = fullLabel;
+              
+              // 关闭菜单
+              menu.style.display = 'none';
+              return;
+            }
+          }
           
           if (searchTerm) {
             // 显示菜单
@@ -1282,7 +1314,8 @@
             const filteredRooms = searchRooms.filter(room => 
               room.room.toLowerCase().includes(searchTerm) || 
               (room.roomLabel && room.roomLabel.toLowerCase().includes(searchTerm)) ||
-              (room.fullLabel && room.fullLabel.toLowerCase().includes(searchTerm))
+              (room.fullLabel && room.fullLabel.toLowerCase().includes(searchTerm)) ||
+              `${room.building}-${room.unit}-${room.room}`.toLowerCase().includes(searchTerm)
             );
             
             // 清空菜单并显示搜索结果
@@ -1306,7 +1339,6 @@
                   
                   // 更新输入框
                   input.value = this.dataset.fullLabel;
-                  input.setAttribute('readonly', 'readonly');
                   
                   // 关闭菜单
                   menu.style.display = 'none';
@@ -1326,7 +1358,6 @@
             // 如果搜索框为空，恢复原始菜单结构
             menu.innerHTML = '';
             generateMenuStructure(_buildingData, menu);
-            input.setAttribute('readonly', 'readonly');
           }
         });
       }
