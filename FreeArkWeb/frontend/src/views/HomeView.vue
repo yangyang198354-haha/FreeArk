@@ -58,6 +58,8 @@
 </template>
 
 <script>
+import { Cpu, DataAnalysis, DocumentCopy, Refresh } from '@element-plus/icons-vue'
+
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { Cpu, DataAnalysis, DocumentCopy, Refresh } from '@element-plus/icons-vue'
@@ -71,13 +73,13 @@ export default {
     Refresh
   },
   setup() {
-    const deviceCount = ref(0)
-    const activeDevices = ref(0)
-    const dataPointCount = ref(0)
-    const systemStatus = ref(null)
-    const checkingStatus = ref(false)
+      const deviceCount = ref(0)
+      const activeDevices = ref(0)
+      const dataPointCount = ref(0)
+      const systemStatus = ref(null)
+      const checkingStatus = ref(false)
 
-    // 模拟数据统计
+      // 模拟数据统计
     const loadStats = () => {
       // 在实际项目中，这里应该从API获取真实数据
       deviceCount.value = 10
@@ -111,7 +113,11 @@ export default {
       dataPointCount,
       systemStatus,
       checkingStatus,
-      checkSystemStatus
+      checkSystemStatus,
+      Cpu,
+      DataAnalysis,
+      DocumentCopy,
+      Refresh
     }
   }
 }

@@ -1,5 +1,8 @@
 # 构建阶段
-FROM node:18-alpine as build
+FROM node:alpine as build
+
+# 设置npm国内镜像源
+RUN npm config set registry https://registry.npmmirror.com
 
 # 设置工作目录
 WORKDIR /app

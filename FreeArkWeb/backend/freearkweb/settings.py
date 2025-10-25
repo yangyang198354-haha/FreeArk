@@ -78,12 +78,23 @@ WSGI_APPLICATION = 'freearkweb.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+# 根据环境变量智能配置数据库连接
+# 如果未设置DB_ENGINE环境变量，默认使用SQLite作为开发数据库
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3'),
+        'NAME': os.environ.get('DB_NAME', BASE_DIR / 'db.sqlite3'),
     }
 }
+
+# 仅在配置了MySQL/MariaDB等需要额外连接参数的数据库时，添加连接参数
+if os.environ.get('DB_ENGINE') and os.environ.get('DB_ENGINE') != 'django.db.backends.sqlite3':
+    DATABASES['default'].update({
+        'USER': os.environ.get('DB_USER', ''),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', ''),
+        'PORT': os.environ.get('DB_PORT', ''),
+    })
 
 
 # Password validation

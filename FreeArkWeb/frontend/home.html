@@ -13,6 +13,14 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <!-- 引入楼栋数据 - 使用非模块方式 -->
+    <script>
+      // 直接定义全局变量，后续从building_data.js加载实际数据
+      window.buildingData = [];
+      window.flattenedBuildingData = [];
+      window.flattenedRooms = [];
+    </script>
+    <script src="./building_data.js"></script>
     <style>
       * {
         margin: 0;
@@ -254,6 +262,80 @@
         align-items: center;
       }
       
+      /* 单框级联菜单样式 */
+      .cascading-selector-container {
+        position: relative;
+        width: 100%;
+      }
+      
+      .cascading-selector {
+        position: relative;
+        width: 100%;
+      }
+      
+      .cascading-selector-input {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        cursor: pointer;
+        background-color: white;
+      }
+      
+      .cascading-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 300px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #ddd;
+        border-top: none;
+        border-radius: 0 0 4px 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .cascading-menu-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .cascading-menu-item:hover {
+        background-color: #f5f7fa;
+      }
+      
+      .cascading-menu-item.has-children::after {
+        content: '▶';
+        font-size: 0.7em;
+        transition: transform 0.2s;
+      }
+      
+      .cascading-menu-item.expanded::after {
+        transform: rotate(90deg);
+      }
+      
+      .cascading-submenu {
+        padding-left: 20px;
+        display: none;
+      }
+      
+      .cascading-submenu.show {
+        display: block;
+      }
+      
+      .cascading-menu-item.selected {
+        background-color: #e6f7ff;
+        color: #1890ff;
+      }
+      
       /* 右侧内容区 */
       .content {
         flex: 1;
@@ -376,20 +458,26 @@
             <div class="card-body">
               <form id="usageQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
                 <div class="form-group" style="flex: 1; min-width: 150px;">
-                  <label for="roomNumberQuery">户号</label>
-                  <input type="text" class="form-control" id="roomNumberQuery" placeholder="请输入户号">
+                  <label for="cascadingSelector">楼栋-单元-户号</label>
+                  <div class="cascading-selector-container">
+                    <div id="cascadingSelector" class="cascading-selector">
+                      <input type="text" class="cascading-selector-input" placeholder="请选择或输入户号" readonly>
+                      <input type="hidden" id="selectedBuilding" name="selectedBuilding">
+                      <input type="hidden" id="selectedUnit" name="selectedUnit">
+                      <input type="hidden" id="selectedRoom" name="selectedRoom">
+                      <div class="cascading-menu" style="display: none;">
+                        <!-- 菜单内容将由JavaScript动态生成 -->
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="form-group" style="flex: 1; min-width: 150px;">
-                  <label for="specificPartQuery">专有部分</label>
-                  <input type="text" class="form-control" id="specificPartQuery" placeholder="请输入专有部分">
-                </div>
+
                 <div class="form-group" style="flex: 1; min-width: 150px;">
                   <label for="energyModeQuery">供能模式</label>
                   <select class="form-control" id="energyModeQuery">
                     <option value="">全部</option>
-                    <option value="electricity">电力</option>
-                    <option value="water">水</option>
-                    <option value="gas">燃气</option>
+                    <option value="制冷">制冷</option>
+                    <option value="制热">制热</option>
                   </select>
                 </div>
                 <div class="form-group" style="flex: 2; min-width: 300px;">
@@ -802,21 +890,485 @@
           document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
           document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
         }
+        
+        // 重置级联选择器
+        const selector = document.getElementById('cascadingSelector');
+        const input = selector.querySelector('.cascading-selector-input');
+        const menu = selector.querySelector('.cascading-menu');
+        
+        // 清空输入框和隐藏字段
+        input.value = '';
+        document.getElementById('selectedBuilding').value = '';
+        document.getElementById('selectedUnit').value = '';
+        document.getElementById('selectedRoom').value = '';
+        
+        // 关闭菜单并重置菜单结构
+        menu.style.display = 'none';
+        menu.innerHTML = '';
+        generateMenuStructure(_buildingData, menu);
+        
+        // 恢复readonly属性
+        input.setAttribute('readonly', 'readonly');
       }
       
       // 搜索用量数据
+      // 从building_data.js中获取楼栋数据
+      // 由于building_data.js使用ES6 export，我们需要在浏览器环境中正确使用
+      // 直接使用window.buildingData，避免创建新的变量导致重复声明
+      if (typeof window.buildingData === 'undefined') {
+        window.buildingData = [];
+      }
+      // 使用不同的变量名来引用building数据
+      let _buildingData = window.buildingData;
+      // 使用不同的变量名来避免与全局flattenedRooms冲突
+      let _flattenedRooms = [];
+      
+      // 数据加载逻辑 - 确保从window对象正确加载building_data.js中的数据
+      console.log('开始加载楼栋数据...');
+      console.log('window.buildingData是否存在:', typeof window.buildingData !== 'undefined');
+      
+      // 重新实现数据加载逻辑，确保能获取完整的楼栋数据
+      // 先检查是否已在window对象上定义了完整数据
+      if (typeof window.buildingData !== 'undefined' && Array.isArray(window.buildingData) && window.buildingData.length > 0) {
+        // 验证数据是否为完整的楼栋数据（至少包含多个楼栋）
+        if (window.buildingData.length > 1 || 
+            (window.buildingData.length === 1 && 
+             window.buildingData[0].children && 
+             window.buildingData[0].children.length > 1)) {
+          _buildingData = window.buildingData;
+          console.log('成功从window.buildingData加载完整数据，共', _buildingData.length, '栋楼');
+        } else {
+          // 如果数据不完整，尝试使用XMLHttpRequest直接加载building_data.js文件
+          console.warn('window.buildingData数据不完整，尝试直接加载文件内容');
+          loadBuildingDataFromFile();
+        }
+      } else {
+        console.warn('未找到window.buildingData，尝试直接加载文件内容');
+        loadBuildingDataFromFile();
+      }
+      
+      // 获取扁平化数据
+      if (typeof window.flattenedRooms !== 'undefined' && Array.isArray(window.flattenedRooms) && window.flattenedRooms.length > 0) {
+        _flattenedRooms = window.flattenedRooms;
+        console.log('成功从window.flattenedRooms加载扁平化数据，共', _flattenedRooms.length, '个房间');
+      } else if (typeof window.flattenedBuildingData !== 'undefined' && Array.isArray(window.flattenedBuildingData) && window.flattenedBuildingData.length > 0) {
+        _flattenedRooms = window.flattenedBuildingData;
+        console.log('成功从window.flattenedBuildingData加载扁平化数据，共', _flattenedRooms.length, '个房间');
+      } else {
+        // 如果没有找到扁平化数据，使用本地函数生成
+        console.warn('未找到有效的扁平化数据，将根据_buildingData生成');
+        // 扁平化楼栋数据用于搜索
+        function flattenBuildingData(data) {
+          let flattened = [];
+          
+          function traverse(building, unit = null, room = null) {
+            if (room) {
+              flattened.push({
+                building: building.value,
+                buildingLabel: building.label,
+                unit: unit.value,
+                unitLabel: unit.label,
+                room: room.value,
+                roomLabel: room.label,
+                fullLabel: `${building.label}${unit.label}${room.label}`
+              });
+            } else if (unit) {
+              (building.children || []).forEach(u => {
+                if (u.children && u.children.length > 0) {
+                  u.children.forEach(r => {
+                    traverse(building, u, r);
+                  });
+                }
+              });
+            } else {
+              (building.children || []).forEach(u => {
+                if (u.children && u.children.length > 0) {
+                  u.children.forEach(r => {
+                    traverse(building, u, r);
+                  });
+                }
+              });
+            }
+          }
+          
+          data.forEach(building => traverse(building));
+          return flattened;
+        }
+        
+        _flattenedRooms = flattenBuildingData(_buildingData);
+        console.log('已生成扁平化数据，共', _flattenedRooms.length, '个房间');
+      }
+      
+      // 直接从文件加载building_data.js内容的函数
+      function loadBuildingDataFromFile() {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', './building_data.js', false); // 同步请求，确保数据加载完成后再继续
+        xhr.onreadystatechange = function() {
+          if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+              try {
+                // 提取文件中的buildingData内容
+                const scriptContent = xhr.responseText;
+                console.log('成功获取building_data.js文件内容');
+                
+                // 尝试执行脚本内容，将变量注册到window对象
+                // 创建一个临时函数来安全执行代码
+                const dataFunction = new Function(scriptContent + '\nreturn {buildingData, flattenedBuildingData, flattenedRooms};');
+                const result = dataFunction();
+                
+                if (result && result.buildingData && Array.isArray(result.buildingData)) {
+                  _buildingData = result.buildingData;
+                  window.buildingData = _buildingData;
+                  console.log('成功从文件内容中提取buildingData，共', _buildingData.length, '栋楼');
+                  
+                  // 同时获取扁平化数据
+                  if (result.flattenedRooms) {
+                    _flattenedRooms = result.flattenedRooms;
+                    window.flattenedRooms = _flattenedRooms;
+                  } else if (result.flattenedBuildingData) {
+                    _flattenedRooms = result.flattenedBuildingData;
+                    window.flattenedBuildingData = _flattenedRooms;
+                  }
+                }
+              } catch (e) {
+                console.error('解析building_data.js内容失败:', e);
+                // 如果解析失败，使用备用数据
+                console.warn('使用备用数据');
+                _buildingData = [
+                  {
+                    "value": "1",
+                    "label": "1栋",
+                    "children": [
+                      {
+                        "value": "1",
+                        "label": "1单元",
+                        "children": [
+                          { "value": "201", "label": "201室" },
+                          { "value": "202", "label": "202室" },
+                          { "value": "301", "label": "301室" },
+                          { "value": "302", "label": "302室" },
+                          { "value": "401", "label": "401室" },
+                          { "value": "402", "label": "402室" }
+                        ]
+                      }
+                    ]
+                  }
+                ];
+              }
+            } else {
+              console.error('加载building_data.js失败，状态码:', xhr.status);
+              // 使用备用数据
+              _buildingData = [
+                {
+                  "value": "1",
+                  "label": "1栋",
+                  "children": [
+                    {
+                      "value": "1",
+                      "label": "1单元",
+                      "children": [
+                        { "value": "201", "label": "201室" },
+                        { "value": "202", "label": "202室" },
+                        { "value": "301", "label": "301室" },
+                        { "value": "302", "label": "302室" },
+                        { "value": "401", "label": "401室" },
+                        { "value": "402", "label": "402室" }
+                      ]
+                    }
+                  ]
+                }
+              ];
+            }
+          }
+        };
+        xhr.send();
+      }
+
+      // 初始化单框级联菜单
+      function initCascadingSelector() {
+        const selector = document.getElementById('cascadingSelector');
+        const input = selector.querySelector('.cascading-selector-input');
+        const menu = selector.querySelector('.cascading-menu');
+        
+        // 确保_buildingData已加载
+        if (Array.isArray(_buildingData)) {
+          // 生成菜单结构
+          generateMenuStructure(_buildingData, menu);
+          
+          // 点击输入框切换菜单显示
+          input.addEventListener('click', function(event) {
+            event.stopPropagation();
+            menu.style.display = menu.style.display === 'none' || !menu.style.display ? 'block' : 'none';
+          });
+          
+          // 点击其他地方关闭菜单
+          document.addEventListener('click', function(event) {
+            if (!selector.contains(event.target)) {
+              menu.style.display = 'none';
+              // 关闭所有展开的子菜单
+              document.querySelectorAll('.cascading-menu-item.expanded').forEach(item => {
+                item.classList.remove('expanded');
+                const submenu = item.nextElementSibling;
+                if (submenu && submenu.classList.contains('cascading-submenu')) {
+                  submenu.classList.remove('show');
+                }
+              });
+            }
+          });
+          
+          // 设置户号搜索功能
+          setupCascadingSearch();
+        }
+      }
+      
+      // 生成级联菜单结构
+      function generateMenuStructure(data, parentElement, level = 0) {
+        if (!Array.isArray(data)) return;
+        
+        data.forEach(item => {
+          const menuItem = document.createElement('div');
+          menuItem.className = 'cascading-menu-item' + (item.children && item.children.length ? ' has-children' : '');
+          menuItem.textContent = item.label;
+          menuItem.dataset.value = item.value;
+          menuItem.dataset.level = level;
+          
+          // 添加点击事件
+          menuItem.addEventListener('click', function(event) {
+            event.stopPropagation();
+            
+            // 如果是楼栋或单元（有子项），切换展开状态
+            if (this.classList.contains('has-children')) {
+              this.classList.toggle('expanded');
+              const submenu = this.nextElementSibling;
+              if (submenu && submenu.classList.contains('cascading-submenu')) {
+                submenu.classList.toggle('show');
+              }
+            } else {
+              // 如果是户号（没有子项），选择该项
+              selectMenuItem(this);
+            }
+          });
+          
+          parentElement.appendChild(menuItem);
+          
+          // 如果有子项，生成子菜单
+          if (item.children && item.children.length) {
+            const submenu = document.createElement('div');
+            submenu.className = 'cascading-submenu';
+            parentElement.appendChild(submenu);
+            generateMenuStructure(item.children, submenu, level + 1);
+          }
+        });
+      }
+      
+      // 选择菜单项
+      function selectMenuItem(item) {
+        const level = parseInt(item.dataset.level);
+        const value = item.dataset.value;
+        const label = item.textContent;
+        
+        // 根据层级确定选择的是楼栋、单元还是户号
+        let buildingValue = '';
+        let buildingLabel = '';
+        let unitValue = '';
+        let unitLabel = '';
+        let roomValue = '';
+        let roomLabel = '';
+        
+        // 优先使用flattenedRooms数据来获取完整层级信息
+        if (level === 2) { // 户号级别，尝试从数据源获取完整层级
+          // 获取所有楼栋数据
+          const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
+          
+          // 遍历楼栋数据查找匹配的户号
+          for (const building of allBuildingData) {
+            for (const unit of building.children) {
+              const room = unit.children.find(r => r.value === value);
+              if (room) {
+                buildingValue = building.value;
+                buildingLabel = building.label;
+                unitValue = unit.value;
+                unitLabel = unit.label;
+                roomValue = room.value;
+                roomLabel = room.label;
+                break;
+              }
+            }
+            if (roomValue) break; // 找到匹配的户号后退出外层循环
+          }
+          
+          console.log('通过数据源查找户号层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
+        }
+        
+        // 如果通过数据源查找失败或不是户号级别，使用DOM层级查找作为备选
+        if (!roomValue || (level < 2 && (!buildingValue || !unitValue))) {
+          let current = item;
+          while (current && current.parentElement && current.parentElement.classList.contains('cascading-menu')) {
+            const parentItem = current.parentElement.previousElementSibling;
+            if (parentItem && parentItem.classList.contains('cascading-menu-item')) {
+              const parentLevel = parseInt(parentItem.dataset.level);
+              if (parentLevel === 0) { // 楼栋
+                buildingValue = parentItem.dataset.value;
+                buildingLabel = parentItem.textContent;
+              } else if (parentLevel === 1) { // 单元
+                unitValue = parentItem.dataset.value;
+                unitLabel = parentItem.textContent;
+              }
+            }
+            current = current.parentElement.parentElement;
+          }
+          
+          // 根据当前层级设置值
+          if (level === 0) { // 楼栋
+            buildingValue = value;
+            buildingLabel = label;
+          } else if (level === 1) { // 单元
+            unitValue = value;
+            unitLabel = label;
+          } else if (level === 2) { // 户号
+            roomValue = value;
+            roomLabel = label;
+          }
+          
+          console.log('通过DOM查找层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
+        }
+        
+        // 更新隐藏字段
+        console.log('准备设置hidden input值 - buildingValue:', buildingValue, 'unitValue:', unitValue, 'roomValue:', roomValue);
+        document.getElementById('selectedBuilding').value = buildingValue;
+        document.getElementById('selectedUnit').value = unitValue;
+        document.getElementById('selectedRoom').value = roomValue;
+        // 验证设置是否成功
+        console.log('设置后hidden input值 - building:', document.getElementById('selectedBuilding').value, 
+                   'unit:', document.getElementById('selectedUnit').value, 
+                   'room:', document.getElementById('selectedRoom').value);
+        
+        // 更新输入框显示
+        const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
+        if (roomValue) {
+          input.value = `${buildingLabel}${unitLabel}${roomLabel}`;
+        } else if (unitValue) {
+          input.value = `${buildingLabel}${unitLabel}`;
+        } else if (buildingValue) {
+          input.value = buildingLabel;
+        }
+        
+        // 关闭菜单
+        document.getElementById('cascadingSelector').querySelector('.cascading-menu').style.display = 'none';
+      }
+      
+      // 设置级联菜单的搜索功能
+      function setupCascadingSearch() {
+        const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
+        
+        input.addEventListener('input', function() {
+          // 移除readonly属性以允许输入
+          this.removeAttribute('readonly');
+          
+          const searchTerm = this.value.toLowerCase().trim();
+          const menu = this.nextElementSibling.nextElementSibling.nextElementSibling; // 获取菜单元素
+          
+          if (searchTerm) {
+            // 显示菜单
+            menu.style.display = 'block';
+            
+            // 确保_flattenedRooms已加载
+            let searchRooms = _flattenedRooms;
+            if (!Array.isArray(searchRooms) || searchRooms.length === 0) {
+              searchRooms = typeof window.flattenedBuildingData !== 'undefined' ? window.flattenedBuildingData : [];
+            }
+            
+            // 过滤匹配的房间
+            const filteredRooms = searchRooms.filter(room => 
+              room.room.toLowerCase().includes(searchTerm) || 
+              (room.roomLabel && room.roomLabel.toLowerCase().includes(searchTerm)) ||
+              (room.fullLabel && room.fullLabel.toLowerCase().includes(searchTerm))
+            );
+            
+            // 清空菜单并显示搜索结果
+            menu.innerHTML = '';
+            
+            if (filteredRooms.length > 0) {
+              filteredRooms.forEach(room => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'cascading-menu-item';
+                resultItem.textContent = room.fullLabel || `${room.buildingLabel || room.building}${room.unitLabel || room.unit}${room.roomLabel || room.room}`;
+                resultItem.dataset.building = room.building;
+                resultItem.dataset.unit = room.unit;
+                resultItem.dataset.room = room.room;
+                resultItem.dataset.fullLabel = resultItem.textContent;
+                
+                resultItem.addEventListener('click', function() {
+                  // 更新隐藏字段
+                  document.getElementById('selectedBuilding').value = this.dataset.building;
+                  document.getElementById('selectedUnit').value = this.dataset.unit;
+                  document.getElementById('selectedRoom').value = this.dataset.room;
+                  
+                  // 更新输入框
+                  input.value = this.dataset.fullLabel;
+                  input.setAttribute('readonly', 'readonly');
+                  
+                  // 关闭菜单
+                  menu.style.display = 'none';
+                });
+                
+                menu.appendChild(resultItem);
+              });
+            } else {
+              const noResultItem = document.createElement('div');
+              noResultItem.className = 'cascading-menu-item';
+              noResultItem.textContent = '未找到匹配的户号';
+              noResultItem.style.color = '#909399';
+              noResultItem.style.cursor = 'default';
+              menu.appendChild(noResultItem);
+            }
+          } else {
+            // 如果搜索框为空，恢复原始菜单结构
+            menu.innerHTML = '';
+            generateMenuStructure(_buildingData, menu);
+            input.setAttribute('readonly', 'readonly');
+          }
+        });
+      }
+      
+      // 获取当前选择的值
+      function getSelectedValues() {
+        const building = document.getElementById('selectedBuilding').value;
+        const unit = document.getElementById('selectedUnit').value;
+        const room = document.getElementById('selectedRoom').value;
+        console.log('getSelectedValues返回值 - building:', building, 'unit:', unit, 'room:', room);
+        return {
+          building: building,
+          unit: unit,
+          room: room
+        };
+      }
+
+      // 页面加载时初始化
+      document.addEventListener('DOMContentLoaded', function() {
+        // 初始化单框级联菜单
+        initCascadingSelector();
+      });
+
       function searchUsageData() {
         // 获取查询条件
-        const roomNumber = document.getElementById('roomNumberQuery').value.trim();
-        const specificPart = document.getElementById('specificPartQuery').value.trim();
         const energyMode = document.getElementById('energyModeQuery').value;
         const startTime = document.getElementById('startTimeQuery').value;
         const endTime = document.getElementById('endTimeQuery').value;
         
-        // 表单验证
-        if (!roomNumber) {
-          alert('请输入户号');
-          document.getElementById('roomNumberQuery').focus();
+        // 从新的级联菜单中获取选中的值
+        const selectedValues = getSelectedValues();
+        console.log('selectedValues from getSelectedValues():', selectedValues);
+        
+        // 直接从hidden inputs获取值进行调试
+        const directBuilding = document.getElementById('selectedBuilding').value;
+        const directUnit = document.getElementById('selectedUnit').value;
+        const directRoom = document.getElementById('selectedRoom').value;
+        console.log('Direct hidden input values - building:', directBuilding, 'unit:', directUnit, 'room:', directRoom);
+        
+        // 表单验证 - 只有户号是必填项
+        if (!selectedValues.room) {
+          alert('请选择户号');
           return;
         }
         
@@ -851,7 +1403,27 @@
         }
         
         // 验证通过，调用加载数据函数
-        loadUsageData(roomNumber, specificPart, energyMode, startTime, endTime);
+        // 构建正确的specific_part格式: building-unit-room
+        const building = selectedValues.building;
+        const unit = selectedValues.unit;
+        const room = selectedValues.room;
+        
+        console.log('开始构建specificPart - building类型:', typeof building, '值:', building, 
+                   'unit类型:', typeof unit, '值:', unit, 
+                   'room类型:', typeof room, '值:', room);
+        
+        // 改进构建逻辑：只要有room值就尝试构建specificPart
+        let specificPart = '';
+        if (room) {
+            // 即使building或unit为空，也尝试构建specificPart
+            specificPart = `${building || ''}-${unit || ''}-${room}`;
+            console.log('构建的specificPart:', specificPart);
+        } else {
+            console.log('未能构建specificPart，因为room值为空:', { building, unit, room });
+        }
+        
+        // 只传入specific_part参数，避免room_number与数据库不匹配的问题
+        loadUsageData('', specificPart, energyMode, startTime, endTime);
       }
       
       // 绘制用量趋势图表
@@ -899,10 +1471,7 @@
         const datasets = [];
         const modeColors = {
           '制冷': 'rgb(75, 192, 192)',
-          '制热': 'rgb(255, 99, 132)',
-          'electricity': 'rgb(54, 162, 235)',
-          'water': 'rgb(153, 102, 255)',
-          'gas': 'rgb(255, 159, 64)'
+          '制热': 'rgb(255, 99, 132)'
         };
         
         modes.forEach(mode => {
@@ -1024,6 +1593,7 @@
       // 加载用量数据，支持查询条件
       function loadUsageData(roomNumber = '', specificPart = '', energyMode = '', startTime = '', endTime = '') {
         console.log('开始加载用量数据，查询条件:', { roomNumber, specificPart, energyMode, startTime, endTime });
+        console.log('specificPart类型:', typeof specificPart, 'specificPart值:', specificPart, 'specificPart是否为空:', !specificPart);
         
         // 显示加载指示器
         const loadingIndicator = document.getElementById('loadingIndicator');
@@ -1038,8 +1608,12 @@
         const baseUrl = 'http://localhost:8000/api/usage/quantity/';
         const params = new URLSearchParams();
         
-        if (roomNumber) params.append('room_number', roomNumber);
-        if (specificPart) params.append('specific_part', specificPart);
+        // 不再使用room_number参数，只使用specific_part参数进行查询
+        // 因为数据库中room_number可能与specific_part中的房间号不一致
+        // if (roomNumber) params.append('room_number', roomNumber);
+        // 无论specificPart是否为空，都添加到请求参数中，便于后端调试
+        console.log('准备添加specific_part参数:', specificPart);
+        params.append('specific_part', specificPart);
         if (energyMode) params.append('energy_mode', energyMode);
         if (startTime) params.append('start_time', startTime);
         if (endTime) params.append('end_time', endTime);

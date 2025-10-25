@@ -4,6 +4,12 @@ import sys
 import time
 from typing import Dict, Any
 
+# 系统模式常量定义
+MODE_HOT = "hot"           # 制热模式
+MODE_COLD = "cold"         # 制冷模式
+MODE_WIND = "wind"         # 通风模式
+MODE_DEHUMIDIFICATION = "dehumidification"  # 除湿模式
+
 # 添加FreeArk目录到Python路径，确保模块可以正确导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -92,7 +98,7 @@ class SystemModePublisher:
             except Exception as e:
                 logger.error(f"❌ 断开MQTT连接异常: {str(e)}")
     
-    def publish_system_mode(self, mode: str, identifier: str, device_sn: int = 22153, product_code: str = "10016") -> bool:
+    def publish_system_mode(self, mode: str, identifier: str, device_sn: int = 21996, attrTag: str = "mode", product_code: str = "10016") -> bool:
         """
         发布系统模式信息到MQTT服务器
         
@@ -133,7 +139,7 @@ class SystemModePublisher:
                         "deviceSn": device_sn,
                         "items": [{
                             "attrConstraint": 1,
-                            "attrTag": "mode",
+                            "attrTag": attrTag,
                             "attrValue": mode
                         }],
                         "productCode": product_code,
@@ -171,9 +177,10 @@ if __name__ == "__main__":
         if publisher.connect():
             # 发布系统模式消息，添加identifier参数
             # 从配置中获取screenMac值并添加QoS后缀
-            screen_mac = publisher.config.get('screenMac', 'c5d29c52a237ade5')
+            screen_mac = publisher.config.get('screenMac', '2860fae9a34ab8a9')
             identifier = f"{screen_mac}"  # 使用screenMac值，不添加QoS后缀
-            publisher.publish_system_mode("cold", identifier)
+            publisher.publish_system_mode(MODE_WIND, identifier, 21996, "mode", "10016")
+            publisher.publish_system_mode("no", identifier, 21997, "energy_supply_mode", "270001")
             
             # 等待消息发送完成
             time.sleep(1)

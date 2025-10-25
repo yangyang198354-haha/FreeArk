@@ -8,7 +8,7 @@
       </template>
       
       <div v-if="loading" class="loading-container">
-        <el-spinner />
+        <el-loading-spinner />
         <p>加载中...</p>
       </div>
       

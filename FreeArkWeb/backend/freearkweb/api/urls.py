@@ -18,6 +18,9 @@ urlpatterns = [
     # 健康检查
     path('health/', views.health_check, name='health-check'),
     
+    # 日志测试
+    path('test_logging/', views.test_logging, name='test-logging'),
+    
     # 用量数据查询
     path('usage/quantity/', views.get_usage_quantity, name='get-usage-quantity'),
 ]

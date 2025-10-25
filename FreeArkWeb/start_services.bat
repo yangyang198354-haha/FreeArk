@@ -1,15 +1,16 @@
 @echo off
 cls
 
-echo 启动脚本
-==============
+echo 启动FreeArkWeb服务
+===============
 
 REM 设置目录路径
 set SCRIPT_DIR=%~dp0
-set FRONTEND_DIR=%SCRIPT_DIR%FreeArkWeb\frontend
-set BACKEND_DIR=%SCRIPT_DIR%FreeArkWeb\backend\freearkweb
+set FRONTEND_DIR=%SCRIPT_DIR%frontend
+set BACKEND_DIR=%SCRIPT_DIR%backend\freearkweb
 
 REM 启动后端服务
+echo 启动后端服务...
 start "后端服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py runserver 0.0.0.0:8000"
 
 REM 等待后端启动

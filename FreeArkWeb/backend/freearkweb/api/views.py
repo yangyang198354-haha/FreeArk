@@ -1,3 +1,4 @@
+import logging
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -9,6 +10,9 @@ from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
     UsageQuantityDailySerializer
 )
+
+# 获取logger实例
+logger = logging.getLogger(__name__)
 
 # 自定义权限类
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -135,7 +139,35 @@ class AdminUserCreate(generics.CreateAPIView):
 @permission_classes([permissions.AllowAny])
 def health_check(request):
     """健康检查接口（允许未认证访问）"""
+    logger.debug('健康检查请求: %s', request.GET)
+    logger.info('健康检查API被调用')
+    logger.warning('这是一条警告日志测试')
+    logger.error('这是一条错误日志测试')
     return Response({'status': 'ok', 'message': 'FreeArk Web API 服务正常运行'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def test_logging(request):
+    """日志测试接口（允许未认证访问）"""
+    # 记录不同级别的日志
+    logger.debug('这是一条DEBUG级别的日志')
+    logger.info('这是一条INFO级别的日志')
+    logger.warning('这是一条WARNING级别的日志')
+    logger.error('这是一条ERROR级别的日志')
+    logger.critical('这是一条CRITICAL级别的日志')
+    
+    # 尝试记录异常信息
+    try:
+        result = 1 / 0
+    except Exception as e:
+        logger.exception('捕获到异常: %s', str(e))
+    
+    return Response({
+        'status': 'ok', 
+        'message': '日志测试完成，请检查日志文件'
+    })
+
 
 
 @api_view(['GET'])
@@ -145,15 +177,19 @@ def get_usage_quantity(request):
     获取每日用量数据
     支持按多个条件过滤：房号、专有部分、供能模式、开始时间和结束时间
     """
-    # 构建基础查询集
-    queryset = UsageQuantityDaily.objects.all()
-    
     # 获取查询参数
     room_number = request.GET.get('room_number')
     specific_part = request.GET.get('specific_part')
     energy_mode = request.GET.get('energy_mode')
     start_time = request.GET.get('start_time')
     end_time = request.GET.get('end_time')
+    
+    # 记录查询条件到日志
+    logger.info(f"UsageQuantityDaily 查询条件 - room_number: {room_number}, specific_part: {specific_part}, "
+                f"energy_mode: {energy_mode}, start_time: {start_time}, end_time: {end_time}")
+    
+    # 构建基础查询集
+    queryset = UsageQuantityDaily.objects.all()
     
     # 应用过滤条件
     if room_number:
@@ -172,9 +208,14 @@ def get_usage_quantity(request):
     
     # 序列化数据
     serializer = UsageQuantityDailySerializer(queryset, many=True)
+    result_data = serializer.data
+    total_count = len(result_data)
+    
+    # 记录查询结果到日志
+    logger.info(f"UsageQuantityDaily 查询结果 - 找到 {total_count} 条记录")
     
     return Response({
         'success': True,
-        'data': serializer.data,
-        'total': len(serializer.data)
+        'data': result_data,
+        'total': total_count
     })

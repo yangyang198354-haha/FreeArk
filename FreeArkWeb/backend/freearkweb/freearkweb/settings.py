@@ -151,3 +151,75 @@ REST_FRAMEWORK = {
 
 # 静态文件配置
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# 日志配置 - 最基本配置
+import os
+import logging
+
+# 确保使用绝对路径
+LOG_DIR = 'C:/Users/yanggyan/TRAE/FreeArk/logs'
+LOG_FILE = os.path.join(LOG_DIR, 'django.log')
+
+# 打印调试信息
+print(f"配置日志目录: {LOG_DIR}")
+print(f"配置日志文件: {LOG_FILE}")
+
+# 确保目录存在
+if not os.path.exists(LOG_DIR):
+    try:
+        os.makedirs(LOG_DIR)
+        print(f"创建日志目录成功: {LOG_DIR}")
+    except Exception as e:
+        print(f"创建日志目录失败: {str(e)}")
+
+# 直接使用Python logging模块创建并测试日志器
+try:
+    # 创建一个简单的logger
+    test_logger = logging.getLogger('test_logger')
+    test_logger.setLevel(logging.DEBUG)
+    
+    # 创建一个文件处理器
+    file_handler = logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    
+    # 创建一个格式化器
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    
+    # 添加处理器到logger
+    test_logger.addHandler(file_handler)
+    
+    # 写入测试日志
+    test_logger.info("这是直接使用Python logging模块写入的测试日志")
+    test_logger.debug("这是一条调试日志")
+    print(f"直接使用Python logging模块写入日志成功: {LOG_FILE}")
+    
+    # 关闭处理器
+    file_handler.close()
+    
+except Exception as e:
+    print(f"直接使用Python logging模块写入日志失败: {str(e)}")
+
+# Django日志配置 - 最简单的配置
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'default': {
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': LOG_FILE,
+            'formatter': 'default',
+            'encoding': 'utf-8',
+        },
+    },
+    'root': {
+        'handlers': ['file'],
+        'level': 'DEBUG',
+    },
+}
