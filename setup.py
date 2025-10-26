@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="freeark-datacollection",
     version="1.0.0",
-    description="FreeArk PLC??????",
+    description="FreeArk PLC数据采集系统",
     author="FreeArk Team",
     author_email="team@freeark.com",
     packages=find_packages(),
@@ -18,6 +18,11 @@ setup(
     entry_points={
         'console_scripts': [
             'run-data-collection=datacollection.main_entry:main',
+            'run-task-scheduler=datacollection.run_task_scheduler:main',
         ],
+    },
+    include_package_data=True,
+    package_data={
+        'datacollection': ['resource/*.json'],
     },
 )
