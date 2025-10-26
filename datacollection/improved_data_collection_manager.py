@@ -590,7 +590,7 @@ class ImprovedDataCollectionManager:
             return False
     
     def send_results_to_mqtt(self, building_file: str) -> bool:
-        """通过MQTT发送结果数据"""
+        """通过MQTT发送结果数据，为每条记录单独发送消息"""
         # 获取输出配置
         output_config = self.load_output_config()
         mqtt_config = output_config['output'].get('mqtt', {})
@@ -629,21 +629,6 @@ class ImprovedDataCollectionManager:
             # 深拷贝结果数据，避免修改原始数据
             results_copy = copy.deepcopy(results)
             
-            # 提取唯一标识符（从第一个设备中获取）
-            unique_identifier = ""
-            for device_id, device_info in results_copy.items():
-                if '唯一标识符' in device_info:
-                    unique_identifier = device_info['唯一标识符']
-                    break
-            
-            # 如果没有找到唯一标识符，使用当前时间戳作为备选
-            if not unique_identifier:
-                unique_identifier = str(int(time.time()))
-                logger.info(f"⚠️  未找到唯一标识符，使用时间戳代替: {unique_identifier}")
-            
-            # 构建完整的MQTT主题
-            mqtt_topic = f"{topic_prefix}{unique_identifier}"
-            
             # 创建连接池配置
             pool_config = {
                 'host': host,
@@ -663,18 +648,47 @@ class ImprovedDataCollectionManager:
             mqtt_manager = MQTTClientManager.get_instance(pool_config)
             
             mqtt_client = None
+            total_records = len(results_copy)
+            success_count = 0
+            
             try:
                 # 从连接池获取客户端
                 mqtt_client = mqtt_manager.get_client()
                 
-                # 发送数据
-                success = mqtt_client.publish(mqtt_topic, results_copy, qos=qos, retain=retain)
+                # 遍历每条记录，单独发送MQTT消息
+                for device_id, device_info in results_copy.items():
+                    # 获取当前记录的唯一标识符
+                    unique_identifier = device_info.get('唯一标识符', '')
+                    
+                    # 如果没有找到唯一标识符，使用设备ID和时间戳作为备选
+                    if not unique_identifier:
+                        unique_identifier = f"{device_id}_{int(time.time())}"
+                        logger.info(f"⚠️  设备 {device_id} 未找到唯一标识符，使用设备ID和时间戳代替: {unique_identifier}")
+                    
+                    # 构建完整的MQTT主题
+                    mqtt_topic = f"{topic_prefix}{unique_identifier}"
+                    
+                    # 创建只包含当前设备信息的消息数据
+                    single_record = {device_id: device_info}
+                    
+                    # 发送数据
+                    success = mqtt_client.publish(mqtt_topic, single_record, qos=qos, retain=retain)
+                    
+                    if success:
+                        success_count += 1
+                        logger.info(f"✅ 设备 {device_id} 数据已成功发送到MQTT主题: {mqtt_topic}")
+                    else:
+                        logger.info(f"❌ 设备 {device_id} 数据发送到MQTT主题失败: {mqtt_topic}")
                 
-                if success:
-                    logger.info(f"✅ 数据已成功发送到MQTT主题: {mqtt_topic}")
+                # 返回整体发送结果
+                if success_count == total_records:
+                    logger.info(f"✅ 所有 {total_records} 条记录均已成功发送到MQTT")
                     return True
+                elif success_count > 0:
+                    logger.info(f"⚠️  部分记录发送成功: {success_count}/{total_records}")
+                    return True  # 即使部分失败，也返回True表示至少有部分成功发送
                 else:
-                    logger.info(f"❌ 发送数据到MQTT主题失败: {mqtt_topic}")
+                    logger.info(f"❌ 所有 {total_records} 条记录发送失败")
                     return False
             finally:
                 # 确保将客户端归还到连接池
