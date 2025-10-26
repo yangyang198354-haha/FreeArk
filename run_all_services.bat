@@ -4,6 +4,15 @@ cls
 echo 启动脚本
 ==============
 
+set DB_ENGINE=django.db.backends.mysql
+set DB_NAME=freeark
+set DB_USER=root
+set DB_PASSWORD=root
+set DB_HOST=192.168.31.97
+set DB_PORT=3306
+
+
+
 REM 设置目录路径
 set SCRIPT_DIR=%~dp0
 set FRONTEND_DIR=%SCRIPT_DIR%FreeArkWeb\frontend

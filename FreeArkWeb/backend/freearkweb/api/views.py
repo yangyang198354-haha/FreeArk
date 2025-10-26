@@ -132,6 +132,48 @@ class AdminUserCreate(generics.CreateAPIView):
     """管理员创建用户视图"""
     permission_classes = [IsAdminUser]
     serializer_class = UserCreateSerializer
+    
+    def create(self, request, *args, **kwargs):
+        try:
+            # 检查用户名是否已存在
+            username = request.data.get('username')
+            if username and CustomUser.objects.filter(username=username).exists():
+                return Response(
+                    {'error': f'用户名 "{username}" 已存在，请选择其他用户名', 'success': False},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # 调用父类方法创建用户
+            response = super().create(request, *args, **kwargs)
+            
+            # 确保响应数据包含id字段，与前端期望的格式匹配
+            user_data = response.data
+            if user_data and 'id' not in user_data:
+                # 获取刚创建的用户对象
+                created_user = CustomUser.objects.get(username=user_data.get('username'))
+                user_data['id'] = created_user.id
+            
+            # 格式化成功响应 - 直接返回user_data以匹配前端期望
+            return Response(user_data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            # 记录错误日志
+            print(f"创建用户异常: {str(e)}")
+            
+            # 检查是否是用户名重复错误
+            if 'Duplicate entry' in str(e) and 'for key' in str(e):
+                # 尝试提取重复的用户名
+                username_match = str(e).split("'")[1] if "'" in str(e) else username
+                return Response(
+                    {'error': f'用户名 "{username_match}" 已存在，请选择其他用户名', 'success': False},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 返回友好的错误信息
+            return Response(
+                {'error': str(e), 'message': '创建用户时发生错误', 'success': False},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 # 健康检查接口保持不变
 
