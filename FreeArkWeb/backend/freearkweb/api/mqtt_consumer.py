@@ -276,8 +276,8 @@ class MQTTConsumer:
                         
                         # 参数名到energy_mode的映射
                         param_to_energy_mode = {
-                            'total_hot_quantity': '累计制热量',
-                            'total_cold_quantity': '累计制冷量'
+                            'total_hot_quantity': '制热',
+                            'total_cold_quantity': '制冷'
                         }
                         
                         for param_key, param_data in device_info['data'].items():
