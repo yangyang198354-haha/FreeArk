@@ -74,3 +74,37 @@ class UsageQuantityDaily(models.Model):
     
     def __str__(self):
         return f"{self.specific_part} - {self.time_period} - {self.energy_mode}"
+
+
+class PLCData(models.Model):
+    """PLC数据存储模型，用于存储从MQTT接收到的PLC数据"""
+    # 专有部分，格式为 "3-1-702"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分', db_index=True, default='')
+        # PLC设备IP地址
+    plc_ip = models.CharField(max_length=50, verbose_name='PLC IP地址', db_index=True, null=True, blank=True)
+    # 楼栋，格式为 "3"
+    building = models.CharField(max_length=10, verbose_name='楼栋', db_index=True, default='')
+    # 单元，格式为 "1"
+    unit = models.CharField(max_length=10, verbose_name='单元', db_index=True, default='')
+    # 房号，格式为 "702"
+    room_number = models.CharField(max_length=10, verbose_name='房号', db_index=True, default='')
+    # 功能模式
+    energy_mode = models.CharField(max_length=100, verbose_name='功能模式', db_index=True, default='未知')
+    # 参数值（使用BigIntegerField以支持大整数）
+    value = models.BigIntegerField(verbose_name='参数值', null=True, blank=True)
+    # 创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    
+    class Meta:
+        db_table = 'plc_data'  # 指定表名
+        verbose_name = 'PLC数据'
+        verbose_name_plural = 'PLC数据'
+        # 创建复合索引以提高查询性能
+        indexes = [
+            models.Index(fields=['specific_part', 'energy_mode', 'created_at']),
+            models.Index(fields=['plc_ip', 'created_at']),
+            models.Index(fields=['building', 'unit', 'room_number']),
+        ]
+    
+    def __str__(self):
+        return f"{self.specific_part} - {self.energy_mode} - {self.created_at}"

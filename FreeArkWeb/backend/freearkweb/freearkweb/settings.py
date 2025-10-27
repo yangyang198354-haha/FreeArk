@@ -86,31 +86,29 @@ WSGI_APPLICATION = 'freearkweb.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# 优先使用环境变量中的MySQL配置，否则使用默认的SQLite
-DB_ENGINE = os.environ.get('DB_ENGINE', 'django.db.backends.mysql')  # 默认使用MySQL 
+# 数据库配置 - 强制使用MySQL，不依赖环境变量覆盖
+# 即使环境变量中设置了其他数据库引擎，这里也会强制使用MySQL
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',  # 强制使用MySQL引擎
+        'NAME': 'freeark',  # 强制使用指定的数据库名
+        'USER': 'root',  # 强制使用指定的用户名
+        'PASSWORD': 'root',  # 强制使用指定的密码
+        'HOST': '192.168.31.97',  # 根据start_services.bat中的配置使用正确的主机地址
+        'PORT': '3306',  # 强制使用指定的端口
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'use_unicode': True,
+        },
+    }
+}
 
-if DB_ENGINE == 'django.db.backends.mysql':
-    DATABASES = {
-        'default': {
-            'ENGINE': DB_ENGINE,
-            'NAME': os.environ.get('DB_NAME', 'freeark'),
-            'USER': os.environ.get('DB_USER', 'root'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'root'),
-            'HOST': os.environ.get('DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DB_PORT', '3306'),
-            'OPTIONS': {
-                'charset': 'utf8mb4',
-                'use_unicode': True,
-            },
-        }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+# 输出数据库配置信息用于调试
+print(f"数据库配置信息:")
+print(f"- 数据库引擎: {DATABASES['default']['ENGINE']}")
+print(f"- 数据库名称: {DATABASES['default']['NAME']}")
+print(f"- 数据库主机: {DATABASES['default']['HOST']}:{DATABASES['default']['PORT']}")
+print(f"- 数据库用户: {DATABASES['default']['USER']}")
 
 
 # Password validation

@@ -1,0 +1,11 @@
+{
+  "host": "192.168.31.97",
+  "port": 32795,
+  "username": "",
+  "password": "",
+  "tls_enabled": false,
+  "topic": "/datacollection/plc/to/collector/#",
+  "qos": 1,
+  "retain": false,
+  "keepalive": 60
+}
