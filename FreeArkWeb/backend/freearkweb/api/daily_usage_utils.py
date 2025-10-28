@@ -10,9 +10,7 @@ class DailyUsageCalculator:
     """
     每日用量计算工具类，包含共享的计算逻辑
     """
-    
-    # 特定部分列表
-    SPECIFIC_PARTS = ['9-1-31-3104', '9-1-31-3105']
+    # 不再使用硬编码的特定部分列表，改为动态从数据库获取
     
     @classmethod
     def calculate_daily_usage(cls, target_date, log_func=None):
@@ -40,8 +38,6 @@ class DailyUsageCalculator:
             log_func(f"计算日期: {target_date}")
             log_func(f"时间范围: {start_datetime} - {end_datetime}")
             
-            log_func(f"要处理的特定部分: {cls.SPECIFIC_PARTS}")
-            
             # 获取次日日期
             next_day = target_date + timedelta(days=1)
             
@@ -50,10 +46,17 @@ class DailyUsageCalculator:
             updated_count = 0
             next_day_count = 0
             
+            # 动态获取指定日期前一个自然日的所有unique specific_part值
+            specific_parts = PLCData.objects.filter(
+                created_at__range=(start_datetime, end_datetime)
+            ).values_list('specific_part', flat=True).distinct()
+            
+            log_func(f"从数据库获取到 {len(specific_parts)} 个特定部分需要处理")
+            
             # 遍历所有特定部分
-            for specific_part in cls.SPECIFIC_PARTS:
+            for specific_part in specific_parts:
                 # 处理制冷和制热两种模式
-                for energy_mode in ['cooling', 'heating']:
+                for energy_mode in ['制冷', '制热']:
                     log_func(f"正在处理: specific_part={specific_part}, energy_mode={energy_mode}")
                     
                     # 获取该特定部分和模式的所有记录
@@ -78,8 +81,8 @@ class DailyUsageCalculator:
                     
                     log_func(f"初始值: {initial_energy}, 最终值: {final_energy}, 用量: {usage_quantity}")
                     
-                    # 标准化energy_mode显示名称
-                    mode_display = '制冷' if energy_mode == 'cooling' else '制热'
+                    # 使用中文能源模式名称
+                    mode_display = energy_mode
                     
                     # 解析specific_part获取building、unit、room_number
                     building, unit, room_number = cls.parse_specific_part(specific_part)
