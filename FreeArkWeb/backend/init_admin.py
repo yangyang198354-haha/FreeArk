@@ -6,13 +6,24 @@ import os
 import sys
 import django
 
-# 添加项目根目录到Python路径
-project_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(project_path)
+# 获取当前脚本所在目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 将backend目录添加到Python路径，这样可以找到freearkweb模块
+sys.path.append(current_dir)
+# 也将父目录添加到路径以确保所有模块都能被找到
+sys.path.append(os.path.dirname(current_dir))
 
 # 设置Django环境变量
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'freearkweb.settings')
-django.setup()
+
+# 确保环境变量已设置
+try:
+    django.setup()
+except Exception as e:
+    print(f"Django setup失败: {e}")
+    print(f"当前Python路径: {sys.path}")
+    print(f"当前工作目录: {os.getcwd()}")
+    raise
 
 from api.models import CustomUser
 def create_superuser():

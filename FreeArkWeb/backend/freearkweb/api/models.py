@@ -61,9 +61,9 @@ class UsageQuantityDaily(models.Model):
     # 初期能耗，单位kWh
     initial_energy = models.IntegerField(verbose_name='初期能耗(kWh)')
     # 末期能耗，单位kWh
-    final_energy = models.IntegerField(verbose_name='末期能耗(kWh)')
+    final_energy = models.IntegerField(verbose_name='末期能耗(kWh)', null=True, blank=True)
     # 使用量，单位kWh
-    usage_quantity = models.IntegerField(verbose_name='使用量(kWh)')
+    usage_quantity = models.IntegerField(verbose_name='使用量(kWh)', null=True, blank=True)
     # 时间段，格式为 "YYYY-MM-DD"
     time_period = models.DateField(verbose_name='时间段')
     

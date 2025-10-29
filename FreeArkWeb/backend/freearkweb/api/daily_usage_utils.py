@@ -59,10 +59,11 @@ class DailyUsageCalculator:
                 for energy_mode in ['制冷', '制热']:
                     log_func(f"正在处理: specific_part={specific_part}, energy_mode={energy_mode}")
                     
-                    # 获取该特定部分和模式的所有记录
+                    # 获取该特定部分和模式在指定日期范围内的记录
                     plc_records = PLCData.objects.filter(
                         specific_part=specific_part,
-                        energy_mode=energy_mode
+                        energy_mode=energy_mode,
+                        created_at__range=(start_datetime, end_datetime)
                     ).order_by('created_at')
                     
                     log_func(f"找到 {plc_records.count()} 条PLC记录")
@@ -113,7 +114,7 @@ class DailyUsageCalculator:
                         else:
                             created_count += 1
                         
-                        # 创建次日记录，初始值为当日最终值
+                        # 创建次日记录，初始值为当日最终值，final_energy和usage_quantity设为None
                         next_record, created = UsageQuantityDaily.objects.get_or_create(
                             time_period=next_day,
                             specific_part=specific_part,
@@ -123,13 +124,15 @@ class DailyUsageCalculator:
                                 'unit': unit,
                                 'room_number': room_number,
                                 'initial_energy': final_energy,
-                                'final_energy': final_energy,  # 设置为与初始值相同，避免NULL错误
-                                'usage_quantity': 0
+                                'final_energy': None,  # 设为None，允许为空
+                                'usage_quantity': None  # 设为None，允许为空，次日不计算用量
                             }
                         )
                         
                         if created or not next_record.initial_energy:
                             next_record.initial_energy = final_energy
+                            next_record.final_energy = None  # 设为None，允许为空
+                            next_record.usage_quantity = None  # 设为None，允许为空，次日不计算用量
                             next_record.save()
                             next_day_count += 1
                         

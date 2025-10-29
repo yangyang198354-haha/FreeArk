@@ -795,8 +795,8 @@
             }
             
             // 根据用户角色显示或隐藏用户管理导航项
-            // 使用更精确的选择器，确保找到正确的元素
-            const userManagementLi = document.querySelector('li.nav-item.dropdown');
+            // 使用更精确的选择器，只匹配用户管理菜单
+            const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
             if (userManagementLi) {
               if (userInfo && userInfo.role === 'admin') {
                 userManagementLi.style.display = 'block';
@@ -1793,7 +1793,7 @@
             pageId = 'dashboard';
             alert('您没有权限访问用户管理页面');
             // 同时确保用户管理菜单被隐藏
-            const userManagementLi = document.querySelector('li.nav-item.dropdown');
+            const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
             if (userManagementLi) {
               userManagementLi.style.display = 'none';
             }
@@ -2316,8 +2316,8 @@
       // 立即执行权限检查，在DOM内容加载之前就隐藏用户管理菜单
       // 这样可以防止菜单在权限检查完成前闪烁显示
       const earlyPermissionCheck = () => {
-        // 使用更精确的选择器，确保找到正确的用户管理菜单项
-        const userManagementLi = document.querySelector('li.nav-item.dropdown');
+        // 使用更精确的选择器，只匹配用户管理菜单
+        const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
         if (userManagementLi) {
           // 默认隐藏，只有管理员登录后才显示
           userManagementLi.style.display = 'none';
