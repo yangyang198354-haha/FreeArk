@@ -10,3 +10,4 @@ mysqlclient
 
 # 其他依赖
 six
+schedule>=1.1.0
