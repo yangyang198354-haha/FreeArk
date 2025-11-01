@@ -1,0 +1,365 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  background-color: #f5f7fa;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+}
+
+.header {
+  background-color: #409eff;
+  color: white;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* 用户下拉菜单样式 */
+.user-dropdown {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.user-dropdown:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.user-dropdown::after {
+  content: '▼';
+  font-size: 0.5em;
+  transition: transform 0.3s;
+}
+
+.user-dropdown.open::after {
+  transform: rotate(180deg);
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  background-color: white;
+  color: #333;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  min-width: 150px;
+  z-index: 1000;
+  display: none;
+}
+
+.user-dropdown-menu.show {
+  display: block;
+}
+
+.user-dropdown-menu a {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: #333;
+  text-decoration: none;
+  transition: background-color 0.3s;
+}
+
+.user-dropdown-menu a:hover {
+  background-color: #f5f7fa;
+}
+
+/* 主容器 */
+.main-container {
+  display: flex;
+  flex: 1;
+  margin-top: 5rem;
+  min-height: calc(100vh - 5rem);
+}
+
+/* 左侧导航栏 */
+.sidebar {
+  width: 240px;
+  background-color: #304156;
+  color: #fff;
+  position: fixed;
+  left: 0;
+  top: 5rem;
+  bottom: 0;
+  overflow-y: auto;
+}
+
+.nav-menu {
+  list-style: none;
+  padding: 1rem 0;
+}
+
+.nav-item {
+  padding: 0 1rem;
+}
+
+.nav-link {
+  display: block;
+  padding: 0.875rem 1rem;
+  color: #c0c4cc;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.3s;
+  margin-bottom: 0.25rem;
+  font-size: 16px;
+}
+
+.nav-link:hover {
+  color: #fff;
+  background-color: #409eff;
+}
+
+.nav-link.active {
+  color: #fff;
+  background-color: #409eff;
+}
+
+/* 下拉菜单样式 */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  display: block;
+  position: static; /* 改为静态定位，使其在导航栏内展开 */
+  background-color: #304156; /* 与导航栏背景颜色一致 */
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  width: 100%;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.6s ease-in-out; /* 添加更慢的展开/折叠动画 */
+}
+
+.dropdown-menu.show {
+  max-height: 500px; /* 设置一个足够大的值以容纳所有菜单项 */
+}
+
+/* 为下拉按钮添加展开/折叠图标 */
+.dropdown-toggle::after {
+  content: ' ▼';
+  font-size: 0.5em;
+  margin-left: 0.5em;
+  transition: transform 0.5s;
+}
+
+.dropdown-toggle.collapsed::after {
+  transform: rotate(-90deg);
+}
+
+/* 下拉菜单项样式 */
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1.5rem 0.75rem 2.5rem; /* 增加左侧padding以创建缩进效果 */
+  clear: both;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.8); /* 与导航栏文字颜色一致 */
+  text-align: left;
+  white-space: nowrap;
+  background-color: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.dropdown-item:hover, .dropdown-item:focus {
+  color: #fff;
+  text-decoration: none;
+  background-color: rgba(255, 255, 255, 0.1); /* 半透明背景 */
+  padding-left: 2.75rem; /* 悬停时轻微左移 */
+}
+
+.dropdown-item.active {
+  color: #fff;
+  text-decoration: none;
+  background-color: #007bff;
+  padding-left: 2.75rem;
+}
+
+/* 确保下拉菜单正确显示在导航栏内 */
+.sidebar .nav-menu {
+  width: 100%;
+}
+
+.nav-item.dropdown {
+  width: 100%;
+}
+
+.nav-item.dropdown > .nav-link {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 单框级联菜单样式 */
+.cascading-selector-container {
+  position: relative;
+  width: 100%;
+}
+
+.cascading-selector {
+  position: relative;
+  width: 100%;
+}
+
+.cascading-selector-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: white;
+}
+
+.cascading-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.cascading-menu-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cascading-menu-item:hover {
+  background-color: #f5f7fa;
+}
+
+.cascading-menu-item.has-children::after {
+  content: '▶';
+  font-size: 0.7em;
+  transition: transform 0.2s;
+}
+
+.cascading-menu-item.expanded::after {
+  transform: rotate(90deg);
+}
+
+.cascading-submenu {
+  padding-left: 20px;
+  display: none;
+}
+
+.cascading-submenu.show {
+  display: block;
+}
+
+.cascading-menu-item.selected {
+  background-color: #e6f7ff;
+  color: #1890ff;
+}
+
+/* 右侧内容区 */
+.content {
+  flex: 1;
+  margin-left: 200px;
+  padding: 2rem;
+}
+
+.page-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  min-height: calc(100vh - 10rem);
+  padding: 2rem;
+}
+
+/* 页面头部 */
+.page-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.page-header h2 {
+  color: #303133;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* 空页面样式 */
+.empty-page {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #909399;
+}
+
+.empty-page h3 {
+  color: #606266;
+  margin-bottom: 1rem;
+}
+
+/* 无访问权限样式 */
+.no-access {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #909399;
+  margin-left: 200px;
+  margin-top: 5rem;
+}
+
+.no-access h2 {
+  margin-bottom: 1rem;
+  color: #606266;
+}
+
+/* 按钮样式 */
+.logout-button {
+  margin-top: 1rem;
+}
