@@ -16,13 +16,13 @@
     <!-- 引入楼栋数据 - 使用非模块方式 -->
     <script>
       // 直接定义全局变量，后续从building_data.js加载实际数据
-      // 注意：building_data.js来源于src/data/building_data.js
-      // 开发环境中Vite会处理路径，生产环境构建时会自动复制到dist目录
+      // 注意：在开发环境中，Vite服务器会通过中间件直接从src/data目录提供building_data.js
+      // 生产环境构建时，building_data.js会被自动复制到dist目录
       window.buildingData = [];
       window.flattenedBuildingData = [];
       window.flattenedRooms = [];
     </script>
-    <script src="./building_data.js"></script>
+    <script src="/building_data.js"></script>
     <link rel="stylesheet" href="./home.css">
     <style>
         /* 所有样式已移至home.css */

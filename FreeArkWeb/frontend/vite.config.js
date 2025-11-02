@@ -1,50 +1,62 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { copyFileSync, existsSync, mkdirSync } from 'fs'
 import { resolve, join, dirname } from 'path'
 
-// 自定义插件：在构建完成后复制building_data.js
-function copyBuildingDataPlugin() {
+// 自定义插件：在构建完成后复制静态资源文件
+function copyStaticFilesPlugin(buildDir) {
   return {
-    name: 'copy-building-data',
+    name: 'copy-static-files',
     closeBundle() {
-      // 总是从src/data复制
-      const srcPath = join(__dirname, 'src', 'data', 'building_data.js')
-      const distPath = join(__dirname, 'dist', 'building_data.js')
+      // 定义需要复制的文件列表
+      const filesToCopy = [
+        { src: join(__dirname, 'src', 'data', 'building_data.js'), dest: join(__dirname, buildDir, 'building_data.js') },
+        { src: join(__dirname, 'home.html'), dest: join(__dirname, buildDir, 'home.html') },
+        { src: join(__dirname, 'home.css'), dest: join(__dirname, buildDir, 'home.css') }
+      ]
       
-      // 确保dist目录存在
-      const distDir = dirname(distPath)
+      // 确保构建目录存在
+      const distDir = join(__dirname, buildDir)
       if (!existsSync(distDir)) {
         try {
           mkdirSync(distDir, { recursive: true })
-          console.log(`✅ 创建dist目录: ${distDir}`)
+          console.log(`✅ 创建构建目录: ${distDir}`)
         } catch (error) {
-          console.error(`❌ 创建dist目录失败: ${error.message}`)
+          console.error(`❌ 创建构建目录失败: ${error.message}`)
         }
       }
       
-      // 尝试使用源文件路径
-      if (existsSync(srcPath)) {
-        try {
-          copyFileSync(srcPath, distPath)
-          console.log(`✅ 成功将building_data.js从${srcPath}复制到${distPath}`)
-        } catch (error) {
-          console.error(`❌ 从${srcPath}复制building_data.js失败: ${error.message}`)
-          console.warn(`⚠️  复制building_data.js失败，但构建过程将继续`)
+      // 复制每个文件
+      filesToCopy.forEach(file => {
+        if (existsSync(file.src)) {
+          try {
+            copyFileSync(file.src, file.dest)
+            console.log(`✅ 成功从${file.src}复制到${file.dest}`)
+          } catch (error) {
+            console.error(`❌ 从${file.src}复制到${file.dest}失败: ${error.message}`)
+            console.warn(`⚠️  复制文件失败，但构建过程将继续`)
+          }
+        } else {
+          console.warn(`⚠️  源文件不存在: ${file.src}`)
+          console.warn(`⚠️  无法复制文件，但构建过程将继续`)
         }
-      } else {
-        console.warn(`⚠️  源文件不存在: ${srcPath}`)
-        console.warn(`⚠️  无法复制building_data.js，但构建过程将继续`)
-      }
+      })
     }
   }
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // 加载环境变量
+  const env = loadEnv(mode, process.cwd())
+  
+  // 获取构建目录，默认为'dist'
+  const buildDir = env.VITE_BUILD_DIR || 'dist'
+  
+  return {
   plugins: [
     vue(),
-    copyBuildingDataPlugin() // 添加自定义复制插件
+    copyStaticFilesPlugin(buildDir) // 添加自定义复制插件，传入构建目录
   ],
   // 配置服务器
   server: {
@@ -94,9 +106,10 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist',
+    outDir: buildDir,
     assetsDir: 'assets',
     minify: 'esbuild',
     sourcemap: false
+  }
   }
 })
