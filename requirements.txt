@@ -10,8 +10,4 @@ python-snap7>=1.4.0
 # MQTT通信库
 paho-mqtt>=1.5.0
 
-# 命令行参数解析
-argparse
-
-# 线程管理（用于mqtt_client_pool.py）
-threading
+# 注意：argparse和threading是Python标准库，不需要在requirements.txt中指定
