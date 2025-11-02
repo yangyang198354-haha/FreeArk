@@ -8,12 +8,14 @@ import django
 
 # 获取当前脚本所在目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# 将backend目录添加到Python路径，这样可以找到freearkweb模块
+# 将backend目录添加到Python路径
 sys.path.append(current_dir)
-# 也将父目录添加到路径以确保所有模块都能被找到
+# 也将父目录添加到路径
 sys.path.append(os.path.dirname(current_dir))
+# 添加freearkweb目录到路径以确保能找到嵌套的freearkweb模块
+sys.path.append(os.path.join(current_dir, 'freearkweb'))
 
-# 设置Django环境变量
+# 设置Django环境变量，指向正确的settings模块路径
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'freearkweb.settings')
 
 # 确保环境变量已设置
