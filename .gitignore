@@ -98,6 +98,11 @@ python-installer.exe
 # 前端相关
 node_modules/
 dist/
+
+# Django静态文件目录（包含收集的静态文件）
+FreeArkWeb/backend/freearkweb/staticfiles/
+# 递归忽略任何位置的staticfiles目录
+**/staticfiles/
 build/
 *.local
 

@@ -139,9 +139,15 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS配置
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://localhost').split(',')
+# CORS配置 - 宽松设置以允许前端连接
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:8080',
+    'http://localhost',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1'
+]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False  # 保持关闭，使用白名单方式更安全
 
 # 设置自定义用户模型
 AUTH_USER_MODEL = 'api.CustomUser'

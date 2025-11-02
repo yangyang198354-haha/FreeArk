@@ -11,3 +11,6 @@ mysqlclient
 # 其他依赖
 six
 schedule>=1.1.0
+
+# 生产环境WSGI服务器
+waitress>=3.0.0

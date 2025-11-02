@@ -29,12 +29,32 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-i%ixus$z-threi-#e&(th%w$a4zi+oq=)-jz&)y!m((g#!iype'
+# 生产环境应当从环境变量中获取SECRET_KEY
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-i%ixus$z-threi-#e&(th%w$a4zi+oq=)-jz&)y!m((g#!iype')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'  # 默认关闭DEBUG模式
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# 生产环境安全设置
+if not DEBUG:
+    # 启用 HTTPS 设置
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
+    SECURE_HSTS_SECONDS = 31536000  # 一年
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # 安全 Cookie 设置
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
+    
+    # 防止点击劫持
+    X_FRAME_OPTIONS = 'DENY'
+    
+    # 内容安全策略
+    # 可以根据实际情况调整
+    CSP_DEFAULT_SRC = ["'self'"]
 
 
 # Application definition
@@ -195,26 +215,63 @@ if not os.path.exists(LOG_DIR):
 
 # 日志目录已配置，将通过Django的LOGGING配置进行日志记录
 
-# Django日志配置 - 最简单的配置
+# Django日志配置 - 生产环境优化配置
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'default': {
-            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        'verbose': {
+            'format': '%(asctime)s [%(levelname)s] %(module)s %(process)d %(thread)d %(message)s'
+        },
+        'simple': {
+            'format': '%(asctime)s [%(levelname)s] %(message)s'
+        },
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
         },
     },
     'handlers': {
         'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
+            'level': 'INFO',  # 生产环境使用INFO级别
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': LOG_FILE,
-            'formatter': 'default',
+            'formatter': 'verbose',
             'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'filters': ['require_debug_true'],
         },
     },
     'root': {
-        'handlers': ['file'],
+        'handlers': ['file', 'console'],
         'level': 'DEBUG',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file', 'console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # 添加应用特定的日志器
+        'api': {
+            'handlers': ['file'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
     },
 }
