@@ -8,10 +8,8 @@ function copyBuildingDataPlugin() {
   return {
     name: 'copy-building-data',
     closeBundle() {
-      // 方法1：从src/data复制
-      const srcPath1 = join(__dirname, 'src', 'data', 'building_data.js')
-      // 方法2：从根目录复制（备选方案）
-      const srcPath2 = join(__dirname, 'building_data.js')
+      // 总是从src/data复制
+      const srcPath = join(__dirname, 'src', 'data', 'building_data.js')
       const distPath = join(__dirname, 'dist', 'building_data.js')
       
       // 确保dist目录存在
@@ -25,31 +23,17 @@ function copyBuildingDataPlugin() {
         }
       }
       
-      // 尝试使用第一个源文件路径
-      if (existsSync(srcPath1)) {
+      // 尝试使用源文件路径
+      if (existsSync(srcPath)) {
         try {
-          copyFileSync(srcPath1, distPath)
-          console.log(`✅ 成功将building_data.js从${srcPath1}复制到${distPath}`)
-          return // 成功后返回，不尝试备选路径
+          copyFileSync(srcPath, distPath)
+          console.log(`✅ 成功将building_data.js从${srcPath}复制到${distPath}`)
         } catch (error) {
-          console.error(`❌ 从${srcPath1}复制building_data.js失败: ${error.message}`)
-          console.log(`尝试使用备选路径...`)
-        }
-      } else {
-        console.warn(`⚠️  源文件不存在: ${srcPath1}`)
-      }
-      
-      // 如果第一个路径失败，尝试第二个源文件路径
-      if (existsSync(srcPath2)) {
-        try {
-          copyFileSync(srcPath2, distPath)
-          console.log(`✅ 成功将building_data.js从${srcPath2}复制到${distPath}`)
-        } catch (error) {
-          console.error(`❌ 从${srcPath2}复制building_data.js失败: ${error.message}`)
+          console.error(`❌ 从${srcPath}复制building_data.js失败: ${error.message}`)
           console.warn(`⚠️  复制building_data.js失败，但构建过程将继续`)
         }
       } else {
-        console.warn(`⚠️  源文件不存在: ${srcPath2}`)
+        console.warn(`⚠️  源文件不存在: ${srcPath}`)
         console.warn(`⚠️  无法复制building_data.js，但构建过程将继续`)
       }
     }
@@ -62,8 +46,46 @@ export default defineConfig({
     vue(),
     copyBuildingDataPlugin() // 添加自定义复制插件
   ],
+  // 配置服务器
   server: {
     port: 8080,
+    // 添加中间件处理building_data.js请求
+    configureServer(server) {
+      server.middlewares.use('/building_data.js', (req, res, next) => {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          
+          // 首先尝试直接从src/data目录读取文件
+          const srcDataPath = path.join(__dirname, 'src', 'data', 'building_data.js');
+          
+          if (fs.existsSync(srcDataPath)) {
+            // 确保返回正确的Content-Type
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+            // 直接读取并发送文件内容
+            const fileContent = fs.readFileSync(srcDataPath, 'utf8');
+            res.end(fileContent);
+            console.log(`✅ 成功从${srcDataPath}提供building_data.js`);
+          } else {
+            // 如果文件不存在，返回404
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'text/plain');
+            res.end('building_data.js not found');
+            console.error(`❌ 文件不存在: ${srcDataPath}`);
+          }
+        } catch (error) {
+          console.error('Error serving building_data.js:', error);
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'text/plain');
+          res.end('Error serving building_data.js');
+        }
+      });
+    },
+    // 确保Vite可以访问src/data目录
+    fs: {
+      allow: ['..']
+    },
+    // 配置API代理
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
@@ -72,11 +94,9 @@ export default defineConfig({
     }
   },
   build: {
-    rollupOptions: {
-      input: {
-        index: resolve(__dirname, 'index.html'),
-        home: resolve(__dirname, 'home.html')
-      }
-    }
+    outDir: 'dist',
+    assetsDir: 'assets',
+    minify: 'esbuild',
+    sourcemap: false
   }
 })

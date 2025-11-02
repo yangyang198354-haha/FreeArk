@@ -16,11 +16,13 @@
     <!-- 引入楼栋数据 - 使用非模块方式 -->
     <script>
       // 直接定义全局变量，后续从building_data.js加载实际数据
+      // 注意：building_data.js来源于src/data/building_data.js
+      // 开发环境中Vite会处理路径，生产环境构建时会自动复制到dist目录
       window.buildingData = [];
       window.flattenedBuildingData = [];
       window.flattenedRooms = [];
     </script>
-    <script src="./building_data.js" type="module"></script>
+    <script src="./building_data.js"></script>
     <link rel="stylesheet" href="./home.css">
     <style>
         /* 所有样式已移至home.css */
@@ -179,7 +181,7 @@
                   <span>共 <span id="totalRecords">0</span> 条记录</span>
                 </div>
                 <nav>
-                  <ul class="pagination justify-content-center">
+                    <ul class="pagination justify-content-end">
                     <li class="page-item" id="prevPageItem">
                       <a class="page-link" href="#" aria-label="上一页" onclick="changePage(currentPage - 1)">
                         <span aria-hidden="true">&laquo;</span>
@@ -193,7 +195,7 @@
                     </li>
                   </ul>
                 </nav>
-                <div class="pagination-size" style="margin-top: 10px; text-align: center;">
+                <div class="pagination-size" style="margin-top: 10px; text-align: right;">
                   <span>每页显示：</span>
                   <select id="pageSizeSelect" onchange="changePageSize(this.value)">
                     <option value="10">10条</option>
@@ -463,9 +465,10 @@
             }
             
             // 根据用户角色显示或隐藏用户管理导航项
-            // 使用更精确的选择器，只匹配用户管理菜单
-            const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
-            if (userManagementLi) {
+            // 使用更兼容的方法选择用户管理菜单的li元素
+            const userManagementLink = document.getElementById('userManagementDropdown');
+            if (userManagementLink && userManagementLink.parentElement) {
+              const userManagementLi = userManagementLink.parentElement;
               if (userInfo && userInfo.role === 'admin') {
                 userManagementLi.style.display = 'block';
               } else {
@@ -1927,7 +1930,8 @@
       function saveUser() {
         // 验证用户权限
         const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-        // 已经在上面声明过userId变量
+        // 获取当前编辑的用户ID
+        const userId = document.getElementById('editUserId').value;
         
         // 只有管理员可以编辑任何用户，普通用户只能编辑自己的资料
         if (!userInfo || (userInfo.role !== 'admin' && userInfo.id.toString() !== userId)) {
@@ -2088,9 +2092,10 @@
       // 立即执行权限检查，在DOM内容加载之前就隐藏用户管理菜单
       // 这样可以防止菜单在权限检查完成前闪烁显示
       const earlyPermissionCheck = () => {
-        // 使用更精确的选择器，只匹配用户管理菜单
-        const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
-        if (userManagementLi) {
+        // 使用更兼容的方法选择用户管理菜单的li元素
+        const userManagementLink = document.getElementById('userManagementDropdown');
+        if (userManagementLink && userManagementLink.parentElement) {
+          const userManagementLi = userManagementLink.parentElement;
           // 默认隐藏，只有管理员登录后才显示
           userManagementLi.style.display = 'none';
         }

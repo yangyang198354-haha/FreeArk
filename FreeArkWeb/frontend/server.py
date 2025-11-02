@@ -34,10 +34,6 @@ with socketserver.TCPServer(("0.0.0.0", PORT), CORSRequestHandler) as httpd:
     print("请在浏览器中访问 http://localhost:8080/")
     print("按 Ctrl+C 停止服务器")
     
-    # 尝试自动打开浏览器
-    try:
-        threading.Thread(target=lambda: time.sleep(1) or webbrowser.open(f'http://localhost:{PORT}/')).start()
-    except Exception:
-        print("无法自动打开浏览器，请手动访问")
+    # 不再自动打开浏览器（由批处理脚本统一处理）
     
     httpd.serve_forever()

@@ -95,8 +95,8 @@ REM 打开浏览器
 start http://localhost:8080/
 
 echo 服务已启动
-Backend: http://localhost:8000/
-Frontend: http://localhost:8080/
+echo Backend: http://localhost:8000/
+echo Frontend: http://localhost:8080/
 
 :end
 pause
