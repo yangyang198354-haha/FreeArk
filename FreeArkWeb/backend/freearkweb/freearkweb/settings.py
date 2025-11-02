@@ -177,8 +177,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 import os
 import logging
 
-# 确保使用绝对路径
-LOG_DIR = 'C:/Users/yanggyan/TRAE/FreeArk/logs'
+# 使用相对路径，基于项目根目录
+LOG_DIR = os.path.join(BASE_DIR, '../../../logs')
 LOG_FILE = os.path.join(LOG_DIR, 'django.log')
 
 # 打印调试信息
