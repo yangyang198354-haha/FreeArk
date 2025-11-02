@@ -76,7 +76,8 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo 依赖安装成功，开始构建...
-call "%NPM_CMD%" run build > npm_build.log 2>&1
+echo 使用开发环境参数构建前端项目
+call "%NPM_CMD%" run build -- --mode development > npm_build.log 2>&1
 if %ERRORLEVEL% neq 0 (
     echo 前端构建失败，请检查npm_build.log
     echo 构建错误详情:
