@@ -1,0 +1,36 @@
+{
+  "output": {
+    "type": "Excel",
+    "excel": {
+      "enabled": false,
+
+      "file_name": "累计用量",
+      "directory": "./output/",
+      "include_all_params": false
+    },
+    "json": {
+      "enabled": false
+    },
+    "mqtt": {
+      "enabled": true,
+      "server": {
+        "host": "192.168.31.97",
+        "port": 32795,
+        "username": "",
+        "password": "",
+        "tls_enabled": false,
+        "pool_size": 5
+      },
+      "topic": {
+        "prefix": "/datacollection/plc/to/collector/"
+      },
+      "qos": 1,
+      "retain": false
+    }
+  },
+  "config_info": {
+    "version": "1.1",
+    "create_time": "2025-10-13",
+    "description": "数据输出配置文件，控制数据收集结果的保存格式，支持JSON、Excel和MQTT输出"
+  }
+}

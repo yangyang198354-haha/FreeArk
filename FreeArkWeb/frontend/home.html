@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自由方舟能耗采集平台 - 主页</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 添加jQuery库 -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- 添加daterangepicker库 -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <!-- 引入楼栋数据 - 使用非模块方式 -->
+    <script>
+      // 直接定义全局变量，后续从building_data.js加载实际数据
+      window.buildingData = [];
+      window.flattenedBuildingData = [];
+      window.flattenedRooms = [];
+    </script>
+    <script src="./building_data.js" type="module"></script>
+    <link rel="stylesheet" href="./home.css">
+    <style>
+        /* 所有样式已移至home.css */
+      </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>自由方舟能耗采集平台</h1>
+      <div class="user-info">
+        <div id="userName" class="user-dropdown">
+          用户
+        </div>
+        <div id="userDropdownMenu" class="user-dropdown-menu">
+          <ul>
+            <li><a href="#" onclick="editProfile()">编辑个人资料</a></li>
+            <li><a href="#" onclick="changePassword()">修改登录密码</a></li>
+            <li><a href="#" onclick="logout()">退出登录</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    
+    <div id="noAccess" class="no-access" style="display: none;">
+      <h2>未授权访问</h2>
+      <p>您尚未登录或登录已过期，请重新登录</p>
+      <button onclick="window.location.href='index.html'" class="logout-button">前往登录</button>
+    </div>
+    
+    <div id="dashboardContent" class="main-container" style="display: none;">
+      <!-- 左侧导航栏 -->
+      <aside class="sidebar">
+        <ul class="nav-menu">
+          <li class="nav-item">
+            <a href="#dashboard" class="nav-link active" onclick="switchPage('dashboard')">系统看板</a>
+          </li>
+          <li class="nav-item dropdown">
+            <a href="#usage" class="nav-link dropdown-toggle collapsed" id="usageDropdown" onclick="expandUsageDropdown(event)">用量查询</a>
+            <div class="dropdown-menu">
+              <a href="#energyReport" class="dropdown-item" onclick="switchPage('usage')">能耗日用量报表</a>
+            </div>
+          </li>
+          <li class="nav-item">
+            <a href="#services" class="nav-link" onclick="switchPage('services')">服务管理</a>
+          </li>
+          <li class="nav-item dropdown">
+            <a href="#" class="nav-link dropdown-toggle collapsed" id="userManagementDropdown">用户管理</a>
+            <div class="dropdown-menu">
+              <a href="#createUser" class="dropdown-item" onclick="switchPage('createUser')">创建用户</a>
+              <a href="#userList" class="dropdown-item" onclick="switchPage('userList')">用户列表</a>
+            </div>
+          </li>
+        </ul>
+      </aside>
+      
+      <!-- 右侧内容区 -->
+      <main class="content">
+        <!-- 系统看板页面 -->
+        <div id="dashboardPage" class="page-container">
+          <div class="page-header">
+            <h2>系统看板</h2>
+          </div>
+          <!-- 空白内容区域 -->
+        </div>
+        
+        <!-- 用量查询页面 -->
+        <div id="usagePage" class="page-container" style="display: none;">
+          <div class="page-header">
+            <h2>能耗日用量报表</h2>
+          </div>
+          
+          <!-- 查询条件表单 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <form id="usageQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                  <label for="cascadingSelector">楼栋-单元-户号</label>
+                  <div class="cascading-selector-container">
+                    <div id="cascadingSelector" class="cascading-selector" style="position: relative;">
+                      <input type="text" class="cascading-selector-input" placeholder="可直接输入，例:1-2-101">
+                      <button type="button" class="cascading-clear-btn" style="display: none; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #999; font-size: 16px;">×</button>
+                      <input type="hidden" id="selectedBuilding" name="selectedBuilding">
+                      <input type="hidden" id="selectedUnit" name="selectedUnit">
+                      <input type="hidden" id="selectedRoom" name="selectedRoom">
+                      <div class="cascading-menu" style="display: none;">
+                        <!-- 菜单内容将由JavaScript动态生成 -->
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                  <label for="energyModeQuery">供能模式</label>
+                  <select class="form-control" id="energyModeQuery">
+                    <option value="">全部</option>
+                    <option value="制冷">制冷</option>
+                    <option value="制热">制热</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex: 2; min-width: 300px;">
+                  <label>时间段</label>
+                  <!-- 添加daterangepicker库的引用 -->
+                  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+                  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+                  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+                  <!-- 单一的时间段选择器 -->
+                  <input type="text" class="form-control" id="dateRangePicker" style="cursor: pointer;">
+                  <input type="hidden" id="startTimeQuery">
+                  <input type="hidden" id="endTimeQuery">
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                  <button type="button" class="btn btn-primary" onclick="searchUsageData()">查询</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetQueryForm()">重置</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <!-- 用量数据图表 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <h3>用量趋势图表</h3>
+              <div class="chart-container" style="position: relative; height: 300px; width: 100%;">
+                <canvas id="usageChart" style="display: none;"></canvas>
+                <div id="chartNoData" class="alert alert-info text-center" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; margin: 0; display: block;">暂无数据</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 用量数据表格 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <h3>用量数据</h3>
+              <div class="table-responsive">
+                <table id="usageTable" class="table table-striped" style="display: none;">
+                  <thead>
+                    <tr>
+                      <th>专有部分</th>
+                      <th>楼栋</th>
+                      <th>单元</th>
+                      <th>房号</th>
+                      <th>供能模式</th>
+                      <th>初期能耗(kWh)</th>
+                      <th>末期能耗(kWh)</th>
+                      <th>使用量(kWh)</th>
+                      <th>时间段</th>
+                    </tr>
+                  </thead>
+                  <tbody id="usageTableBody">
+                    <!-- 数据将通过JavaScript动态填充 -->
+                  </tbody>
+                </table>
+              </div>
+              <!-- 分页控件 -->
+              <div id="pagination" class="pagination-container" style="margin-top: 20px; display: none;">
+                <div class="pagination-info" style="margin-bottom: 10px;">
+                  <span>共 <span id="totalRecords">0</span> 条记录</span>
+                </div>
+                <nav>
+                  <ul class="pagination justify-content-center">
+                    <li class="page-item" id="prevPageItem">
+                      <a class="page-link" href="#" aria-label="上一页" onclick="changePage(currentPage - 1)">
+                        <span aria-hidden="true">&laquo;</span>
+                      </a>
+                    </li>
+                    <div id="pageNumbers" class="d-flex"></div>
+                    <li class="page-item" id="nextPageItem">
+                      <a class="page-link" href="#" aria-label="下一页" onclick="changePage(currentPage + 1)">
+                        <span aria-hidden="true">&raquo;</span>
+                      </a>
+                    </li>
+                  </ul>
+                </nav>
+                <div class="pagination-size" style="margin-top: 10px; text-align: center;">
+                  <span>每页显示：</span>
+                  <select id="pageSizeSelect" onchange="changePageSize(this.value)">
+                    <option value="10">10条</option>
+                    <option value="20">20条</option>
+                    <option value="50">50条</option>
+                    <option value="100">100条</option>
+                  </select>
+                </div>
+              </div>
+              <div id="noDataMessage" class="alert alert-info" style="display: none; margin-top: 20px;">暂无数据</div>
+              <div id="loadingIndicator" class="text-center" style="display: none; margin-top: 20px;">加载中...</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 服务管理页面 -->
+        <div id="servicesPage" class="page-container" style="display: none;">
+          <div class="page-header">
+            <h2>服务管理</h2>
+          </div>
+          <!-- 空白内容区域 -->
+        </div>
+        
+        <!-- 创建用户页面 -->
+        <div id="createUserPage" class="page-container" style="display: none;">
+          <div class="page-header">
+            <h2>创建用户</h2>
+          </div>
+          
+          <!-- 用户创建表单 -->
+          <div class="card">
+            <div class="card-body">
+              <form id="createUserForm" onsubmit="return false;">
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="username">用户名 *</label>
+                    <input type="text" class="form-control" id="username" required>
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="email">电子邮箱 *</label>
+                    <input type="email" class="form-control" id="email" required>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="firstName">名字 *</label>
+                    <input type="text" class="form-control" id="firstName" required>
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="lastName">姓氏 *</label>
+                    <input type="text" class="form-control" id="lastName" required>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="password">密码 *</label>
+                    <input type="password" class="form-control" id="password" required>
+                    <small class="form-text text-muted">密码必须至少8位，包含字母、数字和特殊字符</small>
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="confirmPassword">确认密码 *</label>
+                    <input type="password" class="form-control" id="confirmPassword" required>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="role">角色</label>
+                    <select class="form-control" id="role">
+                      <option value="user">普通用户</option>
+                      <option value="admin">管理员</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="department">部门</label>
+                    <input type="text" class="form-control" id="department">
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="position">职位</label>
+                    <input type="text" class="form-control" id="position">
+                  </div>
+                </div>
+                <button type="button" class="btn btn-primary" id="createUserBtn">创建用户</button>
+                <div id="createUserMessage" class="mt-3"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 用户列表页面 -->
+        <div id="userListPage" class="page-container" style="display: none;">
+          <div class="page-header">
+            <h2>用户列表</h2>
+          </div>
+          
+          <!-- 用户列表 -->
+          <div class="card">
+            <div class="card-body">
+              <div id="userListMessage" class="mb-3"></div>
+              <div class="table-responsive">
+                <table class="table table-striped">
+                  <thead>
+                    <tr>
+                      <th>用户名</th>
+                      <th>电子邮箱</th>
+                      <th>姓名</th>
+                      <th>角色</th>
+                      <th>部门</th>
+                      <th>职位</th>
+                      <th>创建时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="userListBody">
+                    <!-- 用户数据将通过JavaScript动态添加 -->
+                  </tbody>
+                </table>
+              </div>
+              <div id="userListMessage" class="mt-3"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 编辑用户页面 -->
+        <div id="editUserPage" class="page-container" style="display: none;">
+          <div class="page-header">
+            <h2 id="editUserPageTitle">编辑用户</h2>
+            <button type="button" class="btn btn-secondary" onclick="switchPage('userList')">返回用户列表</button>
+          </div>
+          
+          <div class="card">
+            <div class="card-body">
+              <form id="editUserForm" onsubmit="return false;">
+                <input type="hidden" id="editUserId">
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="editUsername">用户名 *</label>
+                    <input type="text" class="form-control" id="editUsername" readonly>
+                    <small class="form-text text-muted">用户名不可修改</small>
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="editEmail">电子邮箱 *</label>
+                    <input type="email" class="form-control" id="editEmail">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="editFirstName">名字</label>
+                    <input type="text" class="form-control" id="editFirstName">
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="editLastName">姓氏</label>
+                    <input type="text" class="form-control" id="editLastName">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="editPassword">密码 (留空表示不修改)</label>
+                    <input type="password" class="form-control" id="editPassword" placeholder="留空表示不修改密码">
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="editRole">角色</label>
+                    <select class="form-control" id="editRole" disabled>
+                      <option value="user">普通用户</option>
+                      <option value="admin">管理员</option>
+                    </select>
+                    <small class="form-text text-muted">角色不可修改</small>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-md-6">
+                    <label for="editDepartment">部门</label>
+                    <input type="text" class="form-control" id="editDepartment">
+                  </div>
+                  <div class="form-group col-md-6">
+                    <label for="editPosition">职位</label>
+                    <input type="text" class="form-control" id="editPosition">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <button type="button" class="btn btn-secondary mr-2" onclick="switchPage('userList')">取消</button>
+                  <button type="button" class="btn btn-primary" id="saveUserBtn">保存更改</button>
+                </div>
+                <div id="editUserMessage" class="mt-3"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    
+    <script>
+      // 初始化日期范围选择器
+      document.addEventListener('DOMContentLoaded', function() {
+        // 初始化daterangepicker
+        $('#dateRangePicker').daterangepicker({
+          opens: 'right',
+          showDropdowns: true,
+          minYear: 2020,
+          maxYear: parseInt(moment().format('YYYY'), 10),
+          startDate: moment().subtract(7, 'days'),
+          endDate: moment(),
+          maxSpan: { days: 60 }, // 最大跨度限制为60天
+          locale: {
+            format: 'YYYY-MM-DD',
+            separator: ' - ',
+            applyLabel: '确定',
+            cancelLabel: '取消',
+            fromLabel: '开始',
+            toLabel: '结束',
+            customRangeLabel: '自定义',
+            weekLabel: 'W',
+            daysOfWeek: ['日', '一', '二', '三', '四', '五', '六'],
+            monthNames: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
+            firstDay: 1
+          },
+          ranges: {
+            '今天': [moment(), moment()],
+            '昨天': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+            '近7天': [moment().subtract(6, 'days'), moment()],
+            '近30天': [moment().subtract(29, 'days'), moment()],
+            '本月': [moment().startOf('month'), moment().endOf('month')],
+            '上月': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+          }
+        }, function(start, end, label) {
+          // 当用户选择日期范围时更新隐藏字段
+          document.getElementById('startTimeQuery').value = start.format('YYYY-MM-DD');
+          document.getElementById('endTimeQuery').value = end.format('YYYY-MM-DD');
+        });
+        
+        // 初始化时设置默认值到隐藏字段
+        const defaultStart = moment().subtract(7, 'days');
+        const defaultEnd = moment();
+        document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
+        document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
+      });
+      
+      // 检查用户是否已登录
+      function checkAuthentication() {
+        const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+        const userToken = localStorage.getItem('userToken');
+        
+        if (isAuthenticated && userToken) {
+          // 显示仪表板内容
+          document.getElementById('dashboardContent').style.display = 'block';
+          document.getElementById('noAccess').style.display = 'none';
+          loadUserInfo();
+        } else {
+          // 显示未授权访问
+          document.getElementById('dashboardContent').style.display = 'none';
+          document.getElementById('noAccess').style.display = 'block';
+        }
+      }
+      
+      // 加载用户信息
+      function loadUserInfo() {
+        const userInfoStr = localStorage.getItem('userInfo');
+        if (userInfoStr) {
+          try {
+            const userInfo = JSON.parse(userInfoStr);
+            const userNameElement = document.getElementById('userName');
+            if (userNameElement) {
+              // 显示姓名而不是用户名，使用formatFullName函数进行格式化
+              const fullName = formatFullName(userInfo.first_name || '', userInfo.last_name || '');
+              userNameElement.textContent = fullName || userInfo.username || '用户';
+            }
+            
+            // 根据用户角色显示或隐藏用户管理导航项
+            // 使用更精确的选择器，只匹配用户管理菜单
+            const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
+            if (userManagementLi) {
+              if (userInfo && userInfo.role === 'admin') {
+                userManagementLi.style.display = 'block';
+              } else {
+                userManagementLi.style.display = 'none';
+              }
+            }
+            
+            // 额外安全检查：如果用户尝试直接访问用户管理页面的URL
+            // 检查当前URL参数或哈希
+            const currentHash = window.location.hash;
+            if (!userInfo || userInfo.role !== 'admin') {
+              if (currentHash.includes('createUser') || currentHash.includes('userList')) {
+                // 重定向到系统看板
+                window.location.hash = '#dashboard';
+                switchPage('dashboard');
+                alert('您没有权限访问用户管理页面');
+              }
+            }
+          } catch (e) {
+            console.error('解析用户信息失败:', e);
+          }
+        }
+      }
+      
+      // 切换用户下拉菜单显示状态
+      function toggleUserDropdown() {
+        const userDropdown = document.getElementById('userName');
+        const dropdownMenu = document.getElementById('userDropdownMenu');
+        
+        userDropdown.classList.toggle('open');
+        dropdownMenu.classList.toggle('show');
+      }
+      
+      // 关闭用户下拉菜单
+      function closeUserDropdown() {
+        const userDropdown = document.getElementById('userName');
+        const dropdownMenu = document.getElementById('userDropdownMenu');
+        
+        userDropdown.classList.remove('open');
+        dropdownMenu.classList.remove('show');
+      }
+      
+      // 编辑个人资料
+      function editProfile() {
+        const userInfoStr = localStorage.getItem('userInfo');
+        if (userInfoStr) {
+          try {
+            const userInfo = JSON.parse(userInfoStr);
+            // 为所有用户（包括普通用户）设置编辑自己的ID
+            localStorage.setItem('editingUserId', userInfo.id);
+            switchPage('editUser');
+          } catch (e) {
+            console.error('解析用户信息失败:', e);
+          }
+        }
+        closeUserDropdown();
+      }
+      
+      // 修改登录密码
+      function changePassword() {
+        // 这里暂时使用alert提示功能开发中
+        alert('密码修改功能开发中');
+        closeUserDropdown();
+      }
+      
+      // 退出登录
+      function logout() {
+        // 清除localStorage中的登录信息
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('isAuthenticated');
+        
+        // 跳转到登录页面
+        window.location.href = 'index.html';
+      }
+      
+      // 原loadBuildingData函数已移除，不再需要
+      // 原renderBuildingTree函数已移除，不再需要
+      // 原所有级联菜单相关函数已移除，不再需要
+      
+      // 重置查询表单
+      function resetQueryForm() {
+        document.getElementById('usageQueryForm').reset();
+        // 重置日期范围选择器为默认值（近7天）
+        if ($('#dateRangePicker').data('daterangepicker')) {
+          const defaultStart = moment().subtract(7, 'days');
+          const defaultEnd = moment();
+          $('#dateRangePicker').data('daterangepicker').setStartDate(defaultStart);
+          $('#dateRangePicker').data('daterangepicker').setEndDate(defaultEnd);
+          // 更新隐藏字段
+          document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
+          document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
+        }
+        
+        // 重置级联选择器
+        const selector = document.getElementById('cascadingSelector');
+        const input = selector.querySelector('.cascading-selector-input');
+        const menu = selector.querySelector('.cascading-menu');
+        
+        // 清空输入框和隐藏字段
+        input.value = '';
+        document.getElementById('selectedBuilding').value = '';
+        document.getElementById('selectedUnit').value = '';
+        document.getElementById('selectedRoom').value = '';
+        
+        // 关闭菜单并重置菜单结构
+        menu.style.display = 'none';
+        menu.innerHTML = '';
+        generateMenuStructure(_buildingData, menu);
+        
+        // 恢复readonly属性
+        input.setAttribute('readonly', 'readonly');
+      }
+      
+      // 搜索用量数据
+      // 从building_data.js中获取楼栋数据
+      // 由于building_data.js使用ES6 export，我们需要在浏览器环境中正确使用
+      // 直接使用window.buildingData，避免创建新的变量导致重复声明
+      if (typeof window.buildingData === 'undefined') {
+        window.buildingData = [];
+      }
+      // 使用不同的变量名来引用building数据
+      let _buildingData = window.buildingData;
+      // 使用不同的变量名来避免与全局flattenedRooms冲突
+      let _flattenedRooms = [];
+      
+      // 数据加载逻辑 - 确保从window对象正确加载building_data.js中的数据
+      console.log('开始加载楼栋数据...');
+      console.log('window.buildingData是否存在:', typeof window.buildingData !== 'undefined');
+      
+      // 重新实现数据加载逻辑，确保能获取完整的楼栋数据
+      // 先检查是否已在window对象上定义了完整数据
+      if (typeof window.buildingData !== 'undefined' && Array.isArray(window.buildingData) && window.buildingData.length > 0) {
+        // 验证数据是否为完整的楼栋数据（至少包含多个楼栋）
+        if (window.buildingData.length > 1 || 
+            (window.buildingData.length === 1 && 
+             window.buildingData[0].children && 
+             window.buildingData[0].children.length > 1)) {
+          _buildingData = window.buildingData;
+          console.log('成功从window.buildingData加载完整数据，共', _buildingData.length, '栋楼');
+        } else {
+          // 如果数据不完整，尝试使用XMLHttpRequest直接加载building_data.js文件
+          console.warn('window.buildingData数据不完整，尝试直接加载文件内容');
+          loadBuildingDataFromFile();
+        }
+      } else {
+        console.warn('未找到window.buildingData，尝试直接加载文件内容');
+        loadBuildingDataFromFile();
+      }
+      
+      // 获取扁平化数据
+      if (typeof window.flattenedRooms !== 'undefined' && Array.isArray(window.flattenedRooms) && window.flattenedRooms.length > 0) {
+        _flattenedRooms = window.flattenedRooms;
+        console.log('成功从window.flattenedRooms加载扁平化数据，共', _flattenedRooms.length, '个房间');
+      } else if (typeof window.flattenedBuildingData !== 'undefined' && Array.isArray(window.flattenedBuildingData) && window.flattenedBuildingData.length > 0) {
+        _flattenedRooms = window.flattenedBuildingData;
+        console.log('成功从window.flattenedBuildingData加载扁平化数据，共', _flattenedRooms.length, '个房间');
+      } else {
+        // 如果没有找到扁平化数据，使用本地函数生成
+        console.warn('未找到有效的扁平化数据，将根据_buildingData生成');
+        // 扁平化楼栋数据用于搜索
+        function flattenBuildingData(data) {
+          let flattened = [];
+          
+          function traverse(building, unit = null, room = null) {
+            if (room) {
+              flattened.push({
+                building: building.value,
+                buildingLabel: building.label,
+                unit: unit.value,
+                unitLabel: unit.label,
+                room: room.value,
+                roomLabel: room.label,
+                fullLabel: `${building.label}${unit.label}${room.label}`
+              });
+            } else if (unit) {
+              (building.children || []).forEach(u => {
+                if (u.children && u.children.length > 0) {
+                  u.children.forEach(r => {
+                    traverse(building, u, r);
+                  });
+                }
+              });
+            } else {
+              (building.children || []).forEach(u => {
+                if (u.children && u.children.length > 0) {
+                  u.children.forEach(r => {
+                    traverse(building, u, r);
+                  });
+                }
+              });
+            }
+          }
+          
+          data.forEach(building => traverse(building));
+          return flattened;
+        }
+        
+        _flattenedRooms = flattenBuildingData(_buildingData);
+        console.log('已生成扁平化数据，共', _flattenedRooms.length, '个房间');
+      }
+      
+      // 直接从文件加载building_data.js内容的函数
+      function loadBuildingDataFromFile() {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', './building_data.js', false); // 同步请求，确保数据加载完成后再继续
+        xhr.onreadystatechange = function() {
+          if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+              try {
+                // 提取文件中的buildingData内容
+                const scriptContent = xhr.responseText;
+                console.log('成功获取building_data.js文件内容');
+                
+                // 尝试执行脚本内容，将变量注册到window对象
+                // 创建一个临时函数来安全执行代码
+                const dataFunction = new Function(scriptContent + '\nreturn {buildingData, flattenedBuildingData, flattenedRooms};');
+                const result = dataFunction();
+                
+                if (result && result.buildingData && Array.isArray(result.buildingData)) {
+                  _buildingData = result.buildingData;
+                  window.buildingData = _buildingData;
+                  console.log('成功从文件内容中提取buildingData，共', _buildingData.length, '栋楼');
+                  
+                  // 同时获取扁平化数据
+                  if (result.flattenedRooms) {
+                    _flattenedRooms = result.flattenedRooms;
+                    window.flattenedRooms = _flattenedRooms;
+                  } else if (result.flattenedBuildingData) {
+                    _flattenedRooms = result.flattenedBuildingData;
+                    window.flattenedBuildingData = _flattenedRooms;
+                  }
+                }
+              } catch (e) {
+                console.error('解析building_data.js内容失败:', e);
+                // 如果解析失败，使用备用数据
+                console.warn('使用备用数据');
+                _buildingData = [
+                  {
+                    "value": "1",
+                    "label": "1栋",
+                    "children": [
+                      {
+                        "value": "1",
+                        "label": "1单元",
+                        "children": [
+                          { "value": "201", "label": "201室" },
+                          { "value": "202", "label": "202室" },
+                          { "value": "301", "label": "301室" },
+                          { "value": "302", "label": "302室" },
+                          { "value": "401", "label": "401室" },
+                          { "value": "402", "label": "402室" }
+                        ]
+                      }
+                    ]
+                  }
+                ];
+              }
+            } else {
+              console.error('加载building_data.js失败，状态码:', xhr.status);
+              // 使用备用数据
+              _buildingData = [
+                {
+                  "value": "1",
+                  "label": "1栋",
+                  "children": [
+                    {
+                      "value": "1",
+                      "label": "1单元",
+                      "children": [
+                        { "value": "201", "label": "201室" },
+                        { "value": "202", "label": "202室" },
+                        { "value": "301", "label": "301室" },
+                        { "value": "302", "label": "302室" },
+                        { "value": "401", "label": "401室" },
+                        { "value": "402", "label": "402室" }
+                      ]
+                    }
+                  ]
+                }
+              ];
+            }
+          }
+        };
+        xhr.send();
+      }
+
+      // 初始化单框级联菜单
+      function initCascadingSelector() {
+        const selector = document.getElementById('cascadingSelector');
+        const input = selector.querySelector('.cascading-selector-input');
+        const menu = selector.querySelector('.cascading-menu');
+        
+        // 确保_buildingData已加载
+        if (Array.isArray(_buildingData)) {
+          // 生成菜单结构
+          generateMenuStructure(_buildingData, menu);
+          
+          // 点击输入框切换菜单显示
+          input.addEventListener('click', function(event) {
+            event.stopPropagation();
+            menu.style.display = menu.style.display === 'none' || !menu.style.display ? 'block' : 'none';
+          });
+          
+          // 点击其他地方关闭菜单
+          document.addEventListener('click', function(event) {
+            if (!selector.contains(event.target)) {
+              menu.style.display = 'none';
+              // 关闭所有展开的子菜单
+              document.querySelectorAll('.cascading-menu-item.expanded').forEach(item => {
+                item.classList.remove('expanded');
+                const submenu = item.nextElementSibling;
+                if (submenu && submenu.classList.contains('cascading-submenu')) {
+                  submenu.classList.remove('show');
+                }
+              });
+            }
+          });
+          
+          // 设置户号搜索功能
+          setupCascadingSearch();
+        }
+      }
+      
+      // 生成级联菜单结构
+      function generateMenuStructure(data, parentElement, level = 0) {
+        if (!Array.isArray(data)) return;
+        
+        data.forEach(item => {
+          const menuItem = document.createElement('div');
+          menuItem.className = 'cascading-menu-item' + (item.children && item.children.length ? ' has-children' : '');
+          menuItem.textContent = item.label;
+          menuItem.dataset.value = item.value;
+          menuItem.dataset.level = level;
+          
+          // 添加点击事件
+          menuItem.addEventListener('click', function(event) {
+            event.stopPropagation();
+            
+            // 如果是楼栋或单元（有子项），切换展开状态
+            if (this.classList.contains('has-children')) {
+              this.classList.toggle('expanded');
+              const submenu = this.nextElementSibling;
+              if (submenu && submenu.classList.contains('cascading-submenu')) {
+                submenu.classList.toggle('show');
+              }
+            } else {
+              // 如果是户号（没有子项），选择该项
+              selectMenuItem(this);
+            }
+          });
+          
+          parentElement.appendChild(menuItem);
+          
+          // 如果有子项，生成子菜单
+          if (item.children && item.children.length) {
+            const submenu = document.createElement('div');
+            submenu.className = 'cascading-submenu';
+            parentElement.appendChild(submenu);
+            generateMenuStructure(item.children, submenu, level + 1);
+          }
+        });
+      }
+      
+      // 选择菜单项
+      function selectMenuItem(item) {
+        const level = parseInt(item.dataset.level);
+        const value = item.dataset.value;
+        const label = item.textContent;
+        
+        // 根据层级确定选择的是楼栋、单元还是户号
+        let buildingValue = '';
+        let buildingLabel = '';
+        let unitValue = '';
+        let unitLabel = '';
+        let roomValue = '';
+        let roomLabel = '';
+        
+        // 优先使用flattenedRooms数据来获取完整层级信息
+        if (level === 2) { // 户号级别，尝试从数据源获取完整层级
+          // 获取所有楼栋数据
+          const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
+          
+          // 遍历楼栋数据查找匹配的户号
+          for (const building of allBuildingData) {
+            for (const unit of building.children) {
+              const room = unit.children.find(r => r.value === value);
+              if (room) {
+                buildingValue = building.value;
+                buildingLabel = building.label;
+                unitValue = unit.value;
+                unitLabel = unit.label;
+                roomValue = room.value;
+                roomLabel = room.label;
+                break;
+              }
+            }
+            if (roomValue) break; // 找到匹配的户号后退出外层循环
+          }
+          
+          console.log('通过数据源查找户号层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
+        }
+        
+        // 如果通过数据源查找失败或不是户号级别，使用DOM层级查找作为备选
+        if (!roomValue || (level < 2 && (!buildingValue || !unitValue))) {
+          let current = item;
+          while (current && current.parentElement && current.parentElement.classList.contains('cascading-menu')) {
+            const parentItem = current.parentElement.previousElementSibling;
+            if (parentItem && parentItem.classList.contains('cascading-menu-item')) {
+              const parentLevel = parseInt(parentItem.dataset.level);
+              if (parentLevel === 0) { // 楼栋
+                buildingValue = parentItem.dataset.value;
+                buildingLabel = parentItem.textContent;
+              } else if (parentLevel === 1) { // 单元
+                unitValue = parentItem.dataset.value;
+                unitLabel = parentItem.textContent;
+              }
+            }
+            current = current.parentElement.parentElement;
+          }
+          
+          // 根据当前层级设置值
+          if (level === 0) { // 楼栋
+            buildingValue = value;
+            buildingLabel = label;
+          } else if (level === 1) { // 单元
+            unitValue = value;
+            unitLabel = label;
+          } else if (level === 2) { // 户号
+            roomValue = value;
+            roomLabel = label;
+          }
+          
+          console.log('通过DOM查找层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
+        }
+        
+        // 更新隐藏字段
+        console.log('准备设置hidden input值 - buildingValue:', buildingValue, 'unitValue:', unitValue, 'roomValue:', roomValue);
+        document.getElementById('selectedBuilding').value = buildingValue;
+        document.getElementById('selectedUnit').value = unitValue;
+        document.getElementById('selectedRoom').value = roomValue;
+        // 验证设置是否成功
+        console.log('设置后hidden input值 - building:', document.getElementById('selectedBuilding').value, 
+                   'unit:', document.getElementById('selectedUnit').value, 
+                   'room:', document.getElementById('selectedRoom').value);
+        
+        // 更新输入框显示
+            const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
+            const clearBtn = document.getElementById('cascadingSelector').querySelector('.cascading-clear-btn');
+            if (roomValue) {
+              input.value = `${buildingLabel}${unitLabel}${roomLabel}`;
+            } else if (unitValue) {
+              input.value = `${buildingLabel}${unitLabel}`;
+            } else if (buildingValue) {
+              input.value = buildingLabel;
+            }
+            
+            // 更新清空按钮显示状态
+            if (clearBtn) {
+              clearBtn.style.display = input.value ? 'block' : 'none';
+            }
+        
+        // 关闭菜单
+        document.getElementById('cascadingSelector').querySelector('.cascading-menu').style.display = 'none';
+      }
+      
+      // 设置级联菜单的搜索功能
+      function setupCascadingSearch() {
+        const input = document.getElementById('cascadingSelector').querySelector('.cascading-selector-input');
+        const clearBtn = document.getElementById('cascadingSelector').querySelector('.cascading-clear-btn');
+        
+        // 更新清空按钮显示状态的函数
+        function updateClearButtonVisibility() {
+          clearBtn.style.display = input.value ? 'block' : 'none';
+        }
+        
+        // 清空按钮点击事件
+        clearBtn.addEventListener('click', function(event) {
+          event.stopPropagation(); // 阻止冒泡，避免触发input的点击事件
+          
+          // 清空输入框和隐藏字段
+          input.value = '';
+          document.getElementById('selectedBuilding').value = '';
+          document.getElementById('selectedUnit').value = '';
+          document.getElementById('selectedRoom').value = '';
+          
+          // 隐藏清空按钮
+          clearBtn.style.display = 'none';
+          
+          // 关闭菜单
+          const menu = document.getElementById('cascadingSelector').querySelector('.cascading-menu');
+          menu.style.display = 'none';
+          
+          // 重置菜单结构
+          menu.innerHTML = '';
+          generateMenuStructure(_buildingData, menu);
+        });
+        
+        input.addEventListener('input', function() {
+          const searchTerm = this.value.toLowerCase().trim();
+          // 更新清空按钮显示状态
+          updateClearButtonVisibility();
+          
+          const menu = this.nextElementSibling.nextElementSibling.nextElementSibling; // 获取菜单元素
+          
+          // 检查是否为"building-unit-room"格式（如"1-1-201"）
+          const formatMatch = searchTerm.match(/^(\d+)-(\d+)-(\d+)$/);
+          if (formatMatch) {
+            const [, building, unit, room] = formatMatch;
+            
+            // 确保_flattenedRooms已加载
+            let searchRooms = _flattenedRooms;
+            if (!Array.isArray(searchRooms) || searchRooms.length === 0) {
+              searchRooms = typeof window.flattenedBuildingData !== 'undefined' ? window.flattenedBuildingData : [];
+            }
+            
+            // 查找完全匹配的房间
+            const exactMatch = searchRooms.find(item => 
+              item.building === building && 
+              item.unit === unit && 
+              item.room === room
+            );
+            
+            if (exactMatch) {
+              // 自动选中匹配的项
+              document.getElementById('selectedBuilding').value = building;
+              document.getElementById('selectedUnit').value = unit;
+              document.getElementById('selectedRoom').value = room;
+              
+              // 更新输入框显示
+              const fullLabel = exactMatch.fullLabel || 
+                               `${exactMatch.buildingLabel || exactMatch.building}${exactMatch.unitLabel || exactMatch.unit}${exactMatch.roomLabel || exactMatch.room}`;
+              input.value = fullLabel;
+              
+              // 关闭菜单
+              menu.style.display = 'none';
+              return;
+            }
+          }
+          
+          if (searchTerm) {
+            // 显示菜单
+            menu.style.display = 'block';
+            
+            // 确保_flattenedRooms已加载
+            let searchRooms = _flattenedRooms;
+            if (!Array.isArray(searchRooms) || searchRooms.length === 0) {
+              searchRooms = typeof window.flattenedBuildingData !== 'undefined' ? window.flattenedBuildingData : [];
+            }
+            
+            // 过滤匹配的房间
+            const filteredRooms = searchRooms.filter(room => 
+              room.room.toLowerCase().includes(searchTerm) || 
+              (room.roomLabel && room.roomLabel.toLowerCase().includes(searchTerm)) ||
+              (room.fullLabel && room.fullLabel.toLowerCase().includes(searchTerm)) ||
+              `${room.building}-${room.unit}-${room.room}`.toLowerCase().includes(searchTerm)
+            );
+            
+            // 清空菜单并显示搜索结果
+            menu.innerHTML = '';
+            
+            if (filteredRooms.length > 0) {
+              filteredRooms.forEach(room => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'cascading-menu-item';
+                resultItem.textContent = room.fullLabel || `${room.buildingLabel || room.building}${room.unitLabel || room.unit}${room.roomLabel || room.room}`;
+                resultItem.dataset.building = room.building;
+                resultItem.dataset.unit = room.unit;
+                resultItem.dataset.room = room.room;
+                resultItem.dataset.fullLabel = resultItem.textContent;
+                
+                resultItem.addEventListener('click', function() {
+                  // 更新隐藏字段
+                  document.getElementById('selectedBuilding').value = this.dataset.building;
+                  document.getElementById('selectedUnit').value = this.dataset.unit;
+                  document.getElementById('selectedRoom').value = this.dataset.room;
+                  
+                  // 更新输入框
+                  input.value = this.dataset.fullLabel;
+                  
+                  // 关闭菜单
+                  menu.style.display = 'none';
+                });
+                
+                menu.appendChild(resultItem);
+              });
+            } else {
+              const noResultItem = document.createElement('div');
+              noResultItem.className = 'cascading-menu-item';
+              noResultItem.textContent = '未找到匹配的户号';
+              noResultItem.style.color = '#909399';
+              noResultItem.style.cursor = 'default';
+              menu.appendChild(noResultItem);
+            }
+          } else {
+            // 如果搜索框为空，恢复原始菜单结构
+            menu.innerHTML = '';
+            generateMenuStructure(_buildingData, menu);
+          }
+        });
+      }
+      
+      // 获取当前选择的值
+      function getSelectedValues() {
+        const building = document.getElementById('selectedBuilding').value;
+        const unit = document.getElementById('selectedUnit').value;
+        const room = document.getElementById('selectedRoom').value;
+        console.log('getSelectedValues返回值 - building:', building, 'unit:', unit, 'room:', room);
+        return {
+          building: building,
+          unit: unit,
+          room: room
+        };
+      }
+
+      // 页面加载时初始化
+      document.addEventListener('DOMContentLoaded', function() {
+        // 初始化单框级联菜单
+        initCascadingSelector();
+      });
+
+      function searchUsageData() {
+        // 获取查询条件
+        const energyMode = document.getElementById('energyModeQuery').value;
+        const startTime = document.getElementById('startTimeQuery').value;
+        const endTime = document.getElementById('endTimeQuery').value;
+        
+        // 从新的级联菜单中获取选中的值
+        const selectedValues = getSelectedValues();
+        console.log('selectedValues from getSelectedValues():', selectedValues);
+        
+        // 直接从hidden inputs获取值进行调试
+        const directBuilding = document.getElementById('selectedBuilding').value;
+        const directUnit = document.getElementById('selectedUnit').value;
+        const directRoom = document.getElementById('selectedRoom').value;
+        console.log('Direct hidden input values - building:', directBuilding, 'unit:', directUnit, 'room:', directRoom);
+        
+        // 表单验证 - 只有户号是必填项
+        if (!selectedValues.room) {
+          alert('请选择户号');
+          return;
+        }
+        
+        if (!startTime) {
+          alert('请选择开始时间');
+          document.getElementById('startTimeQuery').focus();
+          return;
+        }
+        
+        if (!endTime) {
+          alert('请选择结束时间');
+          document.getElementById('endTimeQuery').focus();
+          return;
+        }
+        
+        // 验证时间范围不超过60天
+        const startDate = new Date(startTime);
+        const endDate = new Date(endTime);
+        const timeDiff = endDate - startDate;
+        const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        
+        if (dayDiff < 0) {
+          alert('结束时间不能早于开始时间');
+          document.getElementById('endTimeQuery').focus();
+          return;
+        }
+        
+        if (dayDiff > 60) {
+          alert('时间范围不能超过60天');
+          document.getElementById('endTimeQuery').focus();
+          return;
+        }
+        
+        // 验证通过，调用加载数据函数
+        // 构建正确的specific_part格式: building-unit-room
+        const building = selectedValues.building;
+        const unit = selectedValues.unit;
+        const room = selectedValues.room;
+        
+        console.log('开始构建specificPart - building类型:', typeof building, '值:', building, 
+                   'unit类型:', typeof unit, '值:', unit, 
+                   'room类型:', typeof room, '值:', room);
+        
+        // 改进构建逻辑：只要有room值就尝试构建specificPart
+        let specificPart = '';
+        if (room) {
+            // 即使building或unit为空，也尝试构建specificPart
+            specificPart = `${building || ''}-${unit || ''}-${room}`;
+            console.log('构建的specificPart:', specificPart);
+        } else {
+            console.log('未能构建specificPart，因为room值为空:', { building, unit, room });
+        }
+        
+        // 重置为第一页，确保新查询从第一页开始
+        currentPage = 1;
+        
+        // 只传入specific_part参数，避免room_number与数据库不匹配的问题
+        loadUsageData('', specificPart, energyMode, startTime, endTime);
+      }
+      
+      // 绘制用量趋势图表
+      function drawUsageChart(data) {
+        console.log('开始绘制图表，接收到的数据:', data);
+        
+        // 获取图表和无数据提示元素
+        const usageChart = document.getElementById('usageChart');
+        const chartNoData = document.getElementById('chartNoData');
+        
+        // 检查数据是否为空
+        if (!data || data.length === 0) {
+          console.log('数据为空，显示暂无数据提示');
+          if (usageChart) usageChart.style.display = 'none';
+          if (chartNoData) chartNoData.style.display = 'block';
+          return;
+        }
+        
+        // 有数据时显示图表，隐藏暂无数据提示
+        if (usageChart) usageChart.style.display = 'block';
+        if (chartNoData) chartNoData.style.display = 'none';
+        // 按日期和供能模式分组数据
+        const groupedData = {};
+        const dates = new Set();
+        const modes = new Set(['制冷', '制热']); // 假设只有这两种供能模式
+        
+        data.forEach(item => {
+          const date = item.time_period;
+          const mode = item.energy_mode;
+          const usage = parseFloat(item.usage_quantity) || 0;
+          
+          dates.add(date);
+          modes.add(mode);
+          
+          if (!groupedData[date]) {
+            groupedData[date] = {};
+          }
+          groupedData[date][mode] = (groupedData[date][mode] || 0) + usage;
+        });
+        
+        // 排序日期
+        const sortedDates = Array.from(dates).sort();
+        
+        // 准备图表数据
+        const datasets = [];
+        const modeColors = {
+          '制冷': 'rgb(75, 192, 192)',
+          '制热': 'rgb(255, 99, 132)'
+        };
+        
+        modes.forEach(mode => {
+          const dataPoints = sortedDates.map(date => groupedData[date]?.[mode] || 0);
+          datasets.push({
+            label: mode,
+            data: dataPoints,
+            borderColor: modeColors[mode] || 'rgb(201, 203, 207)',
+            tension: 0.1
+          });
+        });
+        
+        // 获取或创建图表
+        const ctx = document.getElementById('usageChart').getContext('2d');
+        
+        // 如果已有图表实例，销毁它
+        if (window.usageChartInstance) {
+          window.usageChartInstance.destroy();
+        }
+        
+        // 再次确认Chart对象可用
+        console.log('创建图表前Chart对象是否可用:', typeof Chart !== 'undefined');
+        console.log('图表配置:', {labels: sortedDates, datasets: datasets});
+        
+        // 为每个数据集添加点样式和点半径配置
+        datasets.forEach(dataset => {
+          dataset.pointRadius = 5; // 设置点的大小
+          dataset.pointHoverRadius = 7; // 设置鼠标悬停时点的大小
+          dataset.pointBackgroundColor = dataset.borderColor; // 设置点的背景颜色
+          dataset.pointBorderColor = '#fff'; // 设置点的边框颜色
+          dataset.pointBorderWidth = 2; // 设置点的边框宽度
+        });
+        
+        // 定义一个显示数据点数值的插件
+        const dataLabelsPlugin = {
+          id: 'dataLabelsPlugin',
+          afterDatasetsDraw: function(chart) {
+            const ctx = chart.ctx;
+            chart.data.datasets.forEach(function(dataset, datasetIndex) {
+              const meta = chart.getDatasetMeta(datasetIndex);
+              if (!meta.hidden) {
+                meta.data.forEach(function(element, index) {
+                  // 只在有数据点的位置显示标签
+                  if (chart.data.labels[index] && dataset.data[index] !== null && dataset.data[index] !== undefined && dataset.data[index] > 0) {
+                    // 保存当前上下文状态
+                    ctx.save();
+                    // 设置字体样式
+                    ctx.font = Chart.helpers.fontString(10, 'bold', Chart.defaults.font.family);
+                    ctx.fillStyle = dataset.borderColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    
+                    // 获取数据点位置
+                    const position = element.tooltipPosition();
+                    
+                    // 绘制数值标签
+                    ctx.fillText(dataset.data[index].toFixed(2), position.x, position.y - 5);
+                    
+                    // 恢复上下文状态
+                    ctx.restore();
+                  }
+                });
+              }
+            });
+          }
+        };
+        
+        // 创建新图表
+        window.usageChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: sortedDates,
+            datasets: datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: '不同供能模式下的每日使用量'
+              },
+              legend: {
+                display: true,
+                position: 'top'
+              },
+              // 配置Tooltip，确保数据点显示数值
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                  label: function(context) {
+                    return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' kWh';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: '日期'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: '使用量 (kWh)'
+                },
+                beginAtZero: true
+              }
+            }
+          },
+          // 注册自定义插件
+          plugins: [dataLabelsPlugin]
+        });
+      }
+      
+      // 分页相关全局变量
+      let currentPage = 1;    // 当前页码
+      let pageSize = 20;      // 每页显示条数
+      let totalRecords = 0;   // 总记录数
+      let currentQueryParams = {}; // 当前查询参数
+
+      // 加载用量数据，支持查询条件和分页
+      function loadUsageData(roomNumber = '', specificPart = '', energyMode = '', startTime = '', endTime = '') {
+        console.log('开始加载用量数据，查询条件:', { roomNumber, specificPart, energyMode, startTime, endTime });
+        console.log('specificPart类型:', typeof specificPart, 'specificPart值:', specificPart, 'specificPart是否为空:', !specificPart);
+        
+        // 显示加载指示器
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const usageTable = document.getElementById('usageTable');
+        const noDataMessage = document.getElementById('noDataMessage');
+        
+        if (loadingIndicator) loadingIndicator.style.display = 'block';
+        if (usageTable) usageTable.style.display = 'none';
+        if (noDataMessage) noDataMessage.style.display = 'none';
+        
+        // 保存当前查询参数
+        currentQueryParams = {
+          roomNumber,
+          specificPart,
+          energyMode,
+          startTime,
+          endTime
+        };
+        
+        // 构建带查询参数和分页参数的API URL
+        const baseUrl = 'http://localhost:8000/api/usage/quantity/';
+        const params = new URLSearchParams();
+        
+        // 不再使用room_number参数，只使用specific_part参数进行查询
+        // 因为数据库中room_number可能与specific_part中的房间号不一致
+        // if (roomNumber) params.append('room_number', roomNumber);
+        // 无论specificPart是否为空，都添加到请求参数中，便于后端调试
+        console.log('准备添加specific_part参数:', specificPart);
+        params.append('specific_part', specificPart);
+        if (energyMode) params.append('energy_mode', energyMode);
+        if (startTime) params.append('start_time', startTime);
+        if (endTime) params.append('end_time', endTime);
+        
+        // 添加分页参数
+        params.append('page', currentPage);
+        params.append('page_size', pageSize);
+        
+        const apiUrl = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+        console.log('API请求URL:', apiUrl);
+        
+        // 调用API获取数据
+        fetch(apiUrl)
+            .then(response => {
+                console.log('API响应状态:', response.status);
+                console.log('API响应头:', Array.from(response.headers.entries()));
+                
+                if (!response.ok) {
+                    throw new Error(`网络响应异常: ${response.status} ${response.statusText}`);
+                }
+                return response.json().then(data => {
+                    console.log('API响应数据:', data);
+                    return data;
+                });
+            })
+            .then(data => {
+                // 隐藏加载指示器
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                
+                console.log('处理响应数据，是否成功:', data.success, '数据长度:', data.data ? data.data.length : 0);
+                
+                if (data.success && data.data && data.data.length > 0) {
+                    // 显示表格
+                    if (usageTable) usageTable.style.display = 'table';
+                    
+                    // 更新总记录数
+                    totalRecords = data.total || data.data.length;
+                    
+                    // 显示分页控件
+                    document.getElementById('pagination').style.display = 'block';
+                    document.getElementById('totalRecords').textContent = totalRecords;
+                    
+                    // 绘制图表（只在第一页绘制图表）
+                    if (currentPage === 1) {
+                        drawUsageChart(data.data);
+                    }
+                    
+                    // 填充表格数据
+                    const tableBody = document.getElementById('usageTableBody');
+                    if (tableBody) {
+                        tableBody.innerHTML = '';
+                        console.log('开始填充表格数据，共', data.data.length, '条记录');
+                        
+                        data.data.forEach((item, index) => {
+                            const row = tableBody.insertRow();
+                            row.insertCell(0).textContent = item.specific_part || '';
+                            row.insertCell(1).textContent = item.building || '';
+                            row.insertCell(2).textContent = item.unit || '';
+                            row.insertCell(3).textContent = item.room_number || '';
+                            row.insertCell(4).textContent = item.energy_mode || '';
+                            row.insertCell(5).textContent = item.initial_energy || 0;
+                            row.insertCell(6).textContent = item.final_energy || 0;
+                            row.insertCell(7).textContent = item.usage_quantity || 0;
+                            row.insertCell(8).textContent = item.time_period || '';
+                            console.log(`填充第${index+1}条数据:`, item);
+                        });
+                    }
+                    
+                    // 更新分页控件状态
+                    updatePagination();
+                } else {
+                    // 显示无数据提示
+                    if (noDataMessage) noDataMessage.style.display = 'block';
+                    // 隐藏分页控件
+                    document.getElementById('pagination').style.display = 'none';
+                    console.log('没有数据可显示');
+                }
+            })
+            .catch(error => {
+                console.error('加载数据失败:', error);
+                console.error('错误详情:', error.stack);
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                if (noDataMessage) noDataMessage.style.display = 'block';
+                alert('加载数据失败，请检查控制台日志获取详细信息');
+            });
+      }
+      
+      // 更新分页控件显示
+      function updatePagination() {
+        const pageNumbers = document.getElementById('pageNumbers');
+        const prevPageItem = document.getElementById('prevPageItem');
+        const nextPageItem = document.getElementById('nextPageItem');
+        
+        // 清空页码容器
+        pageNumbers.innerHTML = '';
+        
+        // 计算总页数
+        const totalPages = Math.ceil(totalRecords / pageSize);
+        
+        // 设置上一页按钮状态
+        prevPageItem.classList.toggle('disabled', currentPage <= 1);
+        
+        // 设置下一页按钮状态
+        nextPageItem.classList.toggle('disabled', currentPage >= totalPages);
+        
+        // 生成页码按钮（显示当前页附近的页码，最多显示9个）
+        let startPage = Math.max(1, currentPage - 4);
+        let endPage = Math.min(totalPages, startPage + 8);
+        
+        if (endPage - startPage < 8 && startPage > 1) {
+          startPage = Math.max(1, endPage - 8);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+          const li = document.createElement('li');
+          li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+          li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})"></a>`;
+          li.querySelector('a').textContent = i;
+          pageNumbers.appendChild(li);
+        }
+      }
+      
+      // 切换页码
+      function changePage(pageNum) {
+        // 计算总页数
+        const totalPages = Math.ceil(totalRecords / pageSize);
+        
+        // 检查页码是否有效
+        if (pageNum < 1 || pageNum > totalPages) {
+          return;
+        }
+        
+        // 更新当前页码
+        currentPage = pageNum;
+        
+        // 重新加载数据
+        const { roomNumber, specificPart, energyMode, startTime, endTime } = currentQueryParams;
+        loadUsageData(roomNumber, specificPart, energyMode, startTime, endTime);
+        
+        // 滚动到表格顶部
+        document.getElementById('usageTable').scrollIntoView({ behavior: 'smooth' });
+      }
+      
+      // 改变每页显示条数
+      function changePageSize(size) {
+        // 更新每页显示条数
+        pageSize = parseInt(size);
+        // 重置为第一页
+        currentPage = 1;
+        
+        // 重新加载数据
+        const { roomNumber, specificPart, energyMode, startTime, endTime } = currentQueryParams;
+        loadUsageData(roomNumber, specificPart, energyMode, startTime, endTime);
+      }
+      
+      // 过滤房间函数已不再需要，但保留注释
+      // function filterRooms() {
+      //   const searchTerm = document.getElementById('roomSearch').value.toLowerCase();
+      //   const roomItems = document.querySelectorAll('.room-item');
+      //   
+      //   roomItems.forEach(item => {
+      //     const roomName = item.querySelector('label').textContent.toLowerCase();
+      //     item.style.display = roomName.includes(searchTerm) ? 'block' : 'none';
+      //   });
+      // }
+      
+      // 展开用量查询下拉菜单函数
+      function expandUsageDropdown(event) {
+        event.preventDefault();
+        const dropdownMenu = document.getElementById('usageDropdown').nextElementSibling;
+        if (dropdownMenu) {
+          dropdownMenu.classList.toggle('show');
+          // 切换按钮的collapsed类来改变图标方向
+          document.getElementById('usageDropdown').classList.toggle('collapsed');
+        }
+      }
+      
+      // 页面切换函数
+      function switchPage(pageId) {
+        // 首先获取用户信息
+        const userInfoStr = localStorage.getItem('userInfo');
+        let userInfo = null;
+        try {
+          userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+        } catch (e) {
+          console.error('解析用户信息失败:', e);
+        }
+        
+        // 严格的权限检查：普通用户绝对不能访问用户管理页面
+        const isUserManagementPage = pageId === 'createUser' || pageId === 'userList';
+        if (isUserManagementPage) {
+          if (!userInfo || userInfo.role !== 'admin') {
+            // 普通用户尝试访问用户管理，重定向到系统看板
+            pageId = 'dashboard';
+            alert('您没有权限访问用户管理页面');
+            // 同时确保用户管理菜单被隐藏
+            const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
+            if (userManagementLi) {
+              userManagementLi.style.display = 'none';
+            }
+          }
+        }
+        // editUser页面允许普通用户访问，但只能编辑自己的资料
+        else if (pageId === 'editUser') {
+          const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+          const editingUserId = localStorage.getItem('editingUserId');
+          
+          // 普通用户只能编辑自己的资料
+          if (userInfo && userInfo.role !== 'admin' && editingUserId !== userInfo.id.toString()) {
+            localStorage.setItem('editingUserId', userInfo.id.toString());
+          }
+        }
+        
+        // 隐藏所有页面
+        const pages = ['dashboardPage', 'usagePage', 'servicesPage', 'createUserPage', 'userListPage', 'editUserPage'];
+        pages.forEach(id => {
+          document.getElementById(id).style.display = 'none';
+          
+          // 如果是切换到用量查询页面，重置表格状态
+          if (id === 'usagePage' && pageId === 'usagePage') {
+            if (document.getElementById('usageTable')) {
+              document.getElementById('usageTable').style.display = 'none';
+              document.getElementById('noDataMessage').style.display = 'none';
+              document.getElementById('loadingIndicator').style.display = 'none';
+              const tableBody = document.getElementById('usageTableBody');
+              if (tableBody) tableBody.innerHTML = '';
+            }
+          }
+        });
+        
+        // 显示选中的页面
+        document.getElementById(`${pageId}Page`).style.display = 'block';
+        
+        // 切换到用量查询页面时不再自动加载数据，只在用户点击查询按钮时加载
+        if (pageId === 'usage') {
+          // 确保表格和图表初始状态为空
+          const usageTable = document.getElementById('usageTable');
+          const tableBody = document.getElementById('usageTableBody');
+          const noDataMessage = document.getElementById('noDataMessage');
+          const usageChart = document.getElementById('usageChart');
+          const chartNoData = document.getElementById('chartNoData');
+          
+          if (usageTable) usageTable.style.display = 'none';
+          if (tableBody) tableBody.innerHTML = '';
+          if (noDataMessage) noDataMessage.style.display = 'none';
+          
+          // 隐藏图表，显示暂无数据提示
+          if (usageChart) usageChart.style.display = 'none';
+          if (chartNoData) chartNoData.style.display = 'block';
+          
+          // 销毁可能存在的图表实例
+          if (window.usageChartInstance) {
+            window.usageChartInstance.destroy();
+            window.usageChartInstance = null;
+          }
+        }
+        
+        // 更新导航项的活动状态
+        const navLinks = document.querySelectorAll('.nav-link, .dropdown-item');
+        navLinks.forEach(link => {
+          link.classList.remove('active');
+        });
+        
+        // 为普通导航项添加活动状态
+        const navLink = document.querySelector(`.nav-link[onclick="switchPage('${pageId}')"]`);
+        if (navLink) {
+          navLink.classList.add('active');
+        }
+        // 为下拉菜单项添加活动状态
+        const dropdownItem = document.querySelector(`.dropdown-item[onclick="switchPage('${pageId}')"]`);
+        if (dropdownItem) {
+          dropdownItem.classList.add('active');
+          // 同时将下拉按钮也设为活动状态
+          dropdownItem.closest('.dropdown').querySelector('.nav-link').classList.add('active');
+        }
+        
+        // 特殊处理：当页面是usage时，确保能耗日用量报表菜单项被正确设置为active
+        if (pageId === 'usage') {
+          const energyReportItem = document.querySelector('.dropdown-item[href="#energyReport"]');
+          if (energyReportItem) {
+            energyReportItem.classList.add('active');
+            // 确保用量查询下拉按钮也设为活动状态
+            energyReportItem.closest('.dropdown').querySelector('.nav-link').classList.add('active');
+          }
+        }
+        
+        // 加载用户列表（如果切换到用户列表页面）
+        if (pageId === 'userList' && localStorage.getItem('isAuthenticated') === 'true') {
+          const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+          if (userInfo && userInfo.role === 'admin') {
+            loadUserList();
+          }
+        }
+        
+        // 加载用户详情（如果切换到编辑用户页面且有userId参数）
+        if (pageId === 'editUser' && localStorage.getItem('isAuthenticated') === 'true') {
+          const userId = localStorage.getItem('editingUserId');
+          if (userId) {
+            loadUserForEdit(userId);
+          }
+        }
+      }
+      
+      // 验证密码规则
+      function validatePassword(password) {
+        console.log('验证密码:', password);
+        // 至少8位，包含字母、数字和特殊字符
+        // 进一步扩大特殊字符范围，允许几乎所有常见特殊字符
+        // 使用更宽松的规则：至少8位，必须包含字母和数字，可选包含特殊字符
+        const hasLetter = /[A-Za-z]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
+        const isValidLength = password.length >= 8;
+        
+        console.log('密码验证结果:', {hasLetter, hasNumber, isValidLength});
+        
+        // 暂时放宽要求，只检查长度、字母和数字
+        return isValidLength && hasLetter && hasNumber;
+      }
+      
+      // 创建用户
+      function createUser(event) {
+        // 阻止表单默认提交行为，防止重复提交
+        if (event) event.preventDefault();
+        
+        // 验证用户权限
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        const userToken = localStorage.getItem('userToken');
+        console.log('用户信息:', userInfo);
+        console.log('用户令牌存在:', !!userToken);
+        if (!userInfo || userInfo.role !== 'admin') {
+          alert('您没有权限执行此操作');
+          return;
+        }
+        
+        const username = document.getElementById('username').value;
+        const email = document.getElementById('email').value;
+        const firstName = document.getElementById('firstName').value;
+        const lastName = document.getElementById('lastName').value;
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        const role = document.getElementById('role').value;
+        const department = document.getElementById('department').value;
+        const position = document.getElementById('position').value;
+        
+        const messageElement = document.getElementById('createUserMessage');
+        
+        // 验证必填字段
+        if (!username || !email || !firstName || !lastName || !password || !confirmPassword) {
+          messageElement.innerHTML = '<div class="alert alert-danger">请填写所有必填字段</div>';
+          return;
+        }
+        
+        // 验证密码规则
+        if (!validatePassword(password)) {
+          messageElement.innerHTML = '<div class="alert alert-danger">密码必须至少8位，包含字母和数字</div>';
+          return;
+        }
+        
+        // 验证两次密码是否一致
+        if (password !== confirmPassword) {
+          messageElement.innerHTML = '<div class="alert alert-danger">两次输入的密码不一致</div>';
+          return;
+        }
+        
+        const userData = {
+          username,
+          email,
+          first_name: firstName,
+          last_name: lastName,
+          password,
+          role,
+          department,
+          position
+        };
+        
+        fetch('http://localhost:8000/api/users/create/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Token ${localStorage.getItem('userToken')}`
+          },
+          body: JSON.stringify(userData)
+        })
+        .then(response => {
+          // 记录响应状态码，帮助调试
+          console.log('响应状态码:', response.status);
+          
+          // 尝试解析JSON响应
+          return response.json().then(data => {
+            console.log('响应数据:', data);
+            
+            // 根据状态码和响应内容判断是否成功
+            if (response.status === 201) {
+              // 201状态码表示创建成功
+              return data;
+            } else if (data.success === true) {
+              // 即使状态码不是201，如果success为true也认为成功
+              return data;
+            } else {
+              // 错误情况
+              throw data;
+            }
+          });
+        })
+        .then(data => {
+          console.log('用户创建成功数据:', data);
+          messageElement.innerHTML = '<div class="alert alert-success">用户创建成功</div>';
+          // 重置表单
+          document.getElementById('createUserForm').reset();
+          // 重新加载用户列表
+          loadUserList();
+        })
+        .catch(error => {
+          console.error('创建用户失败:', error);
+          // 显示更友好的错误消息
+          let errorMessage = '创建用户失败';
+          if (typeof error === 'object') {
+            if (error.error) {
+              errorMessage = error.error;
+            } else if (error.message) {
+              errorMessage = error.message;
+            } else {
+              errorMessage = '创建用户时发生错误';
+            }
+          }
+          messageElement.innerHTML = `<div class="alert alert-danger">${errorMessage}</div>`;
+        });
+      }
+      
+      // 判断字符串是否包含中文字符
+      function containsChinese(str) {
+        return /[\u4e00-\u9fa5]/.test(str);
+      }
+      
+      // 根据语言规则拼接姓名
+      function formatFullName(firstName, lastName) {
+        // 如果任一字段包含中文，则视为中文名（姓在前，名在后，无空格）
+        if (containsChinese(firstName) || containsChinese(lastName)) {
+          return (lastName || '') + (firstName || '');
+        }
+        // 否则视为英文名（名在前，姓在后，有空格）
+        return `${firstName || ''} ${lastName || ''}`.trim();
+      }
+      
+      // 加载用户列表
+      function loadUserList() {
+        const userListBody = document.getElementById('userListBody');
+        const messageElement = document.getElementById('userListMessage');
+        
+        userListBody.innerHTML = '<tr><td colspan="8" class="text-center">加载中...</td></tr>';
+        
+        fetch('http://localhost:8000/api/users/', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Token ${localStorage.getItem('userToken')}`
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('获取用户列表失败');
+          }
+          return response.json();
+        })
+        .then(users => {
+          userListBody.innerHTML = '';
+          
+          if (users.length === 0) {
+            userListBody.innerHTML = '<tr><td colspan="8" class="text-center">暂无用户</td></tr>';
+            return;
+          }
+          
+          users.forEach(user => {
+            const fullName = formatFullName(user.first_name, user.last_name) || '-';
+            const roleText = user.role === 'admin' ? '管理员' : '普通用户';
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${user.username}</td>
+              <td>${user.email}</td>
+              <td>${fullName}</td>
+              <td>${roleText}</td>
+              <td>${user.department || '-'}</td>
+              <td>${user.position || '-'}</td>
+              <td>${new Date(user.created_at).toLocaleString()}</td>
+              <td>
+                  <button class="btn btn-sm btn-primary mr-1" onclick="editUser(${user.id})">编辑</button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id}, '${user.username}')">删除</button>
+                </td>
+            `;
+            userListBody.appendChild(row);
+          });
+        })
+        .catch(error => {
+          console.error('加载用户列表失败:', error);
+          userListBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">加载失败</td></tr>';
+          messageElement.innerHTML = `<div class="alert alert-danger">获取用户列表失败: ${error.message}</div>`;
+        });
+      }
+      
+      // 编辑用户
+      function editUser(userId) {
+        // 验证用户权限
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        if (!userInfo || userInfo.role !== 'admin') {
+          alert('您没有权限执行此操作');
+          return;
+        }
+        
+        // 存储当前编辑的用户ID并跳转到编辑页面
+        localStorage.setItem('editingUserId', userId);
+        switchPage('editUser');
+      }
+      
+      // 加载用户详情进行编辑
+      function loadUserForEdit(userId) {
+        // 首先获取用户详情
+        fetch(`http://localhost:8000/api/users/${userId}/`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Token ${localStorage.getItem('userToken')}`
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('获取用户详情失败');
+          }
+          return response.json();
+        })
+        .then(user => {
+          // 填充表单
+          document.getElementById('editUserId').value = user.id;
+          document.getElementById('editUsername').value = user.username;
+          document.getElementById('editEmail').value = user.email;
+          document.getElementById('editFirstName').value = user.first_name || '';
+          document.getElementById('editLastName').value = user.last_name || '';
+          document.getElementById('editRole').value = user.role || 'user';
+          document.getElementById('editRole').disabled = true; // 角色不可修改
+          document.getElementById('editDepartment').value = user.department || '';
+          document.getElementById('editPosition').value = user.position || '';
+          document.getElementById('editPassword').value = '';
+          document.getElementById('editUserMessage').innerHTML = '';
+          
+          // 更新页面标题
+          document.getElementById('editUserPageTitle').textContent = `编辑用户: ${user.username}`;
+        })
+        .catch(error => {
+          console.error('加载用户详情失败:', error);
+          const messageElement = document.getElementById('editUserMessage');
+          messageElement.innerHTML = `<div class="alert alert-danger">加载用户详情失败: ${error.message}</div>`;
+        });
+      }
+      
+      // 保存用户修改
+      function saveUser() {
+        // 验证用户权限
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        // 已经在上面声明过userId变量
+        
+        // 只有管理员可以编辑任何用户，普通用户只能编辑自己的资料
+        if (!userInfo || (userInfo.role !== 'admin' && userInfo.id.toString() !== userId)) {
+          alert('您没有权限执行此操作');
+          return;
+        }
+        
+        // 已经在上面声明过userId变量
+        const username = document.getElementById('editUsername').value;
+        const email = document.getElementById('editEmail').value;
+        const firstName = document.getElementById('editFirstName').value;
+        const lastName = document.getElementById('editLastName').value;
+        const password = document.getElementById('editPassword').value;
+        const department = document.getElementById('editDepartment').value;
+        const position = document.getElementById('editPosition').value;
+        
+        const messageElement = document.getElementById('editUserMessage');
+        
+        // 表单验证
+        if (!email.trim()) {
+          messageElement.innerHTML = '<div class="alert alert-danger">邮箱不能为空</div>';
+          return;
+        }
+        
+        // 邮箱格式验证
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          messageElement.innerHTML = '<div class="alert alert-danger">请输入有效的邮箱地址</div>';
+          return;
+        }
+        
+        // 名字和姓氏不能为空
+        if (!firstName.trim()) {
+          messageElement.innerHTML = '<div class="alert alert-danger">名字不能为空</div>';
+          return;
+        }
+        
+        if (!lastName.trim()) {
+          messageElement.innerHTML = '<div class="alert alert-danger">姓氏不能为空</div>';
+          return;
+        }
+        
+        // 构建更新数据（密码为空时不包含在更新数据中）
+        // 必须包含username字段，因为后端序列化器要求它
+        const userData = {
+          username: username,  // 虽然是只读的，但后端要求包含此字段
+          first_name: firstName,
+          last_name: lastName,
+          department,
+          position
+        };
+        
+        // 只有当密码不为空时才更新密码
+        if (password) {
+          userData.password = password;
+        }
+        
+        console.log('发送到后端的数据:', userData);
+        fetch(`http://localhost:8000/api/users/${userId}/`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Token ${localStorage.getItem('userToken')}`
+          },
+          body: JSON.stringify(userData)
+        })
+        .then(response => {
+          console.log('响应状态:', response.status);
+          if (!response.ok) {
+            return response.json().then(err => {
+              console.log('错误详情:', err);
+              throw err;
+            });
+          }
+          return response.json();
+        })
+        .then(data => {
+          // 显示成功消息
+          messageElement.innerHTML = '<div class="alert alert-success">用户更新成功</div>';
+          
+          // 3秒后返回用户列表
+          setTimeout(() => {
+            switchPage('userList');
+          }, 1500);
+        })
+        .catch(error => {
+          console.error('更新用户失败:', error);
+          // 改进错误信息显示
+          let errorMessage = '更新用户失败';
+          if (error && typeof error === 'object') {
+            if (error.email) {
+              errorMessage = `更新用户失败: 邮箱${error.email}`;
+            } else if (error.detail) {
+              errorMessage = `更新用户失败: ${error.detail}`;
+            } else {
+              errorMessage = `更新用户失败: ${JSON.stringify(error)}`;
+            }
+          } else if (typeof error === 'string') {
+            errorMessage = `更新用户失败: ${error}`;
+          }
+          messageElement.innerHTML = `<div class="alert alert-danger">${errorMessage}</div>`;
+        });
+      }
+      
+      // 删除用户
+      function deleteUser(userId, username) {
+        // 验证用户权限
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        if (!userInfo || userInfo.role !== 'admin') {
+          alert('您没有权限执行此操作');
+          return;
+        }
+        
+        console.log('开始删除用户流程，用户ID:', userId, '用户名:', username);
+        
+        // 使用原生confirm对话框，确保确认逻辑正常工作
+        const userConfirmed = confirm(`确定要删除用户 ${username} 吗？此操作不可撤销。`);
+        console.log('用户确认结果:', userConfirmed);
+        
+        // 只有当用户明确点击确认时才执行删除
+        if (userConfirmed) {
+          console.log('用户已确认，准备发送删除请求');
+          
+          fetch(`http://localhost:8000/api/users/${userId}/`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Token ${localStorage.getItem('userToken')}`
+            }
+          })
+          .then(response => {
+            console.log('删除请求响应状态:', response.status);
+            if (!response.ok) {
+              throw new Error('删除用户失败');
+            }
+            // 重新加载用户列表
+            console.log('删除成功，重新加载用户列表');
+            loadUserList();
+            // 显示成功消息
+            const userListMessage = document.getElementById('userListMessage');
+            userListMessage.innerHTML = '<div class="alert alert-success">用户删除成功</div>';
+            setTimeout(() => {
+              userListMessage.innerHTML = '';
+            }, 3000);
+          })
+          .catch(error => {
+            console.error('删除用户失败:', error);
+            const userListMessage = document.getElementById('userListMessage');
+            userListMessage.innerHTML = `<div class="alert alert-danger">删除用户失败: ${error.message}</div>`;
+          });
+        } else {
+          console.log('用户取消了删除操作');
+        }
+      }
+      
+      // 页面切换时加载对应内容 - 已在前面定义
+      
+      // 立即执行权限检查，在DOM内容加载之前就隐藏用户管理菜单
+      // 这样可以防止菜单在权限检查完成前闪烁显示
+      const earlyPermissionCheck = () => {
+        // 使用更精确的选择器，只匹配用户管理菜单
+        const userManagementLi = document.querySelector('li.nav-item.dropdown[id="userManagementDropdown"]');
+        if (userManagementLi) {
+          // 默认隐藏，只有管理员登录后才显示
+          userManagementLi.style.display = 'none';
+        }
+        
+        // 移除无条件隐藏所有下拉菜单的代码
+        // 这样管理员登录后能够正常看到二级子菜单
+      };
+      
+      // 立即执行早期权限检查
+      if (typeof document !== 'undefined' && document.querySelector) {
+        earlyPermissionCheck();
+      }
+      
+      // 页面加载时检查认证状态
+      document.addEventListener('DOMContentLoaded', () => {
+        // 再次执行权限检查，确保完全隐藏菜单
+        earlyPermissionCheck();
+        
+        checkAuthentication();
+        
+        // 确保Chart对象已加载
+        console.log('Chart对象是否可用:', typeof Chart !== 'undefined');
+        
+        // 检查图表容器是否存在
+        console.log('图表容器是否存在:', document.getElementById('usageChart') !== null);
+        
+        // 监听哈希变化，防止用户直接通过URL访问受限页面
+        window.addEventListener('hashchange', () => {
+          const currentHash = window.location.hash;
+          const userInfoStr = localStorage.getItem('userInfo');
+          let userInfo = null;
+          try {
+            userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+          } catch (e) {
+            console.error('解析用户信息失败:', e);
+          }
+          
+          // 检查是否尝试访问用户管理页面
+          if (!userInfo || userInfo.role !== 'admin') {
+            if (currentHash.includes('createUser') || currentHash.includes('userList')) {
+              window.location.hash = '#dashboard';
+              switchPage('dashboard');
+              alert('您没有权限访问用户管理页面');
+            }
+          }
+        });
+        
+        // 页面加载后自动切换到用量查询页面，不自动加载数据
+        setTimeout(() => {
+          switchPage('usage');
+        }, 500);
+        
+        // 绑定用户下拉菜单点击事件
+        document.getElementById('userName').addEventListener('click', function(e) {
+          e.stopPropagation(); // 阻止事件冒泡，避免点击菜单时关闭菜单
+          toggleUserDropdown();
+        });
+        
+        // 点击页面其他地方关闭下拉菜单
+        document.addEventListener('click', function() {
+          closeUserDropdown();
+        });
+        
+        // 阻止点击下拉菜单项时关闭菜单（通过阻止事件冒泡）
+        document.getElementById('userDropdownMenu').addEventListener('click', function(e) {
+          e.stopPropagation();
+        });
+        
+        // 绑定创建用户按钮事件
+        const createUserBtn = document.getElementById('createUserBtn');
+        if (createUserBtn) {
+          createUserBtn.addEventListener('click', createUser);
+        }
+        
+        // 表单提交事件（支持回车键）
+        const createUserForm = document.getElementById('createUserForm');
+        if (createUserForm) {
+          createUserForm.addEventListener('submit', createUser);
+        }
+        
+        // 绑定保存用户按钮点击事件
+        document.getElementById('saveUserBtn').addEventListener('click', saveUser);
+        
+        // 处理下拉菜单点击事件
+        const userManagementDropdown = document.getElementById('userManagementDropdown');
+        if (userManagementDropdown) {
+          userManagementDropdown.addEventListener('click', function(e) {
+            e.preventDefault();
+            // 只处理点击下拉按钮本身的情况，不处理点击下拉菜单项的情况
+            if (e.target === this || !this.querySelector('.dropdown-menu').contains(e.target)) {
+              const dropdownMenu = this.nextElementSibling;
+              if (dropdownMenu) {
+                dropdownMenu.classList.toggle('show');
+                // 切换按钮的collapsed类来改变图标方向
+                this.classList.toggle('collapsed');
+              }
+            }
+          });
+        }
+        
+        // 阻止点击下拉菜单项时关闭菜单
+        document.querySelectorAll('.dropdown-item').forEach(item => {
+          item.addEventListener('click', function(e) {
+            // 不阻止事件传播，让switchPage函数正常执行
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

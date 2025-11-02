@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自由方舟能耗采集平台 - 登录</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 14px;
+      }
+      
+      .login-container {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 400px;
+      }
+      
+      .login-header {
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+      
+      .login-header h2 {
+        color: #303133;
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+      
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      
+      .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #606266;
+      }
+      
+      .form-group input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #dcdfe6;
+        border-radius: 4px;
+        font-size: 1rem;
+        transition: border-color 0.3s;
+      }
+      
+      .form-group input:focus {
+        outline: none;
+        border-color: #409eff;
+      }
+      
+      .error-message {
+        color: #f56c6c;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+      }
+      
+      .login-button {
+        width: 100%;
+        padding: 0.75rem;
+        background-color: #409eff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s;
+        margin-top: 1rem;
+      }
+      
+      .login-button:hover {
+        background-color: #66b1ff;
+      }
+      
+      .login-button:disabled {
+        background-color: #a0cfff;
+        cursor: not-allowed;
+      }
+      
+      .loading-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-container">
+      <div class="login-header">
+        <h2>自由方舟能耗采集平台登录</h2>
+      </div>
+      
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="username">用户名</label>
+          <input type="text" id="username" placeholder="请输入用户名" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="password">密码</label>
+          <input type="password" id="password" placeholder="请输入密码" required>
+        </div>
+        
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+        
+        <button type="submit" id="loginButton" class="login-button">
+          <span id="buttonText">登录</span>
+          <span id="loadingSpinner" class="loading-spinner" style="display: none;"></span>
+        </button>
+      </form>
+    </div>
+    
+    <script>
+      // 显示错误消息
+      function showError(message) {
+        const errorElement = document.getElementById('errorMessage');
+        errorElement.textContent = message;
+        errorElement.style.display = 'block';
+      }
+      
+      // 隐藏错误消息
+      function hideError() {
+        document.getElementById('errorMessage').style.display = 'none';
+      }
+      
+      // 设置按钮加载状态
+      function setButtonLoading(isLoading) {
+        const button = document.getElementById('loginButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        
+        button.disabled = isLoading;
+        
+        if (isLoading) {
+          buttonText.style.display = 'none';
+          loadingSpinner.style.display = 'inline-block';
+        } else {
+          buttonText.style.display = 'inline';
+          loadingSpinner.style.display = 'none';
+        }
+      }
+      
+      // 登录处理函数
+      async function handleLogin(event) {
+        event.preventDefault();
+        hideError();
+        setButtonLoading(true);
+        
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        try {
+          const response = await fetch('http://localhost:8000/api/auth/login/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+          });
+          
+          const data = await response.json();
+          
+          // 根据API返回的数据结构进行处理
+            if (response.ok && data.success === true && data.token) {
+              // 保存Token和用户信息
+              localStorage.setItem('userToken', data.token);
+              localStorage.setItem('userInfo', JSON.stringify(data.user || {}));
+              localStorage.setItem('isAuthenticated', 'true');
+              
+              // 登录成功后跳转到主页
+              console.log('登录成功！正在跳转到主页...');
+              setTimeout(() => {
+                window.location.href = 'home.html';
+              }, 500);
+            } else if (data.success === false) {
+              throw new Error(data.detail || '登录失败，请检查用户名和密码');
+            } else {
+              throw new Error(data.non_field_errors?.[0] || '登录失败，请检查用户名和密码');
+            }
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          setButtonLoading(false);
+        }
+      }
+      
+      // 自动填充管理员账号
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('username').value = 'admin';
+        document.getElementById('password').value = 'admin123';
+      });
+    </script>
+  </body>
+</html>

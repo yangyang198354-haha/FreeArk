@@ -1,0 +1,8 @@
+{
+  "scheduler": {
+    "interval_seconds": 300,
+    "building_files": [
+        "all_owner.json"
+      ]
+  }
+}

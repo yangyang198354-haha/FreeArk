@@ -1,0 +1,54 @@
+{
+  "log_levels": {
+    "global": {
+      "level": "INFO",
+      "description": "全局默认日志级别"
+    },
+    "improved_data_collection": {
+      "level": "INFO",
+      "description": "改进版数据收集管理器日志级别，记录主要业务信息"
+    },
+    "multi_thread_plc_handler": {
+      "level": "DEBUG",
+      "description": "多线程PLC处理器日志级别，记录PLC连接和数据读取详细信息"
+    },
+    "mqtt_client": {
+      "level": "DEBUG",
+      "description": "MQTT客户端日志级别，方便定位连接和消息传输问题"
+    },
+    "quantity_statistics": {
+      "level": "INFO",
+      "description": "用量统计日志级别，记录主要业务信息"
+    },
+    "plc_data_viewer": {
+      "level": "INFO",
+      "description": "PLC数据查看器日志级别，记录GUI操作和数据展示信息"
+    },
+    "plc_write_manager": {
+      "level": "DEBUG",
+      "description": "PLC写入管理器日志级别，记录PLC写入操作信息"
+    },
+    "task_scheduler": {
+      "level": "INFO",
+      "description": "任务调度器日志级别，记录任务调度信息"
+    },
+    "publish_system_mode": {
+      "level": "INFO",
+      "description": "系统模式发布日志级别，记录系统模式更新信息"
+    },
+    "run_task_scheduler": {
+      "level": "INFO",
+      "description": "运行任务调度器日志级别，记录任务调度器启动和运行信息"
+    },
+    "room_data_collector": {
+      "level": "INFO",
+      "description": "房间数据收集器日志级别，记录房间数据收集信息"
+    }
+  },
+  "config_info": {
+    "version": "1.1",
+    "create_time": "2025-10-14",
+    "update_time": "2025-10-15",
+    "description": "日志配置文件，控制各个模块的日志输出级别"
+  }
+}

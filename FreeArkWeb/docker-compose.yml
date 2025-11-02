@@ -1,0 +1,36 @@
+services:
+  # Django后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=False
+      - DB_ENGINE=django.db.backends.mysql
+      - DB_NAME=freeark
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_HOST=192.168.31.97
+      - DB_PORT=3306
+      - SECRET_KEY=django-insecure-i%ixus$z-threi-#e&(th%w$a4zi+oq=)-jz&)y!m((g#!iype
+      - ALLOWED_HOSTS=*
+      - CORS_ALLOWED_ORIGINS=http://localhost:8080,http://localhost
+      - CREATE_SUPERUSER=True
+    ports:
+      - "8000:8000"
+
+  # Vue前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+# 外部MySQL数据库配置已完成，无需内部卷

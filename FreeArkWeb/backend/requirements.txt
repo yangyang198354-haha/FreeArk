@@ -1,0 +1,13 @@
+# Django框架及相关依赖
+django>=5.2.0
+djangorestframework
+django-cors-headers
+python-dotenv
+paho-mqtt>=1.6.1
+
+# 数据库驱动
+mysqlclient
+
+# 其他依赖
+six
+schedule>=1.1.0

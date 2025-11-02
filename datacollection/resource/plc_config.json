@@ -1,0 +1,25 @@
+{
+  "parameters": {
+    "total_hot_quantity": {
+      "name": "total_hot_quantity",
+      "description": "累计制热量",
+      "db_num": 14,
+      "offset": 442,
+      "length": 4,
+      "data_type": "int32"
+    },
+    "total_cold_quantity": {
+      "name": "total_cold_quantity",
+      "description": "累计制冷量",
+      "db_num": 14,
+      "offset": 448,
+      "length": 4,
+      "data_type": "int32"
+    }
+  },
+  "config_info": {
+    "version": "1.0",
+    "create_time": "2024-07-11",
+    "description": "PLC数据读取配置文件"
+  }
+}
