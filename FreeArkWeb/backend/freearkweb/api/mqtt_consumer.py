@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+from datetime import datetime
 import paho.mqtt.client as mqtt
 from django.conf import settings
 from django.db import transaction
@@ -305,7 +306,8 @@ class MQTTConsumer:
                                     'plc_ip': plc_ip,
                                     'param_value': param_data.get('value'),
                                     'success': success,
-                                    'message': param_data.get('message', '')
+                                    'message': param_data.get('message', ''),
+                                    'timestamp': param_data.get('timestamp')  # 传递timestamp
                                 }
                                 
                                 # 保存数据
@@ -379,7 +381,8 @@ class MQTTConsumer:
                                 'plc_ip': plc_ip,
                                 'param_value': mode_data.get('value'),
                                 'success': mode_data.get('success', False),
-                                'message': mode_data.get('message', '')
+                                'message': mode_data.get('message', ''),
+                                'timestamp': mode_data.get('timestamp')  # 传递timestamp
                             }
                             self.save_single_plc_data(data_point, building_file)
                             processed_count += 1
@@ -419,7 +422,8 @@ class MQTTConsumer:
                                             'plc_ip': plc_ip,
                                             'param_value': mode_data.get('value'),
                                             'success': mode_data.get('success', False),
-                                            'message': mode_data.get('message', '')
+                                            'message': mode_data.get('message', ''),
+                                            'timestamp': mode_data.get('timestamp')  # 传递timestamp
                                         }
                                         self.save_single_plc_data(data_point, building_file)
                             else:
@@ -514,6 +518,46 @@ class MQTTConsumer:
                 'plc_ip': data_point.get('plc_ip')  # 从data_point中获取plc_ip值
             }
             
+            # 提取timestamp并设置usage_date
+            timestamp = data_point.get('timestamp')
+            usage_date_set = False
+            
+            if timestamp:
+                try:
+                    # 解析timestamp字符串为datetime对象
+                    # 支持多种时间戳格式
+                    if isinstance(timestamp, str):
+                        # 尝试不同的时间格式
+                        date_formats = [
+                            '%Y-%m-%d %H:%M:%S',
+                            '%Y-%m-%dT%H:%M:%S',
+                            '%Y-%m-%d %H:%M:%S.%f',
+                            '%Y-%m-%dT%H:%M:%S.%f',
+                        ]
+                        parsed_date = None
+                        for fmt in date_formats:
+                            try:
+                                parsed_date = datetime.strptime(timestamp, fmt)
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if parsed_date:
+                            # 设置usage_date为日期部分
+                            plc_data['usage_date'] = parsed_date.date()
+                            usage_date_set = True
+                            logger.debug(f"从timestamp提取日期: {timestamp} -> {parsed_date.date()}")
+                        else:
+                            logger.warning(f"无法解析timestamp格式: {timestamp}")
+                except Exception as e:
+                    logger.error(f"处理timestamp时发生错误: {e}")
+            
+            # 如果没有设置usage_date，使用当前日期作为默认值
+            if not usage_date_set:
+                default_date = datetime.now().date()
+                plc_data['usage_date'] = default_date
+                logger.debug(f"未提供有效的timestamp，使用默认日期: {default_date}")
+            
             logger.debug(f"准备保存的数据: {plc_data}")
             
             # 添加成功状态和消息（如果模型支持这些字段）
@@ -525,10 +569,13 @@ class MQTTConsumer:
             
             # 尝试更新现有记录，如果不存在则创建新记录
             # 使用specific_part和energy_mode作为唯一标识符
-            logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}")
+            # 使用specific_part、energy_mode和usage_date作为唯一标识符
+            usage_date = plc_data.get('usage_date')
+            logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}, usage_date={usage_date}")
             obj, created = PLCData.objects.update_or_create(
                 specific_part=specific_part,
                 energy_mode=energy_mode,
+                usage_date=usage_date,
                 defaults=plc_data
             )
             
@@ -536,9 +583,6 @@ class MQTTConsumer:
                 logger.info(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")
             else:
                 logger.info(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")
-                
-        except Exception as e:
-            logger.error(f"保存PLC数据时发生错误: {e}", exc_info=True)
                 
         except Exception as e:
             logger.error(f"保存PLC数据时发生错误: {e}", exc_info=True)

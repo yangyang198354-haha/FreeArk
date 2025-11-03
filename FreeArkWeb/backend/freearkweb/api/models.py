@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from django.contrib.auth.models import AbstractUser
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -94,6 +95,10 @@ class PLCData(models.Model):
     value = models.BigIntegerField(verbose_name='参数值', null=True, blank=True)
     # 创建时间
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    # 更新时间
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    # 计量日期
+    usage_date = models.DateField(default=timezone.now, verbose_name='计量日期')
     
     class Meta:
         db_table = 'plc_data'  # 指定表名

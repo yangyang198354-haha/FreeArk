@@ -10,7 +10,7 @@ class DailyUsageCalculator:
     """
     每日用量计算工具类，包含共享的计算逻辑
     """
-    # 不再使用硬编码的特定部分列表，改为动态从数据库获取
+
     
     @classmethod
     def calculate_daily_usage(cls, target_date, log_func=None):
@@ -29,26 +29,33 @@ class DailyUsageCalculator:
             log_func = logger.info
         
         try:
-            # 使用带时区的datetime
-            naive_start = datetime.combine(target_date, datetime.min.time())
-            naive_end = datetime.combine(target_date, datetime.max.time())
-            start_datetime = timezone.make_aware(naive_start)
-            end_datetime = timezone.make_aware(naive_end)
+            # 确保target_date带时区
+            if isinstance(target_date, date) and not isinstance(target_date, datetime):
+                # 如果是date对象，转换为带时区的datetime对象（当日的00:00:00）
+                naive_datetime = datetime.combine(target_date, datetime.min.time())
+                target_date = timezone.make_aware(naive_datetime)
+            elif isinstance(target_date, datetime) and target_date.tzinfo is None:
+                # 如果是不带时区的datetime对象，添加时区
+                target_date = timezone.make_aware(target_date)
             
-            log_func(f"计算日期: {target_date}")
-            log_func(f"时间范围: {start_datetime} - {end_datetime}")
+            log_func(f"计算日期: {target_date.date() if isinstance(target_date, datetime) else target_date}")
             
             # 获取次日日期
-            next_day = target_date + timedelta(days=1)
+            if isinstance(target_date, datetime):
+                next_day = (target_date + timedelta(days=1)).date()
+            else:
+                next_day = target_date + timedelta(days=1)
             
             processed_count = 0
             created_count = 0
             updated_count = 0
             next_day_count = 0
             
-            # 动态获取指定日期前一个自然日的所有unique specific_part值
+            # 直接使用usage_date字段获取目标日期的所有unique specific_part值
+            # 使用target_date的日期部分与usage_date字段匹配
+            target_date_value = target_date.date() if isinstance(target_date, datetime) else target_date
             specific_parts = PLCData.objects.filter(
-                created_at__range=(start_datetime, end_datetime)
+                usage_date=target_date_value
             ).values_list('specific_part', flat=True).distinct()
             
             log_func(f"从数据库获取到 {len(specific_parts)} 个特定部分需要处理")
@@ -59,28 +66,21 @@ class DailyUsageCalculator:
                 for energy_mode in ['制冷', '制热']:
                     log_func(f"正在处理: specific_part={specific_part}, energy_mode={energy_mode}")
                     
-                    # 获取该特定部分和模式在指定日期范围内的记录
-                    plc_records = PLCData.objects.filter(
+                    # 获取该特定部分和模式在目标日期的最新记录（按updated_at降序排序，取第一条）
+                    latest_record = PLCData.objects.filter(
                         specific_part=specific_part,
                         energy_mode=energy_mode,
-                        created_at__range=(start_datetime, end_datetime)
-                    ).order_by('created_at')
+                        usage_date=target_date_value
+                    ).order_by('-updated_at').first()
                     
-                    log_func(f"找到 {plc_records.count()} 条PLC记录")
-                    
-                    if not plc_records.exists():
+                    if not latest_record:
                         log_func(f"没有找到 specific_part={specific_part}, energy_mode={energy_mode} 的记录")
                         continue
                     
-                    # 获取最早和最晚上报值
-                    earliest_record = plc_records.first()
-                    latest_record = plc_records.last()
-                    
-                    initial_energy = earliest_record.value
+                    # 获取最后读数作为final_energy
                     final_energy = latest_record.value
-                    usage_quantity = final_energy - initial_energy
                     
-                    log_func(f"初始值: {initial_energy}, 最终值: {final_energy}, 用量: {usage_quantity}")
+                    log_func(f"最终值: {final_energy}")
                     
                     # 使用中文能源模式名称
                     mode_display = energy_mode
@@ -92,16 +92,16 @@ class DailyUsageCalculator:
                     with transaction.atomic():
                         # 查找是否已有当日记录
                         daily_record, created = UsageQuantityDaily.objects.get_or_create(
-                            time_period=target_date,
+                            time_period=target_date_value,
                             specific_part=specific_part,
                             energy_mode=mode_display,
                             defaults={
                                 'building': building,
                                 'unit': unit,
                                 'room_number': room_number,
-                                'initial_energy': initial_energy,
+                                'initial_energy': final_energy,  # 初始值设为最终值
                                 'final_energy': final_energy,
-                                'usage_quantity': usage_quantity
+                                'usage_quantity': 0  # 用量初始设为0
                             }
                         )
                         
