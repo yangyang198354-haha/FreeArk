@@ -9,10 +9,17 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 import os
 from pathlib import Path
-from python_dotenv import load_dotenv
+# 尝试导入python_dotenv，如果失败则跳过
+load_dotenv = None
+try:
+    from python_dotenv import load_dotenv
+    print("已成功导入python_dotenv")
+except ImportError:
+    print("警告: python_dotenv未安装，将使用默认配置")
 
-# 加载环境变量
-load_dotenv()
+# 加载环境变量（如果load_dotenv可用）
+if load_dotenv:
+    load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
