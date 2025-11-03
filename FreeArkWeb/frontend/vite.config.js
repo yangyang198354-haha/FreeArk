@@ -109,7 +109,20 @@ export default defineConfig(({ mode }) => {
     outDir: buildDir,
     assetsDir: 'assets',
     minify: 'esbuild',
-    sourcemap: false
+    sourcemap: false,
+    // 修复Vite 6.0处理内联CSS的问题
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  // 优化HTML处理
+  optimizeDeps: {
+    esbuildOptions: {
+      minifyIdentifiers: false
+    }
   }
   }
 })
