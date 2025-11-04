@@ -23,4 +23,6 @@ urlpatterns = [
     
     # 用量数据查询
     path('usage/quantity/', views.get_usage_quantity, name='get-usage-quantity'),
+    # 月度用量数据查询
+    path('usage/quantity/monthly/', views.get_usage_quantity_monthly, name='get-usage-quantity-monthly'),
 ]

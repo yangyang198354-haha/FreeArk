@@ -45,7 +45,7 @@ class CustomUser(AbstractUser):
 
 class UsageQuantityDaily(models.Model):
     """每日用量数据表"""
-    # 专有部分，格式为 "3-1-702"
+    # 专有部分，格式为 "3-1-7-702"
     specific_part = models.CharField(max_length=20, verbose_name='专有部分')
     # 楼栋，格式为 "3"
     building = models.CharField(max_length=10, verbose_name='楼栋')
@@ -75,6 +75,45 @@ class UsageQuantityDaily(models.Model):
     
     def __str__(self):
         return f"{self.specific_part} - {self.time_period} - {self.energy_mode}"
+
+
+class UsageQuantityMonthly(models.Model):
+    """每月用量数据表"""
+    # 专有部分，格式为 "3-1-7-702"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分')
+    # 楼栋，格式为 "3"
+    building = models.CharField(max_length=10, verbose_name='楼栋')
+    # 单元，格式为 "1"
+    unit = models.CharField(max_length=10, verbose_name='单元')
+    # 房号，格式为 "702"
+    room_number = models.CharField(max_length=10, verbose_name='房号')
+    # 供能模式，可选值为 "制冷" 或 "制热"
+    ENERGY_MODE_CHOICES = (
+        ('制冷', '制冷'),
+        ('制热', '制热'),
+    )
+    energy_mode = models.CharField(max_length=10, choices=ENERGY_MODE_CHOICES, verbose_name='供能模式')
+    # 初期能耗，单位kWh
+    initial_energy = models.IntegerField(verbose_name='初期能耗(kWh)')
+    # 末期能耗，单位kWh
+    final_energy = models.IntegerField(verbose_name='末期能耗(kWh)', null=True, blank=True)
+    # 使用量，单位kWh
+    usage_quantity = models.IntegerField(verbose_name='使用量(kWh)', null=True, blank=True)
+    # 用量月度，格式为 "YYYY-MM"
+    usage_month = models.CharField(max_length=7, verbose_name='用量月度')  # YYYY-MM格式
+    
+    class Meta:
+        db_table = 'usage_quantity_monthly'  # 指定表名
+        verbose_name = '每月用量数据'
+        verbose_name_plural = '每月用量数据'
+        # 创建索引以提高查询性能
+        indexes = [
+            models.Index(fields=['specific_part', 'usage_month']),
+            models.Index(fields=['building', 'unit', 'room_number']),
+        ]
+    
+    def __str__(self):
+        return f"{self.specific_part} - {self.usage_month} - {self.energy_mode}"
 
 
 class PLCData(models.Model):

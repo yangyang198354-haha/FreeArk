@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import CustomUser, UsageQuantityDaily
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly
 
 class UserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
@@ -69,5 +69,16 @@ class UsageQuantityDailySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'specific_part', 'building', 'unit', 'room_number', 
             'energy_mode', 'initial_energy', 'final_energy', 'usage_quantity', 'time_period'
+        ]
+        read_only_fields = ['id']
+
+
+class UsageQuantityMonthlySerializer(serializers.ModelSerializer):
+    """每月用量数据序列化器"""
+    class Meta:
+        model = UsageQuantityMonthly
+        fields = [
+            'id', 'specific_part', 'building', 'unit', 'room_number',
+            'energy_mode', 'initial_energy', 'final_energy', 'usage_quantity', 'usage_month'
         ]
         read_only_fields = ['id']

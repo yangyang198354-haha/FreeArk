@@ -4,11 +4,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
-from .models import CustomUser, UsageQuantityDaily
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
-    UsageQuantityDailySerializer
+    UsageQuantityDailySerializer, UsageQuantityMonthlySerializer
 )
 
 # 获取logger实例
@@ -255,6 +255,67 @@ def get_usage_quantity(request):
     
     # 记录查询结果到日志
     logger.info(f"UsageQuantityDaily 查询结果 - 找到 {total_count} 条记录")
+    
+    return Response({
+        'success': True,
+        'data': result_data,
+        'total': total_count
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_usage_quantity_monthly(request):
+    """
+    获取每月用量数据
+    支持按多个条件过滤：专有部分、楼栋、单元、房号、功能模式、用量月度
+    """
+    # 获取查询参数
+    specific_part = request.GET.get('specific_part')
+    building = request.GET.get('building')
+    unit = request.GET.get('unit')
+    room_number = request.GET.get('room_number')
+    energy_mode = request.GET.get('energy_mode')
+    usage_month = request.GET.get('usage_month')
+    start_month = request.GET.get('start_month')
+    end_month = request.GET.get('end_month')
+    
+    # 记录查询条件到日志
+    logger.info(f"UsageQuantityMonthly 查询条件 - specific_part: {specific_part}, building: {building}, "
+                f"unit: {unit}, room_number: {room_number}, energy_mode: {energy_mode}, "
+                f"usage_month: {usage_month}, start_month: {start_month}, end_month: {end_month}")
+    
+    # 构建基础查询集
+    queryset = UsageQuantityMonthly.objects.all()
+    
+    # 应用过滤条件
+    if specific_part:
+        queryset = queryset.filter(specific_part=specific_part)
+    if building:
+        queryset = queryset.filter(building=building)
+    if unit:
+        queryset = queryset.filter(unit=unit)
+    if room_number:
+        queryset = queryset.filter(room_number=room_number)
+    if energy_mode:
+        queryset = queryset.filter(energy_mode=energy_mode)
+    if usage_month:
+        queryset = queryset.filter(usage_month=usage_month)
+    if start_month:
+        queryset = queryset.filter(usage_month__gte=start_month)
+    if end_month:
+        queryset = queryset.filter(usage_month__lte=end_month)
+    
+    # 按用量月度降序排序
+    queryset = queryset.order_by('-usage_month')
+    
+    # 序列化数据
+    serializer = UsageQuantityMonthlySerializer(queryset, many=True)
+    result_data = serializer.data
+    total_count = len(result_data)
+    
+    # 记录查询结果到日志
+    logger.info(f"UsageQuantityMonthly 查询结果 - 找到 {total_count} 条记录")
     
     return Response({
         'success': True,
