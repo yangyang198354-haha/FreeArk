@@ -1152,11 +1152,20 @@
                    'unit类型:', typeof unit, '值:', unit, 
                    'room类型:', typeof room, '值:', room);
         
-        // 改进构建逻辑：只要有room值就尝试构建specificPart
+        // 改进构建逻辑：只要有room值就尝试构建specificPart，格式为：楼栋-单元-楼层-房号
         let specificPart = '';
         if (room) {
-            // 即使building或unit为空，也尝试构建specificPart
-            specificPart = `${building || ''}-${unit || ''}-${room}`;
+            // 根据房号长度提取楼层号：3位数取第一位，4位数取前两位
+            let floor = '';
+            if (room.length === 3) {
+                floor = room.charAt(0);  // 3位数房号，如302，取第一位作为楼层号
+            } else if (room.length === 4) {
+                floor = room.substring(0, 2);  // 4位数房号，如1002、3305，取前两位作为楼层号
+            } else {
+                floor = room.charAt(0);  // 其他情况默认取第一位
+            }
+            // 构建4部分格式：楼栋-单元-楼层-房号
+            specificPart = `${building || ''}-${unit || ''}-${floor}-${room}`;
             console.log('构建的specificPart:', specificPart);
         } else {
             console.log('未能构建specificPart，因为room值为空:', { building, unit, room });

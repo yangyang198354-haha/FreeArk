@@ -179,10 +179,10 @@ class DailyUsageCalculator:
             if len(parts) == 3:
                 building, unit, room_number = parts
             elif len(parts) == 4:
-                # 如果是格式如"9-1-31-3104"
+                # 如果是格式如"3-1-7-702" (楼栋-单元-楼层-房号)
                 building = parts[0]
                 unit = parts[1]
-                room_number = parts[2]
+                room_number = parts[3]  # 第4部分是房号
             else:
                 # 如果无法解析，使用默认值，specific_part作为room_number
                 room_number = specific_part
