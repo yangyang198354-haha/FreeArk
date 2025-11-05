@@ -5,13 +5,7 @@ cls
 
 echo 启动FreeArkWeb服务
 ===============
-REM 使用MySQL
-set DB_ENGINE=django.db.backends.mysql
-set DB_NAME=freeark
-set DB_USER=root
-set DB_PASSWORD=root
-set DB_HOST=192.168.31.97
-set DB_PORT=3306
+REM 数据库配置已移至settings.py中的USE_SQLITE变量控制
 
 REM 设置目录路径
 set SCRIPT_DIR=%~dp0
