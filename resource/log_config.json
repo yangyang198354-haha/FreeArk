@@ -13,7 +13,7 @@
       "description": "多线程PLC处理器日志级别，记录PLC连接和数据读取详细信息"
     },
     "mqtt_client": {
-      "level": "DEBUG",
+      "level": "INFO",
       "description": "MQTT客户端日志级别，方便定位连接和消息传输问题"
     },
     "quantity_statistics": {
@@ -25,7 +25,7 @@
       "description": "PLC数据查看器日志级别，记录GUI操作和数据展示信息"
     },
     "plc_write_manager": {
-      "level": "DEBUG",
+      "level": "INFO",
       "description": "PLC写入管理器日志级别，记录PLC写入操作信息"
     },
     "task_scheduler": {

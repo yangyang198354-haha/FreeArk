@@ -4,6 +4,9 @@ from django.db import transaction
 from django.utils import timezone
 from api.models import PLCData, UsageQuantityDaily
 
+# 注意：Django的时区处理 - 设置TIME_ZONE='Asia/Shanghai'且USE_TZ=True时，
+# 数据库中存储UTC时间，但在Python代码中操作时会自动转换为本地时区
+
 logger = logging.getLogger(__name__)
 
 class DailyUsageCalculator:

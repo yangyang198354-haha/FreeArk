@@ -67,6 +67,10 @@ class UsageQuantityDaily(models.Model):
     usage_quantity = models.IntegerField(verbose_name='使用量(kWh)', null=True, blank=True)
     # 时间段，格式为 "YYYY-MM-DD"
     time_period = models.DateField(verbose_name='时间段')
+    # 创建时间，自动设置为记录创建时的时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    # 更新时间，每次更新记录时自动设置为当前时间
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     
     class Meta:
         db_table = 'usage_quantity_daily'  # 指定表名
@@ -101,6 +105,10 @@ class UsageQuantityMonthly(models.Model):
     usage_quantity = models.IntegerField(verbose_name='使用量(kWh)', null=True, blank=True)
     # 用量月度，格式为 "YYYY-MM"
     usage_month = models.CharField(max_length=7, verbose_name='用量月度')  # YYYY-MM格式
+    # 创建时间，自动设置为记录创建时的时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    # 更新时间，每次更新记录时自动设置为当前时间
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     
     class Meta:
         db_table = 'usage_quantity_monthly'  # 指定表名

@@ -6,7 +6,7 @@ from datetime import datetime, date, timedelta
 from django.core.management.base import BaseCommand
 from django.conf import settings
 import schedule
-from api.daily_usage_utils import DailyUsageCalculator
+from api.daily_usage_calculator import DailyUsageCalculator
 
 # 配置日志，确保日志目录存在
 log_dir = os.path.join(settings.BASE_DIR, 'logs')
