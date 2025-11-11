@@ -116,7 +116,7 @@ MYSQL_DATABASE = {
     'NAME': 'freeark',
     'USER': 'root',
     'PASSWORD': 'root',
-    'HOST': '192.168.31.97',
+    'HOST': '192.168.31.98',
     'PORT': '3306',
     'OPTIONS': {
         'charset': 'utf8mb4',
