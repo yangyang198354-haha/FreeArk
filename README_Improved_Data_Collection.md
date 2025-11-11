@@ -10,6 +10,10 @@
 4. **统一日志管理**：通过集中式日志配置文件控制所有模块的日志级别和输出格式
 5. **灵活的配置系统**：支持通过JSON配置文件自定义输出行为、数据处理策略等
 6. **完整的错误处理**：提供详细的错误信息和异常捕获机制，确保系统稳定运行
+7. **Excel格式优化**：支持单元格样式设置、表头格式优化和列宽自动调整，提升报表可读性
+8. **MQTT连接池管理**：实现MQTT连接池，高效管理并发连接，支持自动重连机制
+9. **批量处理支持**：可以同时处理多个楼栋的数据文件，支持通配符匹配
+10. **结果统计与展示**：提供详细的数据收集统计信息，包括成功、失败和总数量统计
 
 ## 文件结构
 
@@ -17,7 +21,7 @@
 FreeArk/
 ├── datacollection/
 │   ├── improved_data_collection_manager.py  # 改进版数据收集管理器（核心模块）
-│   ├── multi_thread_plc_handler.py           # 多线程PLC处理器
+│   ├── multi_thread_plc_handler.py          # 多线程PLC处理器
 │   ├── mqtt_client.py                       # MQTT客户端实现
 │   ├── mqtt_client_pool.py                  # MQTT客户端池管理
 │   ├── log_config_manager.py                # 日志配置管理器
@@ -26,11 +30,13 @@ FreeArk/
 ├── resource/
 │   ├── *_data.json                          # 楼栋数据文件（包含设备信息）
 │   ├── plc_config.json                      # PLC参数配置文件
+│   ├── plc_mode_update_config.json          # PLC模式更新配置文件
 │   ├── output_config.json                   # 输出配置文件
 │   ├── log_config.json                      # 日志配置文件
 │   └── mqtt_config.json                     # MQTT配置文件
 ├── output/                                  # 数据输出目录
 ├── log/                                     # 日志文件目录
+├── FreeArkWeb/                              # Web界面相关文件
 ├── run_improved_data_collection_manager.bat # 启动批处理脚本
 └── requirements.txt                         # 项目依赖文件
 ```
@@ -64,7 +70,8 @@ FreeArk/
            "include_all_params": false
          },
          "json": {
-           "enabled": true
+           "enabled": true,
+           "directory": "c:/Users/yanggyan/TRAE/FreeArk/output/"
          },
          "mqtt": {
            "enabled": false,
@@ -80,6 +87,11 @@ FreeArk/
        }
      }
      ```
+
+3. **PLC模式更新配置文件** (`resource/plc_mode_update_config.json`)
+   - 配置PLC模式更新相关参数
+   - 定义需要更新的模式类型和对应值
+   - 支持多设备模式批量更新
 
 3. **日志配置文件** (`resource/log_config.json`)
    - 集中管理所有模块的日志级别和输出格式
@@ -147,24 +159,35 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
    - 每个PLC IP地址作为一个独立任务提交给线程池
    - 单个PLC任务中可以读取多个参数，减少连接开销
    - 使用`concurrent.futures`实现高效的线程管理
+   - 支持配置线程池大小，默认值为10
 
 2. **输出格式控制**
    - 支持同时启用多种输出格式
    - 可配置Excel文件名、目录等参数
    - 支持MQTT消息的QoS级别和保留消息设置
+   - 自动生成带时间戳的输出文件名
 
 3. **错误处理机制**
    - 完善的异常捕获和日志记录
    - 单独记录每个参数的读取状态
    - 设备状态分为：success、partial_success、failed、pending
+   - 详细的错误信息记录，便于故障排查
 
 4. **线程安全设计**
    - 使用可重入锁（RLock）确保并发操作的安全性
    - 避免多线程环境下的数据竞争问题
+   - 任务分组执行，避免频繁创建连接
 
 5. **资源路径自适应**
    - 智能识别运行环境（开发环境或PyInstaller打包环境）
    - 自动适配不同环境下的资源文件路径
+   - 支持自定义输出目录配置
+
+6. **Excel高级格式化**
+   - 表头样式设置（粗体、背景色、边框）
+   - 单元格边框和对齐方式优化
+   - 列宽自动调整，提升数据可读性
+   - 自动分离成功和失败数据到不同工作表
 
 ## 输出说明
 
@@ -173,6 +196,7 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 - 文件位置：`output/*_improved_data_collected_YYYYMMDD_HHMMSS.json`
 - 包含完整的设备信息、参数值和状态标识
 - 每个参数都有独立的时间戳和状态信息
+- 按楼栋和设备进行层级组织的数据结构
 
 ### Excel输出
 
@@ -180,6 +204,8 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 - 自动汇总收集到的数据
 - 支持配置是否包含所有参数
 - 包含success和failure工作表，分别记录成功和失败的数据
+- 高级表格样式，包括表头背景色、边框和字体设置
+- 自动调整列宽，确保数据完整显示
 
 ### MQTT输出
 
@@ -187,6 +213,8 @@ python datacollection\improved_data_collection_manager.py -f 3#_data.json
 - 支持主题前缀自定义
 - 可配置消息质量级别（QoS）
 - 使用客户端池管理连接，提高并发性能
+- 自动处理连接错误和重试机制
+- 支持SSL/TLS加密连接
 
 ## 日志系统
 
@@ -261,11 +289,26 @@ PLC数据查看器提供了图形界面，可以：
 - 提供数据导出为Excel或JSON的功能
 - 支持数据排序和筛选
 
+### 批量处理功能
+
+系统支持高效的批量处理能力：
+- 可同时处理多个楼栋的数据文件
+- 支持通配符匹配，如`*_data.json`
+- 自动统计所有处理文件的结果汇总
+
+### 模式更新支持
+
+通过新增的模式更新配置功能：
+- 可以配置PLC模式更新参数
+- 支持批量更新多个设备的运行模式
+- 提供模式更新状态反馈
+
 ## 未来改进方向
 
 1. 实现设备分组功能，支持按楼栋或区域批量管理
 2. 添加数据缓存机制，提高频繁访问数据的响应速度
-3. 开发Web管理界面，实现配置的可视化管理
+3. 进一步完善Web管理界面，实现配置的可视化管理
 4. 支持更多工业协议，扩展系统兼容性
 5. 添加数据异常检测和报警功能
 6. 实现数据历史趋势分析和图表展示
+7. 开发移动端数据查看应用，支持远程监控
