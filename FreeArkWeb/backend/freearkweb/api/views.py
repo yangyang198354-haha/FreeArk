@@ -216,26 +216,22 @@ def test_logging(request):
 @permission_classes([permissions.AllowAny])
 def get_usage_quantity(request):
     """
-    获取每日用量数据
-    支持按多个条件过滤：房号、专有部分、供能模式、开始时间和结束时间
+    获取能耗日用量报表数据（原有端点，保持不变）
     """
     # 获取查询参数
-    room_number = request.GET.get('room_number')
     specific_part = request.GET.get('specific_part')
     energy_mode = request.GET.get('energy_mode')
     start_time = request.GET.get('start_time')
     end_time = request.GET.get('end_time')
     
     # 记录查询条件到日志
-    logger.info(f"UsageQuantityDaily 查询条件 - room_number: {room_number}, specific_part: {specific_part}, "
-                f"energy_mode: {energy_mode}, start_time: {start_time}, end_time: {end_time}")
+    logger.info(f"能耗日用量报表查询条件 - specific_part: {specific_part}, energy_mode: {energy_mode}, "
+                f"start_time: {start_time}, end_time: {end_time}")
     
     # 构建基础查询集
     queryset = UsageQuantityDaily.objects.all()
     
     # 应用过滤条件
-    if room_number:
-        queryset = queryset.filter(room_number=room_number)
     if specific_part:
         queryset = queryset.filter(specific_part=specific_part)
     if energy_mode:
@@ -245,20 +241,122 @@ def get_usage_quantity(request):
     if end_time:
         queryset = queryset.filter(time_period__lte=end_time)
     
-    # 按时间降序排序
-    queryset = queryset.order_by('-time_period')
+    # 处理分页
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    
+    # 计算分页范围
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    paginated_data = queryset[start_index:end_index]
     
     # 序列化数据
-    serializer = UsageQuantityDailySerializer(queryset, many=True)
-    result_data = serializer.data
-    total_count = len(result_data)
-    
-    # 记录查询结果到日志
-    logger.info(f"UsageQuantityDaily 查询结果 - 找到 {total_count} 条记录")
+    serializer = UsageQuantityDailySerializer(paginated_data, many=True)
+    total_count = queryset.count()
     
     return Response({
         'success': True,
-        'data': result_data,
+        'data': serializer.data,
+        'total': total_count
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_usage_quantity_specific_time_period(request):
+    """
+    获取能耗报表数据（新端点）
+    根据楼栋-单元-户号，供能模式，把包含在指定时间段的数据过滤出来，计算这段时间的用量综合
+    """
+    # 获取查询参数
+    specific_part = request.GET.get('specific_part')
+    energy_mode = request.GET.get('energy_mode')
+    start_time = request.GET.get('start_time')
+    end_time = request.GET.get('end_time')
+    
+    # 记录查询条件到日志
+    logger.info(f"能耗报表查询条件 - specific_part: {specific_part}, energy_mode: {energy_mode}, "
+                f"start_time: {start_time}, end_time: {end_time}")
+    
+    # 构建基础查询集
+    queryset = UsageQuantityDaily.objects.all()
+    
+    # 应用过滤条件
+    if specific_part:
+        queryset = queryset.filter(specific_part=specific_part)
+    if energy_mode:
+        queryset = queryset.filter(energy_mode=energy_mode)
+    if start_time:
+        queryset = queryset.filter(time_period__gte=start_time)
+    if end_time:
+        queryset = queryset.filter(time_period__lte=end_time)
+    
+    # 按专有部分和供能模式分组，计算每个组的初期能耗最小值、末期能耗最大值
+    from django.db.models import Min, Max, F
+    
+    # 获取所有唯一的专有部分和供能模式组合
+    unique_combinations = queryset.values('specific_part', 'energy_mode').distinct()
+    
+    result_data = []
+    
+    for combination in unique_combinations:
+        # 过滤当前组合的数据
+        combo_queryset = queryset.filter(
+            specific_part=combination['specific_part'],
+            energy_mode=combination['energy_mode']
+        )
+        
+        # 获取该组合的第一个building、unit、room_number作为展示数据
+        first_record = queryset.filter(
+            specific_part=combination['specific_part'],
+            energy_mode=combination['energy_mode']
+        ).first()
+        
+        # 设置组合的基本信息
+        combination['building'] = first_record.building if first_record else ''
+        combination['unit'] = first_record.unit if first_record else ''
+        combination['room_number'] = first_record.room_number if first_record else ''
+        
+        # 计算初期能耗（最小值）和末期能耗（最大值）
+        initial_energy = combo_queryset.aggregate(min_energy=Min('initial_energy'))['min_energy']
+        final_energy = combo_queryset.aggregate(max_energy=Max('final_energy'))['max_energy']
+        
+        # 计算使用量
+        usage_quantity = final_energy - initial_energy if initial_energy is not None and final_energy is not None else None
+        
+        # 构建时间段字符串
+        time_period_str = f"{start_time} 至 {end_time}" if start_time and end_time else ""
+        
+        # 添加到结果数据
+        result_data.append({
+            'specific_part': combination['specific_part'],
+            'building': combination['building'],
+            'unit': combination['unit'],
+            'room_number': combination['room_number'],
+            'energy_mode': combination['energy_mode'],
+            'initial_energy': initial_energy,
+            'final_energy': final_energy,
+            'usage_quantity': usage_quantity,
+            'time_period': time_period_str
+        })
+    
+    total_count = len(result_data)
+    
+    # 记录查询结果到日志
+    logger.info(f"能耗报表查询结果 - 找到 {total_count} 条记录")
+    
+    # 处理分页
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    
+    # 计算分页范围
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    paginated_data = result_data[start_index:end_index]
+    
+    return Response({
+        'success': True,
+        'data': paginated_data,
         'total': total_count
     })
 

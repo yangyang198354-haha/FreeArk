@@ -188,7 +188,7 @@ body {
 .dropdown-item {
   display: block;
   width: 100%;
-  padding: 0.75rem 1.5rem 0.75rem 2.5rem; /* 增加左侧padding以创建缩进效果 */
+  padding: 0.75rem 1.5rem 0.75rem 1.5rem; /* 修改为1.5rem实现左对齐 */
   clear: both;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.8); /* 与导航栏文字颜色一致 */
@@ -205,14 +205,14 @@ body {
   color: #fff;
   text-decoration: none;
   background-color: rgba(255, 255, 255, 0.1); /* 半透明背景 */
-  padding-left: 2.75rem; /* 悬停时轻微左移 */
+  padding-left: 1.75rem; /* 悬停时轻微左移 */
 }
 
 .dropdown-item.active {
   color: #fff;
   text-decoration: none;
   background-color: #007bff;
-  padding-left: 2.75rem;
+  padding-left: 1.75rem;
 }
 
 /* 确保下拉菜单正确显示在导航栏内 */

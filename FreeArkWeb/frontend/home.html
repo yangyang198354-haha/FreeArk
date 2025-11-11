@@ -21,6 +21,11 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
     <!-- 引入楼栋数据 - 使用非模块方式 -->
     <script>
+            // 能耗报表全局变量
+            let currentConsumptionPage = 1;
+            let consumptionPageSize = 10;
+            let consumptionTotalPages = 1;
+            let consumptionData = [];
       // 直接定义全局变量，后续从building_data.js加载实际数据
       // 注意：在开发环境中，Vite服务器会通过中间件直接从src/data目录提供building_data.js
       // 生产环境构建时，building_data.js会被自动复制到dist目录
@@ -68,6 +73,7 @@
             <a href="#usage" class="nav-link dropdown-toggle collapsed" id="usageDropdown" onclick="expandUsageDropdown(event)">用量查询</a>
             <div class="dropdown-menu">
               <a href="#energyReport" class="dropdown-item" onclick="switchPage('usage')">能耗日用量报表</a>
+              <a href="#energyConsumptionReport" class="dropdown-item" onclick="switchPage('energyConsumptionReport')">能耗报表</a>
             </div>
           </li>
           <li class="nav-item">
@@ -237,6 +243,127 @@
             <h2>服务管理</h2>
           </div>
           <!-- 空白内容区域 -->
+        </div>
+        
+        <!-- 能耗报表页面 -->
+        <div id="energyConsumptionReportPage" class="page-container" style="display: none;">
+          <div class="page-header">
+            <h2>能耗报表</h2>
+          </div>
+          
+          <!-- 查询条件表单 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <form id="energyConsumptionQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                  <label for="consumptionCascadingSelector">楼栋-单元-户号</label>
+                  <div class="cascading-selector-container">
+                    <div id="consumptionCascadingSelector" class="cascading-selector" style="position: relative;">
+                      <input type="text" class="cascading-selector-input" placeholder="可直接输入，例:1-2-101">
+                      <button type="button" class="cascading-clear-btn" style="display: none; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #999; font-size: 16px;">×</button>
+                      <input type="hidden" id="consumptionSelectedBuilding" name="consumptionSelectedBuilding">
+                      <input type="hidden" id="consumptionSelectedUnit" name="consumptionSelectedUnit">
+                      <input type="hidden" id="consumptionSelectedRoom" name="consumptionSelectedRoom">
+                      <div class="cascading-menu" style="display: none;">
+                        <!-- 菜单内容将由JavaScript动态生成 -->
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                  <label for="consumptionEnergyModeQuery">供能模式</label>
+                  <select class="form-control" id="consumptionEnergyModeQuery">
+                    <option value="">全部</option>
+                    <option value="制冷">制冷</option>
+                    <option value="制热">制热</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex: 2; min-width: 300px;">
+                  <label>时间段</label>
+                  <input type="text" class="form-control" id="consumptionDateRangePicker" style="cursor: pointer;">
+                  <input type="hidden" id="consumptionStartTimeQuery">
+                  <input type="hidden" id="consumptionEndTimeQuery">
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                  <button type="button" class="btn btn-primary" onclick="searchEnergyConsumptionData()">查询</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetConsumptionQueryForm()">重置</button>
+                  <!-- 保存按钮 -->
+                  <button id="consumptionSaveButton" type="button" class="btn btn-success" onclick="saveConsumptionAsXLSX()">
+                    保存
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+
+          
+          <!-- 用量数据表格 -->
+          <div class="card" style="margin: 20px;">
+            <div class="card-body">
+              <h3>用量数据</h3>
+              <!-- 加载指示器 -->
+              <div id="consumptionLoadingIndicator" class="alert alert-info text-center" style="display: none;">
+                正在加载数据，请稍候...
+              </div>
+              <!-- 无数据提示 -->
+              <div id="consumptionNoDataMessage" class="alert alert-info text-center" style="display: none;">
+                暂无数据
+              </div>
+              <div class="table-responsive">
+                <table id="consumptionTable" class="table table-striped" style="display: none;">
+                  <thead>
+                    <tr>
+                      <th>专有部分</th>
+                      <th>楼栋</th>
+                      <th>单元</th>
+                      <th>房号</th>
+                      <th>供能模式</th>
+                      <th>初期能耗(kWh)</th>
+                      <th>末期能耗(kWh)</th>
+                      <th>使用量(kWh)</th>
+                      <th>时间段</th>
+                    </tr>
+                  </thead>
+                  <tbody id="consumptionTableBody">
+                    <!-- 数据将通过JavaScript动态填充 -->
+                  </tbody>
+                </table>
+              </div>
+              
+              <!-- 分页控件 -->
+              <div id="consumptionPagination" class="pagination-container" style="margin-top: 20px; display: none;">
+                <div class="pagination-info" style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                  <span>共 <span id="consumptionTotalRecords">0</span> 条记录</span>
+                </div>
+                <nav>
+                    <ul class="pagination justify-content-end">
+                    <li class="page-item" id="consumptionPrevPageItem">
+                      <a class="page-link" href="#" aria-label="上一页" onclick="changeConsumptionPage(currentConsumptionPage - 1)">
+                        <span aria-hidden="true">&laquo;</span>
+                      </a>
+                    </li>
+                    <div id="consumptionPageNumbers" class="d-flex"></div>
+                    <li class="page-item" id="consumptionNextPageItem">
+                      <a class="page-link" href="#" aria-label="下一页" onclick="changeConsumptionPage(currentConsumptionPage + 1)">
+                        <span aria-hidden="true">&raquo;</span>
+                      </a>
+                    </li>
+                  </ul>
+                </nav>
+                <div class="pagination-size" style="margin-top: 10px; text-align: right;">
+                  <span>每页显示：</span>
+                  <select id="consumptionPageSizeSelect" onchange="changeConsumptionPageSize(this.value)">
+                    <option value="10">10条</option>
+                    <option value="20">20条</option>
+                    <option value="50">50条</option>
+                    <option value="100">100条</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- 创建用户页面 -->
@@ -452,7 +579,393 @@
         const defaultEnd = moment();
         document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
         document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
+        
+        // 初始化能耗报表日期范围选择器
+        $('#consumptionDateRangePicker').daterangepicker({
+          opens: 'right',
+          showDropdowns: true,
+          minYear: 2020,
+          maxYear: parseInt(moment().format('YYYY'), 10),
+          startDate: moment().subtract(7, 'days'),
+          endDate: moment(),
+          maxSpan: { days: 60 }, // 最大跨度限制为60天
+          locale: {
+            format: 'YYYY-MM-DD',
+            separator: ' - ',
+            applyLabel: '确定',
+            cancelLabel: '取消',
+            fromLabel: '开始',
+            toLabel: '结束',
+            customRangeLabel: '自定义',
+            weekLabel: 'W',
+            daysOfWeek: ['日', '一', '二', '三', '四', '五', '六'],
+            monthNames: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
+            firstDay: 1
+          },
+          ranges: {
+            '今天': [moment(), moment()],
+            '昨天': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+            '近7天': [moment().subtract(6, 'days'), moment()],
+            '近30天': [moment().subtract(29, 'days'), moment()],
+            '本月': [moment().startOf('month'), moment().endOf('month')],
+            '上月': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+          }
+        }, function(start, end, label) {
+          // 当用户选择日期范围时更新隐藏字段
+          document.getElementById('consumptionStartTimeQuery').value = start.format('YYYY-MM-DD');
+          document.getElementById('consumptionEndTimeQuery').value = end.format('YYYY-MM-DD');
+        });
+        
+        // 初始化能耗报表日期默认值
+        document.getElementById('consumptionStartTimeQuery').value = defaultStart.format('YYYY-MM-DD');
+        document.getElementById('consumptionEndTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
       });
+      
+      // 能耗报表相关函数
+      // 重置能耗报表查询表单
+      function resetConsumptionQueryForm() {
+        // 重置日期范围
+        document.getElementById('consumptionDateRangePicker').value = '';
+        document.getElementById('consumptionStartTimeQuery').value = '';
+        document.getElementById('consumptionEndTimeQuery').value = '';
+        
+        // 重置楼栋-单元-户号选择
+        document.querySelector('#consumptionCascadingSelector .cascading-selector-input').value = '';
+        document.getElementById('consumptionSelectedBuilding').value = '';
+        document.getElementById('consumptionSelectedUnit').value = '';
+        document.getElementById('consumptionSelectedRoom').value = '';
+        document.querySelector('#consumptionCascadingSelector .cascading-clear-btn').style.display = 'none';
+        
+        // 重置供能模式选择
+        document.getElementById('consumptionEnergyModeQuery').value = '';
+      }
+      
+      // 查询能耗报表数据
+      function searchEnergyConsumptionData() {
+        // 构建查询条件
+        let specificPart = '';
+        const building = document.getElementById('consumptionSelectedBuilding').value;
+        const unit = document.getElementById('consumptionSelectedUnit').value;
+        const room = document.getElementById('consumptionSelectedRoom').value;
+        
+        if (building && unit && room) {
+          // 根据房号长度提取楼层号：3位数取第一位，4位数取前两位
+          let floor = '';
+          if (room.length === 3) {
+            floor = room.charAt(0);  // 3位数房号，如302，取第一位作为楼层号
+          } else if (room.length === 4) {
+            floor = room.substring(0, 2);  // 4位数房号，如1002、3305，取前两位作为楼层号
+          } else {
+            floor = room.charAt(0);  // 其他情况默认取第一位
+          }
+          // 构建4部分格式：楼栋-单元-楼层-房号
+          specificPart = `${building}-${unit}-${floor}-${room}`;
+        } else if (building && unit) {
+          specificPart = building + '-' + unit;
+        } else if (building) {
+          specificPart = building;
+        }
+        
+        const energyMode = document.getElementById('consumptionEnergyModeQuery').value;
+        const startTime = document.getElementById('consumptionStartTimeQuery').value;
+        const endTime = document.getElementById('consumptionEndTimeQuery').value;
+        
+        // 表单验证
+        if (!startTime || !endTime) {
+          alert('请选择时间段');
+          return;
+        }
+        
+        // 重置分页
+        currentConsumptionPage = 1;
+        
+        // 加载数据
+        loadEnergyConsumptionData(specificPart, energyMode, startTime, endTime);
+      }
+      
+      // 加载能耗报表数据
+      function loadEnergyConsumptionData(specificPart, energyMode, startTime, endTime) {
+        // 显示加载状态
+        document.getElementById('consumptionLoadingIndicator').style.display = 'block';
+        document.getElementById('consumptionTable').style.display = 'none';
+        document.getElementById('consumptionNoDataMessage').style.display = 'none';
+        document.getElementById('consumptionPagination').style.display = 'none';
+        
+        // 构建查询参数
+        const params = new URLSearchParams({
+          page: currentConsumptionPage,
+          page_size: consumptionPageSize,
+          specific_part: specificPart || '',
+          energy_mode: energyMode || '',
+          start_time: startTime,
+          end_time: endTime
+        });
+        
+        // 调用API获取数据
+        fetch('http://localhost:8000/api/usage/quantity/specifictimeperiod?' + params)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            // 隐藏加载状态
+            document.getElementById('consumptionLoadingIndicator').style.display = 'none';
+            
+            if (data.success && Array.isArray(data.data)) {
+              consumptionData = data.data;
+              const totalRecords = data.total || 0;
+              
+              // 更新表格数据
+              const tableBody = document.getElementById('consumptionTableBody');
+              tableBody.innerHTML = '';
+              
+              if (consumptionData.length > 0) {
+                // 显示表格
+                document.getElementById('consumptionTable').style.display = 'table';
+                
+                // 填充表格数据
+                consumptionData.forEach(item => {
+                  const row = tableBody.insertRow();
+                  row.insertCell(0).textContent = item.specific_part || '-';
+                  row.insertCell(1).textContent = item.building || '-';
+                  row.insertCell(2).textContent = item.unit || '-';
+                  row.insertCell(3).textContent = item.room_number || '-';
+                  row.insertCell(4).textContent = item.energy_mode || '-';
+                  row.insertCell(5).textContent = item.initial_energy || 0;
+                  row.insertCell(6).textContent = item.final_energy || 0;
+                  row.insertCell(7).textContent = item.usage_quantity || 0;
+                  row.insertCell(8).textContent = item.time_period || '-';
+                });
+                
+                // 更新分页
+                consumptionTotalPages = Math.ceil(totalRecords / consumptionPageSize);
+                document.getElementById('consumptionTotalRecords').textContent = totalRecords;
+                updateConsumptionPagination();
+                document.getElementById('consumptionPagination').style.display = 'block';
+                
+
+              } else {
+                // 显示无数据提示
+                document.getElementById('consumptionNoDataMessage').style.display = 'block';
+              }
+            } else {
+              // 显示无数据提示
+              document.getElementById('consumptionNoDataMessage').style.display = 'block';
+            }
+          })
+          .catch(error => {
+            console.error('Error loading consumption data:', error);
+            document.getElementById('consumptionLoadingIndicator').style.display = 'none';
+            document.getElementById('consumptionNoDataMessage').style.display = 'block';
+            alert('加载数据失败，请重试');
+          });
+      }
+      
+      // 渲染能耗报表图表
+
+      
+      // 更新能耗报表分页
+      function updateConsumptionPagination() {
+        const pageNumbersContainer = document.getElementById('consumptionPageNumbers');
+        pageNumbersContainer.innerHTML = '';
+        
+        // 计算显示的页码范围
+        let startPage = Math.max(1, currentConsumptionPage - 2);
+        let endPage = Math.min(consumptionTotalPages, startPage + 4);
+        
+        if (endPage - startPage < 4) {
+          startPage = Math.max(1, endPage - 4);
+        }
+        
+        // 添加页码按钮
+        for (let i = startPage; i <= endPage; i++) {
+          const li = document.createElement('li');
+          li.className = 'page-item';
+          if (i === currentConsumptionPage) {
+            li.classList.add('active');
+          }
+          
+          const a = document.createElement('a');
+          a.className = 'page-link';
+          a.href = '#';
+          a.textContent = i;
+          a.onclick = function() {
+            changeConsumptionPage(i);
+          };
+          
+          li.appendChild(a);
+          pageNumbersContainer.appendChild(li);
+        }
+        
+        // 更新上一页/下一页按钮状态
+        document.getElementById('consumptionPrevPageItem').classList.toggle('disabled', currentConsumptionPage <= 1);
+        document.getElementById('consumptionNextPageItem').classList.toggle('disabled', currentConsumptionPage >= consumptionTotalPages);
+      }
+      
+      // 切换能耗报表页面
+      function changeConsumptionPage(page) {
+        if (page < 1 || page > consumptionTotalPages) {
+          return;
+        }
+        
+        currentConsumptionPage = page;
+        
+        // 重新加载数据
+        let specificPart = '';
+        const building = document.getElementById('consumptionSelectedBuilding').value;
+        const unit = document.getElementById('consumptionSelectedUnit').value;
+        const room = document.getElementById('consumptionSelectedRoom').value;
+        
+        if (building && unit && room) {
+          // 根据房号长度提取楼层号：3位数取第一位，4位数取前两位
+          let floor = '';
+          if (room.length === 3) {
+            floor = room.charAt(0);  // 3位数房号，如302，取第一位作为楼层号
+          } else if (room.length === 4) {
+            floor = room.substring(0, 2);  // 4位数房号，如1002、3305，取前两位作为楼层号
+          } else {
+            floor = room.charAt(0);  // 其他情况默认取第一位
+          }
+          // 构建4部分格式：楼栋-单元-楼层-房号
+          specificPart = `${building}-${unit}-${floor}-${room}`;
+        } else if (building && unit) {
+          specificPart = building + '-' + unit;
+        } else if (building) {
+          specificPart = building;
+        }
+        
+        const energyMode = document.getElementById('consumptionEnergyModeQuery').value;
+        const startTime = document.getElementById('consumptionStartTimeQuery').value;
+        const endTime = document.getElementById('consumptionEndTimeQuery').value;
+        
+        loadEnergyConsumptionData(specificPart, energyMode, startTime, endTime);
+      }
+      
+      // 改变能耗报表每页显示数量
+      function changeConsumptionPageSize(size) {
+        consumptionPageSize = parseInt(size);
+        currentConsumptionPage = 1;
+        
+        // 重新加载数据
+        let specificPart = '';
+        const building = document.getElementById('consumptionSelectedBuilding').value;
+        const unit = document.getElementById('consumptionSelectedUnit').value;
+        const room = document.getElementById('consumptionSelectedRoom').value;
+        
+        if (building && unit && room) {
+        // 根据房号长度提取楼层号：3位数取第一位，4位数取前两位
+        let floor = '';
+        if (room.length === 3) {
+          floor = room.charAt(0);  // 3位数房号，如302，取第一位作为楼层号
+        } else if (room.length === 4) {
+          floor = room.substring(0, 2);  // 4位数房号，如1002、3305，取前两位作为楼层号
+        } else {
+          floor = room.charAt(0);  // 其他情况默认取第一位
+        }
+        // 构建4部分格式：楼栋-单元-楼层-房号
+        specificPart = `${building}-${unit}-${floor}-${room}`;
+      } else if (building && unit) {
+        specificPart = building + '-' + unit;
+      } else if (building) {
+        specificPart = building;
+      }
+        
+        const energyMode = document.getElementById('consumptionEnergyModeQuery').value;
+        const startTime = document.getElementById('consumptionStartTimeQuery').value;
+        const endTime = document.getElementById('consumptionEndTimeQuery').value;
+        
+        loadEnergyConsumptionData(specificPart, energyMode, startTime, endTime);
+      }
+      
+      // 保存能耗报表为XLSX
+      function saveConsumptionAsXLSX() {
+        if (consumptionData.length === 0) {
+          alert('没有数据可导出');
+          return;
+        }
+        
+        // 收集所有数据
+        collectAllConsumptionData().then(allData => {
+          // 准备导出数据
+          const exportData = allData.map(item => ({
+            '专有部分': item.specific_part || '-',
+            '楼栋': item.building || '-',
+            '单元': item.unit || '-',
+            '房号': item.room || '-',
+            '供能模式': item.energy_mode || '-',
+            '初期能耗(kWh)': item.initial_energy || 0,
+            '末期能耗(kWh)': item.final_energy || 0,
+            '使用量(kWh)': item.usage_quantity || 0,
+            '时间段': item.time_period || '-'
+          }));
+          
+          // 导出为XLSX
+          exportToXLSX(exportData, '能耗报表_' + new Date().toLocaleDateString('zh-CN'));
+        }).catch(error => {
+          console.error('Error collecting consumption data for export:', error);
+          alert('导出数据失败，请重试');
+        });
+      }
+      
+      // 收集所有能耗报表数据
+      function collectAllConsumptionData() {
+        return new Promise((resolve, reject) => {
+          let specificPart = '';
+          const building = document.getElementById('consumptionSelectedBuilding').value;
+          const unit = document.getElementById('consumptionSelectedUnit').value;
+          const room = document.getElementById('consumptionSelectedRoom').value;
+          
+          if (building && unit && room) {
+        // 根据房号长度提取楼层号：3位数取第一位，4位数取前两位
+        let floor = '';
+        if (room.length === 3) {
+          floor = room.charAt(0);  // 3位数房号，如302，取第一位作为楼层号
+        } else if (room.length === 4) {
+          floor = room.substring(0, 2);  // 4位数房号，如1002、3305，取前两位作为楼层号
+        } else {
+          floor = room.charAt(0);  // 其他情况默认取第一位
+        }
+        // 构建4部分格式：楼栋-单元-楼层-房号
+        specificPart = `${building}-${unit}-${floor}-${room}`;
+      } else if (building && unit) {
+        specificPart = building + '-' + unit;
+      } else if (building) {
+        specificPart = building;
+      }
+          
+          const energyMode = document.getElementById('consumptionEnergyModeQuery').value;
+          const startTime = document.getElementById('consumptionStartTimeQuery').value;
+          const endTime = document.getElementById('consumptionEndTimeQuery').value;
+          
+          // 构建查询参数（不分页，获取所有数据）
+          const params = new URLSearchParams({
+            page: 1,
+            pageSize: 10000, // 设置一个较大的值以获取所有数据
+            specificPart: specificPart || '',
+            energyMode: energyMode || '',
+            startTime: startTime,
+            endTime: endTime
+          });
+          
+          fetch('http://localhost:8000/api/usage/quantity?' + params)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(data => {
+              if (data.success && data.data && Array.isArray(data.data)) {
+                resolve(data.data);
+              } else {
+                resolve([]);
+              }
+            })
+            .catch(reject);
+        });
+      }
       
       // 检查用户是否已登录
       function checkAuthentication() {
@@ -1103,11 +1616,332 @@
           room: room
         };
       }
+      
+      // 获取能耗报表当前选择的值
+      function getConsumptionSelectedValues() {
+        const building = document.getElementById('consumptionSelectedBuilding').value;
+        const unit = document.getElementById('consumptionSelectedUnit').value;
+        const room = document.getElementById('consumptionSelectedRoom').value;
+        console.log('getConsumptionSelectedValues返回值 - building:', building, 'unit:', unit, 'room:', room);
+        return {
+          building: building,
+          unit: unit,
+          room: room
+        };
+      }
+      
+      // 初始化能耗报表单框级联菜单
+      function initConsumptionCascadingSelector() {
+        const selector = document.getElementById('consumptionCascadingSelector');
+        const input = selector.querySelector('.cascading-selector-input');
+        const menu = selector.querySelector('.cascading-menu');
+        
+        // 确保_buildingData已加载
+        if (Array.isArray(_buildingData)) {
+          // 生成菜单结构
+          generateConsumptionMenuStructure(_buildingData, menu);
+          
+          // 点击输入框切换菜单显示
+          input.addEventListener('click', function(event) {
+            event.stopPropagation();
+            menu.style.display = menu.style.display === 'none' || !menu.style.display ? 'block' : 'none';
+          });
+          
+          // 点击其他地方关闭菜单
+          document.addEventListener('click', function(event) {
+            if (!selector.contains(event.target)) {
+              menu.style.display = 'none';
+              // 关闭所有展开的子菜单
+              document.querySelectorAll('#consumptionCascadingSelector .cascading-menu-item.expanded').forEach(item => {
+                item.classList.remove('expanded');
+                const submenu = item.nextElementSibling;
+                if (submenu && submenu.classList.contains('cascading-submenu')) {
+                  submenu.classList.remove('show');
+                }
+              });
+            }
+          });
+          
+          // 设置户号搜索功能
+          setupConsumptionCascadingSearch();
+        }
+      }
+      
+      // 生成能耗报表级联菜单结构
+      function generateConsumptionMenuStructure(data, parentElement, level = 0) {
+        if (!Array.isArray(data)) return;
+        
+        data.forEach(item => {
+          const menuItem = document.createElement('div');
+          menuItem.className = 'cascading-menu-item' + (item.children && item.children.length ? ' has-children' : '');
+          menuItem.textContent = item.label;
+          menuItem.dataset.value = item.value;
+          menuItem.dataset.level = level;
+          
+          // 添加点击事件
+          menuItem.addEventListener('click', function(event) {
+            event.stopPropagation();
+            
+            // 如果是楼栋或单元（有子项），切换展开状态
+            if (this.classList.contains('has-children')) {
+              this.classList.toggle('expanded');
+              const submenu = this.nextElementSibling;
+              if (submenu && submenu.classList.contains('cascading-submenu')) {
+                submenu.classList.toggle('show');
+              }
+            } else {
+              // 如果是户号（没有子项），选择该项
+              selectConsumptionMenuItem(this);
+            }
+          });
+          
+          parentElement.appendChild(menuItem);
+          
+          // 如果有子项，生成子菜单
+          if (item.children && item.children.length) {
+            const submenu = document.createElement('div');
+            submenu.className = 'cascading-submenu';
+            parentElement.appendChild(submenu);
+            generateConsumptionMenuStructure(item.children, submenu, level + 1);
+          }
+        });
+      }
+      
+      // 选择能耗报表菜单项
+      function selectConsumptionMenuItem(item) {
+        const level = parseInt(item.dataset.level);
+        const value = item.dataset.value;
+        const label = item.textContent;
+        
+        // 根据层级确定选择的是楼栋、单元还是户号
+        let buildingValue = '';
+        let buildingLabel = '';
+        let unitValue = '';
+        let unitLabel = '';
+        let roomValue = '';
+        let roomLabel = '';
+        
+        // 优先使用flattenedRooms数据来获取完整层级信息
+        if (level === 2) { // 户号级别，尝试从数据源获取完整层级
+          // 获取所有楼栋数据
+          const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
+          
+          // 遍历楼栋数据查找匹配的户号
+          for (const building of allBuildingData) {
+            for (const unit of building.children) {
+              const room = unit.children.find(r => r.value === value);
+              if (room) {
+                buildingValue = building.value;
+                buildingLabel = building.label;
+                unitValue = unit.value;
+                unitLabel = unit.label;
+                roomValue = room.value;
+                roomLabel = room.label;
+                break;
+              }
+            }
+            if (roomValue) break; // 找到匹配的户号后退出外层循环
+          }
+        }
+        
+        // 如果通过数据源查找失败或不是户号级别，使用DOM层级查找作为备选
+        if (!roomValue || (level < 2 && (!buildingValue || !unitValue))) {
+          let current = item;
+          while (current && current.parentElement && current.parentElement.classList.contains('cascading-menu')) {
+            const parentItem = current.parentElement.previousElementSibling;
+            if (parentItem && parentItem.classList.contains('cascading-menu-item')) {
+              const parentLevel = parseInt(parentItem.dataset.level);
+              if (parentLevel === 0) { // 楼栋
+                buildingValue = parentItem.dataset.value;
+                buildingLabel = parentItem.textContent;
+              } else if (parentLevel === 1) { // 单元
+                unitValue = parentItem.dataset.value;
+                unitLabel = parentItem.textContent;
+              }
+            }
+            current = current.parentElement.parentElement;
+          }
+          
+          // 根据当前层级设置值
+          if (level === 0) { // 楼栋
+            buildingValue = value;
+            buildingLabel = label;
+          } else if (level === 1) { // 单元
+            unitValue = value;
+            unitLabel = label;
+          } else if (level === 2) { // 户号
+            roomValue = value;
+            roomLabel = label;
+          }
+        }
+        
+        // 更新隐藏字段
+        document.getElementById('consumptionSelectedBuilding').value = buildingValue;
+        document.getElementById('consumptionSelectedUnit').value = unitValue;
+        document.getElementById('consumptionSelectedRoom').value = roomValue;
+        
+        // 更新输入框显示
+        const input = document.getElementById('consumptionCascadingSelector').querySelector('.cascading-selector-input');
+        const clearBtn = document.getElementById('consumptionCascadingSelector').querySelector('.cascading-clear-btn');
+        if (roomValue) {
+          input.value = `${buildingLabel}${unitLabel}${roomLabel}`;
+        } else if (unitValue) {
+          input.value = `${buildingLabel}${unitLabel}`;
+        } else if (buildingValue) {
+          input.value = buildingLabel;
+        }
+        
+        // 更新清空按钮显示状态
+        if (clearBtn) {
+          clearBtn.style.display = input.value ? 'block' : 'none';
+        }
+        
+        // 关闭菜单
+        document.getElementById('consumptionCascadingSelector').querySelector('.cascading-menu').style.display = 'none';
+      }
+      
+      // 设置能耗报表级联菜单的搜索功能
+      function setupConsumptionCascadingSearch() {
+        const input = document.getElementById('consumptionCascadingSelector').querySelector('.cascading-selector-input');
+        const clearBtn = document.getElementById('consumptionCascadingSelector').querySelector('.cascading-clear-btn');
+        
+        // 更新清空按钮显示状态的函数
+        function updateClearButtonVisibility() {
+          clearBtn.style.display = input.value ? 'block' : 'none';
+        }
+        
+        // 清空按钮点击事件
+        clearBtn.addEventListener('click', function(event) {
+          event.stopPropagation(); // 阻止冒泡，避免触发input的点击事件
+          
+          // 清空输入框和隐藏字段
+          input.value = '';
+          document.getElementById('consumptionSelectedBuilding').value = '';
+          document.getElementById('consumptionSelectedUnit').value = '';
+          document.getElementById('consumptionSelectedRoom').value = '';
+          
+          // 隐藏清空按钮
+          clearBtn.style.display = 'none';
+          
+          // 关闭菜单
+          const menu = document.getElementById('consumptionCascadingSelector').querySelector('.cascading-menu');
+          menu.style.display = 'none';
+          
+          // 重置菜单结构
+          menu.innerHTML = '';
+          generateConsumptionMenuStructure(_buildingData, menu);
+        });
+        
+        input.addEventListener('input', function() {
+          const searchTerm = this.value.toLowerCase().trim();
+          // 更新清空按钮显示状态
+          updateClearButtonVisibility();
+          
+          const menu = this.nextElementSibling.nextElementSibling.nextElementSibling; // 获取菜单元素
+          
+          // 检查是否为"building-unit-room"格式（如"1-1-201"）
+          const formatMatch = searchTerm.match(/^(\d+)-(\d+)-(\d+)$/);
+          if (formatMatch) {
+            const [, building, unit, room] = formatMatch;
+            
+            // 确保_flattenedRooms已加载
+            let searchRooms = _flattenedRooms;
+            if (!Array.isArray(searchRooms) || searchRooms.length === 0) {
+              searchRooms = typeof window.flattenedBuildingData !== 'undefined' ? window.flattenedBuildingData : [];
+            }
+            
+            // 查找完全匹配的房间
+            const exactMatch = searchRooms.find(item => 
+              item.building === building && 
+              item.unit === unit && 
+              item.room === room
+            );
+            
+            if (exactMatch) {
+              // 自动选中匹配的项
+              document.getElementById('consumptionSelectedBuilding').value = building;
+              document.getElementById('consumptionSelectedUnit').value = unit;
+              document.getElementById('consumptionSelectedRoom').value = room;
+              
+              // 更新输入框显示
+              const fullLabel = exactMatch.fullLabel || 
+                               `${exactMatch.buildingLabel || exactMatch.building}${exactMatch.unitLabel || exactMatch.unit}${exactMatch.roomLabel || exactMatch.room}`;
+              input.value = fullLabel;
+              
+              // 关闭菜单
+              menu.style.display = 'none';
+              return;
+            }
+          }
+          
+          if (searchTerm) {
+            // 显示菜单
+            menu.style.display = 'block';
+            
+            // 确保_flattenedRooms已加载
+            let searchRooms = _flattenedRooms;
+            if (!Array.isArray(searchRooms) || searchRooms.length === 0) {
+              searchRooms = typeof window.flattenedBuildingData !== 'undefined' ? window.flattenedBuildingData : [];
+            }
+            
+            // 过滤匹配的房间
+            const filteredRooms = searchRooms.filter(room => 
+              room.room.toLowerCase().includes(searchTerm) || 
+              (room.roomLabel && room.roomLabel.toLowerCase().includes(searchTerm)) ||
+              (room.fullLabel && room.fullLabel.toLowerCase().includes(searchTerm)) ||
+              `${room.building}-${room.unit}-${room.room}`.toLowerCase().includes(searchTerm)
+            );
+            
+            // 清空菜单并显示搜索结果
+            menu.innerHTML = '';
+            
+            if (filteredRooms.length > 0) {
+              filteredRooms.forEach(room => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'cascading-menu-item';
+                resultItem.textContent = room.fullLabel || `${room.buildingLabel || room.building}${room.unitLabel || room.unit}${room.roomLabel || room.room}`;
+                resultItem.dataset.building = room.building;
+                resultItem.dataset.unit = room.unit;
+                resultItem.dataset.room = room.room;
+                resultItem.dataset.fullLabel = resultItem.textContent;
+                
+                resultItem.addEventListener('click', function() {
+                  // 更新隐藏字段
+                  document.getElementById('consumptionSelectedBuilding').value = this.dataset.building;
+                  document.getElementById('consumptionSelectedUnit').value = this.dataset.unit;
+                  document.getElementById('consumptionSelectedRoom').value = this.dataset.room;
+                  
+                  // 更新输入框
+                  input.value = this.dataset.fullLabel;
+                  
+                  // 关闭菜单
+                  menu.style.display = 'none';
+                });
+                
+                menu.appendChild(resultItem);
+              });
+            } else {
+              const noResultItem = document.createElement('div');
+              noResultItem.className = 'cascading-menu-item';
+              noResultItem.textContent = '未找到匹配的户号';
+              noResultItem.style.color = '#909399';
+              noResultItem.style.cursor = 'default';
+              menu.appendChild(noResultItem);
+            }
+          } else {
+            // 如果搜索框为空，恢复原始菜单结构
+            menu.innerHTML = '';
+            generateConsumptionMenuStructure(_buildingData, menu);
+          }
+        });
+      }
 
       // 页面加载时初始化
       document.addEventListener('DOMContentLoaded', function() {
         // 初始化单框级联菜单
         initCascadingSelector();
+        // 初始化能耗报表单框级联菜单
+        initConsumptionCascadingSelector();
       });
 
       function searchUsageData() {
@@ -1826,7 +2660,7 @@
         }
         
         // 隐藏所有页面
-        const pages = ['dashboardPage', 'usagePage', 'servicesPage', 'createUserPage', 'userListPage', 'editUserPage'];
+        const pages = ['dashboardPage', 'usagePage', 'energyConsumptionReportPage', 'servicesPage', 'createUserPage', 'userListPage', 'editUserPage'];
         pages.forEach(id => {
           document.getElementById(id).style.display = 'none';
           
@@ -1845,8 +2679,13 @@
         // 显示选中的页面
         document.getElementById(`${pageId}Page`).style.display = 'block';
         
+        // 切换到能耗报表页面时的处理
+        if (pageId === 'energyConsumptionReport') {
+          // 这里可以添加能耗报表页面的初始化逻辑
+          console.log('切换到能耗报表页面');
+        }
         // 切换到用量查询页面时不再自动加载数据，只在用户点击查询按钮时加载
-        if (pageId === 'usage') {
+        else if (pageId === 'usage') {
           // 确保表格和图表初始状态为空
           const usageTable = document.getElementById('usageTable');
           const tableBody = document.getElementById('usageTableBody');

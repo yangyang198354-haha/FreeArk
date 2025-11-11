@@ -23,6 +23,8 @@ urlpatterns = [
     
     # 用量数据查询
     path('usage/quantity/', views.get_usage_quantity, name='get-usage-quantity'),
+    # 特定时间段用量数据查询（新端点）
+    path('usage/quantity/specifictimeperiod/', views.get_usage_quantity_specific_time_period, name='get-usage-quantity-specific-time-period'),
     # 月度用量数据查询
     path('usage/quantity/monthly/', views.get_usage_quantity_monthly, name='get-usage-quantity-monthly'),
 ]
