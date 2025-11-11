@@ -901,8 +901,8 @@
             '时间段': item.time_period || '-'
           }));
           
-          // 导出为XLSX
-          exportToXLSX(exportData, '能耗报表_' + new Date().toLocaleDateString('zh-CN'));
+          // 导出为XLSX，添加.xlsx后缀
+          exportToXLSX(exportData, '能耗报表_' + new Date().toLocaleDateString('zh-CN') + '.xlsx');
         }).catch(error => {
           console.error('Error collecting consumption data for export:', error);
           alert('导出数据失败，请重试');
@@ -942,14 +942,14 @@
           // 构建查询参数（不分页，获取所有数据）
           const params = new URLSearchParams({
             page: 1,
-            pageSize: 10000, // 设置一个较大的值以获取所有数据
-            specificPart: specificPart || '',
-            energyMode: energyMode || '',
-            startTime: startTime,
-            endTime: endTime
+            page_size: 10000, // 设置一个较大的值以获取所有数据
+            specific_part: specificPart || '',
+            energy_mode: energyMode || '',
+            start_time: startTime,
+            end_time: endTime
           });
           
-          fetch('http://localhost:8000/api/usage/quantity?' + params)
+          fetch('http://localhost:8000/api/usage/quantity/specifictimeperiod?' + params)
             .then(response => {
               if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -2435,8 +2435,8 @@
             return;
           }
           
-          // 直接导出为XLSX格式
-          exportToXLSX(allData);
+          // 直接导出为XLSX格式，传入专用文件名并添加.xlsx后缀
+          exportToXLSX(allData, '能耗日用量报表_' + new Date().toLocaleDateString('zh-CN') + '.xlsx');
         }).catch(error => {
           console.error('保存数据失败:', error);
           if (loadingIndicator) loadingIndicator.style.display = 'none';
@@ -2557,7 +2557,7 @@
       }
       
       // 导出为XLSX格式 - 使用简化但可靠的实现
-      function exportToXLSX(data) {
+      function exportToXLSX(data, fileName) {
         try {
           // 准备数据数组（二维数组格式）
           const excelData = [];
@@ -2568,15 +2568,15 @@
           // 添加数据行
           data.forEach(item => {
             excelData.push([
-              item.specific_part || '',
-              item.building || '',
-              item.unit || '',
-              item.room_number || '',
-              item.energy_mode || '',
-              item.initial_energy !== null && item.initial_energy !== undefined ? item.initial_energy : '',
-              item.final_energy !== null && item.final_energy !== undefined ? item.final_energy : '',
-              item.usage_quantity !== null && item.usage_quantity !== undefined ? item.usage_quantity : '',
-              item.time_period || ''
+              item.specific_part || item['专有部分'] || '',
+              item.building || item['楼栋'] || '',
+              item.unit || item['单元'] || '',
+              item.room || item.room_number || item['房号'] || '',
+              item.energy_mode || item['供能模式'] || '',
+              item.initial_energy !== null && item.initial_energy !== undefined ? item.initial_energy : item['初期能耗(kWh)'] || '',
+              item.final_energy !== null && item.final_energy !== undefined ? item.final_energy : item['末期能耗(kWh)'] || '',
+              item.usage_quantity !== null && item.usage_quantity !== undefined ? item.usage_quantity : item['使用量(kWh)'] || '',
+              item.time_period || item['时间段'] || ''
             ]);
           });
           
@@ -2587,11 +2587,13 @@
           // 将工作表添加到工作簿
           XLSX.utils.book_append_sheet(wb, ws, '用量数据');
           
-          // 生成文件名
-          const dateStr = new Date().getFullYear() + 
-                         String(new Date().getMonth() + 1).padStart(2, '0') + 
-                         String(new Date().getDate()).padStart(2, '0');
-          const fileName = `用量数据_${dateStr}.xlsx`;
+          // 如果没有传入自定义文件名，则使用默认命名规则
+          if (!fileName) {
+            const dateStr = new Date().getFullYear() + 
+                           String(new Date().getMonth() + 1).padStart(2, '0') + 
+                           String(new Date().getDate()).padStart(2, '0');
+            fileName = `用量数据_${dateStr}.xlsx`;
+          }
           
           // 导出为Excel文件
           XLSX.writeFile(wb, fileName);
