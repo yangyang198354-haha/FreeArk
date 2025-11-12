@@ -76,6 +76,15 @@ class UsageQuantityDaily(models.Model):
         db_table = 'usage_quantity_daily'  # 指定表名
         verbose_name = '每日用量数据'
         verbose_name_plural = '每日用量数据'
+        # 创建索引以提高查询性能
+        indexes = [
+            # 单列索引
+            models.Index(fields=['time_period']),
+            models.Index(fields=['specific_part']),
+            models.Index(fields=['energy_mode']),
+            # 组合索引
+            models.Index(fields=['time_period', 'specific_part', 'energy_mode']),
+        ]
     
     def __str__(self):
         return f"{self.specific_part} - {self.time_period} - {self.energy_mode}"
@@ -116,8 +125,13 @@ class UsageQuantityMonthly(models.Model):
         verbose_name_plural = '每月用量数据'
         # 创建索引以提高查询性能
         indexes = [
+            # 保留原有索引
             models.Index(fields=['specific_part', 'usage_month']),
             models.Index(fields=['building', 'unit', 'room_number']),
+            # 新增索引
+            models.Index(fields=['energy_mode']),
+            models.Index(fields=['updated_at']),
+            models.Index(fields=['specific_part', 'energy_mode', 'usage_month']),
         ]
     
     def __str__(self):
@@ -151,8 +165,17 @@ class PLCData(models.Model):
         db_table = 'plc_data'  # 指定表名
         verbose_name = 'PLC数据'
         verbose_name_plural = 'PLC数据'
-        # 创建复合索引以提高查询性能
+        # 创建索引以提高查询性能
         indexes = [
+            # 单列索引
+            models.Index(fields=['usage_date']),
+            models.Index(fields=['specific_part']),
+            models.Index(fields=['energy_mode']),
+            models.Index(fields=['updated_at']),
+            # 组合索引
+            models.Index(fields=['usage_date', 'specific_part', 'energy_mode']),
+            models.Index(fields=['usage_date', 'specific_part', 'energy_mode', 'updated_at']),
+            # 保留原有索引
             models.Index(fields=['specific_part', 'energy_mode', 'created_at']),
             models.Index(fields=['plc_ip', 'created_at']),
             models.Index(fields=['building', 'unit', 'room_number']),
