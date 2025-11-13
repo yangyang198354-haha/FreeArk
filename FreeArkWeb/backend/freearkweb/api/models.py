@@ -166,6 +166,8 @@ class PLCData(models.Model):
         verbose_name = 'PLC数据'
         verbose_name_plural = 'PLC数据'
         # 创建索引以提高查询性能
+        # 唯一约束：确保每个特定部分、能源模式和计量日期组合只有一条记录
+        unique_together = [['specific_part', 'energy_mode', 'usage_date']]
         indexes = [
             # 单列索引
             models.Index(fields=['usage_date']),

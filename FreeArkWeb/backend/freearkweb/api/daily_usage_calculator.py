@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, date, timedelta
 from django.db import transaction, connection
 from django.utils import timezone
-from django.db.models import Max
+from django.db.models import Max, Subquery, OuterRef, F
 from api.models import PLCData, UsageQuantityDaily
 
 # 注意：Django的时区处理 - 设置TIME_ZONE='Asia/Shanghai'且USE_TZ=True时，
@@ -72,21 +72,13 @@ class DailyUsageCalculator:
             # 缓存以提高性能
             cls._specific_part_cache.clear()
             
-            # 优化：使用子查询和聚合获取每个(specific_part, energy_mode)组合的最新记录
-            # 这样可以在单个查询中获取所有需要的数据，避免N+1查询问题
+            # 优化：使用子查询和OuterRef获取每个(specific_part, energy_mode)组合的最新记录
+            # 这样可以确保只获取每个组合的最新记录，避免重复数据
             log_func("获取每个特定部分和能源模式组合的最新记录")
             
-            # 使用子查询找出每个(specific_part, energy_mode)组合的最新updated_at
-            latest_updates = PLCData.objects.filter(
-                usage_date=target_date_value
-            ).values('specific_part', 'energy_mode').annotate(
-                latest_update=Max('updated_at')
-            )
-            
-            # 创建查询条件列表
+            # 直接按目标日期过滤获取所有记录，因为每个 (specific_part, energy_mode) 在目标日期下只有一条记录
             latest_records_qs = PLCData.objects.filter(
-                usage_date=target_date_value,
-                updated_at__in=[update['latest_update'] for update in latest_updates]
+                usage_date=target_date_value
             ).select_related()
             
             # 批量处理结果
@@ -105,6 +97,30 @@ class DailyUsageCalculator:
                     next_day_records_to_create = []
                     next_day_records_to_update = []
                     
+                    # 获取当前批次中所有specific_part和energy_mode的组合
+                    batch_keys = [(record.specific_part, record.energy_mode) for record in batch]
+                    
+                    # 批量预取现有记录以减少数据库查询
+                    # 预取目标日期的现有记录
+                    current_day_existing_records = UsageQuantityDaily.objects.filter(
+                        time_period=target_date_value,
+                        specific_part__in=[key[0] for key in batch_keys],
+                        energy_mode__in=[key[1] for key in batch_keys]
+                    )
+                    
+                    # 创建现有记录的映射，用于O(1)查找
+                    current_day_records_map = {(record.specific_part, record.energy_mode): record for record in current_day_existing_records}
+                    
+                    # 预取次日的现有记录
+                    next_day_existing_records = UsageQuantityDaily.objects.filter(
+                        time_period=next_day,
+                        specific_part__in=[key[0] for key in batch_keys],
+                        energy_mode__in=[key[1] for key in batch_keys]
+                    )
+                    
+                    # 创建次日现有记录的映射
+                    next_day_records_map = {(record.specific_part, record.energy_mode): record for record in next_day_existing_records}
+                    
                     for latest_record in batch:
                         specific_part = latest_record.specific_part
                         energy_mode = latest_record.energy_mode
@@ -121,18 +137,15 @@ class DailyUsageCalculator:
                         mode_display = energy_mode
                         
                         # 查找是否已有当日记录
-                        try:
-                            daily_record = UsageQuantityDaily.objects.get(
-                                time_period=target_date_value,
-                                specific_part=specific_part,
-                                energy_mode=mode_display
-                            )
+                        key = (specific_part, mode_display)
+                        if key in current_day_records_map:
                             # 更新现有记录
+                            daily_record = current_day_records_map[key]
                             daily_record.final_energy = final_energy
                             daily_record.usage_quantity = final_energy - daily_record.initial_energy
                             daily_records_to_update.append(daily_record)
                             updated_count += 1
-                        except UsageQuantityDaily.DoesNotExist:
+                        else:
                             # 创建新记录
                             daily_records_to_create.append(UsageQuantityDaily(
                                 time_period=target_date_value,
@@ -148,20 +161,16 @@ class DailyUsageCalculator:
                             created_count += 1
                         
                         # 处理次日记录
-                        try:
-                            next_record = UsageQuantityDaily.objects.get(
-                                time_period=next_day,
-                                specific_part=specific_part,
-                                energy_mode=mode_display
-                            )
-                            # 如果没有初始值或需要更新
+                        if key in next_day_records_map:
+                            # 更新现有记录
+                            next_record = next_day_records_map[key]
                             if not next_record.initial_energy:
                                 next_record.initial_energy = final_energy
                                 next_record.final_energy = None
                                 next_record.usage_quantity = None
                                 next_day_records_to_update.append(next_record)
                                 next_day_count += 1
-                        except UsageQuantityDaily.DoesNotExist:
+                        else:
                             # 创建次日新记录
                             next_day_records_to_create.append(UsageQuantityDaily(
                                 time_period=next_day,
@@ -241,36 +250,6 @@ class DailyUsageCalculator:
             "CREATE INDEX idx_usagequantitydaily_energy_mode ON api_usagequantitydaily(energy_mode);",
             "CREATE INDEX idx_usagequantitydaily_combined ON api_usagequantitydaily(time_period, specific_part, energy_mode);"
         ]
-    
-    @staticmethod
-    def parse_specific_part(specific_part):
-        """
-        解析specific_part获取building、unit、room_number
-        假设格式为"building-unit-room_number"或直接是房间标识符
-        """
-        # 默认值
-        building = ""
-        unit = ""
-        room_number = ""
-        
-        try:
-            # 尝试解析格式"building-unit-room_number"
-            parts = specific_part.split('-')
-            if len(parts) == 3:
-                building, unit, room_number = parts
-            elif len(parts) == 4:
-                # 如果是格式如"3-1-7-702" (楼栋-单元-楼层-房号)
-                building = parts[0]
-                unit = parts[1]
-                room_number = parts[3]  # 第4部分是房号
-            else:
-                # 如果无法解析，使用默认值，specific_part作为room_number
-                room_number = specific_part
-        except Exception:
-            # 解析失败时使用默认值
-            room_number = specific_part
-        
-        return building, unit, room_number
     
     @staticmethod
     def parse_specific_part(specific_part):
