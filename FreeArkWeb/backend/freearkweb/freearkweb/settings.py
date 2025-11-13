@@ -108,7 +108,7 @@ WSGI_APPLICATION = 'freearkweb.wsgi.application'
 
 # 数据库配置 - 支持MySQL和SQLite切换
 # 设置数据库切换开关：True使用SQLite，False使用MySQL
-USE_SQLITE = False
+USE_SQLITE = True
 
 # MySQL数据库配置
 MYSQL_DATABASE = {
