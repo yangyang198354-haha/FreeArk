@@ -294,14 +294,25 @@ def get_usage_quantity_specific_time_period(request):
     if end_time:
         queryset = queryset.filter(time_period__lte=end_time)
     
-    # 按时间升序排序
-    queryset = queryset.order_by('time_period')
-    
     # 按专有部分和供能模式分组，计算每个组的初期能耗最小值、末期能耗最大值
     from django.db.models import Min, Max, F
     
-    # 获取所有唯一的专有部分和供能模式组合
-    unique_combinations = queryset.values('specific_part', 'energy_mode').distinct()
+    # 获取所有唯一的专有部分
+    unique_specific_parts = queryset.values_list('specific_part', flat=True).distinct()
+    
+    # 定义所有供能模式
+    energy_modes = ['制热', '制冷']
+    
+    # 生成所有组合（专有部分 + 所有供能模式）并去重
+    unique_combinations_set = set()
+    for sp in unique_specific_parts:
+        for em in energy_modes:
+            unique_combinations_set.add((sp, em))
+    # 将去重后的组合转换为字典列表
+    unique_combinations = [{'specific_part': sp, 'energy_mode': em} for sp, em in unique_combinations_set]
+    
+    # 按时间升序排序（用于后续计算）
+    queryset = queryset.order_by('time_period')
     
     result_data = []
     
