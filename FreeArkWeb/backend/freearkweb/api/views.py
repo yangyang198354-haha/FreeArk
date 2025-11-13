@@ -241,6 +241,9 @@ def get_usage_quantity(request):
     if end_time:
         queryset = queryset.filter(time_period__lte=end_time)
     
+    # 按时间升序排序
+    queryset = queryset.order_by('time_period')
+    
     # 处理分页
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 20))
@@ -290,6 +293,9 @@ def get_usage_quantity_specific_time_period(request):
         queryset = queryset.filter(time_period__gte=start_time)
     if end_time:
         queryset = queryset.filter(time_period__lte=end_time)
+    
+    # 按时间升序排序
+    queryset = queryset.order_by('time_period')
     
     # 按专有部分和供能模式分组，计算每个组的初期能耗最小值、末期能耗最大值
     from django.db.models import Min, Max, F
@@ -404,8 +410,8 @@ def get_usage_quantity_monthly(request):
     if end_month:
         queryset = queryset.filter(usage_month__lte=end_month)
     
-    # 按用量月度降序排序
-    queryset = queryset.order_by('-usage_month')
+    # 按用量月度升序排序
+    queryset = queryset.order_by('usage_month')
     
     # 序列化数据
     serializer = UsageQuantityMonthlySerializer(queryset, many=True)

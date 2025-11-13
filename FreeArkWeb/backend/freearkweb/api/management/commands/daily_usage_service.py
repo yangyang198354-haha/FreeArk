@@ -97,14 +97,25 @@ class Command(BaseCommand):
     def calculate_daily_usage(self, target_date):
         """计算指定日期的每日用量，生产环境使用"""
         try:
+            # 记录开始时间
+            start_time = time.time()
+            
             # 使用工具类进行计算，使用logger.info作为日志函数
             result = DailyUsageCalculator.calculate_daily_usage(
                 target_date, 
                 log_func=logger.info
             )
             
-            # 额外记录完成日志
-            logger.info("✅ 计算完成")
+            # 计算耗时
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            # 记录处理结果和耗时
+            logger.info(f"✅ 计算完成，耗时: {duration:.2f}秒")
+            logger.info(f"📊 处理数据条数: {result.get('processed_count', 0)}条")
+            logger.info(f"📈 新增记录: {result.get('created_count', 0)}条")
+            logger.info(f"🔄 更新记录: {result.get('updated_count', 0)}条")
+            logger.info(f"🔮 次日记录: {result.get('next_day_count', 0)}条")
             
         except Exception as e:
             logger.error(f"❌ 计算过程中发生错误: {str(e)}")

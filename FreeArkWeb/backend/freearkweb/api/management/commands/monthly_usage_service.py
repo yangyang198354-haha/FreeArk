@@ -124,16 +124,23 @@ class Command(BaseCommand):
         logger.info(f'🔍 开始月度用量计算流程 - 目标月份: {target_date.strftime("%Y-%m")}')
         
         try:
+            # 记录开始时间
+            start_time = time.time()
+            
             # 调用外部模块进行计算
             result = MonthlyUsageCalculator.calculate_monthly_usage(target_date)
             
+            # 计算耗时
+            end_time = time.time()
+            duration = end_time - start_time
+            
             # 记录结果
             if 'error' in result:
-                logger.error(f"❌ 计算过程中出错: {result['error']}")
+                logger.error(f"❌ 计算过程中出错: {result['error']}, 耗时: {duration:.2f}秒")
             elif result.get('skipped', False):
-                logger.info(f"⚠️  计算被跳过")
+                logger.info(f"⚠️  计算被跳过, 耗时: {duration:.2f}秒")
             else:
-                logger.info(f"📊 月度用量计算完成 - 处理总数: {result['processed']}, 创建: {result['created']}, 更新: {result['updated']}")
+                logger.info(f"📊 月度用量计算完成 - 处理总数: {result['processed']}, 创建: {result['created']}, 更新: {result['updated']}, 耗时: {duration:.2f}秒")
                 
         except Exception as e:
             logger.error(f"❌ 调用计算模块时发生错误: {str(e)}")
