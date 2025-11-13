@@ -734,9 +734,9 @@
                   row.insertCell(2).textContent = item.unit || '-';
                   row.insertCell(3).textContent = item.room_number || '-';
                   row.insertCell(4).textContent = item.energy_mode || '-';
-                  row.insertCell(5).textContent = item.initial_energy || 0;
-                  row.insertCell(6).textContent = item.final_energy || 0;
-                  row.insertCell(7).textContent = item.usage_quantity || 0;
+                  row.insertCell(5).textContent = item.initial_energy !== null && item.initial_energy !== undefined ? item.initial_energy : '';
+                  row.insertCell(6).textContent = item.final_energy !== null && item.final_energy !== undefined ? item.final_energy : '';
+                  row.insertCell(7).textContent = item.usage_quantity !== null && item.usage_quantity !== undefined ? item.usage_quantity : '';
                   row.insertCell(8).textContent = item.time_period || '-';
                 });
                 
