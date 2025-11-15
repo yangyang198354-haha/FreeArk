@@ -6,7 +6,12 @@
           <h1>FreeArk Web</h1>
           <div class="nav-links">
             <router-link v-if="isLoggedIn" to="/">首页</router-link>
-            <router-link v-if="isLoggedIn" to="/usage-query">用量查询</router-link>
+            <div class="nav-dropdown" v-if="isLoggedIn" ref="dropdown">
+  <a class="nav-dropdown-toggle" @click="isDropdownOpen = !isDropdownOpen">能耗报表</a>
+  <div class="nav-dropdown-menu" v-if="isDropdownOpen">
+    <router-link to="/usage-query" class="nav-dropdown-item">用量查询</router-link>
+  </div>
+</div>
             <router-link v-if="!isLoggedIn" to="/login">登录</router-link>
             <button v-if="isLoggedIn" @click="handleLogout" class="logout-btn">
               登出
@@ -35,11 +40,16 @@ export default {
   data() {
     return {
       isLoggedIn: false,
-      userInfo: {}
+      userInfo: {},
+      isDropdownOpen: false
     }
+  },
+  beforeDestroy() {
+    document.removeEventListener('click', this.handleClickOutside)
   },
   created() {
     this.checkAuthStatus()
+    document.addEventListener('click', this.handleClickOutside)
   },
   methods: {
     checkAuthStatus() {
@@ -63,8 +73,14 @@ export default {
         localStorage.removeItem('userInfo')
         this.isLoggedIn = false
         this.userInfo = {}
+        this.isDropdownOpen = false
         // 跳转到登录页
         this.$router.push('/login')
+      }
+    },
+    handleClickOutside(e) {
+      if (this.isDropdownOpen && this.$refs.dropdown && !this.$refs.dropdown.contains(e.target)) {
+        this.isDropdownOpen = false
       }
     }
   }
@@ -139,5 +155,51 @@ body {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Nav dropdown styles */
+.nav-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.nav-dropdown-toggle {
+  color: #fff;
+  text-decoration: none;
+  font-size: 16px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+  cursor: pointer;
+  display: block;
+}
+
+.nav-dropdown-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: #409eff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  margin-top: 2px;
+  z-index: 1000;
+  min-width: 150px;
+}
+
+.nav-dropdown-item {
+  color: #fff;
+  text-decoration: none;
+  font-size: 16px;
+  padding: 8px 16px;
+  display: block;
+  transition: background-color 0.3s;
+}
+
+.nav-dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 </style>
