@@ -21,7 +21,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import { authApi } from '../services/api.js'
 
 export default {
   name: 'LoginView',
@@ -51,12 +51,7 @@ export default {
           this.loading = true
           this.error = ''
           try {
-            const response = await axios.post('http://localhost:8000/api/auth/login/', this.loginForm, {
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              withCredentials: true
-            })
+            const response = await authApi.login(this.loginForm)
             
             // 存储用户信息和Token
             if (response.data.token) {

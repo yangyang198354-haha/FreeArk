@@ -48,14 +48,9 @@
 <script>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { ElSpinner, ElEmpty } from 'element-plus'
 
 export default {
   name: 'UsageQueryView',
-  components: {
-    ElSpinner,
-    ElEmpty
-  },
   setup() {
     const usageData = ref([])
     const loading = ref(false)

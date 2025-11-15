@@ -58,8 +58,6 @@
 </template>
 
 <script>
-import { Cpu, DataAnalysis, DocumentCopy, Refresh } from '@element-plus/icons-vue'
-
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { Cpu, DataAnalysis, DocumentCopy, Refresh } from '@element-plus/icons-vue'
