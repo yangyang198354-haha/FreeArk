@@ -15,11 +15,10 @@
           <el-input v-model="filterForm.houseNumber" placeholder="请输入户号" style="width: 100px;"></el-input>
         </el-form-item>
         
-        <el-form-item label="功能模式">
-          <el-select v-model="filterForm.functionMode" placeholder="请选择" style="width: 150px;">
-            <el-option label="制冷" value="cooling"></el-option>
-            <el-option label="制热" value="heating"></el-option>
-            <el-option label="通风" value="ventilation"></el-option>
+        <el-form-item label="供能模式">
+          <el-select v-model="filterForm.energyMode" placeholder="请选择" style="width: 150px;">
+            <el-option label="制冷" value="制冷"></el-option>
+            <el-option label="制热" value="制热"></el-option>
           </el-select>
         </el-form-item>
         
