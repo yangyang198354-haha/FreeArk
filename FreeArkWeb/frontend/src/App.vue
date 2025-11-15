@@ -6,10 +6,11 @@
           <h1>FreeArk Web</h1>
           <div class="nav-links">
             <router-link v-if="isLoggedIn" to="/">首页</router-link>
-            <div class="nav-dropdown" v-if="isLoggedIn" ref="dropdown">
-  <a class="nav-dropdown-toggle" @click="isDropdownOpen = !isDropdownOpen">能耗报表</a>
-  <div class="nav-dropdown-menu" v-if="isDropdownOpen">
+            <div class="nav-dropdown" v-if="isLoggedIn">
+  <a class="nav-dropdown-toggle">能耗报表</a>
+  <div class="nav-dropdown-menu">
     <router-link to="/usage-query" class="nav-dropdown-item">用量查询</router-link>
+    <router-link to="/monthly-usage-report" class="nav-dropdown-item">能耗月用量报表</router-link>
   </div>
 </div>
             <router-link v-if="!isLoggedIn" to="/login">登录</router-link>
@@ -40,16 +41,11 @@ export default {
   data() {
     return {
       isLoggedIn: false,
-      userInfo: {},
-      isDropdownOpen: false
+      userInfo: {}
     }
-  },
-  beforeDestroy() {
-    document.removeEventListener('click', this.handleClickOutside)
   },
   created() {
     this.checkAuthStatus()
-    document.addEventListener('click', this.handleClickOutside)
   },
   methods: {
     checkAuthStatus() {
@@ -73,14 +69,8 @@ export default {
         localStorage.removeItem('userInfo')
         this.isLoggedIn = false
         this.userInfo = {}
-        this.isDropdownOpen = false
         // 跳转到登录页
         this.$router.push('/login')
-      }
-    },
-    handleClickOutside(e) {
-      if (this.isDropdownOpen && this.$refs.dropdown && !this.$refs.dropdown.contains(e.target)) {
-        this.isDropdownOpen = false
       }
     }
   }
@@ -188,6 +178,11 @@ body {
   margin-top: 2px;
   z-index: 1000;
   min-width: 150px;
+  display: none;
+}
+
+.nav-dropdown:hover .nav-dropdown-menu {
+  display: block;
 }
 
 .nav-dropdown-item {
