@@ -1142,15 +1142,15 @@
       minViewMode: 'months',
       inline: true,
       autoApply: true }, function(start, end, label) {
-        document.getElementById('monthlyStartTimeQuery').value = start.format('YYYY-MM-DD');
-        document.getElementById('monthlyEndTimeQuery').value = end.format('YYYY-MM-DD');
+        document.getElementById('monthlyStartTimeQuery').value = start.format('YYYY-MM');
+        document.getElementById('monthlyEndTimeQuery').value = end.format('YYYY-MM');
       });
 
       // 初始化能耗月用量报表日期默认值
       const defaultMonthlyStart = moment().startOf('month');
       const defaultMonthlyEnd = moment().endOf('month');
-      document.getElementById('monthlyStartTimeQuery').value = defaultMonthlyStart.format('YYYY-MM-DD');
-      document.getElementById('monthlyEndTimeQuery').value = defaultMonthlyEnd.format('YYYY-MM-DD');
+      document.getElementById('monthlyStartTimeQuery').value = defaultMonthlyStart.format('YYYY-MM');
+      document.getElementById('monthlyEndTimeQuery').value = defaultMonthlyEnd.format('YYYY-MM');
 
       // 获取能耗月用量报表当前选择的值
       function getMonthlySelectedValues() {
@@ -1488,8 +1488,8 @@
       function resetMonthlyQueryForm() {
         // 重置日期范围
         document.getElementById('monthlyDateRangePicker').value = '';
-        document.getElementById('monthlyStartTimeQuery').value = defaultMonthlyStart.format('YYYY-MM-DD');
-        document.getElementById('monthlyEndTimeQuery').value = defaultMonthlyEnd.format('YYYY-MM-DD');
+        document.getElementById('monthlyStartTimeQuery').value = defaultMonthlyStart.format('YYYY-MM');
+        document.getElementById('monthlyEndTimeQuery').value = defaultMonthlyEnd.format('YYYY-MM');
 
         // 重置楼栋-单元-户号选择
         document.querySelector('#monthlyCascadingSelector .cascading-selector-input').value = '';
