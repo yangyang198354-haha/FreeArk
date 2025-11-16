@@ -6,30 +6,8 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 from api.plc_data_cleaner import clean_old_plc_data
 
-# 配置日志，确保日志目录存在
-log_dir = os.path.join(settings.BASE_DIR, 'logs')
-os.makedirs(log_dir, exist_ok=True)
-
-# 配置logger
+# 获取配置好的日志器
 logger = logging.getLogger('clean_plc_data')
-logger.setLevel(logging.INFO)
-
-# 确保logger没有现有的handler
-if not logger.handlers:
-    # 添加文件handler
-    log_file = os.path.join(log_dir, 'clean_plc_data.log')
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
-    
-    # 添加控制台handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
 
 class Command(BaseCommand):
     """

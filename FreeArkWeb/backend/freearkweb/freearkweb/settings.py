@@ -257,6 +257,61 @@ LOGGING = {
             'formatter': 'simple',
             'filters': ['require_debug_true'],
         },
+        # 管理命令服务日志文件处理程序
+        'calculate_daily_usage_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'calculate_daily_usage.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
+        'clean_plc_data_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'clean_plc_data.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
+        'daily_usage_service_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'daily_usage_service.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
+        'monthly_usage_service_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'monthly_usage_service.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
+        'mqtt_consumer_service_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'mqtt_consumer_service.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
+        'plc_cleanup_service_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'plc_cleanup_service.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
     },
     'root': {
         'handlers': ['file', 'console'],
@@ -276,6 +331,37 @@ LOGGING = {
         # 添加应用特定的日志器
         'api': {
             'handlers': ['file'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        # 管理命令服务日志器
+        'calculate_daily_usage': {
+            'handlers': ['console', 'calculate_daily_usage_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'clean_plc_data': {
+            'handlers': ['console', 'clean_plc_data_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'daily_usage_service': {
+            'handlers': ['console', 'daily_usage_service_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'monthly_usage_service': {
+            'handlers': ['console', 'monthly_usage_service_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'mqtt_consumer_service': {
+            'handlers': ['console', 'mqtt_consumer_service_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'plc_cleanup_service': {
+            'handlers': ['console', 'plc_cleanup_service_log'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
