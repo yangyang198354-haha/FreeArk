@@ -19,6 +19,18 @@ start "后端服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py runserver 0
 REM 等待后端启动
 ping 127.0.0.1 -n 5 >nul
 
+REM 启动每日用量计算服务（内置定时）
+echo 启动每日用量计算服务...
+start "每日用量计算服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py daily_usage_service"
+
+REM 启动每月用量计算服务（内置定时）
+echo 启动每月用量计算服务...
+start "每月用量计算服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py monthly_usage_service --day 1 --time 02:00"
+
+REM 启动PLC数据清理服务（内置定时）
+echo 启动PLC数据清理服务...
+start "PLC数据清理服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py plc_data_clean_up_service --cron '0 2 * * 0' --days 7"
+
 REM 构建前端
 echo 构建前端项目...
 cd /d %FRONTEND_DIR%

@@ -66,10 +66,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'api.apps.ApiConfig',
     'rest_framework',
-    'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     'corsheaders',
-    'api',
 ]
 
 MIDDLEWARE = [
@@ -200,6 +200,9 @@ REST_FRAMEWORK = {
 
 # 静态文件配置
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# 移除django-crontab配置，改用命令内置的定时功能
+# 这些服务将在start_services.bat中直接启动
 
 # 日志配置 - 最基本配置
 import os
