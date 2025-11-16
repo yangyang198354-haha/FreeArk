@@ -426,9 +426,8 @@
             <!-- 查询条件 -->
             <div class="card" style="margin: 20px;">
               <div class="card-body">
-                <form id="monthlyQueryForm">
-                  <div class="form-row align-items-end" style="margin: 0;">
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-right: 15px; margin-bottom: 15px;">
+                <form id="monthlyQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
+                    <div class="form-group" style="flex: 1; min-width: 150px;">
                       <label for="monthlyCascadingSelector">楼栋-单元-户号</label>
                       <div id="monthlyCascadingSelector" class="cascading-selector" style="position: relative;">
                         <input type="text" class="cascading-selector-input" placeholder="可直接输入，例:1-2-101">
@@ -439,7 +438,7 @@
                         <input type="hidden" id="monthlySelectedRoom" name="selectedRoom">
                       </div>
                     </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-right: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 1; min-width: 150px;">
                       <label for="monthlyEnergyModeQuery">供能模式</label>
                       <select id="monthlyEnergyModeQuery" class="form-control">
                         <option value="">全部</option>
@@ -447,18 +446,17 @@
                         <option value="制热">制热</option>
                       </select>
                     </div>
-                    <div class="form-group" style="flex: 2; min-width: 300px; margin-right: 15px; margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 2; min-width: 300px;">
                       <label for="monthlyDatePickerApp">用量月度</label>
                       <div id="monthlyDatePickerApp"></div>
                       <input type="hidden" id="monthlyStartTimeQuery" name="startTime">
                       <input type="hidden" id="monthlyEndTimeQuery" name="endTime">
                     </div>
-                    <div class="form-group" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <div class="form-group" style="display: flex; gap: 10px;">
                       <button type="button" id="searchMonthlyReportBtn" class="btn btn-primary" onclick="searchMonthlyUsageData()">查询</button>
                       <button type="button" id="resetMonthlyReportBtn" class="btn btn-secondary" onclick="resetMonthlyQueryForm()">重置</button>
                       <button id="saveMonthlyButton" type="button" class="btn btn-success" onclick="saveMonthlyAsXLSX()">保存</button>
                     </div>
-                  </div>
                 </form>
               </div>
             </div>
@@ -4113,9 +4111,9 @@
           }
         });
         
-        // 页面加载后自动切换到用量查询页面，不自动加载数据
+        // 页面加载后默认显示能耗月度用量报表页面
         setTimeout(() => {
-          switchPage('usage');
+          switchPage('monthlyUsageReport');
         }, 500);
         
         // 绑定用户下拉菜单点击事件
