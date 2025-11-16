@@ -2222,12 +2222,19 @@
       function initConsumptionCascadingSelector() {
         const selector = document.getElementById('consumptionCascadingSelector');
         const input = selector.querySelector('.cascading-selector-input');
+        const clearBtn = selector.querySelector('.cascading-clear-btn');
         const menu = selector.querySelector('.cascading-menu');
         
         // 确保_buildingData已加载
         if (Array.isArray(_buildingData)) {
           // 生成菜单结构
           generateConsumptionMenuStructure(_buildingData, menu);
+          
+          // 确保输入框初始为空
+          input.value = '';
+          
+          // 更新清空按钮显示状态
+          clearBtn.style.display = 'none';
           
           // 点击输入框切换菜单显示
           input.addEventListener('click', function(event) {
@@ -2252,6 +2259,9 @@
           
           // 设置户号搜索功能
           setupConsumptionCascadingSearch();
+          
+          // 确保菜单初始状态是隐藏的
+          menu.style.display = 'none';
         }
       }
       
@@ -3551,6 +3561,11 @@
         
         // 显示选中的页面
         document.getElementById(`${pageId}Page`).style.display = 'block';
+        
+        // 确保所有级联菜单隐藏
+        document.querySelectorAll('.cascading-menu').forEach(menu => {
+          menu.style.display = 'none';
+        });
         
         // 切换到能耗报表页面时的处理
         if (pageId === 'energyConsumptionReport') {
