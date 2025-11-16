@@ -424,8 +424,8 @@ def get_usage_quantity_monthly(request):
     if end_month:
         queryset = queryset.filter(usage_month__lte=end_month)
     
-    # 按用量月度升序排序
-    queryset = queryset.order_by('usage_month')
+    # 按专有部分、供能模式、用量月度升序排序
+    queryset = queryset.order_by('specific_part', 'energy_mode', 'usage_month')
     
     # 处理分页（使用前端约定的参数名）
     page = int(request.GET.get('page', 1))
