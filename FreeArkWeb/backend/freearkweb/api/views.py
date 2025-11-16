@@ -426,7 +426,7 @@ def get_usage_quantity_monthly(request):
     
     # 处理分页（使用前端约定的参数名）
     page = int(request.GET.get('page', 1))
-    size = int(request.GET.get('size', 10))
+    size = int(request.GET.get('page_size', 10))
     
     # 计算分页范围
     start_index = (page - 1) * size

@@ -1414,7 +1414,7 @@
         });
 
         // 发送请求
-        fetch(`/api/usage/quantity/monthly/?${params}`)
+        fetch(`http://localhost:8000/api/usage/quantity/monthly?${params}`)
           .then(response => response.json())
           .then(data => {
             // 隐藏加载状态
@@ -3337,7 +3337,7 @@
             const originalPage = currentMonthlyPage;
             
             function fetchNextPage() {
-                const baseUrl = 'http://localhost:8000/api/usage/quantity/monthly/';
+                const baseUrl = 'http://localhost:8000/api/usage/quantity/monthly';
                 const params = new URLSearchParams();
                 params.append('specific_part', specificPart);
                 if (energyMode) params.append('energy_mode', energyMode);
