@@ -5,12 +5,13 @@
         <div class="header-content">
           <h1>FreeArk Web</h1>
           <div class="nav-links">
-            <router-link v-if="isLoggedIn" to="/">首页</router-link>
+            <router-link v-if="isLoggedIn" to="/home">首页</router-link>
             <div class="nav-dropdown" v-if="isLoggedIn">
   <a class="nav-dropdown-toggle">能耗报表</a>
   <div class="nav-dropdown-menu">
-    <router-link to="/usage-query" class="nav-dropdown-item">用量查询</router-link>
     <router-link to="/monthly-usage-report" class="nav-dropdown-item">能耗月用量报表</router-link>
+    <router-link to="/daily-usage-report" class="nav-dropdown-item">能耗日用量报表</router-link>
+    <router-link to="/usage-query" class="nav-dropdown-item">用量查询</router-link>
   </div>
 </div>
             <router-link v-if="!isLoggedIn" to="/login">登录</router-link>

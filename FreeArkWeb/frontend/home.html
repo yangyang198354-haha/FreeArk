@@ -120,9 +120,9 @@
           <li class="nav-item dropdown">
             <a href="#usage" class="nav-link dropdown-toggle collapsed" id="usageDropdown" onclick="expandUsageDropdown(event)">能耗报表</a>
             <div class="dropdown-menu">
+              <a href="#monthlyUsageReport" class="dropdown-item" onclick="switchPage('monthlyUsageReport')">能耗月用量报表</a>
               <a href="#energyReport" class="dropdown-item" onclick="switchPage('usage')">能耗日用量报表</a>
               <a href="#energyConsumptionReport" class="dropdown-item" onclick="switchPage('energyConsumptionReport')">用量查询</a>
-              <a href="#monthlyUsageReport" class="dropdown-item" onclick="switchPage('monthlyUsageReport')">能耗月用量报表</a>
             </div>
           </li>
           <li class="nav-item">
@@ -4067,6 +4067,9 @@
         earlyPermissionCheck();
         
         checkAuthentication();
+        
+        // 默认显示能耗月用量报表页面
+        switchPage('monthlyUsageReport');
         
         // 确保Chart对象已加载
         console.log('Chart对象是否可用:', typeof Chart !== 'undefined');

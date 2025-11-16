@@ -3,6 +3,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
+    redirect: '/monthly-usage-report'
+  },
+  {
+    path: '/home',
     name: 'Home',
     component: () => import('../views/HomeView.vue'),
     meta: { requiresAuth: true }
@@ -17,6 +21,12 @@ const routes = [
     path: '/monthly-usage-report',
     name: 'MonthlyUsageReport',
     component: () => import('../views/MonthlyUsageReportView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/daily-usage-report',
+    name: 'DailyUsageReport',
+    component: () => import('../views/DailyUsageReportView.vue'),
     meta: { requiresAuth: true }
   },
   {
