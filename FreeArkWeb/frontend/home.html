@@ -7,6 +7,39 @@
     <link rel="icon" href="favicon.png" type="image/png">
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <style>
+      /* 自定义日期选择器样式以匹配其他控件 */
+      .el-date-editor--monthrange .el-input__inner {
+        height: 38px;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        padding: 0.375rem 0.75rem;
+        font-size: 1rem;
+        line-height: 1.5;
+        color: #495057;
+        background-color: #fff;
+        background-clip: padding-box;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+      }
+      
+      .el-date-editor--monthrange .el-input__inner:focus {
+        border-color: #80bdff;
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+      }
+      
+      /* 确保选择面板为中文 */
+      .el-picker-panel {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+      
+      .el-month-table__cell .cell {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+    </style>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/locale/zh-cn.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -19,7 +52,14 @@
     <!-- 添加daterangepicker库 -->
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" >
     <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/locale/zh-cn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/zh-cn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <script>
+      // 设置dayjs为中文
+      dayjs.locale('zh-cn');
+    </script>
     <!-- 引入楼栋数据 - 使用非模块方式 -->
     <script>
             // 能耗报表全局变量
@@ -42,6 +82,9 @@
     <link rel="stylesheet" href="./home.css">
     <style>
         /* 所有样式已移至home.css */
+        .el-picker-panel {
+            z-index: 9999;
+        }
       </style>
   </head>
   <body>
@@ -405,8 +448,8 @@
                       </select>
                     </div>
                     <div class="form-group" style="flex: 2; min-width: 300px; margin-right: 15px; margin-bottom: 15px;">
-                      <label for="monthlyDateRangePicker">用量月度</label>
-                      <input type="text" id="monthlyDateRangePicker" class="form-control">
+                      <label for="monthlyDatePickerApp">用量月度</label>
+                      <div id="monthlyDatePickerApp"></div>
                       <input type="hidden" id="monthlyStartTimeQuery" name="startTime">
                       <input type="hidden" id="monthlyEndTimeQuery" name="endTime">
                     </div>
@@ -703,49 +746,68 @@
         document.getElementById('startTimeQuery').value = defaultStart.format('YYYY-MM-DD');
         document.getElementById('endTimeQuery').value = defaultEnd.format('YYYY-MM-DD');
         
-        // 初始化能耗月用量报表日期范围选择器
-        $('#monthlyDateRangePicker').daterangepicker({
-          opens: 'right',
-          showDropdowns: true,
-          minYear: 2020,
-          maxYear: parseInt(moment().format('YYYY'), 10) + 1,
-          startDate: moment().startOf('month'),
-          endDate: moment().endOf('month'),
-          maxSpan: { months: 12 },
-          locale: {
-            format: 'YYYY-MM',
-            separator: ' - ',
-            applyLabel: '确定',
-            cancelLabel: '取消',
-            fromLabel: '开始',
-            toLabel: '结束',
-            customRangeLabel: '自定义',
-            weekLabel: 'W',
-            daysOfWeek: ['日', '一', '二', '三', '四', '五', '六'],
-            monthNames: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
-            firstDay: 1
+        // 初始化 Vue 年月范围选择器
+        const { createApp } = Vue;
+
+        // 创建Vue应用
+        const app = createApp({
+          template: `
+            <el-config-provider :locale="ElementPlusLocaleZhCn">
+              <el-date-picker
+                v-model="dateRange"
+                type="monthrange"
+                range-separator="至"
+                start-placeholder="开始年月"
+                end-placeholder="结束年月"
+                format="YYYY年MM月"
+                value-format="YYYY-MM"
+                @update:model-value="handleDateChange"
+                :picker-options="pickerOptions"
+                class="form-control"
+                :style="{
+                  height: '38px',
+                  border: '1px solid #ced4da',
+                  borderRadius: '0.25rem',
+                  padding: '0.375rem 0.75rem'
+                }"
+              ></el-date-picker>
+            </el-config-provider>
+          `,
+          data() {
+            return {
+              dateRange: [moment().startOf('month').format('YYYY-MM'), moment().endOf('month').format('YYYY-MM')],
+              pickerOptions: {
+                  ranges: {
+                    '本月': [moment().startOf('month').toDate(), moment().endOf('month').toDate()],
+                    '上月': [moment().subtract(1, 'month').startOf('month').toDate(), moment().subtract(1, 'month').endOf('month').toDate()],
+                    '近3个月': [moment().subtract(2, 'month').startOf('month').toDate(), moment().endOf('month').toDate()],
+                    '近6个月': [moment().subtract(5, 'month').startOf('month').toDate(), moment().endOf('month').toDate()],
+                    '本年': [moment().startOf('year').toDate(), moment().endOf('year').toDate()],
+                    '去年': [moment().subtract(1, 'year').startOf('year').toDate(), moment().subtract(1, 'year').endOf('year').toDate()]
+                  },
+                  maxSpan: { months: 12 },
+                  minDate: moment('2020-01').toDate(),
+                  maxDate: moment().add(1, 'year').endOf('year').toDate()
+                }
+            };
           },
-          ranges: {
-            '本月': [moment().startOf('month'), moment().endOf('month')],
-            '上月': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')],
-            '近3个月': [moment().subtract(2, 'month').startOf('month'), moment().endOf('month')],
-            '近6个月': [moment().subtract(5, 'month').startOf('month'), moment().endOf('month')],
-            '本年': [moment().startOf('year'), moment().endOf('year')],
-            '去年': [moment().subtract(1, 'year').startOf('year'), moment().subtract(1, 'year').endOf('year')]
-        },
-        viewMode: 'months',
-        minViewMode: 'months',
-        inline: true,
-        autoApply: true }, function(start, end, label) {
-          document.getElementById('monthlyStartTimeQuery').value = start.format('YYYY-MM');
-          document.getElementById('monthlyEndTimeQuery').value = end.format('YYYY-MM');
+          methods: {
+            handleDateChange(value) {
+              if (value && value.length === 2) {
+                document.getElementById('monthlyStartTimeQuery').value = value[0];
+                document.getElementById('monthlyEndTimeQuery').value = value[1];
+              }
+            }
+          },
+          mounted() {
+            // 设置初始值到隐藏输入框
+            document.getElementById('monthlyStartTimeQuery').value = this.dateRange[0];
+            document.getElementById('monthlyEndTimeQuery').value = this.dateRange[1];
+          }
         });
 
-        // 初始化能耗月用量报表日期默认值
-        const defaultMonthlyStart = moment().startOf('month');
-        const defaultMonthlyEnd = moment().endOf('month');
-        document.getElementById('monthlyStartTimeQuery').value = defaultMonthlyStart.format('YYYY-MM');
-        document.getElementById('monthlyEndTimeQuery').value = defaultMonthlyEnd.format('YYYY-MM');
+        // 挂载Vue应用并保存根组件实例
+        window.monthlyDatePickerInstance = app.use(ElementPlus, { locale: ElementPlusLocaleZhCn }).mount('#monthlyDatePickerApp');
 
         // 初始化能耗报表日期范围选择器
         $('#consumptionDateRangePicker').daterangepicker({
@@ -1486,9 +1548,14 @@
       // 重置能耗月用量报表查询表单
       function resetMonthlyQueryForm() {
         // 重置日期范围
-        document.getElementById('monthlyDateRangePicker').value = '';
-        document.getElementById('monthlyStartTimeQuery').value = defaultMonthlyStart.format('YYYY-MM');
-        document.getElementById('monthlyEndTimeQuery').value = defaultMonthlyEnd.format('YYYY-MM');
+        if (window.monthlyDatePickerInstance) {
+          const defaultStart = moment().startOf('month').format('YYYY-MM');
+          const defaultEnd = moment().endOf('month').format('YYYY-MM');
+          // 在Vue 3中需要通过$data访问响应式数据
+          window.monthlyDatePickerInstance.$data.dateRange = [defaultStart, defaultEnd];
+          document.getElementById('monthlyStartTimeQuery').value = defaultStart;
+          document.getElementById('monthlyEndTimeQuery').value = defaultEnd;
+        }
 
         // 重置楼栋-单元-户号选择
         document.querySelector('#monthlyCascadingSelector .cascading-selector-input').value = '';
