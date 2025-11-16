@@ -317,9 +317,19 @@ def get_usage_quantity_specific_time_period(request):
     # 按时间升序排序（用于后续计算）
     queryset = queryset.order_by('time_period')
     
+    # 处理分页：先对组合列表进行分页
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    
+    # 计算分页范围
+    total_count = len(unique_combinations)
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    paginated_combinations = unique_combinations[start_index:end_index]
+    
     result_data = []
     
-    for combination in unique_combinations:
+    for combination in paginated_combinations:
         # 过滤当前组合的数据
         combo_queryset = queryset.filter(
             specific_part=combination['specific_part'],
@@ -360,23 +370,12 @@ def get_usage_quantity_specific_time_period(request):
             'time_period': time_period_str
         })
     
-    total_count = len(result_data)
-    
     # 记录查询结果到日志
     logger.info(f"能耗报表查询结果 - 找到 {total_count} 条记录")
     
-    # 处理分页
-    page = int(request.GET.get('page', 1))
-    page_size = int(request.GET.get('page_size', 20))
-    
-    # 计算分页范围
-    start_index = (page - 1) * page_size
-    end_index = start_index + page_size
-    paginated_data = result_data[start_index:end_index]
-    
     return Response({
         'success': True,
-        'data': paginated_data,
+        'data': result_data,
         'total': total_count
     })
 
