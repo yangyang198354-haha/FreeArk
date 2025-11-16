@@ -82,6 +82,7 @@ class UsageQuantityDaily(models.Model):
             models.Index(fields=['time_period']),
             models.Index(fields=['specific_part']),
             models.Index(fields=['energy_mode']),
+            models.Index(fields=['time_period', 'energy_mode']),  # 新增复合索引以优化未提供specific_part时的查询
             # 组合索引
             models.Index(fields=['time_period', 'specific_part', 'energy_mode']),
         ]
