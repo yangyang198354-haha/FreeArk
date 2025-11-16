@@ -424,16 +424,24 @@ def get_usage_quantity_monthly(request):
     # 按用量月度升序排序
     queryset = queryset.order_by('usage_month')
     
+    # 处理分页（使用前端约定的参数名）
+    page = int(request.GET.get('page', 1))
+    size = int(request.GET.get('size', 10))
+    
+    # 计算分页范围
+    start_index = (page - 1) * size
+    end_index = start_index + size
+    paginated_queryset = queryset[start_index:end_index]
+    
     # 序列化数据
-    serializer = UsageQuantityMonthlySerializer(queryset, many=True)
-    result_data = serializer.data
-    total_count = len(result_data)
+    serializer = UsageQuantityMonthlySerializer(paginated_queryset, many=True)
+    total_count = queryset.count()
     
     # 记录查询结果到日志
     logger.info(f"UsageQuantityMonthly 查询结果 - 找到 {total_count} 条记录")
     
     return Response({
         'success': True,
-        'data': result_data,
+        'data': serializer.data,
         'total': total_count
     })

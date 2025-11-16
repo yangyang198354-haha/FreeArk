@@ -86,7 +86,7 @@ export default {
         unit: '',
         building: '',
         houseNumber: '',
-        functionMode: '',
+        energyMode: '',
         energyPeriod: '' // YYYY-MM format
       },
       tableData: [],
@@ -102,16 +102,16 @@ export default {
       this.loading = true;
       
       // 根据筛选条件从后端API获取数据
+      
       const params = {
         unit: this.filterForm.unit,
         building: this.filterForm.building,
         room_number: this.filterForm.houseNumber,
-        energy_mode: this.filterForm.functionMode,
+        energy_mode: this.filterForm.energyMode,
         usage_month: this.filterForm.energyPeriod,
         page: this.currentPage,
         size: this.pageSize
-      };
-      
+      };      
       // 使用axios请求后端接口
       this.$axios.get('/api/usage/quantity/monthly/', { params })
         .then(response => {
