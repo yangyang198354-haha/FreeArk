@@ -158,7 +158,7 @@
           <div class="card" style="margin: 20px;">
             <div class="card-body">
               <form id="usageQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
-                <div class="form-group" style="flex: 1; min-width: 150px;">
+                <div class="form-group" style="flex: 1; min-width: 150px; width: 100%;">
                   <label for="cascadingSelector">楼栋-单元-户号</label>
                   <div class="cascading-selector-container">
                     <div id="cascadingSelector" class="cascading-selector" style="position: relative;">
@@ -173,7 +173,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="form-group" style="flex: 1; min-width: 150px;">
+                <div class="form-group" style="flex: 1; min-width: 150px; width: 100%;">
                   <label for="energyModeQuery">供能模式</label>
                   <select class="form-control" id="energyModeQuery">
                     <option value="">全部</option>
@@ -181,7 +181,7 @@
                     <option value="制热">制热</option>
                   </select>
                 </div>
-                <div class="form-group" style="flex: 2; min-width: 300px;">
+                <div class="form-group" style="flex: 2; min-width: 300px; width: 100%;">
                   <label>时间段</label>
                   <!-- 添加daterangepicker库的引用 -->
                   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" >
@@ -426,43 +426,43 @@
             <!-- 查询条件 -->
             <div class="card" style="margin: 20px;">
               <div class="card-body">
-                <form id="monthlyQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end;">
-                    <div class="form-group" style="flex: 1; min-width: 150px;">
-                      <label for="monthlyCascadingSelector">楼栋-单元-户号</label>
-                      <div id="monthlyCascadingSelector" class="cascading-selector" style="position: relative;">
-                        <input type="text" class="cascading-selector-input" placeholder="可直接输入，例:1-2-101">
-                        <button type="button" class="cascading-clear-btn" style="display: none; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #999; font-size: 16px;">×</button>
-                        <div class="cascading-menu"></div>
-                        <input type="hidden" id="monthlySelectedBuilding" name="selectedBuilding">
-                        <input type="hidden" id="monthlySelectedUnit" name="selectedUnit">
-                        <input type="hidden" id="monthlySelectedRoom" name="selectedRoom">
-                      </div>
+                <form id="monthlyQueryForm" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end; width: 100%;">
+                  <div class="form-group" style="flex: 1; min-width: 150px; width: 100%;">
+                    <label for="monthlyCascadingSelector">楼栋-单元-户号</label>
+                    <div id="monthlyCascadingSelector" class="cascading-selector" style="position: relative; width: 100%;">
+                      <input type="text" class="cascading-selector-input" placeholder="可直接输入，例:1-2-101" style="width: 100%;">
+                      <button type="button" class="cascading-clear-btn" style="display: none; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #999; font-size: 16px;">×</button>
+                      <div class="cascading-menu"></div>
+                      <input type="hidden" id="monthlySelectedBuilding" name="selectedBuilding">
+                      <input type="hidden" id="monthlySelectedUnit" name="selectedUnit">
+                      <input type="hidden" id="monthlySelectedRoom" name="selectedRoom">
                     </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px;">
-                      <label for="monthlyEnergyModeQuery">供能模式</label>
-                      <select id="monthlyEnergyModeQuery" class="form-control">
-                        <option value="">全部</option>
-                        <option value="制冷">制冷</option>
-                        <option value="制热">制热</option>
-                      </select>
-                    </div>
-                    <div class="form-group" style="flex: 2; min-width: 300px;">
-                      <label for="monthlyDatePickerApp">用量月度</label>
-                      <div id="monthlyDatePickerApp"></div>
-                      <input type="hidden" id="monthlyStartTimeQuery" name="startTime">
-                      <input type="hidden" id="monthlyEndTimeQuery" name="endTime">
-                    </div>
-                    <div class="form-group" style="display: flex; gap: 10px;">
-                      <button type="button" id="searchMonthlyReportBtn" class="btn btn-primary" onclick="searchMonthlyUsageData()">查询</button>
-                      <button type="button" id="resetMonthlyReportBtn" class="btn btn-secondary" onclick="resetMonthlyQueryForm()">重置</button>
-                      <button id="saveMonthlyButton" type="button" class="btn btn-success" onclick="saveMonthlyAsXLSX()">保存</button>
-                    </div>
+                  </div>
+                  <div class="form-group" style="flex: 1; min-width: 150px; width: 100%;">
+                    <label for="monthlyEnergyModeQuery">供能模式</label>
+                    <select id="monthlyEnergyModeQuery" class="form-control">
+                      <option value="">全部</option>
+                      <option value="制冷">制冷</option>
+                      <option value="制热">制热</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex: 2; min-width: 300px; width: 100%;">
+                    <label for="monthlyDatePickerApp">用量月度</label>
+                    <div id="monthlyDatePickerApp" style="width: 100%;"></div>
+                    <input type="hidden" id="monthlyStartTimeQuery" name="startTime">
+                    <input type="hidden" id="monthlyEndTimeQuery" name="endTime">
+                  </div>
+                  <div class="form-group" style="display: flex; gap: 10px;">
+                    <button type="button" id="searchMonthlyReportBtn" class="btn btn-primary" onclick="searchMonthlyUsageData()">查询</button>
+                    <button type="button" id="resetMonthlyReportBtn" class="btn btn-secondary" onclick="resetMonthlyQueryForm()">重置</button>
+                    <button id="saveMonthlyButton" type="button" class="btn btn-success" onclick="saveMonthlyAsXLSX()">保存</button>
+                  </div>
                 </form>
               </div>
             </div>
           
           <!-- 用量数据表格 -->
-          <div class="card" style="margin: 0 20px;">
+          <div class="card" style="margin: 20px;">
             <div class="card-body">
               <h3>用量数据</h3>
               <!-- 加载指示器 -->
