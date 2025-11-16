@@ -3455,7 +3455,7 @@
               item.initial_energy !== null && item.initial_energy !== undefined ? item.initial_energy : (item['初期能耗(kWh)'] !== null && item['初期能耗(kWh)'] !== undefined) ? item['初期能耗(kWh)'] : '',
               item.final_energy !== null && item.final_energy !== undefined ? item.final_energy : (item['末期能耗(kWh)'] !== null && item['末期能耗(kWh)'] !== undefined) ? item['末期能耗(kWh)'] : '',
               item.usage_quantity !== null && item.usage_quantity !== undefined ? item.usage_quantity : (item['使用量(kWh)'] !== null && item['使用量(kWh)'] !== undefined) ? item['使用量(kWh)'] : '',
-              item.time_period || item['时间段'] || ''
+              item.usage_month || item.time_period || item['时间段'] || ''
             ]);
           });
           
