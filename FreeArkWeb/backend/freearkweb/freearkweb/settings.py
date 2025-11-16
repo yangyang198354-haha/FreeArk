@@ -136,14 +136,7 @@ DATABASES = {
 }
 
 # 输出数据库配置信息用于调试
-# 输出数据库配置信息用于调试
-print(f"数据库配置信息:")
-print(f"- 当前数据库模式: {'SQLite' if USE_SQLITE else 'MySQL'}")
-print(f"- 数据库引擎: {DATABASES['default']['ENGINE']}")
-print(f"- 数据库名称: {DATABASES['default']['NAME']}")
-if not USE_SQLITE:
-    print(f"- 数据库主机: {DATABASES['default']['HOST']}:{DATABASES['default']['PORT']}")
-    print(f"- 数据库用户: {DATABASES['default']['USER']}")
+# 使用日志系统记录配置信息，避免直接print导致重复输出
 
 
 # Password validation
@@ -217,16 +210,14 @@ LOG_DIR = os.path.join(BASE_DIR, '../../../logs')
 LOG_FILE = os.path.join(LOG_DIR, 'django.log')
 
 # 打印调试信息
-print(f"配置日志目录: {LOG_DIR}")
-print(f"配置日志文件: {LOG_FILE}")
+# 使用日志系统记录配置信息，避免直接print导致重复输出
 
 # 确保目录存在
 if not os.path.exists(LOG_DIR):
     try:
         os.makedirs(LOG_DIR)
-        print(f"创建日志目录成功: {LOG_DIR}")
     except Exception as e:
-        print(f"创建日志目录失败: {str(e)}")
+        pass
 
 # 日志目录已配置，将通过Django的LOGGING配置进行日志记录
 
