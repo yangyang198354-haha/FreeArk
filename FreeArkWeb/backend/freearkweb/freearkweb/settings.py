@@ -258,24 +258,7 @@ LOGGING = {
             'filters': ['require_debug_true'],
         },
         # 管理命令服务日志文件处理程序
-        'calculate_daily_usage_log': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(LOG_DIR, 'calculate_daily_usage.log'),
-            'formatter': 'verbose',
-            'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-        },
-        'clean_plc_data_log': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(LOG_DIR, 'clean_plc_data.log'),
-            'formatter': 'verbose',
-            'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-        },
+
         'daily_usage_service_log': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -335,16 +318,7 @@ LOGGING = {
             'propagate': False,
         },
         # 管理命令服务日志器
-        'calculate_daily_usage': {
-            'handlers': ['console', 'calculate_daily_usage_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
-            'propagate': False,
-        },
-        'clean_plc_data': {
-            'handlers': ['console', 'clean_plc_data_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
-            'propagate': False,
-        },
+
         'daily_usage_service': {
             'handlers': ['console', 'daily_usage_service_log'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
