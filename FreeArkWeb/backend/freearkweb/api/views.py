@@ -311,6 +311,9 @@ def get_usage_quantity_specific_time_period(request):
     # 将去重后的组合转换为字典列表
     unique_combinations = [{'specific_part': sp, 'energy_mode': em} for sp, em in unique_combinations_set]
     
+    # 按专有部分和供能模式升序排序组合列表
+    unique_combinations.sort(key=lambda x: (x['specific_part'], x['energy_mode']))
+    
     # 按时间升序排序（用于后续计算）
     queryset = queryset.order_by('time_period')
     
