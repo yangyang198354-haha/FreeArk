@@ -29,7 +29,7 @@ start "每月用量计算服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py
 
 REM 启动PLC数据清理服务（内置定时）
 echo 启动PLC数据清理服务...
-start "PLC数据清理服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py plc_data_clean_up_service --cron '0 2 * * 0' --days 7"
+start "PLC数据清理服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py plc_data_clean_up_service --days 7"
 
 REM 构建前端
 echo 构建前端项目...

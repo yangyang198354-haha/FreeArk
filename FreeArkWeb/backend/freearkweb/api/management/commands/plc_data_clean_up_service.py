@@ -29,8 +29,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--cron',
             type=str,
-            default='0 0 * * 0',  # 默认每周日凌晨0点0分
-            help='cron表达式，格式为 "分 时 日 月 周"（默认为 "0 0 * * 0"，即每周日凌晨0点0分）'
+            default='0 2 * * 0',  # 默认每周日凌晨2点0分
+            help='cron表达式，格式为 "分 时 日 月 周"（默认为 "0 2 * * 0"，即每周日凌晨2点0分）'
         )
         parser.add_argument(
             '--interval',
