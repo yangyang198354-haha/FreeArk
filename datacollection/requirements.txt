@@ -1,0 +1,11 @@
+# FreeArk 数据采集系统依赖
+
+# 数据处理库
+pandas>=1.0.0
+openpyxl>=3.0.0
+
+# PLC通信库
+python-snap7>=1.4.0
+
+# MQTT通信库
+paho-mqtt>=1.5.0

@@ -14,8 +14,8 @@
     "mqtt": {
       "enabled": true,
       "server": {
-        "host": "192.168.31.97",
-        "port": 32795,
+        "host": "192.168.31.98",
+        "port": 32774,
         "username": "",
         "password": "",
         "tls_enabled": false,

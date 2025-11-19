@@ -1,6 +1,6 @@
 {
   "scheduler": {
-    "interval_seconds": 3600,
+    "interval_seconds": 300,
     "building_files": [
         "all_owner.json"
       ]

@@ -1,0 +1,29 @@
+[Unit]
+Description=FreeArk Data Collector Docker Service
+Documentation=https://github.com/your-repo/freeark
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+
+# 定义环境变量
+Environment=COMPOSE_PROJECT_NAME=freeark-data-collector
+Environment=COMPOSE_FILE=/opt/freeark/datacollection/docker-compose.yml
+
+# 工作目录
+WorkingDirectory=/opt/freeark/datacollection
+
+# 启动命令
+ExecStart=/usr/bin/docker-compose up
+
+# 停止命令
+ExecStop=/usr/bin/docker-compose down
+
+# 确保在服务停止时清理所有相关进程
+ExecStopPost=/usr/bin/docker-compose rm -f
+
+[Install]
+WantedBy=multi-user.target

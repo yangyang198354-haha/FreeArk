@@ -204,6 +204,141 @@ class PLCReadWriter:
                 logger.info(f"⚠️  写入异常，第{retries}次重试：{str(e)}")
                 time.sleep(0.1 * retries)  # 指数退避策略
 
+
+    def write_multi(self, configs: List[Dict], max_retries: int = 2) -> List[Tuple[bool, str]]:
+        """批量写入多个参数，使用一次请求提高效率"""
+        retries = 0
+        while retries <= max_retries:
+            try:
+                if not self.connected:
+                    return [(False, "未连接到PLC") for _ in configs]
+
+                # 构造multi_write请求
+                write_requests = []
+                for req in configs:
+                    db_num = req['db_num']
+                    offset = req['offset']
+                    value = req['value']
+                    data_type = req['data_type']
+                    
+                    # 打包数据
+                    packed_data = self._pack_data(value, data_type)
+                    if packed_data is None:
+                        write_requests.append((0x84, db_num, offset, 0x00, b""))  # 无效数据
+                    else:
+                        write_requests.append(
+                            (0x84, db_num, offset, 0x00, packed_data)  # DB区域类型0x84
+                        )
+
+                # 执行批量写入
+                results = self.client.write_multi(write_requests)
+
+                # 处理结果
+                processed_results = []
+                for i, (success, result_code) in enumerate(results):
+                    if success:
+                        processed_results.append((True, "写入成功"))
+                    else:
+                        req = configs[i]
+                        processed_results.append((False, f"写入失败，错误码：{result_code}"))
+
+                return processed_results
+            except Exception as e:
+                retries += 1
+                if retries > max_retries:
+                    return [(False, f"批量写入异常（已重试{max_retries}次）：{str(e)}") for _ in configs]
+                logger.info(f"⚠️  批量写入异常，第{retries}次重试：{str(e)}")
+                time.sleep(0.1 * retries)  # 指数退避策略
+
+    def read_multi(self, requests: List[Dict], max_retries: int = 2) -> List[Tuple[bool, str, any]]:
+        """批量读取多个参数，使用一次请求提高效率"""
+        retries = 0
+        while retries <= max_retries:
+            try:
+                if not self.connected:
+                    return [(False, "未连接到PLC", None) for _ in requests]
+
+                # 构造multi_read请求
+                read_requests = []
+                for req in requests:
+                    db_num = req['db_num']
+                    offset = req['offset']
+                    length = req['length']
+                    
+                    # Snap7的read_multi需要指定数据区域类型
+                    # DB块区域类型为0x84 (S7AreaDB)
+                    read_requests.append(
+                        (0x84, db_num, offset, length, 0x00)  # 最后一个参数是数据类型代码，0x00表示按字节读取
+                    )
+
+                # 执行批量读取
+                results = self.client.read_multi(read_requests)
+
+                # 解析结果
+                parsed_results = []
+                for i, (success, data) in enumerate(results):
+                    if success:
+                        req = requests[i]
+                        data_type = req['data_type']
+                        parsed_value = self._parse_data(data, data_type)  # 使用正确的_parse_data方法
+                        if parsed_value is not None:
+                            parsed_results.append((True, "读取成功", parsed_value))
+                        else:
+                            parsed_results.append((False, f"数据解析失败：{data_type}", None))
+                    else:
+                        parsed_results.append((False, "批量读取失败", None))
+
+                return parsed_results
+            except Exception as e:
+                retries += 1
+                if retries > max_retries:
+                    return [(False, f"批量读取异常（已重试{max_retries}次）：{str(e)}", None) for _ in requests]
+                logger.info(f"⚠️  批量读取异常，第{retries}次重试：{str(e)}")
+                time.sleep(0.1 * retries)  # 指数退避策略
+        """批量写入多个参数，使用一次请求提高效率"""
+        retries = 0
+        while retries <= max_retries:
+            try:
+                if not self.connected:
+                    return [(False, "未连接到PLC") for _ in requests]
+
+                # 构造multi_write请求
+                write_requests = []
+                for req in requests:
+                    db_num = req['db_num']
+                    offset = req['offset']
+                    value = req['value']
+                    data_type = req['data_type']
+                    
+                    # 打包数据
+                    packed_data = self._pack_data(value, data_type)
+                    if packed_data is None:
+                        write_requests.append((0x84, db_num, offset, 0x00, b""))  # 无效数据
+                    else:
+                        write_requests.append(
+                            (0x84, db_num, offset, 0x00, packed_data)  # DB区域类型0x84
+                        )
+
+                # 执行批量写入
+                results = self.client.write_multi(write_requests)
+
+                # 处理结果
+                processed_results = []
+                for i, (success, result_code) in enumerate(results):
+                    if success:
+                        processed_results.append((True, "写入成功"))
+                    else:
+                        req = requests[i]
+                        processed_results.append((False, f"写入失败，错误码：{result_code}"))
+
+                return processed_results
+            except Exception as e:
+                retries += 1
+                if retries > max_retries:
+                    return [(False, f"批量写入异常（已重试{max_retries}次）：{str(e)}") for _ in requests]
+                logger.info(f"⚠️  批量写入异常，第{retries}次重试：{str(e)}")
+                time.sleep(0.1 * retries)  # 指数退避策略
+
 class PLCManager:
     def __init__(self, max_workers: int = 5):
         """初始化PLC管理器，配置线程池大小"""
@@ -393,7 +528,7 @@ class PLCManager:
             logger.info("=" * 60)
 
     def _read_single_plc_multiple_params(self, plc_ip: str, configs: List[Dict]) -> List[Dict]:
-        """读取单个PLC的多个参数 - 使用线程安全的客户端缓存"""
+        """读取单个PLC的多个参数 - 使用线程安全的客户端缓存，采用批量读取提高效率"""
         results = []
         
         # 获取或创建PLC读取器
@@ -418,17 +553,18 @@ class PLCManager:
             with self.stats_lock:
                 self.connection_stats[plc_ip]['active_connections'] = 1
             
-            # 依次读取每个参数
-            for config in configs:
+            # 批量读取所有参数
+            start_read_time = time.time()
+            read_results = reader.read_multi(configs)
+            total_read_time = time.time() - start_read_time
+            
+            # 处理批量读取结果
+            for i, (success, message, value) in enumerate(read_results):
+                config = configs[i]
                 db_num = config['db_num']
                 offset = config['offset']
-                length = config['length']
                 data_type = config['data_type']
-                
-                start_read_time = time.time()
-                # 读取数据
-                success, message, value = reader.read_db_data(db_num, offset, length, data_type)
-                read_duration = time.time() - start_read_time
+                read_duration = total_read_time / len(configs)  # 计算单次参数读取耗时
                 
                 result = {
                     'ip': plc_ip,
@@ -437,7 +573,7 @@ class PLCManager:
                     'success': success,
                     'message': message,
                     'value': value,
-                    'read_time': read_duration  # 添加读取耗时
+                    'read_time': read_duration
                 }
                 results.append(result)
                 
@@ -616,6 +752,154 @@ class PLCManager:
                 'message': f"写入异常: {str(e)}",
                 'write_time': 0
             }
+
+    def _write_single_plc_multiple_params(self, plc_ip: str, configs: List[Dict]) -> List[Dict]:
+        """写入单个PLC的多个参数 - 使用线程安全的客户端缓存"""
+        results = []
+        
+        # 获取或创建PLC读取器
+        reader = self._get_or_create_reader(plc_ip)
+        
+        try:
+            # 确保已连接
+            if not reader.connect():
+                # 连接失败，为所有配置添加失败结果
+                for config in configs:
+                    results.append({
+                        'ip': plc_ip,
+                        'db_num': config['db_num'],
+                        'offset': config['offset'],
+                        'value': config['value'],
+                        'data_type': config['data_type'],
+                        'success': False,
+                        'message': "PLC连接失败"
+                    })
+                return results
+            
+            # 更新活跃连接统计
+            with self.stats_lock:
+                self.connection_stats[plc_ip]['active_connections'] = 1
+            
+            # 批量写入所有参数
+            start_write_time = time.time()
+            write_results = reader.write_multi(configs)
+            total_write_time = time.time() - start_write_time
+            
+            # 处理批量写入结果
+            for i, (success, message) in enumerate(write_results):
+                config = configs[i]
+                db_num = config['db_num']
+                offset = config['offset']
+                value = config['value']
+                data_type = config['data_type']
+                
+                result = {
+                    'ip': plc_ip,
+                    'db_num': db_num,
+                    'offset': offset,
+                    'value': value,
+                    'data_type': data_type,
+                    'success': success,
+                    'message': message,
+                    'write_time': total_write_time / len(configs)  # 平均分配总耗时
+                }
+                
+                # 记录详细的写入日志
+                if success:
+                    logger.debug(f"✅ 成功写入PLC数据: {plc_ip}, DB{db_num}, 偏移量{offset}, 值: {value}, 数据类型: {data_type}, 耗时: {result['write_time']:.3f}秒")
+                else:
+                    logger.debug(f"❌ 写入PLC数据失败: {plc_ip}, DB{db_num}, 偏移量{offset}, 原因: {message}")
+                
+                results.append(result)
+            
+            return results
+        except Exception as e:
+            logger.error(f"❌ 写入单个PLC的多个参数异常: {plc_ip} - {str(e)}")
+            # 为所有配置添加失败结果
+            for config in configs:
+                results.append({
+                    'ip': plc_ip,
+                    'db_num': config['db_num'],
+                    'offset': config['offset'],
+                    'value': config['value'],
+                    'data_type': config['data_type'],
+                    'success': False,
+                    'message': f"写入异常：{str(e)}"
+                })
+            return results
+
+    def write_multiple_plc_params(self, plc_write_configs: List[Dict]) -> List[Dict]:
+        """批量写入多个PLC的参数 - 优化版，使用线程安全的客户端缓存"""
+        if not self.thread_pool:
+            logger.info("❌ 线程池未启动，请先调用start()方法")
+            return []
+        
+        # 按PLC IP对参数配置进行分组
+        ip_to_configs = {}
+        for config in plc_write_configs:
+            plc_ip = config['ip']
+            if plc_ip not in ip_to_configs:
+                ip_to_configs[plc_ip] = []
+            ip_to_configs[plc_ip].append(config)
+        
+        # 打印任务启动信息
+        unique_ips = set(config.get('ip') for config in plc_write_configs if config.get('ip'))
+        logger.info(f"🚀 开始写入PLC数据 - 任务总数: {len(plc_write_configs)}, 涉及PLC数量: {len(unique_ips)}, 线程池大小: {self.max_workers}")
+        
+        # 为每个PLC IP创建一个任务
+        future_to_ip = {}
+        for plc_ip, configs in ip_to_configs.items():
+            future = self.thread_pool.submit(self._write_single_plc_multiple_params, plc_ip, configs)
+            future_to_ip[future] = (plc_ip, configs)
+        
+        # 收集结果
+        results = []
+        start_time = time.time()
+        
+        for future in concurrent.futures.as_completed(future_to_ip):
+            plc_ip, configs = future_to_ip[future]
+            try:
+                # 设置超时时间为30秒
+                ip_results = future.result(timeout=30)
+                results.extend(ip_results)
+            except concurrent.futures.TimeoutError:
+                logger.error(f"❌ PLC写入任务执行超时：{plc_ip}, 超时时间30秒")
+                # 为该IP下的所有配置添加超时结果
+                for config in configs:
+                    results.append({
+                        'ip': config['ip'],
+                        'db_num': config['db_num'],
+                        'offset': config['offset'],
+                        'value': config['value'],
+                        'data_type': config['data_type'],
+                        'success': False,
+                        'message': "任务执行超时（30秒）",
+                        'value': None
+                    })
+            except Exception as e:
+                logger.info(f"❌ PLC写入任务执行异常：{plc_ip} - {str(e)}")
+                # 为该IP下的所有配置添加失败结果
+                for config in configs:
+                    results.append({
+                        'ip': config['ip'],
+                        'db_num': config['db_num'],
+                        'offset': config['offset'],
+                        'value': config['value'],
+                        'data_type': config['data_type'],
+                        'success': False,
+                        'message': f"任务执行异常：{str(e)}",
+                        'value': None
+                    })
+        
+        # 打印完成信息
+        total_duration = time.time() - start_time
+        success_count = sum(1 for r in results if r.get('success', False))
+        logger.info(f"✅ PLC数据写入任务已完成 - 总耗时: {total_duration:.2f}秒, 成功: {success_count}/{len(results)}个任务")
+        
+        # 打印连接统计信息
+        self._print_connection_stats()
+        
+        return results
     
     def print_write_results(self, results: List[Dict]) -> None:
         """打印写入结果 - 显示写入耗时"""

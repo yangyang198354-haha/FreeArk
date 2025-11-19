@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  freeark-data-collector:
+    image: freeark-data-collector:latest
+    container_name: freeark-data-collector
+    restart: unless-stopped
+    volumes:
+      - ./output:/app/output  # 挂载输出目录
+      - ../resource:/app/resource  # 挂载资源目录
+    environment:
+      - PYTHONPATH=/app
+    # 网络配置，如果需要访问外部PLC设备，可以使用host网络
+    # network_mode: host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

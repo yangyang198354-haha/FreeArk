@@ -31,6 +31,10 @@ REM 启动PLC数据清理服务（内置定时）
 echo 启动PLC数据清理服务...
 start "PLC数据清理服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py plc_data_clean_up_service --days 7"
 
+REM 启动MQTT消费者服务
+echo 启动MQTT消费者服务...
+start "MQTT消费者服务" cmd /k "cd /d %BACKEND_DIR% && python manage.py mqtt_consumer_service"
+
 REM 构建前端
 echo 构建前端项目...
 cd /d %FRONTEND_DIR%
