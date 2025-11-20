@@ -289,6 +289,15 @@ LOGGING = {
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
         },
+        'mqtt_consumer_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'mqtt_consumer.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 1024 * 1024 * 5,  # 5MB
+            'backupCount': 5,
+        },
         'plc_cleanup_service_log': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -334,6 +343,11 @@ LOGGING = {
         },
         'mqtt_consumer_service': {
             'handlers': ['console', 'mqtt_consumer_service_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'api.mqtt_consumer': {
+            'handlers': ['console', 'mqtt_consumer_log'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
