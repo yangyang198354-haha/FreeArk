@@ -179,7 +179,9 @@
         const password = document.getElementById('password').value;
         
         try {
-          const response = await fetch('http://localhost:8000/api/auth/login/', {
+          // 使用配置文件中配置的API地址
+          const apiBaseUrl = window.API_CONFIG?.baseUrl || 'http://localhost:8000';
+          const response = await fetch(`${apiBaseUrl}/api/auth/login/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -213,10 +215,7 @@
         }
       }
       
-      // 不自动填充账号信息，用户需手动输入
-      document.addEventListener('DOMContentLoaded', () => {
-        // 输入框保持为空，不自动填充任何内容
-      });
+
     </script>
   </body>
 </html>

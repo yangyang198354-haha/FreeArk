@@ -13,7 +13,8 @@ function copyStaticFilesPlugin(buildDir) {
         { src: join(__dirname, 'src', 'data', 'building_data.js'), dest: join(__dirname, buildDir, 'building_data.js') },
         { src: join(__dirname, 'home.html'), dest: join(__dirname, buildDir, 'home.html') },
         { src: join(__dirname, 'home.css'), dest: join(__dirname, buildDir, 'home.css') },
-        { src: join(__dirname, 'favicon.png'), dest: join(__dirname, buildDir, 'favicon.png') }
+        { src: join(__dirname, 'favicon.png'), dest: join(__dirname, buildDir, 'favicon.png') },
+        { src: join(__dirname, 'config.js'), dest: join(__dirname, buildDir, 'config.js') }
       ]
       
       // 确保构建目录存在
