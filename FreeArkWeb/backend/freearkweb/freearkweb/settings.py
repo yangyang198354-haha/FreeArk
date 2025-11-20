@@ -35,7 +35,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-i%ixus$z-threi-#e&(th
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'  # 默认关闭DEBUG模式
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.52').split(',')
 
 # 生产环境安全设置
 if not DEBUG:
@@ -181,7 +181,7 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS配置
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080').split(',')
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://192.168.31.52:8080').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 # 自定义用户模型配置
