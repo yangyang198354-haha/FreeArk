@@ -91,7 +91,9 @@
       <script>
         // API调用辅助函数
         function getApiUrl(endpoint) {
-          return `${window.API_CONFIG.baseUrl}${endpoint}`;
+          // 添加默认值检查，确保即使config.js未正确加载也能使用有效的URL
+          const baseUrl = window.API_CONFIG?.baseUrl || 'http://192.168.31.52:8000';
+          return `${baseUrl}${endpoint}`;
         }
         
         // 带认证的fetch封装
@@ -1444,7 +1446,7 @@
         });
 
         // 发送请求
-        fetch(`http://localhost:8000/api/usage/quantity/monthly?${params}`)
+        fetch(getApiUrl(`/api/usage/quantity/monthly?${params}`))
           .then(response => response.json())
           .then(data => {
             // 隐藏加载状态
@@ -3026,7 +3028,7 @@
         };
         
         // 构建带查询参数和分页参数的API URL
-        const baseUrl = 'http://localhost:8000/api/usage/quantity/';
+        const baseUrl = getApiUrl('/api/usage/quantity/');
         const params = new URLSearchParams();
         
         // 不再使用room_number参数，只使用specific_part参数进行查询

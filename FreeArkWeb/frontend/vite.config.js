@@ -99,13 +99,8 @@ export default defineConfig(({ mode }) => {
     fs: {
       allow: ['..']
     },
-    // 配置API代理
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true
-      }
-    }
+    // 移除API代理配置，使用config.js中定义的动态API地址
+    // 这样前端可以根据config.js中的设置自动切换API环境
   },
   build: {
     outDir: buildDir,

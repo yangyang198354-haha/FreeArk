@@ -6,6 +6,8 @@
     <title>自由方舟能耗采集平台 - 登录</title>
     <link rel="icon" href="favicon.png" type="image/png">
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <!-- 引入配置文件 -->
+    <script src="config.js"></script>
     <style>
       * {
         margin: 0;
@@ -180,7 +182,7 @@
         
         try {
           // 使用配置文件中配置的API地址
-          const apiBaseUrl = window.API_CONFIG?.baseUrl || 'http://localhost:8000';
+          const apiBaseUrl = window.API_CONFIG?.baseUrl || 'http://192.168.31.52:8000';
           const response = await fetch(`${apiBaseUrl}/api/auth/login/`, {
             method: 'POST',
             headers: {
