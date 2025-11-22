@@ -6,8 +6,11 @@ cd "$(dirname "$0")"
 # 创建日志目录（如果不存在）
 mkdir -p logs
 
-# 激活虚拟环境
-source venv/bin/activate
+# 激活虚拟环境（使用POSIX兼容的点号命令）
+. venv/bin/activate
+
+# 在虚拟环境中安装所需依赖
+pip install waitress --upgrade
 
 # 启动后端服务器，使用nohup并将日志重定向到logs目录
 nohup python FreeArkWeb/backend/freearkweb/start_windows_server.py > logs/backend.log 2>&1 &
