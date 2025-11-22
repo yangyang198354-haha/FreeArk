@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 mkdir -p logs
 
 echo "FreeArkWeb后端Linux启动脚本"
-echo "使用waitress作为WSGI服务器"
+echo "使用跨平台Python脚本启动服务"
 
 # 检查虚拟环境是否存在，如果不存在则创建
 if [ ! -d "venv" ]; then
@@ -29,42 +29,22 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 fi
 
-# 设置环境变量
-export DJANGO_SETTINGS_MODULE="freearkweb.settings"
-export DEBUG="False"
-
-# 收集静态文件
-echo "收集静态文件..."
-python manage.py collectstatic --noinput
-
-# 创建一个临时的Python脚本来启动waitress
-cat > start_waitress.py << 'EOF'
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""使用waitress启动Django应用"""
-
-import os
-import sys
-
-# 设置环境变量
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'freearkweb.settings')
-os.environ.setdefault('DEBUG', 'False')
-
-from waitress import serve
-from freearkweb.wsgi import application
-
-print("启动Waitress服务器...")
-print("服务将在 http://0.0.0.0:8000 上运行")
-
-# 确保使用0.0.0.0以允许从任何网络接口访问
-serve(application, host='0.0.0.0', port=8000)
-EOF
-
-# 启动后端服务器，使用nohup并将日志重定向到logs目录
-echo "启动后端服务器..."
-nohup python start_waitress.py > logs/backend.log 2>&1 &
-
-echo "后端服务器已启动，进程ID: $!"
-echo "日志输出到 logs/backend.log"
-echo "可以使用 'tail -f logs/backend.log' 查看日志"
-echo "使用 'kill $!' 停止服务"
+# 检查start_windows_server.py文件是否存在
+if [ -f "start_windows_server.py" ]; then
+    echo "找到跨平台启动脚本: start_windows_server.py"
+    # 设置执行权限
+    chmod +x start_windows_server.py
+    
+    # 启动后端服务器，使用nohup并将日志重定向到logs目录
+    echo "启动后端服务器..."
+    nohup python start_windows_server.py > logs/backend.log 2>&1 &
+    
+    echo "后端服务器已启动，进程ID: $!"
+    echo "日志输出到 logs/backend.log"
+    echo "可以使用 'tail -f logs/backend.log' 查看日志"
+    echo "使用 'kill $!' 停止服务"
+else
+    echo "错误: 找不到start_windows_server.py文件"
+    echo "请确保脚本在当前目录中"
+    exit 1
+fi
