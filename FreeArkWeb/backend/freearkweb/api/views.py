@@ -287,8 +287,10 @@ def get_usage_quantity_specific_time_period(request):
     # 应用过滤条件
     if specific_part:
         queryset = queryset.filter(specific_part=specific_part)
+    # 确保严格应用供能模式过滤，避免显示不符合选择模式的记录
     if energy_mode:
         queryset = queryset.filter(energy_mode=energy_mode)
+        logger.info(f"应用供能模式过滤: {energy_mode}")
     if start_time:
         queryset = queryset.filter(time_period__gte=start_time)
     if end_time:
@@ -297,19 +299,9 @@ def get_usage_quantity_specific_time_period(request):
     # 按专有部分和供能模式分组，计算每个组的初期能耗最小值、末期能耗最大值
     from django.db.models import Min, Max, F
     
-    # 获取所有唯一的专有部分
-    unique_specific_parts = queryset.values_list('specific_part', flat=True).distinct()
-    
-    # 如果用户指定了供能模式，只使用该模式；否则使用所有供能模式
-    energy_modes = [energy_mode] if energy_mode else ['制热', '制冷']
-    
-    # 生成组合（专有部分 + 用户选择的供能模式）并去重
-    unique_combinations_set = set()
-    for sp in unique_specific_parts:
-        for em in energy_modes:
-            unique_combinations_set.add((sp, em))
-    # 将去重后的组合转换为字典列表
-    unique_combinations = [{'specific_part': sp, 'energy_mode': em} for sp, em in unique_combinations_set]
+    # 从已过滤的查询集中严格获取符合条件的(specific_part, energy_mode)组合
+    unique_combinations = list(queryset.values('specific_part', 'energy_mode').distinct())
+    logger.info(f"过滤后获取的组合数量: {len(unique_combinations)}")
     
     # 按专有部分和供能模式升序排序组合列表
     unique_combinations.sort(key=lambda x: (x['specific_part'], x['energy_mode']))
@@ -330,11 +322,12 @@ def get_usage_quantity_specific_time_period(request):
     result_data = []
     
     for combination in paginated_combinations:
-        # 过滤当前组合的数据
+        # 严格过滤当前组合的数据，确保只获取符合条件的特定组合数据
         combo_queryset = queryset.filter(
             specific_part=combination['specific_part'],
             energy_mode=combination['energy_mode']
         )
+        logger.debug(f"处理组合: {combination}, 对应数据条数: {combo_queryset.count()}")
         
         # 获取该组合的第一个building、unit、room_number作为展示数据
         first_record = queryset.filter(
