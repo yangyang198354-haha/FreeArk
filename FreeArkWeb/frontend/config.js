@@ -12,7 +12,7 @@ window.API_CONFIG = {
   localUrl: 'http://localhost:8000',
   
   // 生产环境API地址
-  productionUrl: 'http://192.168.31.52:8000',
+  productionUrl: 'http://et116374mm892.vicp.fun:8000',
   
   // 获取当前配置的API基础URL
   get baseUrl() {
