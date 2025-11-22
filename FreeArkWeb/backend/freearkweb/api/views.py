@@ -300,10 +300,10 @@ def get_usage_quantity_specific_time_period(request):
     # 获取所有唯一的专有部分
     unique_specific_parts = queryset.values_list('specific_part', flat=True).distinct()
     
-    # 定义所有供能模式
-    energy_modes = ['制热', '制冷']
+    # 如果用户指定了供能模式，只使用该模式；否则使用所有供能模式
+    energy_modes = [energy_mode] if energy_mode else ['制热', '制冷']
     
-    # 生成所有组合（专有部分 + 所有供能模式）并去重
+    # 生成组合（专有部分 + 用户选择的供能模式）并去重
     unique_combinations_set = set()
     for sp in unique_specific_parts:
         for em in energy_modes:
