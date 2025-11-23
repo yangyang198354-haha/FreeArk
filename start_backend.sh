@@ -17,7 +17,7 @@ fi
 
 # 激活虚拟环境（使用POSIX兼容的点号命令）
 echo "激活虚拟环境..."
-source venv/bin/activate
+. venv/bin/activate
 
 # 在虚拟环境中安装所需依赖
 echo "安装必要依赖..."
