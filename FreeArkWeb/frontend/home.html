@@ -1825,12 +1825,22 @@
           
           function traverse(building, unit = null, room = null) {
             if (room) {
+              // 从room.value中提取纯房号（如从"3-1-702"中提取"702"）
+              let pureRoomNumber = room.value;
+              if (pureRoomNumber.includes('-')) {
+                const parts = pureRoomNumber.split('-');
+                if (parts.length >= 3) {
+                  pureRoomNumber = parts[2];
+                }
+              }
+              
               flattened.push({
                 building: building.value,
                 buildingLabel: building.label,
                 unit: unit.value,
                 unitLabel: unit.label,
-                room: room.value,
+                room: pureRoomNumber, // 使用纯房号
+                originalRoomValue: room.value, // 保留原始value值
                 roomLabel: room.label,
                 fullLabel: `${building.label}${unit.label}${room.label}`
               });
