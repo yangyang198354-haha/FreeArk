@@ -9,10 +9,10 @@ window.API_CONFIG = {
   useLocal: false,
   
   // 本地开发环境API地址
-  localUrl: 'http://localhost:8000',
+  localUrl: 'http://localhost',
   
   // 生产环境API地址
-  productionUrl: 'http://et116374mm892.vicp.fun:8000',
+  productionUrl: 'http://et116374mm892.vicp.fun',
   
   // 获取当前配置的API基础URL
   get baseUrl() {
