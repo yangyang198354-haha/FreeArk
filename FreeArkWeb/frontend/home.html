@@ -1296,7 +1296,7 @@
       // 选择能耗月用量报表菜单项
       function selectMonthlyConsumptionMenuItem(item) {
         const level = parseInt(item.dataset.level);
-        const value = item.dataset.value;
+        let value = item.dataset.value;
         const label = item.textContent;
         
         // 根据层级确定选择的是楼栋、单元还是户号
@@ -1307,64 +1307,101 @@
         let roomValue = '';
         let roomLabel = '';
         
+        // 解析户号级别value格式（楼栋-单元-房号）
+        if (level === 2 && value.includes('-')) {
+          const parts = value.split('-');
+          if (parts.length >= 3) {
+            buildingValue = parts[0];
+            unitValue = parts[1];
+            // 只使用房号部分用于数据源查找
+            const pureRoomValue = parts[2];
+            
+            // 获取所有楼栋数据
+            const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
+            
+            // 遍历楼栋数据查找匹配的户号
+            for (const building of allBuildingData) {
+              for (const unit of building.children) {
+                const room = unit.children.find(r => r.value === value || r.value === pureRoomValue);
+                if (room) {
+                  buildingValue = building.value;
+                  buildingLabel = building.label;
+                  unitValue = unit.value;
+                  unitLabel = unit.label;
+                  roomValue = value; // 保存原始带格式的value
+                  roomLabel = room.label;
+                  break;
+                }
+              }
+              if (roomValue) break; // 找到匹配的户号后退出外层循环
+            }
+            
+            // 如果已通过解析获取到完整信息，直接返回
+            if (buildingValue && unitValue && roomValue) {
+              // 继续后续处理
+            }
+          }
+        }
+        
         // 优先使用flattenedRooms数据来获取完整层级信息
-        if (level === 2) { // 户号级别，尝试从数据源获取完整层级
+        if ((level === 2 && !roomValue) || (level < 2)) { // 户号级别且未通过解析获取到信息，或不是户号级别
           // 获取所有楼栋数据
           const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
           
           // 遍历楼栋数据查找匹配的户号
-          for (const building of allBuildingData) {
-            for (const unit of building.children) {
-              const room = unit.children.find(r => r.value === value);
-              if (room) {
-                buildingValue = building.value;
-                buildingLabel = building.label;
-                unitValue = unit.value;
-                unitLabel = unit.label;
-                roomValue = room.value;
-                roomLabel = room.label;
-                break;
+          if (level === 2) {
+            // 尝试用原始value或纯房号查找
+            let searchValue = value;
+            if (value.includes('-')) {
+              const parts = value.split('-');
+              if (parts.length >= 3) {
+                searchValue = parts[2]; // 使用纯房号查找
               }
             }
-            if (roomValue) break; // 找到匹配的户号后退出外层循环
+            
+            for (const building of allBuildingData) {
+              for (const unit of building.children) {
+                const room = unit.children.find(r => r.value === value || r.value === searchValue);
+                if (room) {
+                  buildingValue = building.value;
+                  buildingLabel = building.label;
+                  unitValue = unit.value;
+                  unitLabel = unit.label;
+                  roomValue = value; // 保存原始带格式的value
+                  roomLabel = room.label;
+                  break;
+                }
+              }
+              if (roomValue) break; // 找到匹配的户号后退出外层循环
+            }
           }
         }
         
-        // 如果通过数据源查找失败或不是户号级别，使用DOM层级查找作为备选
-        if (!roomValue || (level < 2 && (!buildingValue || !unitValue))) {
-          let current = item;
-          while (current && current.parentElement && current.parentElement.classList.contains('cascading-menu')) {
-            const parentItem = current.parentElement.previousElementSibling;
-            if (parentItem && parentItem.classList.contains('cascading-menu-item')) {
-              const parentLevel = parseInt(parentItem.dataset.level);
-              if (parentLevel === 0) { // 楼栋
-                buildingValue = parentItem.dataset.value;
-                buildingLabel = parentItem.textContent;
-              } else if (parentLevel === 1) { // 单元
-                unitValue = parentItem.dataset.value;
-                unitLabel = parentItem.textContent;
-              }
-            }
-            current = current.parentElement.parentElement;
-          }
-          
-          // 根据当前层级设置值
-          if (level === 0) { // 楼栋
-            buildingValue = value;
-            buildingLabel = label;
-          } else if (level === 1) { // 单元
-            unitValue = value;
-            unitLabel = label;
-          } else if (level === 2) { // 户号
-            roomValue = value;
-            roomLabel = label;
+        // 根据当前层级直接设置值，不再使用DOM遍历
+        if (level === 0) { // 楼栋
+          buildingValue = value;
+          buildingLabel = label;
+        } else if (level === 1) { // 单元
+          unitValue = value;
+          unitLabel = label;
+        } else if (level === 2 && !roomValue) { // 户号且之前未找到
+          roomValue = value;
+          roomLabel = label;
+        }
+        
+        // 提取纯房号信息用于隐藏字段和查询
+        let pureRoomValue = roomValue;
+        if (roomValue && roomValue.includes('-')) {
+          const parts = roomValue.split('-');
+          if (parts.length >= 3) {
+            pureRoomValue = parts[2]; // 只提取房号部分
           }
         }
         
         // 更新隐藏字段
         document.getElementById('monthlySelectedBuilding').value = buildingValue;
         document.getElementById('monthlySelectedUnit').value = unitValue;
-        document.getElementById('monthlySelectedRoom').value = roomValue;
+        document.getElementById('monthlySelectedRoom').value = pureRoomValue; // 使用纯房号
         
         // 更新输入框显示
         const input = document.getElementById('monthlyCascadingSelector').querySelector('.cascading-selector-input');
@@ -1989,7 +2026,7 @@
       // 选择菜单项
       function selectMenuItem(item) {
         const level = parseInt(item.dataset.level);
-        const value = item.dataset.value;
+        let value = item.dataset.value;
         const label = item.textContent;
         
         // 根据层级确定选择的是楼栋、单元还是户号
@@ -2000,69 +2037,99 @@
         let roomValue = '';
         let roomLabel = '';
         
+        // 解析户号级别value格式（楼栋-单元-房号）
+        if (level === 2 && value.includes('-')) {
+          const parts = value.split('-');
+          if (parts.length >= 3) {
+            buildingValue = parts[0];
+            unitValue = parts[1];
+            // 只使用房号部分用于数据源查找
+            const pureRoomValue = parts[2];
+            
+            // 获取所有楼栋数据
+            const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
+            
+            // 遍历楼栋数据查找匹配的户号
+            for (const building of allBuildingData) {
+              for (const unit of building.children) {
+                const room = unit.children.find(r => r.value === value || r.value === pureRoomValue);
+                if (room) {
+                  buildingValue = building.value;
+                  buildingLabel = building.label;
+                  unitValue = unit.value;
+                  unitLabel = unit.label;
+                  roomValue = value; // 保存原始带格式的value
+                  roomLabel = room.label;
+                  break;
+                }
+              }
+              if (roomValue) break; // 找到匹配的户号后退出外层循环
+            }
+          }
+        }
+        
         // 优先使用flattenedRooms数据来获取完整层级信息
-        if (level === 2) { // 户号级别，尝试从数据源获取完整层级
+        if ((level === 2 && !roomValue) || (level < 2)) { // 户号级别且未通过解析获取到信息，或不是户号级别
           // 获取所有楼栋数据
           const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
           
           // 遍历楼栋数据查找匹配的户号
-          for (const building of allBuildingData) {
-            for (const unit of building.children) {
-              const room = unit.children.find(r => r.value === value);
-              if (room) {
-                buildingValue = building.value;
-                buildingLabel = building.label;
-                unitValue = unit.value;
-                unitLabel = unit.label;
-                roomValue = room.value;
-                roomLabel = room.label;
-                break;
+          if (level === 2) {
+            // 尝试用原始value或纯房号查找
+            let searchValue = value;
+            if (value.includes('-')) {
+              const parts = value.split('-');
+              if (parts.length >= 3) {
+                searchValue = parts[2]; // 使用纯房号查找
               }
             }
-            if (roomValue) break; // 找到匹配的户号后退出外层循环
+            
+            for (const building of allBuildingData) {
+              for (const unit of building.children) {
+                const room = unit.children.find(r => r.value === value || r.value === searchValue);
+                if (room) {
+                  buildingValue = building.value;
+                  buildingLabel = building.label;
+                  unitValue = unit.value;
+                  unitLabel = unit.label;
+                  roomValue = value; // 保存原始带格式的value
+                  roomLabel = room.label;
+                  break;
+                }
+              }
+              if (roomValue) break; // 找到匹配的户号后退出外层循环
+            }
+            
+            console.log('通过数据源查找户号层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
           }
-          
-          console.log('通过数据源查找户号层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
         }
         
-        // 如果通过数据源查找失败或不是户号级别，使用DOM层级查找作为备选
-        if (!roomValue || (level < 2 && (!buildingValue || !unitValue))) {
-          let current = item;
-          while (current && current.parentElement && current.parentElement.classList.contains('cascading-menu')) {
-            const parentItem = current.parentElement.previousElementSibling;
-            if (parentItem && parentItem.classList.contains('cascading-menu-item')) {
-              const parentLevel = parseInt(parentItem.dataset.level);
-              if (parentLevel === 0) { // 楼栋
-                buildingValue = parentItem.dataset.value;
-                buildingLabel = parentItem.textContent;
-              } else if (parentLevel === 1) { // 单元
-                unitValue = parentItem.dataset.value;
-                unitLabel = parentItem.textContent;
-              }
-            }
-            current = current.parentElement.parentElement;
+        // 根据当前层级直接设置值，不再使用DOM遍历
+        if (level === 0) { // 楼栋
+          buildingValue = value;
+          buildingLabel = label;
+        } else if (level === 1) { // 单元
+          unitValue = value;
+          unitLabel = label;
+        } else if (level === 2 && !roomValue) { // 户号且之前未找到
+          roomValue = value;
+          roomLabel = label;
+        }
+        
+        // 提取纯房号信息用于隐藏字段和查询
+        let pureRoomValue = roomValue;
+        if (roomValue && roomValue.includes('-')) {
+          const parts = roomValue.split('-');
+          if (parts.length >= 3) {
+            pureRoomValue = parts[2]; // 只提取房号部分
           }
-          
-          // 根据当前层级设置值
-          if (level === 0) { // 楼栋
-            buildingValue = value;
-            buildingLabel = label;
-          } else if (level === 1) { // 单元
-            unitValue = value;
-            unitLabel = label;
-          } else if (level === 2) { // 户号
-            roomValue = value;
-            roomLabel = label;
-          }
-          
-          console.log('通过DOM查找层级关系 - building:', buildingValue, 'unit:', unitValue, 'room:', roomValue);
         }
         
         // 更新隐藏字段
         console.log('准备设置hidden input值 - buildingValue:', buildingValue, 'unitValue:', unitValue, 'roomValue:', roomValue);
         document.getElementById('selectedBuilding').value = buildingValue;
         document.getElementById('selectedUnit').value = unitValue;
-        document.getElementById('selectedRoom').value = roomValue;
+        document.getElementById('selectedRoom').value = pureRoomValue; // 使用纯房号
         // 验证设置是否成功
         console.log('设置后hidden input值 - building:', document.getElementById('selectedBuilding').value, 
                    'unit:', document.getElementById('selectedUnit').value, 
@@ -2340,7 +2407,7 @@
       // 选择能耗报表菜单项
       function selectConsumptionMenuItem(item) {
         const level = parseInt(item.dataset.level);
-        const value = item.dataset.value;
+        let value = item.dataset.value;
         const label = item.textContent;
         
         // 根据层级确定选择的是楼栋、单元还是户号
@@ -2351,64 +2418,96 @@
         let roomValue = '';
         let roomLabel = '';
         
+        // 解析户号级别value格式（楼栋-单元-房号）
+        if (level === 2 && value.includes('-')) {
+          const parts = value.split('-');
+          if (parts.length >= 3) {
+            buildingValue = parts[0];
+            unitValue = parts[1];
+            // 只使用房号部分用于数据源查找
+            const pureRoomValue = parts[2];
+            
+            // 获取所有楼栋数据
+            const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
+            
+            // 遍历楼栋数据查找匹配的户号
+            for (const building of allBuildingData) {
+              for (const unit of building.children) {
+                const room = unit.children.find(r => r.value === value || r.value === pureRoomValue);
+                if (room) {
+                  buildingValue = building.value;
+                  buildingLabel = building.label;
+                  unitValue = unit.value;
+                  unitLabel = unit.label;
+                  roomValue = value; // 保存原始带格式的value
+                  roomLabel = room.label;
+                  break;
+                }
+              }
+              if (roomValue) break; // 找到匹配的户号后退出外层循环
+            }
+          }
+        }
+        
         // 优先使用flattenedRooms数据来获取完整层级信息
-        if (level === 2) { // 户号级别，尝试从数据源获取完整层级
+        if ((level === 2 && !roomValue) || (level < 2)) { // 户号级别且未通过解析获取到信息，或不是户号级别
           // 获取所有楼栋数据
           const allBuildingData = typeof window.buildingData !== 'undefined' ? window.buildingData : [];
           
           // 遍历楼栋数据查找匹配的户号
-          for (const building of allBuildingData) {
-            for (const unit of building.children) {
-              const room = unit.children.find(r => r.value === value);
-              if (room) {
-                buildingValue = building.value;
-                buildingLabel = building.label;
-                unitValue = unit.value;
-                unitLabel = unit.label;
-                roomValue = room.value;
-                roomLabel = room.label;
-                break;
+          if (level === 2) {
+            // 尝试用原始value或纯房号查找
+            let searchValue = value;
+            if (value.includes('-')) {
+              const parts = value.split('-');
+              if (parts.length >= 3) {
+                searchValue = parts[2]; // 使用纯房号查找
               }
             }
-            if (roomValue) break; // 找到匹配的户号后退出外层循环
+            
+            for (const building of allBuildingData) {
+              for (const unit of building.children) {
+                const room = unit.children.find(r => r.value === value || r.value === searchValue);
+                if (room) {
+                  buildingValue = building.value;
+                  buildingLabel = building.label;
+                  unitValue = unit.value;
+                  unitLabel = unit.label;
+                  roomValue = value; // 保存原始带格式的value
+                  roomLabel = room.label;
+                  break;
+                }
+              }
+              if (roomValue) break; // 找到匹配的户号后退出外层循环
+            }
           }
         }
         
-        // 如果通过数据源查找失败或不是户号级别，使用DOM层级查找作为备选
-        if (!roomValue || (level < 2 && (!buildingValue || !unitValue))) {
-          let current = item;
-          while (current && current.parentElement && current.parentElement.classList.contains('cascading-menu')) {
-            const parentItem = current.parentElement.previousElementSibling;
-            if (parentItem && parentItem.classList.contains('cascading-menu-item')) {
-              const parentLevel = parseInt(parentItem.dataset.level);
-              if (parentLevel === 0) { // 楼栋
-                buildingValue = parentItem.dataset.value;
-                buildingLabel = parentItem.textContent;
-              } else if (parentLevel === 1) { // 单元
-                unitValue = parentItem.dataset.value;
-                unitLabel = parentItem.textContent;
-              }
-            }
-            current = current.parentElement.parentElement;
-          }
-          
-          // 根据当前层级设置值
-          if (level === 0) { // 楼栋
-            buildingValue = value;
-            buildingLabel = label;
-          } else if (level === 1) { // 单元
-            unitValue = value;
-            unitLabel = label;
-          } else if (level === 2) { // 户号
-            roomValue = value;
-            roomLabel = label;
+        // 根据当前层级直接设置值，不再使用DOM遍历
+        if (level === 0) { // 楼栋
+          buildingValue = value;
+          buildingLabel = label;
+        } else if (level === 1) { // 单元
+          unitValue = value;
+          unitLabel = label;
+        } else if (level === 2 && !roomValue) { // 户号且之前未找到
+          roomValue = value;
+          roomLabel = label;
+        }
+        
+        // 提取纯房号信息用于隐藏字段和查询
+        let pureRoomValue = roomValue;
+        if (roomValue && roomValue.includes('-')) {
+          const parts = roomValue.split('-');
+          if (parts.length >= 3) {
+            pureRoomValue = parts[2]; // 只提取房号部分
           }
         }
         
         // 更新隐藏字段
         document.getElementById('consumptionSelectedBuilding').value = buildingValue;
         document.getElementById('consumptionSelectedUnit').value = unitValue;
-        document.getElementById('consumptionSelectedRoom').value = roomValue;
+        document.getElementById('consumptionSelectedRoom').value = pureRoomValue; // 使用纯房号
         
         // 更新输入框显示
         const input = document.getElementById('consumptionCascadingSelector').querySelector('.cascading-selector-input');
