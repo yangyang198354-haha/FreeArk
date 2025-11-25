@@ -6,7 +6,7 @@
 
 window.API_CONFIG = {
   // 设置为true使用本地环境，false使用生产环境
-  useLocal: false,
+  useLocal: true,
   
   // 本地开发环境API地址
   localUrl: 'http://localhost:8000',

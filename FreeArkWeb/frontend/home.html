@@ -389,7 +389,7 @@
                   <span>每页显示：</span>
                   <select id="pageSizeSelect" onchange="changePageSize(this.value)">
                     <option value="10">10条</option>
-                    <option value="20">20条</option>
+                    <option value="20" selected>20条</option>
                     <option value="50">50条</option>
                     <option value="100">100条</option>
                   </select>
@@ -519,7 +519,7 @@
                 <div class="pagination-size" style="margin-top: 10px; text-align: right;">
                   <span>每页显示：</span>
                   <select id="consumptionPageSizeSelect" onchange="changeConsumptionPageSize(this.value)">
-                    <option value="10">10条</option>
+                    <option value="10" selected>10条</option>
                     <option value="20">20条</option>
                     <option value="50">50条</option>
                     <option value="100">100条</option>
@@ -3303,10 +3303,8 @@
                     document.getElementById('pagination').style.display = 'block';
                     document.getElementById('totalRecords').textContent = totalRecords;
                     
-                    // 绘制图表（只在第一页绘制图表）
-                    if (currentPage === 1) {
-                        drawUsageChart(data.data);
-                    }
+                    // 绘制图表（每次加载数据时都更新图表）
+                    drawUsageChart(data.data);
                     
                     // 填充表格数据
                     const tableBody = document.getElementById('usageTableBody');
