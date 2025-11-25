@@ -35,7 +35,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-i%ixus$z-threi-#e&(th
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'  # 默认关闭DEBUG模式
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.52,et116374mm892.vicp.fun').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.51,192.168.31.52,et116374mm892.vicp.fun').split(',')
 
 # 生产环境安全设置
 if not DEBUG:
@@ -185,6 +185,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8000',
     'http://localhost:8080',
+    'http://192.168.31.51:8000',
+    'http://192.168.31.51:8080',
     'http://192.168.31.52:8000',
     'http://192.168.31.52:8080',
     'http://et116374m892.vicp.fun',
@@ -229,6 +231,8 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://localhost:8080',
+    'http://192.168.31.51:8000',
+    'http://192.168.31.51:8080',
     'http://192.168.31.52:8000',
     'http://192.168.31.52:8080',
     'http://et116374m892.vicp.fun',
