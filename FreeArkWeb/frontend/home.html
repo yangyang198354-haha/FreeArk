@@ -1238,7 +1238,7 @@
             '供能模式': item.energy_mode || '-',
             '初期能耗(kWh)': item.initial_energy !== null && item.initial_energy !== undefined ? item.initial_energy : '',
             '末期能耗(kWh)': item.final_energy !== null && item.final_energy !== undefined ? item.final_energy : '',
-            '使用量(kWh)': (item.initial_energy !== null && item.initial_energy !== undefined && item.final_energy !== null && item.final_energy !== undefined) ? (item.initial_energy - item.final_energy) : '',
+            '使用量(kWh)': (item.initial_energy !== null && item.initial_energy !== undefined && item.final_energy !== null && item.final_energy !== undefined) ? (item.final_energy - item.initial_energy) : '',
             '时间段': item.time_period || '-'
           }));
           
