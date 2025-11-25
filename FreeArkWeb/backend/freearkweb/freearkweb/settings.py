@@ -262,19 +262,25 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 import os
 import logging
 
-# 使用相对路径，基于项目根目录
-LOG_DIR = os.path.join(BASE_DIR, '../../../logs')
-LOG_FILE = os.path.join(LOG_DIR, 'django.log')
+# 使用绝对路径，避免相对路径解析问题
+# 首选路径：项目根目录下的logs文件夹
+PRIMARY_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR)))), 'logs')
+# 备选路径：用户目录下的FreeArk_logs文件夹
+FALLBACK_LOG_DIR = os.path.join(os.path.expanduser('~'), 'FreeArk_logs')
 
-# 打印调试信息
-# 使用日志系统记录配置信息，避免直接print导致重复输出
-
-# 确保目录存在
-if not os.path.exists(LOG_DIR):
-    try:
+# 尝试使用首选路径，如果失败则使用备选路径
+try:
+    LOG_DIR = PRIMARY_LOG_DIR
+    # 确保目录存在，如果不存在则创建
+    if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
-    except Exception as e:
-        pass
+    LOG_FILE = os.path.join(LOG_DIR, 'django.log')
+except Exception as e:
+    # 如果首选路径失败，使用备选路径
+    LOG_DIR = FALLBACK_LOG_DIR
+    if not os.path.exists(LOG_DIR):
+        os.makedirs(LOG_DIR)
+    LOG_FILE = os.path.join(LOG_DIR, 'django.log')
 
 # 日志目录已配置，将通过Django的LOGGING配置进行日志记录
 
@@ -324,6 +330,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
+            'delay': True,  # 延迟创建文件，直到第一次写入
         },
         'monthly_usage_service_log': {
             'level': 'INFO',
@@ -333,6 +340,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
+            'delay': True,  # 延迟创建文件，直到第一次写入
         },
         'mqtt_consumer_service_log': {
             'level': 'INFO',
@@ -342,6 +350,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
+            'delay': True,  # 延迟创建文件，直到第一次写入
         },
         'mqtt_consumer_log': {
             'level': 'INFO',
@@ -351,6 +360,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
+            'delay': True,  # 延迟创建文件，直到第一次写入
         },
         'plc_cleanup_service_log': {
             'level': 'INFO',
@@ -360,6 +370,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
+            'delay': True,  # 延迟创建文件，直到第一次写入
         },
     },
     'root': {

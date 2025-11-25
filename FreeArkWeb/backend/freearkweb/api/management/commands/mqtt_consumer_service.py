@@ -1,13 +1,14 @@
 import os
 import time
-import logging
 import schedule
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from api.mqtt_consumer import start_mqtt_consumer, stop_mqtt_consumer
+# 导入统一的日志工具
+from .common import get_service_logger, log_service_start, log_service_stop, log_task_start, log_task_completion, log_error, log_warning
 
 # 获取配置好的日志器
-logger = logging.getLogger('mqtt_consumer_service')
+logger = get_service_logger('mqtt_consumer_service')
 
 class Command(BaseCommand):
     """
@@ -40,16 +41,21 @@ class Command(BaseCommand):
         
         logger.info('🚀 正在启动MQTT消费者服务...')
         self.stdout.write(self.style.SUCCESS('🚀 正在启动MQTT消费者服务...'))
-        logger.info(f'🔧 服务配置: monitor_interval={monitor_interval}秒, auto_restart={auto_restart}')
+        # 使用统一的日志方法
+        service_config = {
+            'monitor_interval': f'{monitor_interval}秒',
+            'auto_restart': auto_restart
+        }
+        log_service_start(logger, 'MQTT消费者服务', service_config)
         
         exit_code = 0
         
         try:
             # 启动MQTT消费者
-            logger.info('🔄 尝试启动MQTT消费者...')
+            log_task_start(logger, 'MQTT消费者启动')
             if start_mqtt_consumer():
                 success_msg = '✅ MQTT消费者服务已成功启动'
-                logger.info(success_msg)
+                log_task_completion(logger, 'MQTT消费者启动')
                 self.stdout.write(self.style.SUCCESS(success_msg))
                 
                 topic_msg = '📝 正在监听主题: /datacollection/plc/to/collector/#'
@@ -57,7 +63,7 @@ class Command(BaseCommand):
                 self.stdout.write(topic_msg + '\n')
                 
                 warning_msg = '⚠️  按 Ctrl+C 停止服务'
-                logger.info(warning_msg)
+                log_warning(logger, '按 Ctrl+C 停止服务')
                 self.stdout.write(self.style.WARNING(warning_msg))
                 
                 # 设置监控任务（如果需要自动重启）
@@ -78,26 +84,26 @@ class Command(BaseCommand):
                 finally:
                     # 停止MQTT消费者
                     stopping_msg = '🔄 正在停止MQTT消费者服务...'
-                    logger.info(stopping_msg)
+                    log_task_start(logger, 'MQTT消费者停止')
                     self.stdout.write(stopping_msg)
                     
                     if stop_mqtt_consumer():
                         stop_success_msg = '✅ MQTT消费者服务已成功停止'
-                        logger.info(stop_success_msg)
+                        log_task_completion(logger, 'MQTT消费者停止')
                         self.stdout.write(self.style.SUCCESS(stop_success_msg))
                     else:
                         stop_fail_msg = '❌ MQTT消费者服务停止失败'
-                        logger.error(stop_fail_msg)
+                        log_error(logger, 'MQTT消费者服务停止失败')
                         self.stdout.write(self.style.ERROR(stop_fail_msg))
                         exit_code = 1
             else:
                 start_fail_msg = '❌ MQTT消费者服务启动失败'
-                logger.error(start_fail_msg)
+                log_error(logger, 'MQTT消费者服务启动失败')
                 self.stdout.write(self.style.ERROR(start_fail_msg))
                 exit_code = 1
                 
         except Exception as e:
-            error_msg = f'❌ 运行过程中发生错误: {str(e)}'
+            log_error(logger, '运行过程中发生错误', e)
             logger.error(f'运行MQTT消费者服务时发生错误: {str(e)}')
             import traceback
             logger.error(traceback.format_exc())

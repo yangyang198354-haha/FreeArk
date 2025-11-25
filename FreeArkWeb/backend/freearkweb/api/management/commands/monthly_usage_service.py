@@ -1,15 +1,16 @@
 import os
 import sys
 import time
-import logging
 from datetime import datetime, date, timedelta
 from django.core.management.base import BaseCommand
 from django.conf import settings
 import schedule
 from api.monthly_usage_calculator import MonthlyUsageCalculator
+# 导入统一的日志工具
+from .common import get_service_logger, log_service_start, log_service_stop, log_task_start, log_task_completion, log_error
 
 # 获取配置好的日志器
-logger = logging.getLogger('monthly_usage_service')
+logger = get_service_logger('monthly_usage_service')
 
 class Command(BaseCommand):
     help = '每月用量计算后台服务，可以周期性运行或手动执行'
@@ -27,7 +28,14 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # 直接打印到控制台，确保服务正常启动
         print('🚀 每月用量计算后台服务启动')
-        logger.info('🚀 每月用量计算后台服务启动')
+        # 使用统一的日志方法
+        service_config = {
+            'day': options['day'],
+            'time': options['time'],
+            'run_once': options['run_once'],
+            'month': options['month'] if options['month'] else '上个月(默认)'
+        }
+        log_service_start(logger, '每月用量计算后台服务', service_config)
         
         # 如果设置了只运行一次
         if options['run_once']:
@@ -48,9 +56,9 @@ class Command(BaseCommand):
                 else:
                     target_date = date(today.year, today.month - 1, 1)
             
-            logger.info(f'📊 开始计算{target_date.strftime("%Y-%m")}的用量数据')
+            log_task_start(logger, f'计算{target_date.strftime("%Y-%m")}的用量数据')
             self.calculate_monthly_usage(target_date)
-            logger.info('✅ 单次计算完成，服务退出')
+            log_task_completion(logger, '单次计算')
             return 0
         
         # 设置定时任务
@@ -70,7 +78,7 @@ class Command(BaseCommand):
         schedule.every().day.at(run_time).do(check_and_run_monthly_task)
         
         # 立即运行一次
-        logger.info('📊 立即运行一次计算任务')
+        log_task_start(logger, '首次计算任务')
         self.monthly_job()
         
         # 持续运行服务
@@ -80,7 +88,7 @@ class Command(BaseCommand):
                 schedule.run_pending()
                 time.sleep(60)  # 每分钟检查一次
         except KeyboardInterrupt:
-            logger.info('🛑 服务已停止')
+            log_service_stop(logger, '每月用量计算后台服务')
             return 0
     
     def monthly_job(self):
@@ -91,7 +99,7 @@ class Command(BaseCommand):
         else:
             target_date = date(today.year, today.month - 1, 1)
         
-        logger.info(f'📊 开始计算{target_date.strftime("%Y-%m")}的用量数据')
+        log_task_start(logger, f'计算{target_date.strftime("%Y-%m")}的用量数据')
         self.calculate_monthly_usage(target_date)
     
     def calculate_monthly_usage(self, target_date):
@@ -114,16 +122,20 @@ class Command(BaseCommand):
             
             # 记录结果
             if 'error' in result:
-                logger.error(f"❌ 计算过程中出错: {result['error']}, 耗时: {duration:.2f}秒")
+                log_error(logger, f"计算过程中出错: {result['error']}, 耗时: {duration:.2f}秒")
             elif result.get('skipped', False):
                 logger.info(f"⚠️  计算被跳过, 耗时: {duration:.2f}秒")
             else:
-                logger.info(f"📊 月度用量计算完成 - 处理总数: {result['processed']}, 创建: {result['created']}, 更新: {result['updated']}, 耗时: {duration:.2f}秒")
+                result_info = {
+                    "处理总数": result['processed'],
+                    "创建": result['created'],
+                    "更新": result['updated'],
+                    "耗时": f"{duration:.2f}秒"
+                }
+                log_task_completion(logger, '月度用量计算', result_info)
                 
         except Exception as e:
-            logger.error(f"❌ 调用计算模块时发生错误: {str(e)}")
-            import traceback
-            logger.error(f"调用错误详情: {traceback.format_exc()}")
+            log_error(logger, "调用计算模块时发生错误", e)
         finally:
             logger.info(f'🏁 月度用量计算流程结束 - 目标月份: {target_date.strftime("%Y-%m")}')
 

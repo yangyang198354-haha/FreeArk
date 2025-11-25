@@ -1,15 +1,16 @@
 import os
 import schedule
 import time
-import logging
 from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.utils import timezone
 from api.plc_data_cleaner import clean_old_plc_data
+# 导入统一的日志工具
+from .common import get_service_logger, log_service_start, log_service_stop, log_task_start, log_task_completion, log_error, log_warning
 
 # 获取配置好的日志器
-logger = logging.getLogger('plc_cleanup_service')
+logger = get_service_logger('plc_cleanup_service')
 
 class Command(BaseCommand):
     """
@@ -51,13 +52,17 @@ class Command(BaseCommand):
         run_once = options['once']
         
         logger.info(f'🚀 启动PLC数据清理服务...')
-        logger.info(f'🔧 清理配置: 保留{days}天数据')
         self.stdout.write(self.style.SUCCESS(f'🚀 启动PLC数据清理服务...'))
         self.stdout.write(f'🔧 清理配置: 保留{days}天数据')
+        # 使用统一的日志方法
+        service_config = {
+            'days_to_keep': f'{days}天',
+        }
+        log_service_start(logger, 'PLC数据清理服务', service_config)
         
         # 如果指定了--once参数，则立即执行一次清理并退出
         if run_once:
-            logger.info('📊 执行一次性清理任务...')
+            log_task_start(logger, '执行一次性清理任务')
             self.stdout.write(f'📊 执行一次性清理任务...')
             self.run_cleanup_task(days)
             return
@@ -74,10 +79,10 @@ class Command(BaseCommand):
                 schedule.run_pending()
                 time.sleep(1)
         except KeyboardInterrupt:
-            logger.info('🛑 收到终止信号，服务正在停止...')
+            log_task_start(logger, 'PLC数据清理服务停止')
             self.stdout.write('🛑 收到终止信号，服务正在停止...')
         finally:
-            logger.info('✅ PLC数据清理服务已停止')
+            log_task_completion(logger, 'PLC数据清理服务停止')
             self.stdout.write(self.style.SUCCESS('✅ PLC数据清理服务已停止'))
     
     def run_cleanup_task(self, days):
@@ -85,18 +90,15 @@ class Command(BaseCommand):
         执行清理任务
         """
         try:
-            logger.info(f'📊 开始执行PLC数据清理任务，保留{days}天数据...')
+            log_task_start(logger, f'PLC数据清理任务，保留{days}天数据')
             self.stdout.write(f'📊 开始执行PLC数据清理任务，保留{days}天数据...')
             
             result = clean_old_plc_data(days)
-            logger.info(f'✅ 清理完成: {result["message"]}')
+            log_task_completion(logger, 'PLC数据清理', {"message": result["message"]})
             self.stdout.write(f'{datetime.now()} - {result["message"]}')
         except Exception as e:
-            error_msg = f'执行PLC数据清理任务时出错: {str(e)}'
-            logger.error(error_msg)
-            import traceback
-            logger.error(traceback.format_exc())
-            self.stderr.write(error_msg)
+            log_error(logger, '执行PLC数据清理任务时出错', e)
+            self.stderr.write(f'执行PLC数据清理任务时出错: {str(e)}')
     
     def setup_schedule(self, cron_expr, interval, days):
         """
@@ -112,8 +114,8 @@ class Command(BaseCommand):
                 self.stdout.write(f'✅ 已配置cron表达式: {cron_expr}')
                 return
             except Exception as e:
-                logger.warning(f'⚠️ cron表达式解析失败: {str(e)}，尝试使用间隔时间配置')
-                self.stdout.write(self.style.WARNING(f'⚠️ cron表达式解析失败: {str(e)}，尝试使用间隔时间配置'))
+                log_warning(logger, f'cron表达式解析失败: {str(e)}，尝试使用间隔时间配置')
+            self.stdout.write(self.style.WARNING(f'⚠️ cron表达式解析失败: {str(e)}，尝试使用间隔时间配置'))
         
         # 使用简单的时间间隔
         if interval:
@@ -211,5 +213,5 @@ class Command(BaseCommand):
             logger.info(f'📅 配置周日执行: 每周日{scheduled_time}')
             job.sunday.at(scheduled_time).do(self.run_cleanup_task, days=days)
         else:
-            logger.warning(f'⚠️ 未知的时间间隔: {interval}，使用默认配置')
+            log_warning(logger, f'未知的时间间隔: {interval}，使用默认配置')
             job.sunday.at(scheduled_time).do(self.run_cleanup_task, days=days)
