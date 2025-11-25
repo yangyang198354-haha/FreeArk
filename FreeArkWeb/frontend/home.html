@@ -3482,7 +3482,7 @@
           const originalPage = currentPage;
           
           function fetchNextPage() {
-            const baseUrl = 'http://localhost:8000/api/usage/quantity/';
+            const baseUrl = `${window.API_CONFIG.baseUrl}/api/usage/quantity/`;
             const params = new URLSearchParams();
             params.append('specific_part', specificPart);
             if (energyMode) params.append('energy_mode', energyMode);
@@ -3593,7 +3593,7 @@
             const originalPage = currentMonthlyPage;
             
             function fetchNextPage() {
-                const baseUrl = 'http://localhost:8000/api/usage/quantity/monthly';
+                const baseUrl = `${window.API_CONFIG.baseUrl}/api/usage/quantity/monthly`;
                 const params = new URLSearchParams();
                 params.append('specific_part', specificPart);
                 if (energyMode) params.append('energy_mode', energyMode);
@@ -4104,7 +4104,7 @@
       // 加载用户详情进行编辑
       function loadUserForEdit(userId) {
         // 首先获取用户详情
-        fetch(`http://localhost:8000/api/users/${userId}/`, {
+        fetch(`${window.API_CONFIG.baseUrl}/api/users/${userId}/`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -4205,7 +4205,7 @@
         }
         
         console.log('发送到后端的数据:', userData);
-        fetch(`http://localhost:8000/api/users/${userId}/`, {
+        fetch(`${window.API_CONFIG.baseUrl}/api/users/${userId}/`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
