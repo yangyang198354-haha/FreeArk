@@ -2,6 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # CSRF token获取
+    path('get-csrf-token/', views.get_csrf_token, name='get-csrf-token'),
+    
     # 用户认证相关路由
     path('auth/login/', views.user_login, name='user-login'),
     path('auth/logout/', views.user_logout, name='user-logout'),

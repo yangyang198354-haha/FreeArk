@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
+from django.views.decorators.csrf import csrf_exempt
 from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly
 from .serializers import (
     UserSerializer,
@@ -13,6 +14,36 @@ from .serializers import (
 
 # 获取logger实例
 logger = logging.getLogger(__name__)
+
+# 获取CSRF token的视图函数
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_csrf_token(request):
+    """获取CSRF token，同时在响应体和cookies中返回token值"""
+    # 导入get_token函数，确保CSRF token被生成
+    from django.middleware.csrf import get_token
+    from django.conf import settings
+    
+    # 调用get_token确保token已生成并设置到cookie中
+    csrf_token = get_token(request)
+    
+    # 创建响应对象
+    response = Response({"status": "success", "csrftoken": csrf_token}, status=status.HTTP_200_OK)
+    
+    # 显式地将CSRF token设置到响应的cookies中
+    # 这样前端就能从response cookies中获取到token
+    response.set_cookie(
+        key=settings.CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=settings.CSRF_COOKIE_HTTPONLY,
+        secure=settings.CSRF_COOKIE_SECURE,
+        samesite=settings.CSRF_COOKIE_SAMESITE,
+        max_age=settings.CSRF_COOKIE_AGE if hasattr(settings, 'CSRF_COOKIE_AGE') else None,
+        path=settings.CSRF_COOKIE_PATH if hasattr(settings, 'CSRF_COOKIE_PATH') else '/',
+        domain=settings.CSRF_COOKIE_DOMAIN if hasattr(settings, 'CSRF_COOKIE_DOMAIN') else None,
+    )
+    
+    return response
 
 # 自定义权限类
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -30,6 +61,7 @@ class IsAdminUser(permissions.BasePermission):
 # 用户相关视图
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@csrf_exempt
 def user_login(request):
     """用户登录视图"""
     serializer = UserLoginSerializer(data=request.data)

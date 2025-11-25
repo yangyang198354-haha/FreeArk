@@ -181,8 +181,30 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS配置 - 允许所有来源
-CORS_ALLOW_ALL_ORIGINS = True
+# 更精确地配置CORS源，而不是允许所有源
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:8000',
+    'http://localhost:8080',
+    'http://192.168.31.52:8000',
+    'http://192.168.31.52:8080',
+    'http://et116374m892.vicp.fun',
+]
 CORS_ALLOW_CREDENTIALS = True
+
+# 允许前端使用credentials时的跨域请求
+CORS_ALLOWED_ORIGINS_WITH_CREDENTIALS = True
+
+# CSRF Cookie配置 - 确保跨域环境中cookie正常工作
+# 根据是否为DEBUG模式设置不同的cookie策略
+if DEBUG:
+    # 开发环境设置
+    CSRF_COOKIE_SAMESITE = 'None'  # 改为None以支持跨域cookie
+    CSRF_COOKIE_SECURE = False  # 开发环境不强制HTTPS
+else:
+    # 生产环境设置
+    CSRF_COOKIE_SAMESITE = 'None'  # 生产环境使用None以支持跨域
+    CSRF_COOKIE_SECURE = True  # 生产环境必须使用HTTPS
+CSRF_COOKIE_HTTPONLY = False
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -202,6 +224,19 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# CSRF信任源配置 - 允许本地环境、内网IP和花生壳域名
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8000',
+    'http://localhost:8080',
+    'http://192.168.31.52:8000',
+    'http://192.168.31.52:8080',
+    'http://et116374m892.vicp.fun',
+]
+
+# 确保cookie在开发环境中正确设置
+SESSION_COOKIE_SAMESITE = CSRF_COOKIE_SAMESITE
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE
 
 # 自定义用户模型配置
 AUTH_USER_MODEL = 'api.CustomUser'
