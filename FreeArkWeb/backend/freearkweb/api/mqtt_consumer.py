@@ -98,7 +98,7 @@ class MQTTConsumer:
                 # 提取PLC IP地址
                 plc_ip_match = re.search(r'\"PLC IP地址\"\s*:\s*\"([^\"]*)\"', json_str)
                 plc_ip = plc_ip_match.group(1) if plc_ip_match else "未知"
-                logger.info(f"提取到PLC IP地址: {plc_ip}")
+                logger.debug(f"提取到PLC IP地址: {plc_ip}")
                 
                 # 提取total_hot_quantity相关信息
                 hot_value_match = re.search(r'\"total_hot_quantity\"\s*:\s*\{[^}]*\"value\"\s*:\s*([^,}]*)', json_str)
@@ -131,7 +131,7 @@ class MQTTConsumer:
                         "message": hot_message_match.group(1) if hot_message_match else "",
                         "timestamp": timestamp
                     }
-                    logger.info(f"提取到制热数据: value={manual_result[device_id]['data']['total_hot_quantity']['value']}, success={manual_result[device_id]['data']['total_hot_quantity']['success']}")
+                    logger.debug(f"提取到制热数据: value={manual_result[device_id]['data']['total_hot_quantity']['value']}, success={manual_result[device_id]['data']['total_hot_quantity']['success']}")
                 
                 # 添加制冷数据
                 if cold_value_match:
@@ -142,9 +142,9 @@ class MQTTConsumer:
                         "message": cold_message_match.group(1) if cold_message_match else "",
                         "timestamp": timestamp
                     }
-                    logger.info(f"提取到制冷数据: value={manual_result[device_id]['data']['total_cold_quantity']['value']}, success={manual_result[device_id]['data']['total_cold_quantity']['success']}")
+                    logger.debug(f"提取到制冷数据: value={manual_result[device_id]['data']['total_cold_quantity']['value']}, success={manual_result[device_id]['data']['total_cold_quantity']['success']}")
                 
-                logger.info("成功通过手动解析构建JSON数据")
+                logger.debug("成功通过手动解析构建JSON数据")
                 return manual_result
                 
             except Exception as e:
@@ -242,7 +242,7 @@ class MQTTConsumer:
     def process_message(self, topic, payload):
         """处理接收到的消息并保存到数据库"""
         try:
-            logger.info(f"开始处理消息: 主题={topic}")
+            logger.debug(f"开始处理消息: 主题={topic}")
             
             # 从topic中提取楼栋文件名（如果存在）
             building_file = None
@@ -262,7 +262,7 @@ class MQTTConsumer:
                 if len(payload) == 1 and not any(key in ['data', 'device_id', 'param_key', 'results'] for key in payload.keys()):
                     device_id = list(payload.keys())[0]
                     device_info = payload[device_id]
-                    logger.info(f"处理improved_data_collection_manager发送的数据格式: device_id={device_id}")
+                    logger.debug(f"处理improved_data_collection_manager发送的数据格式: device_id={device_id}")
                     
                     # device_id就是PLCData的specific_part
                     specific_part = device_id
@@ -271,7 +271,7 @@ class MQTTConsumer:
                     
                     # 检查是否包含data字段
                     if 'data' in device_info and isinstance(device_info['data'], dict):
-                        logger.info(f"处理data字段，包含{len(device_info['data'])}个数据项")
+                        logger.debug(f"处理data字段，包含{len(device_info['data'])}个数据项")
                         processed_count = 0
                         skipped_count = 0
                         
@@ -314,13 +314,13 @@ class MQTTConsumer:
                                 self.save_single_plc_data(data_point, building_file)
                                 processed_count += 1
                         
-                        logger.info(f"improved_data_collection_manager数据处理完成，成功处理{processed_count}个数据点，跳过{skipped_count}个失败数据点")
+                        logger.debug(f"improved_data_collection_manager数据处理完成，成功处理{processed_count}个数据点，跳过{skipped_count}个失败数据点")
                     else:
                         logger.warning(f"device_info中未找到data字段或data不是字典类型: {device_info}")
                 
                 # 检查是否是新格式的消息，包含data字段
                 elif 'data' in payload and isinstance(payload['data'], dict):
-                    logger.info(f"处理新格式消息: 包含data字段，data包含{len(payload['data'])}个数据项")
+                    logger.debug(f"处理新格式消息: 包含data字段，data包含{len(payload['data'])}个数据项")
                     # 提取房间信息
                     specific_part = None
                     building = ''
@@ -386,23 +386,23 @@ class MQTTConsumer:
                             }
                             self.save_single_plc_data(data_point, building_file)
                             processed_count += 1
-                    logger.info(f"新格式消息处理完成，共处理{processed_count}个数据点")
+                    logger.debug(f"新格式消息处理完成，共处理{processed_count}个数据点")
                 
                 # 检查是否是单个PLC数据点
                 elif 'device_id' in payload and 'param_key' in payload:
-                    logger.info(f"处理单个PLC数据点: device_id={payload['device_id']}, param_key={payload['param_key']}")
+                    logger.debug(f"处理单个PLC数据点: device_id={payload['device_id']}, param_key={payload['param_key']}")
                     self.save_single_plc_data(payload, building_file)
                 
                 # 检查是否包含多个结果的列表
                 elif 'results' in payload and isinstance(payload['results'], list):
-                    logger.info(f"处理结果列表，共{len(payload['results'])}个项目")
+                    logger.debug(f"处理结果列表，共{len(payload['results'])}个项目")
                     for i, result in enumerate(payload['results']):
                         logger.debug(f"处理结果项[{i}]: {result}")
                         self.save_single_plc_data(result, building_file)
                 
                 # 检查是否直接是数据点列表（旧格式）
                 elif all(isinstance(item, dict) for item in payload.values()):
-                    logger.info(f"处理旧格式数据点列表，共{len(payload)}个设备")
+                    logger.debug(f"处理旧格式数据点列表，共{len(payload)}个设备")
                     for device_id, device_data in payload.items():
                         if isinstance(device_data, dict):
                             logger.debug(f"处理设备数据: device_id={device_id}, 包含{len(device_data)}个参数")
@@ -442,7 +442,7 @@ class MQTTConsumer:
             
             elif isinstance(payload, list):
                 # 如果payload直接是列表，逐个处理
-                logger.info(f"处理列表类型消息，共{len(payload)}个项目")
+                logger.debug(f"处理列表类型消息，共{len(payload)}个项目")
                 for i, item in enumerate(payload):
                     if isinstance(item, dict):
                         logger.debug(f"处理列表项[{i}]: {item}")
@@ -455,7 +455,7 @@ class MQTTConsumer:
         except Exception as e:
             logger.error(f"处理消息数据时发生错误: {e}", exc_info=True)
         finally:
-            logger.debug(f"消息处理完成: 主题={topic}")
+                logger.debug(f"消息处理完成: 主题={topic}")
     
     def save_single_plc_data(self, data_point, building_file=None):
         """保存单个PLC数据点到数据库"""
