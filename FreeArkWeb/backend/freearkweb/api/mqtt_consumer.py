@@ -5,8 +5,9 @@ import re
 import time
 from datetime import datetime
 import paho.mqtt.client as mqtt
+import MySQLdb
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, connection as django_connection
 from .models import PLCData
 
 # 获取logger
@@ -457,8 +458,34 @@ class MQTTConsumer:
         finally:
                 logger.debug(f"消息处理完成: 主题={topic}")
     
+    def _check_and_reconnect_db(self):
+        """检查数据库连接并在需要时重新连接"""
+        try:
+            # 检查连接是否可用
+            django_connection.ensure_connection()
+            logger.debug("数据库连接正常")
+            return True
+        except Exception as e:
+            logger.warning(f"数据库连接检查失败，尝试重新连接: {e}")
+            try:
+                # 关闭旧连接
+                django_connection.close()
+                # 重新建立连接
+                django_connection.connect()
+                logger.info("数据库连接已重新建立")
+                return True
+            except Exception as re_conn_error:
+                logger.error(f"数据库重新连接失败: {re_conn_error}")
+                return False
+
     def save_single_plc_data(self, data_point, building_file=None):
-        """保存单个PLC数据点到数据库"""
+        """保存单个PLC数据点到数据库，包含重试和重连机制"""
+        # 最大重试次数
+        max_retries = 3
+        retry_count = 0
+        retry_delay = 2  # 初始重试延迟（秒）
+        
+        # 数据解析部分，只执行一次
         try:
             logger.debug(f"开始保存单个PLC数据点，building_file={building_file}")
             logger.debug(f"数据点原始内容: {data_point}")
@@ -567,25 +594,63 @@ class MQTTConsumer:
             # if hasattr(PLCData, 'message'):
             #     plc_data['message'] = message
             
-            # 尝试更新现有记录，如果不存在则创建新记录
-            # 使用specific_part和energy_mode作为唯一标识符
-            # 使用specific_part、energy_mode和usage_date作为唯一标识符
             usage_date = plc_data.get('usage_date')
-            logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}, usage_date={usage_date}")
-            obj, created = PLCData.objects.update_or_create(
-                specific_part=specific_part,
-                energy_mode=energy_mode,
-                usage_date=usage_date,
-                defaults=plc_data
-            )
             
-            if created:
-                logger.info(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")
-            else:
-                logger.info(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")
-                
         except Exception as e:
-            logger.error(f"保存PLC数据时发生错误: {e}", exc_info=True)
+            logger.error(f"解析PLC数据时发生错误: {e}", exc_info=True)
+            return
+        
+        # 数据库操作，带重试机制
+        while retry_count < max_retries:
+            try:
+                # 在每次尝试前检查数据库连接
+                if not self._check_and_reconnect_db():
+                    retry_count += 1
+                    logger.warning(f"数据库连接失败，第 {retry_count}/{max_retries} 次重试")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避
+                    continue
+                
+                # 使用事务确保数据一致性
+                with transaction.atomic():
+                    logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}, usage_date={usage_date}")
+                    obj, created = PLCData.objects.update_or_create(
+                        specific_part=specific_part,
+                        energy_mode=energy_mode,
+                        usage_date=usage_date,
+                        defaults=plc_data
+                    )
+                    
+                    if created:
+                        logger.info(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")
+                    else:
+                        logger.info(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")
+                
+                # 操作成功，退出循环
+                break
+                
+            except (MySQLdb.OperationalError, django.db.OperationalError) as e:
+                # 捕获数据库操作错误
+                retry_count += 1
+                error_msg = str(e)
+                logger.error(f"数据库操作错误 (第 {retry_count}/{max_retries} 次): {error_msg}")
+                
+                # 如果是连接已断开的错误，尝试重新连接
+                if '2006' in error_msg or 'server has gone away' in error_msg.lower():
+                    logger.warning("数据库连接已断开，尝试重新连接...")
+                
+                # 如果还未达到最大重试次数，等待后重试
+                if retry_count < max_retries:
+                    wait_time = retry_delay * (2 ** (retry_count - 1))
+                    logger.info(f"等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"达到最大重试次数 ({max_retries})，数据保存失败: {specific_part} - {energy_mode}")
+                    
+            except Exception as e:
+                # 捕获其他错误，不重试
+                logger.error(f"保存PLC数据时发生未知错误: {e}", exc_info=True)
+                break
     
     def connect(self):
         """连接到MQTT代理"""

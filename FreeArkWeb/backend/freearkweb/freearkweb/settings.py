@@ -121,7 +121,14 @@ MYSQL_DATABASE = {
     'OPTIONS': {
         'charset': 'utf8mb4',
         'use_unicode': True,
+        # 连接超时配置
+        'connect_timeout': 60,  # 连接超时时间，单位秒
+        'read_timeout': 60,     # 读取超时时间，单位秒
+        'write_timeout': 60,    # 写入超时时间，单位秒
+        'autocommit': True,     # 自动提交模式
     },
+    # 连接池和会话配置
+    'CONN_MAX_AGE': 300,  # 数据库连接的最大生存时间，单位秒
 }
 
 # SQLite数据库配置
