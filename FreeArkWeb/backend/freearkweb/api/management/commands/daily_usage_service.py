@@ -4,6 +4,7 @@ import time
 from datetime import datetime, date, timedelta
 from django.core.management.base import BaseCommand
 from django.conf import settings
+from django.db import close_old_connections
 import schedule
 from api.daily_usage_calculator import DailyUsageCalculator
 # 导入统一的日志工具
@@ -84,6 +85,9 @@ class Command(BaseCommand):
         try:
             # 记录开始时间
             start_time = time.time()
+            
+            # 关闭旧的数据库连接，确保使用新的有效连接
+            close_old_connections()
             
             # 使用工具类进行计算，使用logger.info作为日志函数
             result = DailyUsageCalculator.calculate_daily_usage(
