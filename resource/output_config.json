@@ -15,7 +15,7 @@
       "enabled": true,
       "server": {
         "host": "192.168.31.98",
-        "port": 32774,
+        "port": 32788,
         "username": "",
         "password": "",
         "tls_enabled": false,

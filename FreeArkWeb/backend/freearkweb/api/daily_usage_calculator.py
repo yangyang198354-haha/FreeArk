@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, date, timedelta
-from django.db import transaction, connection
+from django.db import transaction, connection, close_old_connections
 from django.utils import timezone
 from django.db.models import Max, Subquery, OuterRef, F
 from api.models import PLCData, UsageQuantityDaily
@@ -44,6 +44,9 @@ class DailyUsageCalculator:
             batch_size = cls.BATCH_SIZE
         
         try:
+            # 关闭旧的数据库连接，确保使用新的有效连接
+            close_old_connections()
+            
             # 确保target_date带时区
             if isinstance(target_date, date) and not isinstance(target_date, datetime):
                 # 如果是date对象，转换为带时区的datetime对象（当日的00:00:00）

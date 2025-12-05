@@ -1,7 +1,7 @@
 import logging
 from datetime import date, timedelta
 from django.db.models import Min, Max, Sum
-from django.db import transaction
+from django.db import transaction, close_old_connections
 from api.models import UsageQuantityDaily, UsageQuantityMonthly
 
 # 获取logger
@@ -27,6 +27,9 @@ class MonthlyUsageCalculator:
         logger.info(f'🔍 开始月度用量计算流程 - 目标月份: {target_date.strftime("%Y-%m")}')
         
         try:
+            # 关闭旧的数据库连接，确保使用新的有效连接
+            close_old_connections()
+            
             # 验证目标日期格式
             if not isinstance(target_date, date):
                 raise ValueError(f"目标日期必须是date类型，当前类型: {type(target_date)}")
