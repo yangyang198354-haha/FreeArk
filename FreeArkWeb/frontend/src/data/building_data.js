@@ -2669,3 +2669,5 @@ const buildingData = [
     ]
   }
 ];
+
+export default buildingData;

@@ -11,10 +11,7 @@ function copyStaticFilesPlugin(buildDir) {
       // 定义需要复制的文件列表
       const filesToCopy = [
         { src: join(__dirname, 'src', 'data', 'building_data.js'), dest: join(__dirname, buildDir, 'building_data.js') },
-        { src: join(__dirname, 'home.html'), dest: join(__dirname, buildDir, 'home.html') },
-        { src: join(__dirname, 'home.css'), dest: join(__dirname, buildDir, 'home.css') },
-        { src: join(__dirname, 'favicon.png'), dest: join(__dirname, buildDir, 'favicon.png') },
-        { src: join(__dirname, 'config.js'), dest: join(__dirname, buildDir, 'config.js') }
+        { src: join(__dirname, 'favicon.png'), dest: join(__dirname, buildDir, 'favicon.png') }
       ]
       
       // 确保构建目录存在
@@ -60,6 +57,12 @@ export default defineConfig(({ mode }) => {
     vue(),
     copyStaticFilesPlugin(buildDir) // 添加自定义复制插件，传入构建目录
   ],
+  // 配置路径别名
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src')
+    }
+  },
   // 配置服务器
   server: {
     port: 8080,
@@ -99,8 +102,7 @@ export default defineConfig(({ mode }) => {
     fs: {
       allow: ['..']
     },
-    // 移除API代理配置，使用config.js中定义的动态API地址
-    // 这样前端可以根据config.js中的设置自动切换API环境
+    // 移除API代理配置，使用环境变量配置API地址
   },
   build: {
     outDir: buildDir,

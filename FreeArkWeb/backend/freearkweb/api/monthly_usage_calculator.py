@@ -14,7 +14,6 @@ class MonthlyUsageCalculator:
     BATCH_SIZE = 1000
     
     @staticmethod
-    @transaction.atomic
     def calculate_monthly_usage(target_date):
         """计算指定月份的每月用量，从daily_quantity_usage表聚合数据并更新monthly_quantity_usage表
         
@@ -53,31 +52,24 @@ class MonthlyUsageCalculator:
             logger.info(f'📅 计算时间范围: {month_start} 到 {month_end}')
             
             # 使用单个数据库查询同时获取所有聚合数据，避免Python内存计算和多次查询
-            try:
-                logger.info('🔎 开始查询日用量数据表...')
-                
-                # 直接在数据库层面进行分组和聚合计算，获取所需的所有数据
-                aggregated_data = UsageQuantityDaily.objects.filter(
-                    time_period__gte=month_start,
-                    time_period__lt=next_month_start
-                ).values('specific_part', 'building', 'unit', 'room_number', 'energy_mode').annotate(
-                    min_initial_energy=Min('initial_energy'),
-                    max_final_energy=Max('final_energy')
-                )
-                
-                # 获取记录总数
-                record_count = aggregated_data.count()
-                logger.info(f'📋 查询完成，找到 {record_count} 个专有部分的日用量记录')
-                
-                if record_count == 0:
-                    logger.warning(f'⚠️  未找到 {year}-{month} 月份的日用量记录，跳过计算')
-                    return {"processed": 0, "created": 0, "updated": 0, "skipped": True}
-                    
-            except Exception as db_error:
-                logger.error(f"❌ 数据库查询失败: {str(db_error)}")
-                import traceback
-                logger.error(f"数据库查询错误详情: {traceback.format_exc()}")
-                raise
+            logger.info('🔎 开始查询日用量数据表...')
+            
+            # 直接在数据库层面进行分组和聚合计算，获取所需的所有数据
+            aggregated_data = UsageQuantityDaily.objects.filter(
+                time_period__gte=month_start,
+                time_period__lt=next_month_start
+            ).values('specific_part', 'building', 'unit', 'room_number', 'energy_mode').annotate(
+                min_initial_energy=Min('initial_energy'),
+                max_final_energy=Max('final_energy')
+            )
+            
+            # 获取记录总数
+            record_count = aggregated_data.count()
+            logger.info(f'📋 查询完成，找到 {record_count} 个专有部分的日用量记录')
+            
+            if record_count == 0:
+                logger.warning(f'⚠️  未找到 {year}-{month} 月份的日用量记录，跳过计算')
+                return {"processed": 0, "created": 0, "updated": 0, "skipped": True}
             
             # 准备批量操作的数据
             monthly_data_list = []

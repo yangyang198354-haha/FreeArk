@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: '/monthly-usage-report'
+    redirect: '/home'
   },
   {
     path: '/home',
@@ -27,6 +27,36 @@ const routes = [
     path: '/daily-usage-report',
     name: 'DailyUsageReport',
     component: () => import('../views/DailyUsageReportView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/services',
+    name: 'Services',
+    component: () => import('../views/ServicesView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/create-user',
+    name: 'CreateUser',
+    component: () => import('../views/CreateUserView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/user-list',
+    name: 'UserList',
+    component: () => import('../views/UserListView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/edit-user/:id',
+    name: 'EditUser',
+    component: () => import('../views/EditUserView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: () => import('../views/ChangePasswordView.vue'),
     meta: { requiresAuth: true }
   },
   {

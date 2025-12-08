@@ -1,8 +1,10 @@
 import axios from 'axios'
 
 // 创建axios实例
+// 从环境变量获取基础URL，确保不包含/api前缀
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api',
+  baseURL: `${baseURL}/api`,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -47,6 +49,28 @@ export const authApi = {
   getCurrentUser: () => api.get('/auth/me/')
 }
 
-// 只保留认证相关API
+// 用户管理相关API
+export const userApi = {
+  // 获取用户列表
+  getUsers: (params) => api.get('/users/', { params }),
+  // 获取单个用户信息
+  getUser: (id) => api.get(`/users/${id}/`),
+  // 创建用户
+  createUser: (userData) => api.post('/users/', userData),
+  // 更新用户
+  updateUser: (id, userData) => api.put(`/users/${id}/`, userData),
+  // 删除用户
+  deleteUser: (id) => api.delete(`/users/${id}/`)
+}
+
+// 能耗报表相关API
+export const usageApi = {
+  // 查询日用量报表
+  getDailyUsage: (params) => api.get('/usage/daily/', { params }),
+  // 查询月用量报表
+  getMonthlyUsage: (params) => api.get('/usage/quantity/monthly/', { params }),
+  // 查询用量查询数据
+  getUsageQuery: (params) => api.get('/usage/quantity/specifictimeperiod/', { params })
+}
 
 export default api

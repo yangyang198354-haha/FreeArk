@@ -275,7 +275,8 @@ import logging
 
 # 使用绝对路径，避免相对路径解析问题
 # 首选路径：项目根目录下的logs文件夹
-PRIMARY_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR)))), 'logs')
+# 修改日志路径为FreeArk项目根目录下的logs文件夹
+PRIMARY_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR))), 'logs')
 # 备选路径：用户目录下的FreeArk_logs文件夹
 FALLBACK_LOG_DIR = os.path.join(os.path.expanduser('~'), 'FreeArk_logs')
 
