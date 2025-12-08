@@ -475,3 +475,41 @@ def get_usage_quantity_monthly(request):
         'data': serializer.data,
         'total': total_count
     })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def change_password(request):
+    """
+    修改用户密码
+    需要提供当前密码和新密码
+    """
+    user = request.user
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+    
+    # 验证参数
+    if not current_password or not new_password:
+        return Response({
+            'success': False,
+            'error': '当前密码和新密码不能为空'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # 验证当前密码是否正确
+    if not user.check_password(current_password):
+        return Response({
+            'success': False,
+            'error': '当前密码错误'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # 设置新密码
+    user.set_password(new_password)
+    user.save()
+    
+    # 记录日志
+    logger.info(f"用户 {user.username} 成功修改了密码")
+    
+    return Response({
+        'success': True,
+        'message': '密码修改成功'
+    })

@@ -10,6 +10,7 @@ urlpatterns = [
     path('auth/logout/', views.user_logout, name='user-logout'),
     path('auth/me/', views.get_current_user, name='get-current-user'),
     path('auth/register/', views.user_register, name='user-register'),
+    path('change-password/', views.change_password, name='change-password'),
     
     # 管理员用户管理路由
     path('users/', views.UserList.as_view(), name='user-list'),
