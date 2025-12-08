@@ -4,10 +4,27 @@ from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly
 
 class UserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
+    password = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
+    
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department', 'position', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department', 'position', 'created_at', 'updated_at', 'password']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'username']
+    
+    def update(self, instance, validated_data):
+        # 提取密码（如果提供）
+        password = validated_data.pop('password', None)
+        
+        # 更新其他字段
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # 如果提供了密码，则更新密码
+        if password:
+            instance.set_password(password)
+        
+        instance.save()
+        return instance
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """用户注册序列化器"""
