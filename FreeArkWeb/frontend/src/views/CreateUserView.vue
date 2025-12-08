@@ -67,7 +67,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import { userApi } from '../services/api'
 
 export default {
   name: 'CreateUserView',
@@ -90,6 +90,16 @@ export default {
     }
   },
   methods: {
+    // 验证密码规则
+    validatePassword(password) {
+      // 至少8位，包含字母和数字
+      const hasLetter = /[A-Za-z]/.test(password)
+      const hasNumber = /[0-9]/.test(password)
+      const isValidLength = password.length >= 8
+      
+      return isValidLength && hasLetter && hasNumber
+    },
+    
     async handleSubmit() {
       // 表单验证
       if (this.userForm.password !== this.userForm.confirmPassword) {
@@ -97,18 +107,33 @@ export default {
         return
       }
       
+      // 密码复杂度验证
+      if (!this.validatePassword(this.userForm.password)) {
+        this.showMessage('密码必须至少8位，包含字母和数字', 'error')
+        return
+      }
+      
       this.loading = true
       this.clearMessage()
       
       try {
-        // 调用API创建用户
-        const response = await axios.post('/api/users/', this.userForm, {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
+        // 转换请求体字段名
+        const userData = {
+          username: this.userForm.username,
+          email: this.userForm.email,
+          first_name: this.userForm.firstName,
+          last_name: this.userForm.lastName,
+          password: this.userForm.password,
+          role: this.userForm.role,
+          department: this.userForm.department,
+          position: this.userForm.position
+        }
         
-        if (response.data.success) {
+        // 调用API创建用户
+        const response = await userApi.createUser(userData)
+        
+        // 处理响应
+        if (response.data) {
           this.showMessage('用户创建成功', 'success')
           // 重置表单
           this.resetForm()
@@ -117,7 +142,9 @@ export default {
         }
       } catch (error) {
         console.error('创建用户失败:', error)
-        this.showMessage('用户创建失败，请检查输入信息', 'error')
+        // 提取错误信息
+        const errorMessage = error.response?.data?.error || error.response?.data?.message || '用户创建失败，请检查输入信息'
+        this.showMessage(errorMessage, 'error')
       } finally {
         this.loading = false
       }

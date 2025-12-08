@@ -56,7 +56,7 @@ export const userApi = {
   // 获取单个用户信息
   getUser: (id) => api.get(`/users/${id}/`),
   // 创建用户
-  createUser: (userData) => api.post('/users/', userData),
+  createUser: (userData) => api.post('/users/create/', userData),
   // 更新用户
   updateUser: (id, userData) => api.put(`/users/${id}/`, userData),
   // 删除用户

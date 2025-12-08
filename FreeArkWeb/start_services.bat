@@ -85,15 +85,12 @@ if %ERRORLEVEL% neq 0 (
     goto end
 )
 
-echo 依赖安装成功，开始构建...
-echo 使用开发环境参数构建前端项目
-call "%NPM_CMD%" run dev > npm_build.log 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo 前端构建失败，请检查npm_build.log
-    echo 构建错误详情:
-    type npm_build.log
-    goto end
-)
+echo 依赖安装成功，启动开发环境...
+echo 使用开发环境参数启动前端开发服务器...
+start "前端开发服务器" cmd /k "cd /d %FRONTEND_DIR% && call "%NPM_CMD%" run dev"
+
+REM 等待开发服务器启动
+ping 127.0.0.1 -n 5 >nul
 
 REM 启动前端服务
 echo 启动前端服务...

@@ -26,11 +26,11 @@
               <tr v-for="user in users" :key="user.id">
                 <td>{{ user.username }}</td>
                 <td>{{ user.email }}</td>
-                <td>{{ user.first_name }} {{ user.last_name }}</td>
+                <td>{{ formatFullName(user.first_name, user.last_name) }}</td>
                 <td>{{ user.role }}</td>
                 <td>{{ user.department }}</td>
                 <td>{{ user.position }}</td>
-                <td>{{ user.created_at }}</td>
+                <td>{{ formatDateTime(user.created_at) }}</td>
                 <td>
                   <button class="btn btn-sm btn-primary" @click="editUser(user.id)">编辑</button>
                   <button class="btn btn-sm btn-danger" @click="deleteUser(user.id)" style="margin-left: 5px;">删除</button>
@@ -104,6 +104,34 @@ export default {
         messageElement.textContent = ''
         messageElement.className = 'mb-3'
       }, 3000)
+    },
+    
+    // 判断字符串是否包含中文字符
+    containsChinese(str) {
+      return /[\u4e00-\u9fa5]/.test(str)
+    },
+    
+    // 根据语言规则格式化姓名
+    formatFullName(firstName, lastName) {
+      // 如果任一字段包含中文，则视为中文名（姓在前，名在后，无空格）
+      if (this.containsChinese(firstName) || this.containsChinese(lastName)) {
+        return (lastName || '') + (firstName || '')
+      }
+      // 否则视为英文名（名在前，姓在后，有空格）
+      return `${firstName || ''} ${lastName || ''}`.trim()
+    },
+    
+    // 格式化日期时间
+    formatDateTime(dateTimeString) {
+      return new Date(dateTimeString).toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
     }
   }
 }
