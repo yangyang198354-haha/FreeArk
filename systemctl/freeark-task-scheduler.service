@@ -9,22 +9,18 @@ Restart=always
 RestartSec=5
 
 # 定义环境变量
-Environment=PYTHONPATH=/opt/freeark
+Environment=PYTHONPATH=/home/yangyang/Freeark/FreeArk
 
 # 工作目录
-WorkingDirectory=/opt/freeark/datacollection
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/datacollection
 
-# 启动命令
-# 假设使用系统 Python 或虚拟环境中的 Python
-ExecStart=/usr/bin/python3 /opt/freeark/datacollection/run_task_scheduler.py
-
-# 或者如果使用虚拟环境
-# ExecStart=/opt/freeark/venv/bin/python /opt/freeark/datacollection/run_task_scheduler.py
+# 启动命令 - 使用虚拟环境中的Python
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/datacollection/run_task_scheduler.py
 
 # 停止命令
 ExecStop=/bin/kill -s SIGINT $MAINPID
 
-# 设置用户和组（可选，根据实际部署需求调整）
+# 设置用户和组（根据实际部署需求调整）
 # User=freeark
 # Group=freeark
 

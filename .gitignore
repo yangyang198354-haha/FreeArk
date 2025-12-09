@@ -129,38 +129,5 @@ docs/_build/
 
 # 本地历史
 .history/
-.trae/documents/按钮高度调整修复计划.md
-.trae/documents/后端定时服务数据库连接超时修复计划.md
-.trae/documents/恢复Vue架构中丢失的用户管理功能.md
-.trae/documents/恢复Vue页面到删除前的原始状态.md
-.trae/documents/级联菜单功能修复计划.md
-.trae/documents/级联菜单问题修复计划.md
-.trae/documents/级联菜单下拉显示问题修复计划.md
-.trae/documents/每日用量查询页面图表渲染错误修复计划.md
-.trae/documents/能耗日用量报表图表修复计划.md
-.trae/documents/能耗日用量报表图表样式修复计划.md
-.trae/documents/能耗日用量报表图例样式修复计划.md
-.trae/documents/启动前后端测试计划.md
-.trae/documents/全面检查并修复网站导航栏功能及页面加载问题.md
-.trae/documents/使用环境变量VITE_API_BASE_URL统一管理API调用.md
-.trae/documents/统一表单输入框样式.md
-.trae/documents/修复查询按钮组对齐问题.md
-.trae/documents/修复登录功能失败问题.md
-.trae/documents/修复登录后home页面的导航栏和内容显示问题.md
-.trae/documents/修复登录页面无法显示问题.md
-.trae/documents/修复级联菜单数据加载问题.md
-.trae/documents/修复级联菜单无法加载数据问题.md
-.trae/documents/修复输入框高度不一致问题.md
-.trae/documents/修改级联选择器搜索功能.md
-.trae/documents/修改时间段控件的快速选择功能.md
-.trae/documents/用量查询及报表页面布局优化调整计划.md
-.trae/documents/用量查询及报表页面布局优化计划.md
-.trae/documents/用量查询及报表页面控件精确对齐调整计划.md
-.trae/documents/用量查询页面布局优化.md
-.trae/documents/重新设计前端样式.md
-.trae/documents/自由方舟前端Vue重构计划.md
-.trae/documents/DailyUsageReportView图表渲染报错修复计划.md
-.trae/documents/Home.html to Vue Migration Plan.md
-.trae/documents/Vue前端功能补充计划.md
-.trae/rules/project_rules.md
-.trae/documents/plan_20251208_135013.md
+.trae/documents/
+.trae/documents/*

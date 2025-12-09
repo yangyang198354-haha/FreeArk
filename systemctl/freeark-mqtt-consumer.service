@@ -1,0 +1,17 @@
+[Unit]
+Description=FreeArk mqtt-consumer Service
+After=network.target
+
+[Service]
+Type=simple
+User=freeark
+WorkingDirectory=/home/freeark/FreeArkWeb/backend
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/freeark/FreeArkWeb/backend/manage.py mqtt_consumer_service --auto-restart --monitor-interval 60
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-mqtt-consumer
+
+[Install]
+WantedBy=multi-user.target

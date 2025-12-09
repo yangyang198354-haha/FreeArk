@@ -1,0 +1,17 @@
+[Unit]
+Description=FreeArk daily-usage Service
+After=network.target
+
+[Service]
+Type=simple
+User=freeark
+WorkingDirectory=/home/freeark/FreeArkWeb/backend
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/freeark/FreeArkWeb/backend/manage.py daily_usage_service --time 00:10
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-daily-usage
+
+[Install]
+WantedBy=multi-user.target
