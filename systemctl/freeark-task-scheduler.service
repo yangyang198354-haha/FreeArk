@@ -12,7 +12,7 @@ RestartSec=5
 Environment=PYTHONPATH=/home/yangyang/Freeark/FreeArk
 
 # 工作目录
-WorkingDirectory=/home/yangyang/Freeark/FreeArk/datacollection
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/
 
 # 启动命令 - 使用虚拟环境中的Python
 ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/datacollection/run_task_scheduler.py
