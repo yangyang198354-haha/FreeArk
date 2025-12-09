@@ -21,8 +21,7 @@ ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/
 ExecStop=/bin/kill -s SIGINT $MAINPID
 
 # 设置用户和组（根据实际部署需求调整）
-# User=freeark
-# Group=freeark
+User=yangyang
 
 # 日志输出
 StandardOutput=journal

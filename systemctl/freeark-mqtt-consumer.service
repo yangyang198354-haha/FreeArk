@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=freeark
+User=yangyang
 WorkingDirectory=/home/freeark/FreeArkWeb/backend
 ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/freeark/FreeArkWeb/backend/manage.py mqtt_consumer_service --auto-restart --monitor-interval 60
 Restart=on-failure

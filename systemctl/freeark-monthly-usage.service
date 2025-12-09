@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=freeark
+User=yangyang
 WorkingDirectory=/home/freeark/FreeArkWeb/backend
 ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/freeark/FreeArkWeb/backend/manage.py monthly_usage_service --day 1 --time 01:00
 Restart=on-failure
