@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=yangyang
-WorkingDirectory=/home/freeark/FreeArkWeb/backend
-ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/freeark/FreeArkWeb/backend/manage.py daily_usage_service --time 00:10
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py daily_usage_service --time 00:10
 Restart=on-failure
 RestartSec=30s
 StandardOutput=journal
