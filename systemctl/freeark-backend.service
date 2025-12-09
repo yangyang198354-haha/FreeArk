@@ -1,0 +1,17 @@
+[Unit]
+Description=FreeArk backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=yangyang
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/start_waitress_server.py
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-backend
+
+[Install]
+WantedBy=multi-user.target

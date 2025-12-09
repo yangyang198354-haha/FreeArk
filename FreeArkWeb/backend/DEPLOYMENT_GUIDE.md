@@ -66,7 +66,7 @@ Waitress 是一个纯 Python 实现的 WSGI 服务器，与 Windows 完全兼容
 
 ```cmd
 cd c:\Users\yanggyan\TRAE\FreeArk\FreeArkWeb\backend\freearkweb
-python start_windows_server.py
+python start_waitress_server.py
 ```
 
 该脚本会自动：

@@ -33,23 +33,23 @@ if [ -f "$BACKEND_DIR/requirements.txt" ]; then
     pip install -r "$BACKEND_DIR/requirements.txt"
 fi
 
-# 检查start_windows_server.py文件是否存在
-if [ -f "$BACKEND_DIR/start_windows_server.py" ]; then
-    echo "找到跨平台启动脚本: $BACKEND_DIR/start_windows_server.py"
+# 检查start_waitress_server.py文件是否存在
+if [ -f "$BACKEND_DIR/start_waitress_server.py" ]; then
+    echo "找到跨平台启动脚本: $BACKEND_DIR/start_waitress_server.py"
     # 设置执行权限
-    chmod +x "$BACKEND_DIR/start_windows_server.py"
+    chmod +x "$BACKEND_DIR/start_waitress_server.py"
     
     # 启动后端服务器，使用nohup并将日志重定向到logs目录
     echo "启动后端服务器..."
     # 注意：这里直接使用当前激活的虚拟环境运行脚本
-    nohup python "$BACKEND_DIR/start_windows_server.py" > logs/backend.log 2>&1 &
+    nohup python "$BACKEND_DIR/start_waitress_server.py" > logs/backend.log 2>&1 &
     
     echo "后端服务器已启动，进程ID: $!"
     echo "日志输出到 logs/backend.log"
     echo "可以使用 'tail -f logs/backend.log' 查看日志"
     echo "使用 'kill $!' 停止服务"
 else
-    echo "错误: 找不到start_windows_server.py文件"
+    echo "错误: 找不到start_waitress_server.py文件"
     echo "请确保文件位于 $BACKEND_DIR 目录中"
     exit 1
 fi
