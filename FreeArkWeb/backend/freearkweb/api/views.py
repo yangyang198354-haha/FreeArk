@@ -216,34 +216,8 @@ class AdminUserCreate(generics.CreateAPIView):
 @permission_classes([permissions.AllowAny])
 def health_check(request):
     """健康检查接口（允许未认证访问）"""
-    logger.debug('健康检查请求: %s', request.GET)
     logger.info('健康检查API被调用')
-    logger.warning('这是一条警告日志测试')
-    logger.error('这是一条错误日志测试')
     return Response({'status': 'ok', 'message': 'FreeArk Web API 服务正常运行'})
-
-
-@api_view(['GET'])
-@permission_classes([permissions.AllowAny])
-def test_logging(request):
-    """日志测试接口（允许未认证访问）"""
-    # 记录不同级别的日志
-    logger.debug('这是一条DEBUG级别的日志')
-    logger.info('这是一条INFO级别的日志')
-    logger.warning('这是一条WARNING级别的日志')
-    logger.error('这是一条ERROR级别的日志')
-    logger.critical('这是一条CRITICAL级别的日志')
-    
-    # 尝试记录异常信息
-    try:
-        result = 1 / 0
-    except Exception as e:
-        logger.exception('捕获到异常: %s', str(e))
-    
-    return Response({
-        'status': 'ok', 
-        'message': '日志测试完成，请检查日志文件'
-    })
 
 
 
