@@ -244,20 +244,21 @@ class MQTTConsumer:
         # 最大重试次数
         max_retries = 5
         retry_count = 0
-        retry_delay = 2  # 初始重试延迟（秒）
+        retry_delay = 1  # 初始重试延迟（秒）
         
-        logger.info(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
+        logger.debug(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
         
         while retry_count < max_retries:
             try:
-                logger.info(f"🔍 消息处理循环 {retry_count+1}/{max_retries}: 检查数据库连接")
-                # 在处理消息前检查数据库连接
-                if not self._check_and_reconnect_db():
-                    retry_count += 1
-                    wait_time = retry_delay * (2 ** retry_count)
-                    logger.warning(f"❌ 数据库连接失败，第 {retry_count}/{max_retries} 次重试，等待 {wait_time} 秒...")
-                    time.sleep(wait_time)
-                    continue
+                if retry_count == 0:
+                    logger.debug(f"🔍 消息处理: 检查数据库连接")
+                    # 只在首次处理时检查数据库连接
+                    if not self._check_and_reconnect_db():
+                        retry_count += 1
+                        wait_time = retry_delay * (2 ** (retry_count - 1))
+                        logger.warning(f"❌ 数据库连接失败，第 {retry_count}/{max_retries} 次重试，等待 {wait_time} 秒...")
+                        time.sleep(wait_time)
+                        continue
                 
                 logger.debug(f"🔄 开始处理消息内容: 主题={topic}")
                 
@@ -480,7 +481,7 @@ class MQTTConsumer:
                 # 如果还未达到最大重试次数，等待后重试
                 if retry_count < max_retries:
                     wait_time = retry_delay * (2 ** (retry_count - 1))
-                    logger.info(f"⏱ 等待 {wait_time} 秒后重试...")
+                    logger.debug(f"⏱ 等待 {wait_time} 秒后重试...")  # 降低日志级别
                     time.sleep(wait_time)
                 else:
                     logger.error(f"💥 达到最大重试次数 ({max_retries})，消息处理失败: 主题={topic}")
@@ -492,8 +493,8 @@ class MQTTConsumer:
     
     def _check_and_reconnect_db(self):
         """检查数据库连接并在需要时重新连接，增强版包含重试机制"""
-        max_reconnect_attempts = 3
-        reconnect_delay = 1  # 初始重连延迟（秒）
+        max_reconnect_attempts = 2  # 减少重试次数
+        reconnect_delay = 0.5  # 减少初始重连延迟
         
         logger.debug("开始检查数据库连接状态")
         
@@ -501,19 +502,19 @@ class MQTTConsumer:
             try:
                 # 检查连接是否可用
                 django_connection.ensure_connection()
-                logger.info("✓ 数据库连接正常")
+                logger.debug("✓ 数据库连接正常")  # 降低日志级别
                 return True
             except Exception as e:
-                logger.warning(f"✗ 数据库连接检查失败 (尝试 {attempt+1}/{max_reconnect_attempts}): {e}")
+                logger.debug(f"✗ 数据库连接检查失败 (尝试 {attempt+1}/{max_reconnect_attempts}): {e}")  # 降低日志级别
                 
                 if attempt == max_reconnect_attempts - 1:
                     # 最后一次尝试失败
-                    logger.error("✗ 所有数据库连接检查尝试都失败，准备重建连接")
+                    logger.warning("✗ 所有数据库连接检查尝试都失败，准备重建连接")
                     break
                 
                 # 等待后重试
                 wait_time = reconnect_delay * (2 ** attempt)
-                logger.info(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")
+                logger.debug(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")  # 降低日志级别
                 time.sleep(wait_time)
         
         try:
@@ -647,14 +648,8 @@ class MQTTConsumer:
             logger.error(f"解析PLC数据时发生错误: {e}", exc_info=True)
             return
         
-        # 数据库操作，不再包含重试机制，因为process_message已经有了更全面的重试
+        # 数据库操作，不再包含重试机制和连接检查，因为process_message已经处理
         try:
-            # 在执行数据库操作前检查连接
-            if not self._check_and_reconnect_db():
-                logger.error("数据库连接检查失败，无法保存数据")
-                # 抛出异常，让process_message的重试机制处理
-                raise django.db.OperationalError("数据库连接失败")
-            
             # 使用事务确保数据一致性
             with transaction.atomic():
                 logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}, usage_date={usage_date}")
@@ -666,9 +661,9 @@ class MQTTConsumer:
                 )
                 
                 if created:
-                    logger.info(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")
+                    logger.debug(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")  # 降低日志级别
                 else:
-                    logger.info(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")
+                    logger.debug(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")  # 降低日志级别
                 
         except (MySQLdb.OperationalError, django.db.OperationalError) as e:
             # 捕获数据库操作错误，抛出让process_message处理
