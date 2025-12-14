@@ -239,252 +239,299 @@ class MQTTConsumer:
         elif level == mqtt.MQTT_LOG_DEBUG and settings.DEBUG:
             logger.debug(f"MQTT调试: {buf}")
     
-    @transaction.atomic
     def process_message(self, topic, payload):
         """处理接收到的消息并保存到数据库"""
-        try:
-            logger.debug(f"开始处理消息: 主题={topic}")
-            
-            # 从topic中提取楼栋文件名（如果存在）
-            building_file = None
-            topic_parts = topic.split('/')
-            logger.debug(f"主题解析: 部分数量={len(topic_parts)}, 内容={topic_parts}")
-            
-            if len(topic_parts) > 4:
-                building_file = topic_parts[4]  # 假设格式为 /datacollection/plc/to/collector/[building_file]
-                logger.debug(f"从主题提取楼栋文件名: {building_file}")
-            
-            # 处理不同格式的消息
-            if isinstance(payload, dict):
-                logger.debug(f"处理字典类型消息，包含键: {list(payload.keys())}")
-                
-                # 检查是否是improved_data_collection_manager.py发送的数据格式：{device_id: device_info}
-                # 这种格式的特点是：只有一个键，且键名可能是房间标识（如9-1-31-3104）
-                if len(payload) == 1 and not any(key in ['data', 'device_id', 'param_key', 'results'] for key in payload.keys()):
-                    device_id = list(payload.keys())[0]
-                    device_info = payload[device_id]
-                    logger.debug(f"处理improved_data_collection_manager发送的数据格式: device_id={device_id}")
-                    
-                    # device_id就是PLCData的specific_part
-                    specific_part = device_id
-                    plc_ip = device_info.get('PLC IP地址', '') or device_info.get('IP地址', '')
-                    logger.debug(f"提取信息: specific_part={specific_part}, plc_ip={plc_ip}")
-                    
-                    # 检查是否包含data字段
-                    if 'data' in device_info and isinstance(device_info['data'], dict):
-                        logger.debug(f"处理data字段，包含{len(device_info['data'])}个数据项")
-                        processed_count = 0
-                        skipped_count = 0
-                        
-                        # 参数名到energy_mode的映射
-                        param_to_energy_mode = {
-                            'total_hot_quantity': '制热',
-                            'total_cold_quantity': '制冷'
-                        }
-                        
-                        for param_key, param_data in device_info['data'].items():
-                            if isinstance(param_data, dict):
-                                success = param_data.get('success', False)
-                                
-                                # 对于success为false的数据，只记录日志不保存
-                                if not success:
-                                    message = param_data.get('message', '未知错误')
-                                    logger.warning(f"跳过失败的数据: specific_part={specific_part}, param_key={param_key}, message={message}")
-                                    skipped_count += 1
-                                    continue
-                                
-                                # 处理success为true的数据
-                                logger.debug(f"处理数据项: param_key={param_key}, 数据={param_data}")
-                                
-                                # 映射参数名到energy_mode
-                                energy_mode = param_to_energy_mode.get(param_key, param_key)
-                                logger.debug(f"参数映射: {param_key} -> {energy_mode}")
-                                
-                                # 构建数据点
-                                data_point = {
-                                    'specific_part': specific_part,
-                                    'energy_mode': energy_mode,
-                                    'plc_ip': plc_ip,
-                                    'param_value': param_data.get('value'),
-                                    'success': success,
-                                    'message': param_data.get('message', ''),
-                                    'timestamp': param_data.get('timestamp')  # 传递timestamp
-                                }
-                                
-                                # 保存数据
-                                self.save_single_plc_data(data_point, building_file)
-                                processed_count += 1
-                        
-                        logger.debug(f"improved_data_collection_manager数据处理完成，成功处理{processed_count}个数据点，跳过{skipped_count}个失败数据点")
-                    else:
-                        logger.warning(f"device_info中未找到data字段或data不是字典类型: {device_info}")
-                
-                # 检查是否是新格式的消息，包含data字段
-                elif 'data' in payload and isinstance(payload['data'], dict):
-                    logger.debug(f"处理新格式消息: 包含data字段，data包含{len(payload['data'])}个数据项")
-                    # 提取房间信息
-                    specific_part = None
-                    building = ''
-                    unit = ''
-                    room_number = ''
-                    plc_ip = ''
-                    
-                    # 尝试从不同字段获取specific_part
-                    if '专有部分坐落' in payload:
-                        logger.debug(f"从'专有部分坐落'字段提取信息: {payload['专有部分坐落']}")
-                        # 从专有部分坐落提取（格式：成都乐府（二仙桥）-9-1-3104）
-                        location_parts = payload['专有部分坐落'].split('-')
-                        logger.debug(f"专有部分坐落解析: 部分数量={len(location_parts)}, 内容={location_parts}")
-                        if len(location_parts) >= 4:
-                            specific_part = f"{location_parts[1]}-{location_parts[2]}-{location_parts[3]}"
-                            logger.debug(f"成功解析specific_part: {specific_part}")
-                    
-                    # 如果没有专有部分坐落，尝试从键名获取（例如："9-1-31-3104"）
-                    if not specific_part and topic_parts and len(topic_parts) > 4:
-                        possible_key = topic_parts[4]
-                        if '-' in possible_key:
-                            specific_part = possible_key
-                            logger.debug(f"从主题获取specific_part: {specific_part}")
-                    
-                    # 获取楼栋、单元、房号信息
-                    if '楼栋' in payload:
-                        building = payload['楼栋'].replace('栋', '')
-                        logger.debug(f"从'楼栋'字段提取: {building}")
-                    if '单元' in payload:
-                        unit = payload['单元'].replace('单元', '')
-                        logger.debug(f"从'单元'字段提取: {unit}")
-                    if '户号' in payload:
-                        room_number = str(payload['户号'])
-                        logger.debug(f"从'户号'字段提取: {room_number}")
-                    
-                    # 获取PLC IP地址
-                    if 'PLC IP地址' in payload:
-                        plc_ip = payload['PLC IP地址']
-                        logger.debug(f"从'PLC IP地址'字段提取: {plc_ip}")
-                    elif 'IP地址' in payload:
-                        plc_ip = payload['IP地址']
-                        logger.debug(f"从'IP地址'字段提取: {plc_ip}")
-                    
-                    logger.debug(f"解析完成: specific_part={specific_part}, building={building}, unit={unit}, room_number={room_number}, plc_ip={plc_ip}")
-                    
-                    # 处理data字段中的各项数据
-                    processed_count = 0
-                    for energy_mode, mode_data in payload['data'].items():
-                        if isinstance(mode_data, dict):
-                            logger.debug(f"处理data项: energy_mode={energy_mode}, 数据={mode_data}")
-                            # 构建数据点
-                            data_point = {
-                                'specific_part': specific_part,
-                                'building': building,
-                                'unit': unit,
-                                'room_number': room_number,
-                                'energy_mode': energy_mode,
-                                'plc_ip': plc_ip,
-                                'param_value': mode_data.get('value'),
-                                'success': mode_data.get('success', False),
-                                'message': mode_data.get('message', ''),
-                                'timestamp': mode_data.get('timestamp')  # 传递timestamp
-                            }
-                            self.save_single_plc_data(data_point, building_file)
-                            processed_count += 1
-                    logger.debug(f"新格式消息处理完成，共处理{processed_count}个数据点")
-                
-                # 检查是否是单个PLC数据点
-                elif 'device_id' in payload and 'param_key' in payload:
-                    logger.debug(f"处理单个PLC数据点: device_id={payload['device_id']}, param_key={payload['param_key']}")
-                    self.save_single_plc_data(payload, building_file)
-                
-                # 检查是否包含多个结果的列表
-                elif 'results' in payload and isinstance(payload['results'], list):
-                    logger.debug(f"处理结果列表，共{len(payload['results'])}个项目")
-                    for i, result in enumerate(payload['results']):
-                        logger.debug(f"处理结果项[{i}]: {result}")
-                        self.save_single_plc_data(result, building_file)
-                
-                # 检查是否直接是数据点列表（旧格式）
-                elif all(isinstance(item, dict) for item in payload.values()):
-                    logger.debug(f"处理旧格式数据点列表，共{len(payload)}个设备")
-                    for device_id, device_data in payload.items():
-                        if isinstance(device_data, dict):
-                            logger.debug(f"处理设备数据: device_id={device_id}, 包含{len(device_data)}个参数")
-                            # 检查是否是新格式的数据结构
-                            if 'data' in device_data and isinstance(device_data['data'], dict):
-                                # 处理嵌套的data结构
-                                specific_part = device_id
-                                plc_ip = device_data.get('PLC IP地址', '') or device_data.get('IP地址', '')
-                                logger.debug(f"嵌套data结构: specific_part={specific_part}, plc_ip={plc_ip}")
-                                
-                                for energy_mode, mode_data in device_data['data'].items():
-                                    if isinstance(mode_data, dict):
-                                        logger.debug(f"处理嵌套data项: energy_mode={energy_mode}")
-                                        data_point = {
-                                            'specific_part': specific_part,
-                                            'energy_mode': energy_mode,
-                                            'plc_ip': plc_ip,
-                                            'param_value': mode_data.get('value'),
-                                            'success': mode_data.get('success', False),
-                                            'message': mode_data.get('message', ''),
-                                            'timestamp': mode_data.get('timestamp')  # 传递timestamp
-                                        }
-                                        self.save_single_plc_data(data_point, building_file)
-                            else:
-                                # 处理旧格式的数据结构
-                                for param_key, param_value in device_data.items():
-                                    logger.debug(f"处理旧格式参数: param_key={param_key}")
-                                    # 构建数据点
-                                    data_point = {
-                                        'device_id': device_id,
-                                        'param_key': param_key,
-                                        'param_value': param_value,
-                                        'success': True,
-                                        'message': '数据接收成功'
-                                    }
-                                    self.save_single_plc_data(data_point, building_file)
-            
-            elif isinstance(payload, list):
-                # 如果payload直接是列表，逐个处理
-                logger.debug(f"处理列表类型消息，共{len(payload)}个项目")
-                for i, item in enumerate(payload):
-                    if isinstance(item, dict):
-                        logger.debug(f"处理列表项[{i}]: {item}")
-                        self.save_single_plc_data(item, building_file)
-                    else:
-                        logger.warning(f"列表项[{i}]不是字典类型: {type(item)}")
-            else:
-                logger.warning(f"未知的消息格式: {type(payload).__name__}")
-        
-        except Exception as e:
-            logger.error(f"处理消息数据时发生错误: {e}", exc_info=True)
-        finally:
-                logger.debug(f"消息处理完成: 主题={topic}")
-    
-    def _check_and_reconnect_db(self):
-        """检查数据库连接并在需要时重新连接"""
-        try:
-            # 检查连接是否可用
-            django_connection.ensure_connection()
-            logger.debug("数据库连接正常")
-            return True
-        except Exception as e:
-            logger.warning(f"数据库连接检查失败，尝试重新连接: {e}")
-            try:
-                # 关闭旧连接
-                django_connection.close()
-                # 重新建立连接
-                django_connection.connect()
-                logger.info("数据库连接已重新建立")
-                return True
-            except Exception as re_conn_error:
-                logger.error(f"数据库重新连接失败: {re_conn_error}")
-                return False
-
-    def save_single_plc_data(self, data_point, building_file=None):
-        """保存单个PLC数据点到数据库，包含重试和重连机制"""
         # 最大重试次数
-        max_retries = 3
+        max_retries = 5
         retry_count = 0
         retry_delay = 2  # 初始重试延迟（秒）
         
+        logger.info(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
+        
+        while retry_count < max_retries:
+            try:
+                logger.info(f"🔍 消息处理循环 {retry_count+1}/{max_retries}: 检查数据库连接")
+                # 在处理消息前检查数据库连接
+                if not self._check_and_reconnect_db():
+                    retry_count += 1
+                    wait_time = retry_delay * (2 ** retry_count)
+                    logger.warning(f"❌ 数据库连接失败，第 {retry_count}/{max_retries} 次重试，等待 {wait_time} 秒...")
+                    time.sleep(wait_time)
+                    continue
+                
+                logger.debug(f"🔄 开始处理消息内容: 主题={topic}")
+                
+                # 从topic中提取楼栋文件名（如果存在）
+                building_file = None
+                topic_parts = topic.split('/')
+                logger.debug(f"主题解析: 部分数量={len(topic_parts)}, 内容={topic_parts}")
+                
+                if len(topic_parts) > 4:
+                    building_file = topic_parts[4]  # 假设格式为 /datacollection/plc/to/collector/[building_file]
+                    logger.debug(f"从主题提取楼栋文件名: {building_file}")
+                
+                # 处理不同格式的消息
+                if isinstance(payload, dict):
+                    logger.debug(f"处理字典类型消息，包含键: {list(payload.keys())}")
+                    
+                    # 检查是否是improved_data_collection_manager.py发送的数据格式：{device_id: device_info}
+                    # 这种格式的特点是：只有一个键，且键名可能是房间标识（如9-1-31-3104）
+                    if len(payload) == 1 and not any(key in ['data', 'device_id', 'param_key', 'results'] for key in payload.keys()):
+                        device_id = list(payload.keys())[0]
+                        device_info = payload[device_id]
+                        logger.debug(f"处理improved_data_collection_manager发送的数据格式: device_id={device_id}")
+                        
+                        # device_id就是PLCData的specific_part
+                        specific_part = device_id
+                        plc_ip = device_info.get('PLC IP地址', '') or device_info.get('IP地址', '')
+                        logger.debug(f"提取信息: specific_part={specific_part}, plc_ip={plc_ip}")
+                        
+                        # 检查是否包含data字段
+                        if 'data' in device_info and isinstance(device_info['data'], dict):
+                            logger.debug(f"处理data字段，包含{len(device_info['data'])}个数据项")
+                            processed_count = 0
+                            skipped_count = 0
+                            
+                            # 参数名到energy_mode的映射
+                            param_to_energy_mode = {
+                                'total_hot_quantity': '制热',
+                                'total_cold_quantity': '制冷'
+                            }
+                            
+                            for param_key, param_data in device_info['data'].items():
+                                if isinstance(param_data, dict):
+                                    success = param_data.get('success', False)
+                                    
+                                    # 对于success为false的数据，只记录日志不保存
+                                    if not success:
+                                        message = param_data.get('message', '未知错误')
+                                        logger.warning(f"跳过失败的数据: specific_part={specific_part}, param_key={param_key}, message={message}")
+                                        skipped_count += 1
+                                        continue
+                                    
+                                    # 处理success为true的数据
+                                    logger.debug(f"处理数据项: param_key={param_key}, 数据={param_data}")
+                                    
+                                    # 映射参数名到energy_mode
+                                    energy_mode = param_to_energy_mode.get(param_key, param_key)
+                                    logger.debug(f"参数映射: {param_key} -> {energy_mode}")
+                                    
+                                    # 构建数据点
+                                    data_point = {
+                                        'specific_part': specific_part,
+                                        'energy_mode': energy_mode,
+                                        'plc_ip': plc_ip,
+                                        'param_value': param_data.get('value'),
+                                        'success': success,
+                                        'message': param_data.get('message', ''),
+                                        'timestamp': param_data.get('timestamp')  # 传递timestamp
+                                    }
+                                    
+                                    # 保存数据
+                                    self.save_single_plc_data(data_point, building_file)
+                                    processed_count += 1
+                            
+                            logger.info(f"✅ improved_data_collection_manager数据处理完成，成功处理{processed_count}个数据点，跳过{skipped_count}个失败数据点")
+                        else:
+                            logger.warning(f"device_info中未找到data字段或data不是字典类型: {device_info}")
+                    # 检查是否是新格式的消息，包含data字段
+                    elif 'data' in payload and isinstance(payload['data'], dict):
+                        logger.debug(f"处理新格式消息: 包含data字段，data包含{len(payload['data'])}个数据项")
+                        # 提取房间信息
+                        specific_part = None
+                        building = ''
+                        unit = ''
+                        room_number = ''
+                        plc_ip = ''
+                        
+                        # 尝试从不同字段获取specific_part
+                        if '专有部分坐落' in payload:
+                            logger.debug(f"从'专有部分坐落'字段提取信息: {payload['专有部分坐落']}")
+                            # 从专有部分坐落提取（格式：成都乐府（二仙桥）-9-1-3104）
+                            location_parts = payload['专有部分坐落'].split('-')
+                            logger.debug(f"专有部分坐落解析: 部分数量={len(location_parts)}, 内容={location_parts}")
+                            if len(location_parts) >= 4:
+                                specific_part = f"{location_parts[1]}-{location_parts[2]}-{location_parts[3]}"
+                                logger.debug(f"成功解析specific_part: {specific_part}")
+                        
+                        # 如果没有专有部分坐落，尝试从键名获取（例如："9-1-31-3104"）
+                        if not specific_part and topic_parts and len(topic_parts) > 4:
+                            possible_key = topic_parts[4]
+                            if '-' in possible_key:
+                                specific_part = possible_key
+                                logger.debug(f"从主题获取specific_part: {specific_part}")
+                        
+                        # 获取楼栋、单元、房号信息
+                        if '楼栋' in payload:
+                            building = payload['楼栋'].replace('栋', '')
+                            logger.debug(f"从'楼栋'字段提取: {building}")
+                        if '单元' in payload:
+                            unit = payload['单元'].replace('单元', '')
+                            logger.debug(f"从'单元'字段提取: {unit}")
+                        if '户号' in payload:
+                            room_number = str(payload['户号'])
+                            logger.debug(f"从'户号'字段提取: {room_number}")
+                        
+                        # 获取PLC IP地址
+                        if 'PLC IP地址' in payload:
+                            plc_ip = payload['PLC IP地址']
+                            logger.debug(f"从'PLC IP地址'字段提取: {plc_ip}")
+                        elif 'IP地址' in payload:
+                            plc_ip = payload['IP地址']
+                            logger.debug(f"从'IP地址'字段提取: {plc_ip}")
+                        
+                        logger.debug(f"解析完成: specific_part={specific_part}, building={building}, unit={unit}, room_number={room_number}, plc_ip={plc_ip}")
+                        
+                        # 处理data字段中的各项数据
+                        processed_count = 0
+                        for energy_mode, mode_data in payload['data'].items():
+                            if isinstance(mode_data, dict):
+                                logger.debug(f"处理data项: energy_mode={energy_mode}, 数据={mode_data}")
+                                # 构建数据点
+                                data_point = {
+                                    'specific_part': specific_part,
+                                    'building': building,
+                                    'unit': unit,
+                                    'room_number': room_number,
+                                    'energy_mode': energy_mode,
+                                    'plc_ip': plc_ip,
+                                    'param_value': mode_data.get('value'),
+                                    'success': mode_data.get('success', False),
+                                    'message': mode_data.get('message', ''),
+                                    'timestamp': mode_data.get('timestamp')  # 传递timestamp
+                                }
+                                self.save_single_plc_data(data_point, building_file)
+                                processed_count += 1
+                        logger.info(f"✅ 新格式消息处理完成，成功处理{processed_count}个数据点")
+                    # 检查是否是单个PLC数据点
+                    elif 'device_id' in payload and 'param_key' in payload:
+                        logger.debug(f"处理单个PLC数据点: device_id={payload['device_id']}, param_key={payload['param_key']}")
+                        self.save_single_plc_data(payload, building_file)
+                    # 检查是否包含多个结果的列表
+                    elif 'results' in payload and isinstance(payload['results'], list):
+                        logger.debug(f"处理结果列表，共{len(payload['results'])}个项目")
+                        for i, result in enumerate(payload['results']):
+                            logger.debug(f"处理结果项[{i}]: {result}")
+                            self.save_single_plc_data(result, building_file)
+                    # 检查是否直接是数据点列表（旧格式）
+                    elif all(isinstance(item, dict) for item in payload.values()):
+                        logger.debug(f"处理旧格式数据点列表，共{len(payload)}个设备")
+                        for device_id, device_data in payload.items():
+                            if isinstance(device_data, dict):
+                                logger.debug(f"处理设备数据: device_id={device_id}, 包含{len(device_data)}个参数")
+                                # 检查是否是新格式的数据结构
+                                if 'data' in device_data and isinstance(device_data['data'], dict):
+                                    # 处理嵌套的data结构
+                                    specific_part = device_id
+                                    plc_ip = device_data.get('PLC IP地址', '') or device_data.get('IP地址', '')
+                                    logger.debug(f"嵌套data结构: specific_part={specific_part}, plc_ip={plc_ip}")
+                                    
+                                    for energy_mode, mode_data in device_data['data'].items():
+                                        if isinstance(mode_data, dict):
+                                            logger.debug(f"处理嵌套data项: energy_mode={energy_mode}")
+                                            data_point = {
+                                                'specific_part': specific_part,
+                                                'energy_mode': energy_mode,
+                                                'plc_ip': plc_ip,
+                                                'param_value': mode_data.get('value'),
+                                                'success': mode_data.get('success', False),
+                                                'message': mode_data.get('message', ''),
+                                                'timestamp': mode_data.get('timestamp')  # 传递timestamp
+                                            }
+                                            self.save_single_plc_data(data_point, building_file)
+                                else:
+                                    # 处理旧格式的数据结构
+                                    for param_key, param_value in device_data.items():
+                                        logger.debug(f"处理旧格式参数: param_key={param_key}")
+                                        # 构建数据点
+                                        data_point = {
+                                            'device_id': device_id,
+                                            'param_key': param_key,
+                                            'param_value': param_value,
+                                            'success': True,
+                                            'message': '数据接收成功'
+                                        }
+                                        self.save_single_plc_data(data_point, building_file)
+                elif isinstance(payload, list):
+                    # 如果payload直接是列表，逐个处理
+                    logger.debug(f"处理列表类型消息，共{len(payload)}个项目")
+                    for i, item in enumerate(payload):
+                        if isinstance(item, dict):
+                            logger.debug(f"处理列表项[{i}]: {item}")
+                            self.save_single_plc_data(item, building_file)
+                        else:
+                            logger.warning(f"列表项[{i}]不是字典类型: {type(item)}")
+                else:
+                    logger.warning(f"未知的消息格式: {type(payload).__name__}")
+                
+                # 处理成功，退出循环
+                logger.info(f"✅ 消息处理完成: 主题={topic}, 重试次数={retry_count}")
+                return
+                
+            except (MySQLdb.OperationalError, django.db.OperationalError) as e:
+                retry_count += 1
+                error_msg = str(e)
+                logger.error(f"❌ 数据库操作错误 (第 {retry_count}/{max_retries} 次): {error_msg}")
+                
+                # 如果是连接已断开的错误，尝试重新连接
+                if '2006' in error_msg or 'server has gone away' in error_msg.lower() or 'connection reset by peer' in error_msg.lower():
+                    logger.warning("🔄 数据库连接已断开，尝试重新连接...")
+                
+                # 如果还未达到最大重试次数，等待后重试
+                if retry_count < max_retries:
+                    wait_time = retry_delay * (2 ** (retry_count - 1))
+                    logger.info(f"⏱ 等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"💥 达到最大重试次数 ({max_retries})，消息处理失败: 主题={topic}")
+            
+            except Exception as e:
+                # 非数据库错误，不重试
+                logger.error(f"处理消息数据时发生非数据库错误: {e}", exc_info=True)
+                break
+    
+    def _check_and_reconnect_db(self):
+        """检查数据库连接并在需要时重新连接，增强版包含重试机制"""
+        max_reconnect_attempts = 3
+        reconnect_delay = 1  # 初始重连延迟（秒）
+        
+        logger.debug("开始检查数据库连接状态")
+        
+        for attempt in range(max_reconnect_attempts):
+            try:
+                # 检查连接是否可用
+                django_connection.ensure_connection()
+                logger.info("✓ 数据库连接正常")
+                return True
+            except Exception as e:
+                logger.warning(f"✗ 数据库连接检查失败 (尝试 {attempt+1}/{max_reconnect_attempts}): {e}")
+                
+                if attempt == max_reconnect_attempts - 1:
+                    # 最后一次尝试失败
+                    logger.error("✗ 所有数据库连接检查尝试都失败，准备重建连接")
+                    break
+                
+                # 等待后重试
+                wait_time = reconnect_delay * (2 ** attempt)
+                logger.info(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")
+                time.sleep(wait_time)
+        
+        try:
+            # 关闭旧连接
+            django_connection.close()
+            logger.info("🔄 已关闭旧的数据库连接")
+            
+            # 尝试重新建立连接
+            logger.info("🔄 正在尝试重新建立数据库连接...")
+            django_connection.connect()
+            logger.info("✓ 数据库连接已成功重新建立")
+            return True
+        except Exception as re_conn_error:
+            logger.error(f"✗ 数据库重新连接失败: {re_conn_error}")
+            return False
+
+    def save_single_plc_data(self, data_point, building_file=None):
+        """保存单个PLC数据点到数据库"""
         # 数据解析部分，只执行一次
         try:
             logger.debug(f"开始保存单个PLC数据点，building_file={building_file}")
@@ -600,57 +647,37 @@ class MQTTConsumer:
             logger.error(f"解析PLC数据时发生错误: {e}", exc_info=True)
             return
         
-        # 数据库操作，带重试机制
-        while retry_count < max_retries:
-            try:
-                # 在每次尝试前检查数据库连接
-                if not self._check_and_reconnect_db():
-                    retry_count += 1
-                    logger.warning(f"数据库连接失败，第 {retry_count}/{max_retries} 次重试")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # 指数退避
-                    continue
+        # 数据库操作，不再包含重试机制，因为process_message已经有了更全面的重试
+        try:
+            # 在执行数据库操作前检查连接
+            if not self._check_and_reconnect_db():
+                logger.error("数据库连接检查失败，无法保存数据")
+                # 抛出异常，让process_message的重试机制处理
+                raise django.db.OperationalError("数据库连接失败")
+            
+            # 使用事务确保数据一致性
+            with transaction.atomic():
+                logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}, usage_date={usage_date}")
+                obj, created = PLCData.objects.update_or_create(
+                    specific_part=specific_part,
+                    energy_mode=energy_mode,
+                    usage_date=usage_date,
+                    defaults=plc_data
+                )
                 
-                # 使用事务确保数据一致性
-                with transaction.atomic():
-                    logger.debug(f"执行数据库操作: update_or_create specific_part={specific_part}, energy_mode={energy_mode}, usage_date={usage_date}")
-                    obj, created = PLCData.objects.update_or_create(
-                        specific_part=specific_part,
-                        energy_mode=energy_mode,
-                        usage_date=usage_date,
-                        defaults=plc_data
-                    )
-                    
-                    if created:
-                        logger.info(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")
-                    else:
-                        logger.info(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")
-                
-                # 操作成功，退出循环
-                break
-                
-            except (MySQLdb.OperationalError, django.db.OperationalError) as e:
-                # 捕获数据库操作错误
-                retry_count += 1
-                error_msg = str(e)
-                logger.error(f"数据库操作错误 (第 {retry_count}/{max_retries} 次): {error_msg}")
-                
-                # 如果是连接已断开的错误，尝试重新连接
-                if '2006' in error_msg or 'server has gone away' in error_msg.lower():
-                    logger.warning("数据库连接已断开，尝试重新连接...")
-                
-                # 如果还未达到最大重试次数，等待后重试
-                if retry_count < max_retries:
-                    wait_time = retry_delay * (2 ** (retry_count - 1))
-                    logger.info(f"等待 {wait_time} 秒后重试...")
-                    time.sleep(wait_time)
+                if created:
+                    logger.info(f"创建新的PLC数据记录: {specific_part} - {energy_mode}")
                 else:
-                    logger.error(f"达到最大重试次数 ({max_retries})，数据保存失败: {specific_part} - {energy_mode}")
-                    
-            except Exception as e:
-                # 捕获其他错误，不重试
-                logger.error(f"保存PLC数据时发生未知错误: {e}", exc_info=True)
-                break
+                    logger.info(f"更新现有PLC数据记录: {specific_part} - {energy_mode}, 参数值={plc_data['value']}")
+                
+        except (MySQLdb.OperationalError, django.db.OperationalError) as e:
+            # 捕获数据库操作错误，抛出让process_message处理
+            logger.error(f"数据库操作错误: {e}")
+            raise
+        except Exception as e:
+            # 捕获其他错误，不重试
+            logger.error(f"保存PLC数据时发生未知错误: {e}", exc_info=True)
+            raise
     
     def connect(self):
         """连接到MQTT代理"""

@@ -107,7 +107,7 @@ class Command(BaseCommand):
             logger.error(f'运行MQTT消费者服务时发生错误: {str(e)}')
             import traceback
             logger.error(traceback.format_exc())
-            self.stdout.write(self.style.ERROR(error_msg))
+            self.stdout.write(self.style.ERROR(f'运行MQTT消费者服务时发生错误: {str(e)}'))
             exit_code = 1
         else:
             exit_code = 0
