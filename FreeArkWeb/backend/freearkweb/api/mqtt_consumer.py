@@ -648,20 +648,38 @@ class MQTTConsumer:
         try:
             logger.debug(f"批量保存: 执行批量数据库操作，共 {len(processed_data_list)} 个数据点")
 
-            # 使用bulk_create的update_conflicts参数进行批量upsert操作
-            created_count = PLCData.objects.bulk_create(
-                [PLCData(**data) for data in processed_data_list],
-                update_conflicts=True,
-                unique_fields=['specific_part', 'energy_mode', 'usage_date'],
-                update_fields=[
-                    'value', 'plc_ip', 'building',
-                    'unit', 'room_number'
-                ]
-            )
+            # 使用循环update_or_create实现批量upsert操作（兼容所有数据库后端）
+            created_count = 0
+            updated_count = 0
+            
+            for data in processed_data_list:
+                # 提取唯一标识字段
+                unique_kwargs = {
+                    'specific_part': data['specific_part'],
+                    'energy_mode': data['energy_mode'],
+                    'usage_date': data['usage_date']
+                }
+                # 提取需要更新的字段
+                update_kwargs = {
+                    'value': data['value'],
+                    'plc_ip': data['plc_ip'],
+                    'building': data['building'],
+                    'unit': data['unit'],
+                    'room_number': data['room_number']
+                }
+                # 执行update_or_create
+                obj, created = PLCData.objects.update_or_create(
+                    defaults=update_kwargs, **unique_kwargs
+                )
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
 
             logger.info(
                 f"✅ 批量保存完成: 成功处理 {len(processed_data_list)} 个数据点，" 
-                f"创建/更新 {len(created_count)} 条记录，跳过 {skipped_count} 个"
+                f"创建 {created_count} 条记录，更新 {updated_count} 条记录，" 
+                f"跳过 {skipped_count} 个"
             )
 
         except (MySQLdb.OperationalError) as e:
