@@ -471,7 +471,8 @@ class MQTTConsumer:
             error_msg = str(e)
             logger.error(f"❌ 数据库操作错误: {error_msg}")
             # 如果是连接已断开的错误，尝试重新连接（但不重试当前消息处理）
-            if ('2006' in error_msg or 'server has gone away' in error_msg.lower() 
+            if ('2006' in error_msg \
+                    or 'server has gone away' in error_msg.lower() \
                     or 'connection reset by peer' in error_msg.lower()):
                 logger.warning("🔄 数据库连接已断开，尝试重新连接...")
                 self._check_and_reconnect_db()
@@ -641,7 +642,7 @@ class MQTTConsumer:
             return
 
         logger.debug(f"批量保存: 成功解析 {len(processed_data_list)} 个数据点，" 
-                    f"跳过 {skipped_count} 个")
+                     f"跳过 {skipped_count} 个")
 
         # 数据库操作，批量保存所有数据点
         try:
@@ -651,9 +652,11 @@ class MQTTConsumer:
             created_count = PLCData.objects.bulk_create(
                 [PLCData(**data) for data in processed_data_list],
                 update_conflicts=True,
-                conflict_target=['specific_part', 'energy_mode', 'usage_date'],
-                update_fields=['value', 'plc_ip', 'building', 
-                             'unit', 'room_number']
+                unique_fields=['specific_part', 'energy_mode', 'usage_date'],
+                update_fields=[
+                    'value', 'plc_ip', 'building',
+                    'unit', 'room_number'
+                ]
             )
 
             logger.info(
@@ -666,7 +669,8 @@ class MQTTConsumer:
             error_msg = str(e)
             logger.error(f"❌ 批量数据库操作错误: {error_msg}")
             # 如果是连接已断开的错误，尝试重新连接
-            if ('2006' in error_msg or 'server has gone away' in error_msg.lower() 
+            if ('2006' in error_msg \
+                    or 'server has gone away' in error_msg.lower() \
                     or 'connection reset by peer' in error_msg.lower()):
                 logger.warning("🔄 数据库连接已断开，尝试重新连接...")
                 self._check_and_reconnect_db()
@@ -902,3 +906,4 @@ def start_mqtt_consumer():
 def stop_mqtt_consumer():
     """停止MQTT消费者"""
     return mqtt_consumer.stop()
+
