@@ -475,16 +475,16 @@ class MQTTConsumer:
                     or 'server has gone away' in error_msg.lower() \
                     or 'connection reset by peer' in error_msg.lower()):
                 logger.warning("🔄 数据库连接已断开，尝试重新连接...")
-                self._check_and_reconnect_db()
+                self._check_and_reconnect_db(with_diagnostic=False)
         
         except Exception as e:
             # 处理其他错误
             logger.error(f"处理消息时发生错误: {e}", exc_info=True)
     
-    def _check_and_reconnect_db(self):
-        """检查数据库连接并在需要时重新连接，增强版包含重试机制"""
-        max_reconnect_attempts = 2  # 减少重试次数
-        reconnect_delay = 0.5  # 减少初始重连延迟
+    def _check_and_reconnect_db(self, with_diagnostic=True):
+        """检查数据库连接并在需要时重新连接，增强版包含重试机制和完整连接重置"""
+        max_reconnect_attempts = 3  # 保持足够的重试次数
+        reconnect_delay = 1  # 保持合适的初始重连延迟
         
         logger.debug("开始检查数据库连接状态")
         
@@ -492,38 +492,96 @@ class MQTTConsumer:
             try:
                 # 检查连接是否可用
                 django_connection.ensure_connection()
-                logger.debug("✓ 数据库连接正常")  # 降低日志级别
+                logger.info("✓ 数据库连接正常")
                 return True
             except Exception as e:
                 logger.error(f"✗ 数据库连接检查失败 (尝试 {attempt+1}/{max_reconnect_attempts}): "
-                            f"{e}")  # 降低日志级别
+                            f"{e}")
                 
                 if attempt == max_reconnect_attempts - 1:
                     # 最后一次尝试失败
-                    logger.warning("✗ 所有数据库连接检查尝试都失败，准备重建连接")
+                    logger.warning("✗ 所有数据库连接检查尝试都失败，准备强制重建连接")
                     break
                 
                 # 等待后重试
                 wait_time = reconnect_delay * (2 ** attempt)
-                logger.debug(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")  # 降低日志级别
+                logger.debug(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")
                 time.sleep(wait_time)
         
         try:
-            # 关闭旧连接
+            # 1. 关闭旧连接
+            logger.info("🔄 正在关闭旧的数据库连接...")
             django_connection.close()
-            logger.info("🔄 已关闭旧的数据库连接")
+            logger.info("✅ 已关闭旧的数据库连接")
             
-            # 尝试重新建立连接
+            # 3. 清除连接状态，确保完全重置
+            if hasattr(django_connection, '_cursor') and django_connection._cursor:
+                django_connection._cursor.close()
+                django_connection._cursor = None
+            
+            # 4. 延迟一下，给数据库服务器时间处理连接关闭
+            time.sleep(0.5)
+            
+            # 5. 尝试重新建立连接
             logger.info("🔄 正在尝试重新建立数据库连接...")
             django_connection.connect()
-            logger.info("✓ 数据库连接已成功重新建立")
+            logger.info("✅ 数据库连接已成功重新建立")
+            
+            # 6. 验证新连接是否真正可用
+            django_connection.ensure_connection()
+            logger.info("✅ 新连接验证成功")
+            
+            # 7. 可选的诊断功能（仅在调试模式下或显式请求时启用）
+            if with_diagnostic and settings.DEBUG:
+                try:
+                    logger.debug("🔍 正在使用原始MySQLdb连接进行诊断...")
+                    db_config = settings.DATABASES['default']
+                    
+                    direct_conn = MySQLdb.connect(
+                        host=db_config['HOST'],
+                        port=int(db_config['PORT']) if db_config['PORT'] else 3306,
+                        user=db_config['USER'],
+                        password=db_config['PASSWORD'],
+                        database=db_config['NAME'],
+                        charset=db_config.get('OPTIONS', {}).get('charset', 'utf8')
+                    )
+                    direct_conn.ping()
+                    direct_conn.close()
+                    logger.debug("✅ 原始MySQLdb连接诊断成功")
+                except Exception as diag_error:
+                    logger.debug(f"⚠️ 原始MySQLdb连接诊断失败: {diag_error}")
+            
             return True
+            
         except Exception as re_conn_error:
             logger.error(f"✗ 数据库重新连接失败: {re_conn_error}")
+            
+            # 仅在调试模式下进行详细诊断
+            if with_diagnostic and settings.DEBUG:
+                try:
+                    logger.debug("🔍 正在进行详细的数据库连接诊断...")
+                    from django.conf import settings
+                    db_config = settings.DATABASES['default']
+                    
+                    direct_conn = MySQLdb.connect(
+                        host=db_config['HOST'],
+                        port=int(db_config['PORT']) if db_config['PORT'] else 3306,
+                        user=db_config['USER'],
+                        password=db_config['PASSWORD'],
+                        database=db_config['NAME'],
+                        charset=db_config.get('OPTIONS', {}).get('charset', 'utf8')
+                    )
+                    direct_conn.ping()
+                    direct_conn.close()
+                    logger.debug("✅ 原始MySQLdb连接成功，问题可能出在Django连接管理上")
+                except Exception as diag_error:
+                    logger.error(f"✗ 原始MySQLdb连接诊断失败: {diag_error}")
+                    logger.error("✗ 数据库连接问题可能与网络、认证或数据库服务器配置有关")
+                
             return False
 
-    def save_batch_plc_data(self, batch_data, building_file=None):
-        """批量保存PLC数据点到数据库"""
+    def save_batch_plc_data(self, batch_data, building_file=None, max_retries=3):
+        """批量保存PLC数据点到数据库，支持重连后的自动重试"""
         if not batch_data:
             logger.debug("批量保存: 没有数据点需要保存")
             return
@@ -646,55 +704,107 @@ class MQTTConsumer:
 
         # 数据库操作，批量保存所有数据点
         try:
-            logger.debug(f"批量保存: 执行批量数据库操作，共 {len(processed_data_list)} 个数据点")
+            for retry_count in range(max_retries):
+                try:
+                    logger.debug(f"批量保存: 执行批量数据库操作 (重试: {retry_count+1}/{max_retries})，共 {len(processed_data_list)} 个数据点")
 
-            # 使用循环update_or_create实现批量upsert操作（兼容所有数据库后端）
-            created_count = 0
-            updated_count = 0
-            
-            for data in processed_data_list:
-                # 提取唯一标识字段
-                unique_kwargs = {
-                    'specific_part': data['specific_part'],
-                    'energy_mode': data['energy_mode'],
-                    'usage_date': data['usage_date']
-                }
-                # 提取需要更新的字段
-                update_kwargs = {
-                    'value': data['value'],
-                    'plc_ip': data['plc_ip'],
-                    'building': data['building'],
-                    'unit': data['unit'],
-                    'room_number': data['room_number']
-                }
-                # 执行update_or_create
-                obj, created = PLCData.objects.update_or_create(
-                    defaults=update_kwargs, **unique_kwargs
-                )
-                if created:
-                    created_count += 1
-                else:
-                    updated_count += 1
+                    # 优化：使用bulk_create结合ON DUPLICATE KEY UPDATE（MySQL/MariaDB特定）
+                    from django.db import connection
+                    
+                    # 检查是否使用MySQL数据库
+                    if 'mysql' in connection.vendor.lower():
+                        # 构建批量插入SQL，使用ON DUPLICATE KEY UPDATE
+                        if processed_data_list:
+                            # 获取字段名
+                            fields = list(processed_data_list[0].keys())
+                            
+                            # 构建INSERT语句
+                            placeholders = ','.join(['(%s)' % ','.join(['%s']*len(fields))])
+                            insert_sql = f"INSERT INTO api_plcdata ({','.join(fields)}) VALUES {placeholders}"
+                            
+                            # 构建ON DUPLICATE KEY UPDATE语句
+                            update_fields = [f"{field}=VALUES({field})" for field in fields 
+                                           if field not in ['specific_part', 'energy_mode', 'usage_date']]
+                            update_sql = f"ON DUPLICATE KEY UPDATE {','.join(update_fields)}"
+                            
+                            # 合并SQL
+                            full_sql = f"{insert_sql} {update_sql}"
+                            
+                            # 准备参数
+                            params = []
+                            for data in processed_data_list:
+                                params.extend([data[field] for field in fields])
+                            
+                            # 执行批量SQL
+                            with connection.cursor() as cursor:
+                                cursor.execute(full_sql, params)
+                                affected_rows = cursor.rowcount
+                            
+                            # 估算创建和更新的数量
+                            # 注意：这只是估算，实际可能不准确
+                            created_count = affected_rows - len(processed_data_list)
+                            updated_count = len(processed_data_list) - created_count
+                        
+                    else:
+                        # 回退到兼容所有数据库的update_or_create方式
+                        created_count = 0
+                        updated_count = 0
+                        
+                        for data in processed_data_list:
+                            # 提取唯一标识字段
+                            unique_kwargs = {
+                                'specific_part': data['specific_part'],
+                                'energy_mode': data['energy_mode'],
+                                'usage_date': data['usage_date']
+                            }
+                            # 提取需要更新的字段
+                            update_kwargs = {
+                                'value': data['value'],
+                                'plc_ip': data['plc_ip'],
+                                'building': data['building'],
+                                'unit': data['unit'],
+                                'room_number': data['room_number']
+                            }
+                            # 执行update_or_create
+                            obj, created = PLCData.objects.update_or_create(
+                                defaults=update_kwargs, **unique_kwargs
+                            )
+                            if created:
+                                created_count += 1
+                            else:
+                                updated_count += 1
 
-            logger.info(
-                f"✅ 批量保存完成: 成功处理 {len(processed_data_list)} 个数据点，" 
-                f"创建 {created_count} 条记录，更新 {updated_count} 条记录，" 
-                f"跳过 {skipped_count} 个"
-            )
+                    logger.info(
+                        f"✅ 批量保存完成: 成功处理 {len(processed_data_list)} 个数据点，" 
+                        f"创建 {created_count} 条记录，更新 {updated_count} 条记录，" 
+                        f"跳过 {skipped_count} 个"
+                    )
+                    return  # 成功完成，退出函数
 
-        except (MySQLdb.OperationalError) as e:
-            # 捕获数据库操作错误，尝试重连
-            error_msg = str(e)
-            logger.error(f"❌ 批量数据库操作错误: {error_msg}")
-            # 如果是连接已断开的错误，尝试重新连接
-            if ('2006' in error_msg \
-                    or 'server has gone away' in error_msg.lower() \
-                    or 'connection reset by peer' in error_msg.lower()):
-                logger.warning("🔄 数据库连接已断开，尝试重新连接...")
-                self._check_and_reconnect_db()
-            raise
+                except (MySQLdb.OperationalError) as e:
+                    # 捕获数据库操作错误，尝试重连
+                    error_msg = str(e)
+                    logger.error(f"❌ 批量数据库操作错误 (重试: {retry_count+1}/{max_retries}): {error_msg}")
+                    
+                    # 如果不是最后一次重试，尝试重新连接并继续
+                    if retry_count < max_retries - 1:
+                        # 如果是连接已断开的错误，尝试重新连接
+                        if ('2006' in error_msg \
+                                or 'server has gone away' in error_msg.lower() \
+                                or 'connection reset by peer' in error_msg.lower()):
+                            logger.warning("🔄 数据库连接已断开，尝试重新连接...")
+                            if self._check_and_reconnect_db(with_diagnostic=False):
+                                logger.info("✅ 数据库重新连接成功，准备重试批量操作...")
+                                # 等待一下再重试
+                                time.sleep(0.5)
+                                continue
+                    
+                    # 最后一次重试失败，或者重连失败
+                    logger.error("❌ 所有数据库操作重试都失败")
+                    raise
+        
         except Exception as e:
-            # 捕获其他错误
+            # 处理其他错误
             logger.error(f"批量保存: 发生未知错误: {e}", exc_info=True)
             raise
     
