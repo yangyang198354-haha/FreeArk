@@ -687,6 +687,11 @@ class MQTTConsumer:
                     default_date = datetime.now().date()
                     plc_data['usage_date'] = default_date
 
+                # 添加时间字段（Django模型中auto_now_add=True和auto_now=True，但直接SQL插入需要显式提供）
+                current_time = datetime.now()
+                plc_data['created_at'] = current_time
+                plc_data['updated_at'] = current_time
+                
                 # 添加到处理后的数据列表
                 processed_data_list.append(plc_data)
 
