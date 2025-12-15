@@ -718,9 +718,11 @@ class MQTTConsumer:
                             # 获取字段名
                             fields = list(processed_data_list[0].keys())
                             
-                            # 构建INSERT语句
-                            placeholders = ','.join(['(%s)' % ','.join(['%s']*len(fields))])
-                            insert_sql = f"INSERT INTO api_plcdata ({','.join(fields)}) VALUES {placeholders}"
+                            # 构建INSERT语句 - 为每个数据点生成占位符组
+                            field_placeholders = ','.join(['%s'] * len(fields))
+                            # 为每个数据点生成一个完整的占位符组
+                            record_placeholders = ','.join(['(%s)' % field_placeholders for _ in processed_data_list])
+                            insert_sql = f"INSERT INTO api_plcdata ({','.join(fields)}) VALUES {record_placeholders}"
                             
                             # 构建ON DUPLICATE KEY UPDATE语句
                             update_fields = [f"{field}=VALUES({field})" for field in fields 
