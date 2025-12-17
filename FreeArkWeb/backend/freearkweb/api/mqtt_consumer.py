@@ -485,7 +485,7 @@ class MQTTConsumer:
                     ConnectionAbortedError, BrokenPipeError) as e:
                 error_msg = str(e)
                 logger.error(f"❌ 数据库操作错误: {error_msg}")
-                logger.debug(f"当前连接状态: closed={django_connection.closed}, connection_id={id(django_connection)}")
+                logger.debug(f"当前连接状态: connection_id={id(django_connection)}")
                 # 如果是连接已断开的错误，尝试重新连接
                 if ('2006' in error_msg \
                         or 'server has gone away' in error_msg.lower() \
@@ -496,11 +496,11 @@ class MQTTConsumer:
                     retry_count += 1
                     if retry_count <= max_retries:
                         logger.warning(f"🔄 数据库连接已断开，尝试重新连接并重试消息处理... (重试 {retry_count}/{max_retries})")
-                        logger.debug(f"重试前连接状态: closed={django_connection.closed}, connection_id={id(django_connection)}")
+                        logger.debug(f"重试前连接状态: connection_id={id(django_connection)}")
                         # 尝试重新连接
                         if self._check_and_reconnect_db(with_diagnostic=False):
                             logger.info("✅ 数据库连接已重新建立，准备重试消息处理")
-                            logger.debug(f"重连后连接状态: closed={django_connection.closed}, connection_id={id(django_connection)}")
+                            logger.debug(f"重连后连接状态: connection_id={id(django_connection)}")
                             # 等待一小段时间确保连接稳定
                             time.sleep(0.5)
                             continue  # 重试当前消息
@@ -523,7 +523,7 @@ class MQTTConsumer:
         reconnect_delay = 1  # 保持合适的初始重连延迟
         
         logger.debug(f"开始检查数据库连接状态，当前线程ID: {threading.get_ident()}")
-        logger.debug(f"初始连接状态: closed={django_connection.closed}, connection_id={id(django_connection)}")
+        logger.debug(f"初始连接状态: connection_id={id(django_connection)}")
         
         def is_connection_valid():
             """更彻底地检查连接有效性，包括实际执行SQL查询"""
@@ -574,7 +574,7 @@ class MQTTConsumer:
             # 1. 关闭旧连接
             logger.info("🔄 正在关闭旧的数据库连接...")
             old_connection_id = id(django_connection)
-            logger.debug(f"旧连接ID: {old_connection_id}, 关闭前状态: closed={django_connection.closed}")
+            logger.debug(f"旧连接ID: {old_connection_id}")
             django_connection.close()
             logger.info(f"✅ 已关闭旧的数据库连接 [ID: {old_connection_id}]")
             
@@ -839,12 +839,12 @@ class MQTTConsumer:
         try:
             # 操作前检查并确保数据库连接可用
             logger.debug("操作前检查数据库连接...")
-            logger.debug(f"线程ID: {threading.get_ident()}, 连接状态: closed={django_connection.closed}, connection_id={id(django_connection)}")
+            logger.debug(f"线程ID: {threading.get_ident()}, 连接状态: connection_id={id(django_connection)}")
             
             # 更严格的连接检查：先确保连接存在，然后执行一个简单查询验证
             logger.debug("执行ensure_connection()检查...")
             django_connection.ensure_connection()
-            logger.debug(f"ensure_connection()完成，新连接状态: closed={django_connection.closed}")
+            logger.debug(f"ensure_connection()完成，新连接状态: connection_id={id(django_connection)}")
             
             # 执行SELECT 1验证连接是否真正可用
             logger.debug("执行SELECT 1验证连接...")
