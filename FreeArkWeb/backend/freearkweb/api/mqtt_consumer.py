@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db import connection as django_connection
 from django.db import transaction
 from django.db.utils import OperationalError as DjangoOperationalError
+from django.utils import timezone
 from .models import PLCData
 
 # 获取logger
@@ -893,6 +894,8 @@ class MQTTConsumer:
                     to_update = []
                     update_values = []
                     
+                    current_time = timezone.now()
+                    
                     for key, data in unique_key_map.items():
                         if key in existing_map:
                             # 更新现有记录
@@ -903,6 +906,8 @@ class MQTTConsumer:
                             record.unit = data['unit']
                             record.room_number = data['room_number']
                             record.plc_ip = data['plc_ip']
+                            # 手动设置updated_at字段，因为bulk_update不会触发auto_now
+                            record.updated_at = current_time
                             
                             to_update.append(record)
                             update_values.append((old_value, data['value']))
