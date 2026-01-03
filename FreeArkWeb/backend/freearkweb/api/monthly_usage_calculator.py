@@ -89,7 +89,13 @@ class MonthlyUsageCalculator:
                 # 直接使用数据库聚合的结果
                 initial_energy = record['min_initial_energy'] or 0
                 final_energy = record['max_final_energy'] or 0
-                total_quantity = final_energy - initial_energy
+                
+                # 确保月度用量不为负数，处理数据异常情况
+                if final_energy < initial_energy:
+                    logger.warning(f"发现不合理的能耗数据：specific_part={record['specific_part']}, energy_mode={record['energy_mode']}, initial_energy={initial_energy}, final_energy={final_energy}")
+                    total_quantity = 0
+                else:
+                    total_quantity = final_energy - initial_energy
                 
                 # 构建月度记录数据
                 monthly_data = {

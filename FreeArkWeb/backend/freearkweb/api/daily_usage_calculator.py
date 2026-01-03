@@ -206,11 +206,40 @@ class DailyUsageCalculator:
                             ['initial_energy', 'final_energy', 'usage_quantity']
                         )
             
+            # 处理前一天有记录但final_energy为空的情况
+            previous_day = target_date_value - timedelta(days=1)
+            incomplete_records = UsageQuantityDaily.objects.filter(
+                time_period=previous_day,
+                final_energy__isnull=True
+            )
+            
+            previous_day_updated = 0
+            if incomplete_records.exists():
+                log_func(f"处理前一天({previous_day})未完成记录，共 {incomplete_records.count()} 条")
+                
+                # 批量更新这些记录
+                with transaction.atomic():
+                    update_list = []
+                    for record in incomplete_records:
+                        # 打印未完成记录的明细
+                        log_func(f"  处理未完成记录: specific_part={record.specific_part}, energy_mode={record.energy_mode}, initial_energy={record.initial_energy}")
+                        record.final_energy = record.initial_energy
+                        record.usage_quantity = 0
+                        update_list.append(record)
+                    if update_list:
+                        UsageQuantityDaily.objects.bulk_update(
+                            update_list,
+                            ['final_energy', 'usage_quantity']
+                        )
+                        previous_day_updated = len(update_list)
+                        log_func(f"  成功更新 {previous_day_updated} 条记录")
+                log_func(f"已完成前一天未完成记录的处理")
+            
             # 返回处理结果
             result = {
                 'processed_count': processed_count,
                 'created_count': created_count,
-                'updated_count': updated_count,
+                'updated_count': updated_count + previous_day_updated,
                 'next_day_count': next_day_count
             }
             
