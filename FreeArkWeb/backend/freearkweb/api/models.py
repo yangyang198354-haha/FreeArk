@@ -186,3 +186,90 @@ class PLCData(models.Model):
     
     def __str__(self):
         return f"{self.specific_part} - {self.energy_mode} - {self.created_at}"
+
+
+class PLCConnectionStatus(models.Model):
+    """PLC连接状态表模型，用于记录PLC设备的连接状态信息"""
+    # 专有部分，格式为 "3-1-7-702"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分', unique=True, db_index=True)
+    # 连接状态，可选值为 "online" 或 "offline"
+    CONNECTION_STATUS_CHOICES = (
+        ('online', '在线'),
+        ('offline', '离线'),
+    )
+    connection_status = models.CharField(max_length=10, choices=CONNECTION_STATUS_CHOICES, default='offline', verbose_name='连接状态')
+    # 最后一次在线时间
+    last_online_time = models.DateTimeField(null=True, blank=True, verbose_name='最后一次在线时间')
+    # 楼栋，格式为 "3"
+    building = models.CharField(max_length=10, verbose_name='楼栋', db_index=True)
+    # 单元，格式为 "1"
+    unit = models.CharField(max_length=10, verbose_name='单元', db_index=True)
+    # 房号，格式为 "702"
+    room_number = models.CharField(max_length=10, verbose_name='房号', db_index=True)
+    # 记录创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='记录创建时间')
+    # 记录更新时间
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='记录更新时间')
+    
+    class Meta:
+        db_table = 'plc_connection_status'  # 指定表名
+        verbose_name = 'PLC连接状态'
+        verbose_name_plural = 'PLC连接状态'
+        # 创建索引以提高查询性能
+        indexes = [
+            # 单列索引
+            models.Index(fields=['connection_status']),
+            models.Index(fields=['building']),
+            models.Index(fields=['unit']),
+            models.Index(fields=['last_online_time']),
+            models.Index(fields=['updated_at']),
+            # 组合索引
+            models.Index(fields=['building', 'unit']),
+            models.Index(fields=['connection_status', 'building', 'unit']),
+        ]
+    
+    def __str__(self):
+        return f"{self.specific_part} - {self.connection_status}"
+
+
+class PLCStatusChangeHistory(models.Model):
+    """PLC状态变化历史表模型，用于记录PLC设备的状态变化事件"""
+    # 专有部分，格式为 "3-1-7-702"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分', db_index=True)
+    # 状态变化类型，可选值为 "online" 或 "offline"
+    STATUS_CHOICES = (
+        ('online', '上线'),
+        ('offline', '离线'),
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, verbose_name='状态变化类型')
+    # 变化时间戳
+    change_time = models.DateTimeField(auto_now_add=True, verbose_name='状态变化时间', db_index=True)
+    # 楼栋，格式为 "3"
+    building = models.CharField(max_length=10, verbose_name='楼栋', db_index=True, default='')
+    # 单元，格式为 "1"
+    unit = models.CharField(max_length=10, verbose_name='单元', db_index=True, default='')
+    # 房号，格式为 "702"
+    room_number = models.CharField(max_length=10, verbose_name='房号', db_index=True, default='')
+    # 记录创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='记录创建时间')
+    
+    class Meta:
+        db_table = 'plc_status_change_history'  # 指定表名
+        verbose_name = 'PLC状态变化历史'
+        verbose_name_plural = 'PLC状态变化历史'
+        # 创建索引以提高查询性能
+        indexes = [
+            # 单列索引
+            models.Index(fields=['specific_part']),
+            models.Index(fields=['status']),
+            models.Index(fields=['change_time']),
+            models.Index(fields=['building']),
+            models.Index(fields=['unit']),
+            # 组合索引
+            models.Index(fields=['specific_part', 'change_time']),
+            models.Index(fields=['building', 'unit', 'change_time']),
+            models.Index(fields=['status', 'change_time']),
+        ]
+    
+    def __str__(self):
+        return f"{self.specific_part} - {self.status} - {self.change_time}"

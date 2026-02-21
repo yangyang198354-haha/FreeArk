@@ -325,6 +325,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 1024 * 1024 * 5,  # 5MB
             'backupCount': 5,
+            'delay': True,  # 延迟创建文件，直到第一次写入
         },
         'console': {
             'level': 'DEBUG',

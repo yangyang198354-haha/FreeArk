@@ -28,4 +28,11 @@ urlpatterns = [
     path('usage/quantity/specifictimeperiod/', views.get_usage_quantity_specific_time_period, name='get-usage-quantity-specific-time-period'),
     # 月度用量数据查询
     path('usage/quantity/monthly/', views.get_usage_quantity_monthly, name='get-usage-quantity-monthly'),
+    
+    # PLC连接状态查询
+    path('plc/connection-status/', views.get_plc_connection_status, name='get-plc-connection-status'),
+    # 单个PLC连接状态详情查询
+    path('plc/connection-status/<str:specific_part>/', views.get_plc_connection_status_detail, name='get-plc-connection-status-detail'),
+    # PLC状态变化历史查询
+    path('plc/status-change-history/<str:specific_part>/', views.get_plc_status_change_history, name='get-plc-status-change-history'),
 ]

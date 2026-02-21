@@ -60,6 +60,18 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/plc-status',
+    name: 'PlcStatus',
+    component: () => import('../views/PlcStatusView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/specific-part-detail/:specificPart',
+    name: 'SpecificPartDetail',
+    component: () => import('../views/SpecificPartDetailView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

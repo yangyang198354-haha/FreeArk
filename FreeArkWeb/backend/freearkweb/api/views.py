@@ -5,11 +5,12 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
-    UsageQuantityDailySerializer, UsageQuantityMonthlySerializer
+    UsageQuantityDailySerializer, UsageQuantityMonthlySerializer,
+    PLCConnectionStatusSerializer
 )
 
 # 获取logger实例
@@ -487,3 +488,149 @@ def change_password(request):
         'success': True,
         'message': '密码修改成功'
     })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_plc_connection_status(request):
+    """
+    获取PLC设备连接状态列表
+    支持分页、筛选（按楼栋、单元、连接状态）
+    """
+    # 获取查询参数
+    building = request.GET.get('building')
+    unit = request.GET.get('unit')
+    connection_status = request.GET.get('connection_status')
+    
+    # 记录查询条件到日志
+    logger.info(f"PLC连接状态查询条件 - building: {building}, unit: {unit}, connection_status: {connection_status}")
+    
+    # 构建基础查询集
+    queryset = PLCConnectionStatus.objects.all()
+    
+    # 应用过滤条件
+    if building:
+        queryset = queryset.filter(building=building)
+    if unit:
+        queryset = queryset.filter(unit=unit)
+    if connection_status:
+        queryset = queryset.filter(connection_status=connection_status)
+    
+    # 按特定部分排序
+    queryset = queryset.order_by('specific_part')
+    
+    # 处理分页
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 10))
+    
+    # 计算分页范围
+    total_count = queryset.count()
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    paginated_data = queryset[start_index:end_index]
+    
+    # 序列化数据
+    serializer = PLCConnectionStatusSerializer(paginated_data, many=True)
+    
+    # 计算统计数据
+    online_count = PLCConnectionStatus.objects.filter(connection_status='online').count()
+    offline_count = PLCConnectionStatus.objects.filter(connection_status='offline').count()
+    total_devices = PLCConnectionStatus.objects.count()
+    online_rate = round((online_count / total_devices) * 100, 2) if total_devices > 0 else 0
+    
+    return Response({
+        'success': True,
+        'data': serializer.data,
+        'total': total_count,
+        'statistics': {
+            'online_count': online_count,
+            'offline_count': offline_count,
+            'total_devices': total_devices,
+            'online_rate': online_rate
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_plc_connection_status_detail(request, specific_part):
+    """
+    获取单个PLC设备的连接状态详情
+    """
+    # 记录查询条件到日志
+    logger.info(f"PLC连接状态详情查询 - specific_part: {specific_part}")
+    
+    try:
+        # 查询指定specific_part的设备
+        plc_status = PLCConnectionStatus.objects.get(specific_part=specific_part)
+        
+        # 序列化数据
+        serializer = PLCConnectionStatusSerializer(plc_status)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    except PLCConnectionStatus.DoesNotExist:
+        # 设备不存在
+        return Response({
+            'success': False,
+            'error': f'未找到特定部分为 {specific_part} 的PLC设备'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        # 其他错误
+        logger.error(f"查询PLC连接状态详情时发生错误: {e}", exc_info=True)
+        return Response({
+            'success': False,
+            'error': '查询PLC连接状态详情时发生错误'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_plc_status_change_history(request, specific_part):
+    """
+    获取单个PLC设备的状态变化历史记录
+    """
+    # 记录查询条件到日志
+    logger.info(f"PLC状态变化历史查询 - specific_part: {specific_part}")
+    
+    try:
+        # 查询指定specific_part的设备状态变化历史，按时间倒序排序
+        history_records = PLCStatusChangeHistory.objects.filter(
+            specific_part=specific_part
+        ).order_by('-change_time')
+        
+        # 处理分页
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+        
+        # 计算分页范围
+        total_count = history_records.count()
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        paginated_data = history_records[start_index:end_index]
+        
+        # 构建响应数据
+        result_data = []
+        for record in paginated_data:
+            result_data.append({
+                'status': record.status,
+                'change_time': record.change_time,
+                'building': record.building,
+                'unit': record.unit,
+                'room_number': record.room_number
+            })
+        
+        return Response({
+            'success': True,
+            'data': result_data,
+            'total': total_count
+        })
+    except Exception as e:
+        # 其他错误
+        logger.error(f"查询PLC状态变化历史时发生错误: {e}", exc_info=True)
+        return Response({
+            'success': False,
+            'error': '查询PLC状态变化历史时发生错误'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus
 
 class UserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
@@ -99,3 +99,14 @@ class UsageQuantityMonthlySerializer(serializers.ModelSerializer):
             'energy_mode', 'initial_energy', 'final_energy', 'usage_quantity', 'usage_month'
         ]
         read_only_fields = ['id']
+
+
+class PLCConnectionStatusSerializer(serializers.ModelSerializer):
+    """PLC连接状态序列化器"""
+    class Meta:
+        model = PLCConnectionStatus
+        fields = [
+            'id', 'specific_part', 'connection_status', 'last_online_time',
+            'building', 'unit', 'room_number', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
