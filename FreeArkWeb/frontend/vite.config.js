@@ -102,7 +102,14 @@ export default defineConfig(({ mode }) => {
     fs: {
       allow: ['..']
     },
-    // 移除API代理配置，使用环境变量配置API地址
+    // 添加API代理配置
+    proxy: {
+      '/ark/billing-managerment/list': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ark\/billing-managerment\/list/, '/api/billing/list/')
+      }
+    }
   },
   build: {
     outDir: buildDir,

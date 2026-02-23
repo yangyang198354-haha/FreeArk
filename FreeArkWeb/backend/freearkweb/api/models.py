@@ -273,3 +273,31 @@ class PLCStatusChangeHistory(models.Model):
     
     def __str__(self):
         return f"{self.specific_part} - {self.status} - {self.change_time}"
+
+
+class SpecificPartInfo(models.Model):
+    """专有部分信息表，用于存储screenMAC与specific_part的对应关系"""
+    # screenMAC，唯一标识符
+    screenMAC = models.CharField(max_length=50, verbose_name='屏幕MAC地址', unique=True, db_index=True)
+    # 专有部分，格式为 "3-1-7-702"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分', db_index=True)
+    # 记录创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='记录创建时间')
+    # 记录更新时间
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='记录更新时间')
+    
+    class Meta:
+        db_table = 'specific_part_info'  # 指定表名
+        verbose_name = '专有部分信息'
+        verbose_name_plural = '专有部分信息'
+        # 创建索引以提高查询性能
+        indexes = [
+            # 单列索引
+            models.Index(fields=['screenMAC']),
+            models.Index(fields=['specific_part']),
+            # 组合索引
+            models.Index(fields=['screenMAC', 'specific_part']),
+        ]
+    
+    def __str__(self):
+        return f"{self.screenMAC} - {self.specific_part}"

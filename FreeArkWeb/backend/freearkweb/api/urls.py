@@ -35,4 +35,7 @@ urlpatterns = [
     path('plc/connection-status/<str:specific_part>/', views.get_plc_connection_status_detail, name='get-plc-connection-status-detail'),
     # PLC状态变化历史查询
     path('plc/status-change-history/<str:specific_part>/', views.get_plc_status_change_history, name='get-plc-status-change-history'),
+    
+    # 计费管理接口
+    path('billing/list/', views.get_bill_list, name='get-bill-list'),
 ]

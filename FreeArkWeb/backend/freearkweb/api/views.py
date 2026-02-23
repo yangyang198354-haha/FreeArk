@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
@@ -633,4 +633,142 @@ def get_plc_status_change_history(request, specific_part):
         return Response({
             'success': False,
             'error': '查询PLC状态变化历史时发生错误'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@csrf_exempt
+def get_bill_list(request):
+    """
+    获取历史用能数据
+    参考ark/billing-managerment/list规范
+    """
+    try:
+        # 从HTTP请求头中提取screenMAC信息
+        screen_mac = request.META.get('HTTP_SCREENMAC', '')
+        logger.info(f"历史用能数据查询 - screenMac: {screen_mac}")
+        
+        # 验证screenMAC是否存在
+        if not screen_mac:
+            logger.error("请求头中缺少screenMAC信息")
+            return Response({
+                "code": 400,
+                "message": "请求头中缺少screenMAC信息",
+                "data": []
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 使用screenMAC查询specific_part_info表，获取对应的specific_part
+        try:
+            specific_part_info = SpecificPartInfo.objects.get(screenMAC=screen_mac)
+            specific_part = specific_part_info.specific_part
+            logger.info(f"screenMAC {screen_mac} 对应的specific_part: {specific_part}")
+        except SpecificPartInfo.DoesNotExist:
+            logger.error(f"screenMAC {screen_mac} 未找到对应的专有部分信息")
+            return Response({
+                "code": 404,
+                "message": f"screenMAC {screen_mac} 未找到对应的专有部分信息",
+                "data": []
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 获取请求参数
+        start_date = request.data.get('startDate')
+        end_date = request.data.get('endDate')
+        energy_type = request.data.get('energyType', '')
+        
+        logger.info(f"查询参数 - startDate: {start_date}, endDate: {end_date}, energyType: {energy_type}")
+        
+        # 构建查询集
+        queryset = UsageQuantityMonthly.objects.filter(specific_part=specific_part)
+        
+        # 处理时间格式转换（从YYYYMM到YYYY-MM）
+        def format_date(date_str):
+            if date_str and len(date_str) == 6:
+                try:
+                    return f"{date_str[:4]}-{date_str[4:]}"
+                except:
+                    return date_str
+            return date_str
+        
+        # 应用时间范围过滤
+        if start_date:
+            # 转换为YYYY-MM格式
+            formatted_start_date = format_date(start_date)
+            queryset = queryset.filter(usage_month__gte=formatted_start_date)
+        if end_date:
+            # 转换为YYYY-MM格式
+            formatted_end_date = format_date(end_date)
+            queryset = queryset.filter(usage_month__lte=formatted_end_date)
+        
+        # 应用能源类型过滤
+        if energy_type in ['制冷', '制热']:
+            # 直接使用energy_type作为energy_mode查询条件
+            queryset = queryset.filter(energy_mode=energy_type)
+        
+        # 按用量月度和能源模式排序（先按月份，再按能源模式）
+        queryset = queryset.order_by('usage_month', 'energy_mode')
+        
+        # 不需要分页，直接使用所有数据
+        paginated_data = queryset
+        
+        # 构建响应数据
+        result_data = []
+        for record in paginated_data:
+            # 解析专有部分信息
+            parts = record.specific_part.split('-')
+            building = parts[0] if len(parts) > 0 else ''
+            unit = parts[1] if len(parts) > 1 else ''
+            room_number = parts[3] if len(parts) > 3 else ''
+            
+            # 格式化账单周期
+            month_parts = record.usage_month.split('-')
+            billing_cycle = f"{month_parts[0]}年{month_parts[1]}月"
+            
+            # 计算账单日期（使用月末日期）
+            import calendar
+            year = int(month_parts[0])
+            month = int(month_parts[1])
+            last_day = calendar.monthrange(year, month)[1]
+            billing_date = f"{year}-{month:02d}-{last_day:02d}"
+            
+            # 计算账单金额
+            unit_price = 0.28
+            usage_amount = record.usage_quantity or 0
+            bill_amount = round(usage_amount * unit_price, 2)
+            
+            # 构建账单数据
+            bill_data = {
+                "id": record.id,
+                "realestateId": 67754642,
+                "familyId": 521697181,
+                "familyName": f"{building}栋{unit}单元{room_number}",
+                "modeName": record.energy_mode,
+                "chargeItems": f"{record.energy_mode}费",
+                "usageAmount": str(int(usage_amount)) if usage_amount == int(usage_amount) else str(usage_amount),
+                "basicAmount": None,
+                "beyondAmount": None,
+                "basicPrice": str(unit_price),
+                "beyondPrice": None,
+                "billingCycle": billing_cycle,
+                "billingDate": billing_date,
+                "billAmount": f"{bill_amount:.2f}"
+            }
+            result_data.append(bill_data)
+        
+        # 构建响应
+        response_data = {
+            "code": 200,
+            "message": "成功",
+            "data": result_data
+        }
+        
+        logger.info(f"历史用能数据查询成功 - 找到 {len(result_data)} 条记录")
+        return Response(response_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"查询历史用能数据时发生错误: {str(e)}", exc_info=True)
+        return Response({
+            "code": 500,
+            "message": f"查询历史用能数据时发生错误: {str(e)}",
+            "data": []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
