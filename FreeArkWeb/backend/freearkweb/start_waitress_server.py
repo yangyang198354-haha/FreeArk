@@ -17,7 +17,7 @@ print(f"脚本运行目录: {script_dir}")
 
 # 设置环境变量
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'freearkweb.settings')
-os.environ.setdefault('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.51，192.168.31.52,et116374mm892.vicp.fun')
+os.environ.setdefault('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.51,192.168.31.52,et116374mm892.vicp.fun')
 
 os.environ.setdefault('DEBUG', 'False')
 
