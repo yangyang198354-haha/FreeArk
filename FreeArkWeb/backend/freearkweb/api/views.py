@@ -636,9 +636,9 @@ def get_plc_status_change_history(request, specific_part):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
-@csrf_exempt
 def get_bill_list(request):
     """
     获取历史用能数据
