@@ -232,10 +232,10 @@ export default {
           page_size: this.pageSize,
           specific_part: specificPart || '',
           energy_mode: energyMode || '',
-          start_time: startTime,
-          end_time: endTime
+          start_month: startTime,
+          end_month: endTime
         }
-        
+
         // 调用API获取数据
         const response = await api.get('/api/usage/quantity/monthly/', params)
         
@@ -330,8 +330,8 @@ export default {
           page_size: 100, // 每页获取100条数据，加快收集速度
           specific_part: specificPart || '',
           energy_mode: energyMode || '',
-          start_time: startTime,
-          end_time: endTime
+          start_month: startTime,
+          end_month: endTime
         }
         
         // 调用API获取数据

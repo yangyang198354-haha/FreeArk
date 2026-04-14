@@ -1,6 +1,7 @@
 import logging
+import traceback
 from datetime import date, timedelta
-from django.db.models import Min, Max, Sum
+from django.db.models import Min, Max
 from django.db import transaction, close_old_connections
 from api.models import UsageQuantityDaily, UsageQuantityMonthly
 
@@ -23,16 +24,16 @@ class MonthlyUsageCalculator:
         Returns:
             dict: 包含处理结果的汇总信息
         """
+        # 入口类型校验，必须在访问 date 方法之前执行
+        if not isinstance(target_date, date):
+            return {"error": f"目标日期必须是date类型，当前类型: {type(target_date)}"}
+
         logger.info(f'🔍 开始月度用量计算流程 - 目标月份: {target_date.strftime("%Y-%m")}')
-        
+
         try:
             # 关闭旧的数据库连接，确保使用新的有效连接
             close_old_connections()
-            
-            # 验证目标日期格式
-            if not isinstance(target_date, date):
-                raise ValueError(f"目标日期必须是date类型，当前类型: {type(target_date)}")
-            
+
             # 确定月份的开始和结束日期
             year = target_date.year
             month = target_date.month
@@ -122,11 +123,14 @@ class MonthlyUsageCalculator:
             return {"processed": 0, "created": 0, "updated": 0, "error": str(val_error)}
         except Exception as e:
             logger.error(f"❌ 月度用量计算过程中发生未预期错误: {str(e)}")
-            import traceback
             logger.error(f"未预期错误详情: {traceback.format_exc()}")
             return {"processed": 0, "created": 0, "updated": 0, "error": str(e)}
         finally:
-            logger.info(f'🏁 月度用量计算流程结束 - 目标月份: {target_date.strftime("%Y-%m")}')
+            try:
+                month_label = target_date.strftime("%Y-%m")
+            except AttributeError:
+                month_label = str(target_date)
+            logger.info(f'🏁 月度用量计算流程结束 - 目标月份: {month_label}')
     
     @staticmethod
     @transaction.atomic

@@ -25,8 +25,6 @@ class Command(BaseCommand):
                           help='手动执行时指定计算日期，格式为YYYY-MM-DD，默认为昨天')
     
     def handle(self, *args, **options):
-        # 直接打印到控制台，确保服务正常启动
-        print('🚀 每日用量计算后台服务启动')
         # 使用统一的日志方法
         service_config = {
             'time': options['time'],
@@ -42,8 +40,8 @@ class Command(BaseCommand):
                 try:
                     target_date = datetime.strptime(options['date'], '%Y-%m-%d').date()
                 except ValueError:
-                    self.stdout.write(self.style.ERROR('日期格式错误，请使用YYYY-MM-DD格式'))
-                    return 1
+                    logger.error('日期格式错误，请使用YYYY-MM-DD格式')
+                    return
             else:
                 # 默认计算昨天的数据
                 target_date = date.today() - timedelta(days=1)
@@ -51,7 +49,7 @@ class Command(BaseCommand):
             log_task_start(logger, f'计算{target_date}的用量数据')
             self.calculate_daily_usage(target_date)
             log_task_completion(logger, '单次计算')
-            return 0
+            return
         
         # 设置定时任务
         run_time = options['time']
@@ -72,7 +70,7 @@ class Command(BaseCommand):
                 time.sleep(60)  # 每分钟检查一次
         except KeyboardInterrupt:
             log_service_stop(logger, '每日用量计算后台服务')
-            return 0
+            return
     
     def daily_job(self):
         """每日定时任务，计算昨天的数据"""

@@ -1,8 +1,7 @@
 import logging
 from datetime import datetime, date, timedelta
-from django.db import transaction, connection, close_old_connections
+from django.db import transaction, close_old_connections
 from django.utils import timezone
-from django.db.models import Max, Subquery, OuterRef, F
 from api.models import PLCData, UsageQuantityDaily
 
 # 注意：Django的时区处理 - 设置TIME_ZONE='Asia/Shanghai'且USE_TZ=True时，
@@ -82,7 +81,7 @@ class DailyUsageCalculator:
             # 直接按目标日期过滤获取所有记录，因为每个 (specific_part, energy_mode) 在目标日期下只有一条记录
             latest_records_qs = PLCData.objects.filter(
                 usage_date=target_date_value
-            ).select_related()
+            )
             
             # 批量处理结果
             total_records = latest_records_qs.count()

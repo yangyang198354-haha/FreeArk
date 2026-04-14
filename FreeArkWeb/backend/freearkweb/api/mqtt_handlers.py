@@ -441,6 +441,7 @@ class PLCDataHandler(MessageHandler):
             
         except Exception as e:
             logger.error(f"PLCDataHandler: 批量保存PLC数据点时发生错误: {e}", exc_info=True)
+            raise  # 向上传播，使 process_message 的重试/重连逻辑能感知到数据库错误
 
 
 class ConnectionStatusHandler(MessageHandler):

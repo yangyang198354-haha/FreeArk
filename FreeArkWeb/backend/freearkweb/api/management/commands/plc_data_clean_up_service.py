@@ -51,9 +51,8 @@ class Command(BaseCommand):
         interval = options['interval']
         run_once = options['once']
         
-        logger.info(f'🚀 启动PLC数据清理服务...')
-        self.stdout.write(self.style.SUCCESS(f'🚀 启动PLC数据清理服务...'))
-        self.stdout.write(f'🔧 清理配置: 保留{days}天数据')
+        logger.info('启动PLC数据清理服务...')
+        logger.info(f'清理配置: 保留{days}天数据')
         # 使用统一的日志方法
         service_config = {
             'days_to_keep': f'{days}天',
@@ -63,7 +62,6 @@ class Command(BaseCommand):
         # 如果指定了--once参数，则立即执行一次清理并退出
         if run_once:
             log_task_start(logger, '执行一次性清理任务')
-            self.stdout.write(f'📊 执行一次性清理任务...')
             self.run_cleanup_task(days)
             return
         
@@ -73,17 +71,16 @@ class Command(BaseCommand):
         
         # 启动调度循环
         try:
-            logger.info('🔄 调度服务已启动，按Ctrl+C退出')
-            self.stdout.write(self.style.SUCCESS('🔄 调度服务已启动，按Ctrl+C退出'))
+            logger.info('调度服务已启动，按Ctrl+C退出')
             while True:
                 schedule.run_pending()
                 time.sleep(1)
         except KeyboardInterrupt:
             log_task_start(logger, 'PLC数据清理服务停止')
-            self.stdout.write('🛑 收到终止信号，服务正在停止...')
+            logger.info('收到终止信号，服务正在停止...')
         finally:
             log_task_completion(logger, 'PLC数据清理服务停止')
-            self.stdout.write(self.style.SUCCESS('✅ PLC数据清理服务已停止'))
+            logger.info('PLC数据清理服务已停止')
     
     def run_cleanup_task(self, days):
         """
@@ -91,7 +88,6 @@ class Command(BaseCommand):
         """
         try:
             log_task_start(logger, f'PLC数据清理任务，保留{days}天数据')
-            self.stdout.write(f'📊 开始执行PLC数据清理任务，保留{days}天数据...')
             
             result = clean_old_plc_data(days)
             log_task_completion(logger, 'PLC数据清理', {"message": result["message"]})

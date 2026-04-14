@@ -9,7 +9,7 @@ import paho.mqtt.client as mqtt
 import MySQLdb
 from django.conf import settings
 from django.db import connection as django_connection
-from django.db import transaction
+from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError as DjangoOperationalError
 from django.utils import timezone
 from .models import PLCData
@@ -195,6 +195,13 @@ class MQTTConsumer:
     
     def on_message(self, client, userdata, msg):
         """收到MQTT消息后的回调函数"""
+        # 主动释放当前线程（paho-mqtt 回调线程）中已过期或已断开的 Django DB 连接。
+        # paho-mqtt 的 loop_start() 在独立线程中回调此方法，Django 的 connection 是
+        # thread-local 的，DB 维护线程保活的是它自己的连接，与本线程无关。
+        # 若不在此处清理，MySQL wait_timeout（默认 8h）过后连接会被服务端断开，
+        # 导致后续所有 ORM 操作静默失败。
+        close_old_connections()
+
         try:
             logger.info(f"收到消息: 主题={msg.topic}, 长度={len(msg.payload)}字节, QoS={msg.qos}, 保留={msg.retain}")
             

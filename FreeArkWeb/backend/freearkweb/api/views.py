@@ -1,9 +1,11 @@
+import calendar
 import logging
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
+from django.db.models import Min, Max, Count, Case, When, IntegerField
 from django.views.decorators.csrf import csrf_exempt
 from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo
 from .serializers import (
@@ -154,14 +156,13 @@ class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     
     def update(self, request, *args, **kwargs):
         try:
-            print(f"更新用户请求数据: {request.data}")
+            logger.debug("更新用户请求数据: %s", request.data)
             response = super().update(request, *args, **kwargs)
             return response
         except Exception as e:
-            print(f"更新用户错误: {str(e)}")
-            # 如果是序列化器错误
+            logger.debug("更新用户错误: %s", str(e))
             if hasattr(e, 'detail'):
-                print(f"序列化器错误详情: {e.detail}")
+                logger.debug("序列化器错误详情: %s", e.detail)
             raise
 
 class AdminUserCreate(generics.CreateAPIView):
@@ -307,8 +308,7 @@ def get_usage_quantity_specific_time_period(request):
         queryset = queryset.filter(time_period__lte=end_time)
     
     # 按专有部分和供能模式分组，计算每个组的初期能耗最小值、末期能耗最大值
-    from django.db.models import Min, Max, F
-    
+
     # 从已过滤的查询集中严格获取符合条件的(specific_part, energy_mode)组合
     unique_combinations = list(queryset.values('specific_part', 'energy_mode').distinct())
     logger.info(f"过滤后获取的组合数量: {len(unique_combinations)}")
@@ -337,22 +337,19 @@ def get_usage_quantity_specific_time_period(request):
             specific_part=combination['specific_part'],
             energy_mode=combination['energy_mode']
         )
-        logger.debug(f"处理组合: {combination}, 对应数据条数: {combo_queryset.count()}")
-        
+
         # 获取该组合的第一个building、unit、room_number作为展示数据
-        first_record = queryset.filter(
-            specific_part=combination['specific_part'],
-            energy_mode=combination['energy_mode']
-        ).first()
+        first_record = combo_queryset.first()
         
         # 设置组合的基本信息
         combination['building'] = first_record.building if first_record else ''
         combination['unit'] = first_record.unit if first_record else ''
         combination['room_number'] = first_record.room_number if first_record else ''
         
-        # 计算初期能耗（最小值）和末期能耗（最大值）
-        initial_energy = combo_queryset.aggregate(min_energy=Min('initial_energy'))['min_energy']
-        final_energy = combo_queryset.aggregate(max_energy=Max('final_energy'))['max_energy']
+        # 计算初期能耗（最小值）和末期能耗（最大值），单次聚合查询
+        agg = combo_queryset.aggregate(min_energy=Min('initial_energy'), max_energy=Max('final_energy'))
+        initial_energy = agg['min_energy']
+        final_energy = agg['max_energy']
         
         # 计算使用量
         usage_quantity = final_energy - initial_energy if initial_energy is not None and final_energy is not None else None
@@ -531,11 +528,16 @@ def get_plc_connection_status(request):
     
     # 序列化数据
     serializer = PLCConnectionStatusSerializer(paginated_data, many=True)
-    
-    # 计算统计数据
-    online_count = PLCConnectionStatus.objects.filter(connection_status='online').count()
-    offline_count = PLCConnectionStatus.objects.filter(connection_status='offline').count()
-    total_devices = PLCConnectionStatus.objects.count()
+
+    # 计算统计数据 — 单次聚合查询，避免 3 次全表 COUNT
+    stats = PLCConnectionStatus.objects.aggregate(
+        total_devices=Count('id'),
+        online_count=Count(Case(When(connection_status='online', then=1), output_field=IntegerField())),
+        offline_count=Count(Case(When(connection_status='offline', then=1), output_field=IntegerField())),
+    )
+    total_devices = stats['total_devices']
+    online_count = stats['online_count']
+    offline_count = stats['offline_count']
     online_rate = round((online_count / total_devices) * 100, 2) if total_devices > 0 else 0
     
     return Response({
@@ -725,7 +727,6 @@ def get_bill_list(request):
             billing_cycle = f"{month_parts[0]}年{month_parts[1]}月"
             
             # 计算账单日期（使用月末日期）
-            import calendar
             year = int(month_parts[0])
             month = int(month_parts[1])
             last_day = calendar.monthrange(year, month)[1]

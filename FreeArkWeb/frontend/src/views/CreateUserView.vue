@@ -67,7 +67,7 @@
 </template>
 
 <script>
-import { userApi } from '../services/api'
+import api from '@/utils/api.js'
 
 export default {
   name: 'CreateUserView',
@@ -130,10 +130,10 @@ export default {
         }
         
         // 调用API创建用户
-        const response = await userApi.createUser(userData)
-        
-        // 处理响应
-        if (response.data) {
+        const response = await api.post('/api/users/create/', userData)
+
+        // 处理响应（utils/api 直接返回裸 JSON）
+        if (response) {
           this.showMessage('用户创建成功', 'success')
           // 重置表单
           this.resetForm()

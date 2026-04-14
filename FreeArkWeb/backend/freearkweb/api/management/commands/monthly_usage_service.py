@@ -27,8 +27,6 @@ class Command(BaseCommand):
                           help='手动执行时指定计算月份，格式为YYYY-MM，默认为上个月')
     
     def handle(self, *args, **options):
-        # 直接打印到控制台，确保服务正常启动
-        print('🚀 每月用量计算后台服务启动')
         # 使用统一的日志方法
         service_config = {
             'day': options['day'],
@@ -48,7 +46,7 @@ class Command(BaseCommand):
                     target_date = date(year, month, 1)
                 except (ValueError, IndexError):
                     self.stdout.write(self.style.ERROR('月份格式错误，请使用YYYY-MM格式'))
-                    return 1
+                    return
             else:
                 # 默认计算上个月的数据
                 today = date.today()
@@ -60,7 +58,7 @@ class Command(BaseCommand):
             log_task_start(logger, f'计算{target_date.strftime("%Y-%m")}的用量数据')
             self.calculate_monthly_usage(target_date)
             log_task_completion(logger, '单次计算')
-            return 0
+            return
         
         # 设置定时任务
         run_day = options['day']
@@ -90,7 +88,7 @@ class Command(BaseCommand):
                 time.sleep(60)  # 每分钟检查一次
         except KeyboardInterrupt:
             log_service_stop(logger, '每月用量计算后台服务')
-            return 0
+            return
     
     def monthly_job(self):
         """每月定时任务，计算上个月的数据"""

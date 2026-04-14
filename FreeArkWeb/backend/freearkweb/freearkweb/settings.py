@@ -138,8 +138,11 @@ SQLITE_DATABASE = {
 }
 
 # 根据开关选择数据库
+# 当运行测试时（manage.py test），自动使用 SQLite 以避免依赖生产数据库
+import sys as _sys
+_RUNNING_TESTS = 'test' in _sys.argv
 DATABASES = {
-    'default': SQLITE_DATABASE if USE_SQLITE else MYSQL_DATABASE
+    'default': SQLITE_DATABASE if (USE_SQLITE or _RUNNING_TESTS) else MYSQL_DATABASE
 }
 
 # 输出数据库配置信息用于调试

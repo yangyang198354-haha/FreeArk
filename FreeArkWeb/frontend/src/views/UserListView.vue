@@ -46,7 +46,7 @@
 </template>
 
 <script>
-import { userApi } from '../services/api'
+import api from '@/utils/api.js'
 
 export default {
   name: 'UserListView',
@@ -64,9 +64,9 @@ export default {
     async loadUsers() {
       this.loading = true
       try {
-        const response = await userApi.getUsers()
-        if (response.data) {
-          this.users = response.data
+        const response = await api.get('/api/users/')
+        if (response) {
+          this.users = response
         }
       } catch (error) {
         console.error('加载用户列表失败:', error)
@@ -84,7 +84,7 @@ export default {
     async deleteUser(userId) {
       if (confirm('确定要删除这个用户吗？')) {
         try {
-          await userApi.deleteUser(userId)
+          await api.delete(`/api/users/${userId}/`)
           this.showMessage('用户删除成功', 'success')
           this.loadUsers()
         } catch (error) {

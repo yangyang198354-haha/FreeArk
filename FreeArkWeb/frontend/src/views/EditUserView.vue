@@ -67,7 +67,7 @@
 </template>
 
 <script>
-import { userApi } from '../services/api'
+import api from '@/utils/api.js'
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -114,9 +114,9 @@ export default {
     const loadUser = async (id) => {
       loading.value = true
       try {
-        const response = await userApi.getUser(id)
-        if (response.data) {
-          const user = response.data
+        const response = await api.get(`/api/users/${id}/`)
+        if (response) {
+          const user = response
           userForm.value = {
             username: user.username,
             email: user.email,
@@ -156,9 +156,9 @@ export default {
         }
         
         // 调用API更新用户
-        const response = await userApi.updateUser(userId.value, updateData)
-        
-        if (response.data) {
+        const response = await api.patch(`/api/users/${userId.value}/`, updateData)
+
+        if (response) {
           showMessage('用户更新成功', 'success')
         } else {
           showMessage('用户更新失败', 'error')

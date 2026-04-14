@@ -176,16 +176,32 @@ const api = {
     return response.json();
   },
   
+  // PATCH请求
+  async patch(endpoint, data = {}) {
+    const response = await authenticatedFetch(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
   // DELETE请求
   async delete(endpoint) {
     const response = await authenticatedFetch(endpoint, {
       method: 'DELETE'
     });
-    
+
     if (!response.ok) {
       throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
     }
-    
+
+    // 204 No Content 无响应体
+    if (response.status === 204) return null;
     return response.json();
   },
   
