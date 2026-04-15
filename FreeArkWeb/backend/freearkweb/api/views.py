@@ -195,7 +195,7 @@ class AdminUserCreate(generics.CreateAPIView):
             
         except Exception as e:
             # 记录错误日志
-            print(f"创建用户异常: {str(e)}")
+            logger.error(f"创建用户异常: {str(e)}")
             
             # 检查是否是用户名重复错误
             if 'Duplicate entry' in str(e) and 'for key' in str(e):

@@ -5,8 +5,8 @@ from django.db.models import Min, Max
 from django.db import transaction, close_old_connections
 from api.models import UsageQuantityDaily, UsageQuantityMonthly
 
-# 获取logger
-logger = logging.getLogger('monthly_usage_calculator')
+# 获取logger（使用 __name__ 确保命名与模块路径一致，即 api.monthly_usage_calculator）
+logger = logging.getLogger(__name__)
 
 class MonthlyUsageCalculator:
     """月度用量计算核心模块，负责从日用量数据聚合生成月度用量记录"""

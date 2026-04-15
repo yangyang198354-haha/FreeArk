@@ -19,3 +19,35 @@ DEBUG = False
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
+
+# ---------------------------------------------------------------------------
+# 测试环境日志配置：禁用所有文件 handler，避免在测试运行时生成日志文件。
+# 使用 NullHandler 吸收所有日志输出，不影响测试结果。
+# ---------------------------------------------------------------------------
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'null': {
+            'class': 'logging.NullHandler',
+        },
+    },
+    'root': {
+        'handlers': ['null'],
+        'level': 'CRITICAL',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'api': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+    },
+}

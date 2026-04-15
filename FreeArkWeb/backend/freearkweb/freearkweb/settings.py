@@ -18,8 +18,8 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    # 如果没有python_dotenv模块，继续运行
-    print("Warning: python_dotenv module not found, using environment variables directly")
+    # python_dotenv 未安装时直接使用系统环境变量，不影响运行
+    pass
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -272,43 +272,47 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # 移除django-crontab配置，改用命令内置的定时功能
 # 这些服务将在start_services.bat中直接启动
 
-# 日志配置 - 最基本配置
-import os
-import logging
+# ---------------------------------------------------------------------------
+# 日志配置
+# ---------------------------------------------------------------------------
+# 日志目录优先级：
+#   1. 环境变量 LOG_DIR（生产环境设置为 /home/pi/freeark-prod/logs/）
+#   2. BASE_DIR/logs/（开发环境 fallback）
+# 测试环境中 test_settings.py 会完全覆盖 LOGGING，不会触碰此目录。
+# ---------------------------------------------------------------------------
+_env_log_dir = os.environ.get('LOG_DIR', '')
+if _env_log_dir:
+    LOG_DIR = _env_log_dir
+else:
+    LOG_DIR = os.path.join(BASE_DIR, 'logs')
 
-# 使用绝对路径，避免相对路径解析问题
-# 首选路径：项目根目录下的logs文件夹
-# 修改日志路径为FreeArk项目根目录下的logs文件夹
-PRIMARY_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR))), 'logs')
-# 备选路径：用户目录下的FreeArk_logs文件夹
-FALLBACK_LOG_DIR = os.path.join(os.path.expanduser('~'), 'FreeArk_logs')
+# 仅在非测试运行时创建目录（测试通过 test_settings.py 的 LOGGING 覆盖绕过文件 handler）
+if not _RUNNING_TESTS:
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+    except OSError:
+        # 目录创建失败时降级到用户主目录，不阻止启动
+        LOG_DIR = os.path.join(os.path.expanduser('~'), 'freeark_logs')
+        os.makedirs(LOG_DIR, exist_ok=True)
 
-# 尝试使用首选路径，如果失败则使用备选路径
-try:
-    LOG_DIR = PRIMARY_LOG_DIR
-    # 确保目录存在，如果不存在则创建
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
-    LOG_FILE = os.path.join(LOG_DIR, 'django.log')
-except Exception as e:
-    # 如果首选路径失败，使用备选路径
-    LOG_DIR = FALLBACK_LOG_DIR
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
-    LOG_FILE = os.path.join(LOG_DIR, 'django.log')
+# 10 MB 单文件上限，保留 10 个滚动文件
+_LOG_MAX_BYTES = 10 * 1024 * 1024
+_LOG_BACKUP_COUNT = 10
 
-# 日志目录已配置，将通过Django的LOGGING配置进行日志记录
-
-# Django日志配置 - 生产环境优化配置
+# Django 日志配置
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
+        # 生产/文件格式：含时间戳、级别、模块名
         'verbose': {
-            'format': '%(asctime)s [%(levelname)s] %(module)s %(process)d %(thread)d %(message)s'
+            'format': '%(asctime)s [%(levelname)s] %(name)s %(process)d %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
         },
+        # 控制台格式：精简，开发阅读友好
         'simple': {
-            'format': '%(asctime)s [%(levelname)s] %(message)s'
+            'format': '%(asctime)s [%(levelname)-8s] %(name)s: %(message)s',
+            'datefmt': '%H:%M:%S',
         },
     },
     'filters': {
@@ -320,33 +324,34 @@ LOGGING = {
         },
     },
     'handlers': {
+        # 主应用日志文件（INFO+，滚动）
         'file': {
-            'level': 'INFO',  # 生产环境使用INFO级别
+            'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOG_FILE,
+            'filename': os.path.join(LOG_DIR, 'django.log'),
             'formatter': 'verbose',
             'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-            'delay': True,  # 延迟创建文件，直到第一次写入
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
         },
+        # 控制台输出：仅 DEBUG 模式下生效（开发环境）
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
             'filters': ['require_debug_true'],
         },
-        # 管理命令服务日志文件处理程序
-
+        # 各后台服务的专属滚动日志文件
         'daily_usage_service_log': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(LOG_DIR, 'daily_usage_service.log'),
             'formatter': 'verbose',
             'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-            'delay': True,  # 延迟创建文件，直到第一次写入
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
         },
         'monthly_usage_service_log': {
             'level': 'INFO',
@@ -354,9 +359,9 @@ LOGGING = {
             'filename': os.path.join(LOG_DIR, 'monthly_usage_service.log'),
             'formatter': 'verbose',
             'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-            'delay': True,  # 延迟创建文件，直到第一次写入
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
         },
         'mqtt_consumer_service_log': {
             'level': 'INFO',
@@ -364,9 +369,9 @@ LOGGING = {
             'filename': os.path.join(LOG_DIR, 'mqtt_consumer_service.log'),
             'formatter': 'verbose',
             'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-            'delay': True,  # 延迟创建文件，直到第一次写入
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
         },
         'mqtt_consumer_log': {
             'level': 'INFO',
@@ -374,9 +379,9 @@ LOGGING = {
             'filename': os.path.join(LOG_DIR, 'mqtt_consumer.log'),
             'formatter': 'verbose',
             'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-            'delay': True,  # 延迟创建文件，直到第一次写入
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
         },
         'plc_cleanup_service_log': {
             'level': 'INFO',
@@ -384,16 +389,18 @@ LOGGING = {
             'filename': os.path.join(LOG_DIR, 'plc_cleanup_service.log'),
             'formatter': 'verbose',
             'encoding': 'utf-8',
-            'maxBytes': 1024 * 1024 * 5,  # 5MB
-            'backupCount': 5,
-            'delay': True,  # 延迟创建文件，直到第一次写入
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
         },
     },
+    # root logger：INFO+ 写文件，DEBUG 模式下同时输出控制台
     'root': {
         'handlers': ['file', 'console'],
         'level': 'INFO',
     },
     'loggers': {
+        # Django 框架日志
         'django': {
             'handlers': ['file', 'console'],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
@@ -404,14 +411,19 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
-        # 添加应用特定的日志器
+        # 应用整体（api.*）：INFO+ 写主文件，DEBUG 模式下控制台可见
         'api': {
-            'handlers': ['file'],
+            'handlers': ['file', 'console'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
-        # 管理命令服务日志器
-
+        # api.mqtt_consumer 专属日志文件（同时保留 console）
+        'api.mqtt_consumer': {
+            'handlers': ['console', 'mqtt_consumer_log'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        # 后台服务日志器（各自写专属文件，同时在 DEBUG 模式下输出控制台）
         'daily_usage_service': {
             'handlers': ['console', 'daily_usage_service_log'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
@@ -427,13 +439,24 @@ LOGGING = {
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
-        'api.mqtt_consumer': {
-            'handlers': ['console', 'mqtt_consumer_log'],
+        'plc_cleanup_service': {
+            'handlers': ['console', 'plc_cleanup_service_log'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
-        'plc_cleanup_service': {
-            'handlers': ['console', 'plc_cleanup_service_log'],
+        # 其他管理命令服务（使用 root 文件 + 控制台，不单独开文件）
+        'plc_connection_monitor': {
+            'handlers': ['file', 'console'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'fix_daily_usage': {
+            'handlers': ['file', 'console'],
+            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'fix_plc_data': {
+            'handlers': ['file', 'console'],
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
