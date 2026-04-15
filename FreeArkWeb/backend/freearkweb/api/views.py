@@ -956,12 +956,15 @@ def dashboard_trend(request):
 
 
 # 受监控的 systemctl 服务列表
+# 服务名与 systemctl/ 目录下的 .service 文件名一一对应
 MONITORED_SERVICES = [
-    'freeark-prod-web',
-    'freeark-prod-mqtt',
-    'freeark-prod-daily',
-    'freeark-prod-monthly',
-    'freeark-prod-cleanup',
+    'freeark-backend',
+    'freeark-mqtt-consumer',
+    'freeark-daily-usage',
+    'freeark-monthly-usage',
+    'freeark-plc-cleanup',
+    'freeark-plc-connection-monitor',
+    'freeark-task-scheduler',
 ]
 
 

@@ -1865,8 +1865,8 @@ class DashboardServicesAPITest(TestCase):
         body = response.json()
         self.assertTrue(body["success"])
         services = body["data"]
-        # 有 5 个受监控服务
-        self.assertEqual(len(services), 5)
+        # 有 7 个受监控服务
+        self.assertEqual(len(services), 7)
         for svc in services:
             self.assertTrue(svc["is_active"])
             self.assertEqual(svc["status"], "active")
@@ -1904,11 +1904,13 @@ class DashboardServicesAPITest(TestCase):
         response = self.client.get(reverse("dashboard-services"))
         service_names = [svc["name"] for svc in response.json()["data"]]
         for expected_name in [
-            "freeark-prod-web",
-            "freeark-prod-mqtt",
-            "freeark-prod-daily",
-            "freeark-prod-monthly",
-            "freeark-prod-cleanup",
+            "freeark-backend",
+            "freeark-mqtt-consumer",
+            "freeark-daily-usage",
+            "freeark-monthly-usage",
+            "freeark-plc-cleanup",
+            "freeark-plc-connection-monitor",
+            "freeark-task-scheduler",
         ]:
             self.assertIn(expected_name, service_names)
 
@@ -1920,7 +1922,7 @@ class DashboardServicesAPITest(TestCase):
         mock_run.return_value = mock_result
 
         self.client.get(reverse("dashboard-services"))
-        self.assertEqual(mock_run.call_count, 5)
+        self.assertEqual(mock_run.call_count, 7)
 
     def test_unauthenticated_returns_401(self):
         client = APIClient()
