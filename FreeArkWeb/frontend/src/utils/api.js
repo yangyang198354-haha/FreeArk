@@ -2,9 +2,10 @@
 
 // 获取API基础URL
 function getApiUrl(endpoint) {
-  // 从环境变量获取API配置，或使用默认值
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-  // 环境变量中的baseUrl应该已经不包含/api前缀，直接拼接端点
+  // 优先使用环境变量；生产环境留空时取当前页面 origin，
+  // API 请求走同源 Nginx 代理，LAN/外网均正常；开发时 fallback 到 localhost:8000
+  const baseUrl = import.meta.env.VITE_API_BASE_URL
+    || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
   return `${baseUrl}${endpoint}`;
 }
 
@@ -42,9 +43,10 @@ async function ensureCSRFToken() {
       return true;
     }
     
-    // 使用环境变量中配置的API地址
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-    
+    // 与 getApiUrl 保持一致：优先环境变量，否则取当前 origin
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
+      || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+
     // 规范化API基础URL，确保末尾没有斜杠
     const normalizedBaseUrl = apiBaseUrl.replace(/\/$/, '');
     

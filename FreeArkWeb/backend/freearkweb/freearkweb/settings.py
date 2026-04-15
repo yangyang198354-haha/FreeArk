@@ -195,11 +195,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8000',
     'http://localhost:8080',
+    'http://192.168.31.51',        # Nginx 80端口（LAN主要入口）
     'http://192.168.31.51:8000',
     'http://192.168.31.51:8080',
+    'http://192.168.31.52',
     'http://192.168.31.52:8000',
     'http://192.168.31.52:8080',
-    'http://et116374m892.vicp.fun',
+    'http://et116374mm892.vicp.fun',  # 修正：mm892（原来少了一个m）
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -208,14 +210,10 @@ CORS_ALLOWED_ORIGINS_WITH_CREDENTIALS = True
 
 # CSRF Cookie配置 - 确保跨域环境中cookie正常工作
 # 根据是否为DEBUG模式设置不同的cookie策略
-if DEBUG:
-    # 开发环境设置
-    CSRF_COOKIE_SAMESITE = 'None'  # 改为None以支持跨域cookie
-    CSRF_COOKIE_SECURE = False  # 开发环境不强制HTTPS
-else:
-    # 生产环境设置
-    CSRF_COOKIE_SAMESITE = 'None'  # 生产环境使用None以支持跨域
-    CSRF_COOKIE_SECURE = True  # 生产环境必须使用HTTPS
+# HTTP 部署（无 HTTPS），Secure 必须为 False，否则浏览器丢弃 cookie
+# 若将来启用 HTTPS，可将 CSRF_COOKIE_SECURE 改为 True，SAMESITE 改为 'None'
+CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SAMESITE = 'Lax'  # Lax 兼容同站及 Nginx 同源代理；None 需要 Secure=True
 CSRF_COOKIE_HTTPONLY = False
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -241,11 +239,13 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://localhost:8080',
+    'http://192.168.31.51',        # Nginx 80端口
     'http://192.168.31.51:8000',
     'http://192.168.31.51:8080',
+    'http://192.168.31.52',
     'http://192.168.31.52:8000',
     'http://192.168.31.52:8080',
-    'http://et116374m892.vicp.fun',
+    'http://et116374mm892.vicp.fun',  # 修正拼写
 ]
 
 # 确保cookie在开发环境中正确设置
