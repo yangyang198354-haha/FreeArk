@@ -1527,6 +1527,487 @@ class UserRegisterAPITest(TestCase):
 
 
 # ===========================================================================
+# 八、看板 Dashboard API 测试
+# ===========================================================================
+
+class DashboardTotalEnergyAPITest(TestCase):
+    """看板 API 1：总电量查询测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dash_total_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        today = date.today()
+        # 创建本年度制冷数据：usage_quantity=200
+        make_daily_record(
+            specific_part="3-1-7-702",
+            energy_mode="制冷",
+            time_period=date(today.year, 1, 15),
+            usage_quantity=200,
+        )
+        # 创建本年度制热数据：usage_quantity=150
+        make_daily_record(
+            specific_part="3-1-7-702",
+            energy_mode="制热",
+            time_period=date(today.year, 1, 16),
+            usage_quantity=150,
+        )
+
+    def test_default_returns_current_year(self):
+        """未传日期参数时默认返回当年汇总"""
+        response = self.client.get(reverse("dashboard-total-energy"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["total_kwh"], 350)
+        self.assertEqual(data["cooling_kwh"], 200)
+        self.assertEqual(data["heating_kwh"], 150)
+
+    def test_custom_date_range(self):
+        """指定日期范围时只统计范围内数据"""
+        today = date.today()
+        response = self.client.get(
+            reverse("dashboard-total-energy"),
+            {"start_date": f"{today.year}-01-15", "end_date": f"{today.year}-01-15"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["total_kwh"], 200)
+        self.assertEqual(data["cooling_kwh"], 200)
+        self.assertEqual(data["heating_kwh"], 0)
+
+    def test_no_data_returns_zeros(self):
+        """无数据时返回全 0，不报错"""
+        response = self.client.get(
+            reverse("dashboard-total-energy"),
+            {"start_date": "2000-01-01", "end_date": "2000-12-31"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["total_kwh"], 0)
+        self.assertEqual(data["cooling_kwh"], 0)
+        self.assertEqual(data["heating_kwh"], 0)
+
+    def test_unauthenticated_returns_401(self):
+        """未登录时返回 401"""
+        client = APIClient()
+        response = client.get(reverse("dashboard-total-energy"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_invalid_start_date_returns_400(self):
+        """非法 start_date 格式返回 400"""
+        response = self.client.get(
+            reverse("dashboard-total-energy"),
+            {"start_date": "not-a-date"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+
+    def test_invalid_end_date_returns_400(self):
+        """非法 end_date 格式返回 400"""
+        response = self.client.get(
+            reverse("dashboard-total-energy"),
+            {"end_date": "20250101"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+
+    def test_response_contains_date_fields(self):
+        """响应包含 start_date 和 end_date 字段"""
+        response = self.client.get(reverse("dashboard-total-energy"))
+        data = response.json()["data"]
+        self.assertIn("start_date", data)
+        self.assertIn("end_date", data)
+
+
+class DashboardSummaryAPITest(TestCase):
+    """看板 API 2：今日/本月累计用电量测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dash_summary_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        today = date.today()
+        month_start = date(today.year, today.month, 1)
+
+        # 今日数据：100 kWh
+        make_daily_record(
+            specific_part="3-1-7-702",
+            energy_mode="制冷",
+            time_period=today,
+            usage_quantity=100,
+        )
+        # 本月月初数据：80 kWh
+        if month_start != today:
+            make_daily_record(
+                specific_part="3-1-7-702",
+                energy_mode="制热",
+                time_period=month_start,
+                usage_quantity=80,
+            )
+
+    def test_today_kwh(self):
+        """today_kwh 等于今日所有用量之和"""
+        response = self.client.get(reverse("dashboard-summary"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["today_kwh"], 100)
+
+    def test_month_kwh_includes_today(self):
+        """month_kwh 包含当月所有数据（含今日）"""
+        response = self.client.get(reverse("dashboard-summary"))
+        data = response.json()["data"]
+        today = date.today()
+        month_start = date(today.year, today.month, 1)
+        if month_start != today:
+            self.assertEqual(data["month_kwh"], 180)
+        else:
+            self.assertEqual(data["month_kwh"], 100)
+
+    def test_no_data_returns_zeros(self):
+        """数据库无数据时返回全 0"""
+        UsageQuantityDaily.objects.all().delete()
+        response = self.client.get(reverse("dashboard-summary"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["today_kwh"], 0)
+        self.assertEqual(data["month_kwh"], 0)
+
+    def test_unauthenticated_returns_401(self):
+        client = APIClient()
+        response = client.get(reverse("dashboard-summary"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_response_contains_date_and_month(self):
+        """响应包含 date 和 month 字段"""
+        response = self.client.get(reverse("dashboard-summary"))
+        data = response.json()["data"]
+        self.assertIn("date", data)
+        self.assertIn("month", data)
+
+
+class DashboardPLCOnlineRateAPITest(TestCase):
+    """看板 API 3：PLC 系统运行率测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dash_plc_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    def _make_plc(self, specific_part, status_val):
+        parts = specific_part.split("-")
+        PLCConnectionStatus.objects.create(
+            specific_part=specific_part,
+            building=parts[0],
+            unit=parts[1],
+            room_number=parts[-1],
+            connection_status=status_val,
+        )
+
+    def test_all_online(self):
+        """全部在线时 rate=100.0"""
+        self._make_plc("3-1-7-701", "online")
+        self._make_plc("3-1-7-702", "online")
+        response = self.client.get(reverse("dashboard-plc-online-rate"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["rate"], 100.0)
+        self.assertEqual(data["online_count"], 2)
+        self.assertEqual(data["offline_count"], 0)
+        self.assertEqual(data["total_count"], 2)
+
+    def test_mixed_status(self):
+        """混合状态时 rate 正确计算"""
+        self._make_plc("3-1-7-701", "online")
+        self._make_plc("3-1-7-702", "offline")
+        response = self.client.get(reverse("dashboard-plc-online-rate"))
+        data = response.json()["data"]
+        self.assertEqual(data["rate"], 50.0)
+        self.assertEqual(data["online_count"], 1)
+        self.assertEqual(data["offline_count"], 1)
+
+    def test_no_devices_returns_zero_rate(self):
+        """无设备时 rate=0，不报错"""
+        response = self.client.get(reverse("dashboard-plc-online-rate"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["rate"], 0.0)
+        self.assertEqual(data["total_count"], 0)
+
+    def test_unauthenticated_returns_401(self):
+        client = APIClient()
+        response = client.get(reverse("dashboard-plc-online-rate"))
+        self.assertEqual(response.status_code, 401)
+
+
+class DashboardTrendAPITest(TestCase):
+    """看板 API 4：近 N 天用电量趋势测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dash_trend_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        today = date.today()
+        # 昨日数据：制冷 50，制热 30
+        make_daily_record(
+            specific_part="3-1-7-702",
+            energy_mode="制冷",
+            time_period=today - timedelta(days=1),
+            usage_quantity=50,
+        )
+        make_daily_record(
+            specific_part="3-1-7-702",
+            energy_mode="制热",
+            time_period=today - timedelta(days=1),
+            usage_quantity=30,
+        )
+        # 今日数据：制冷 70
+        make_daily_record(
+            specific_part="3-1-7-702",
+            energy_mode="制冷",
+            time_period=today,
+            usage_quantity=70,
+        )
+
+    def test_default_7_days_returns_7_items(self):
+        """默认 days=7 时返回 7 条记录"""
+        response = self.client.get(reverse("dashboard-trend"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(len(data), 7)
+
+    def test_custom_days(self):
+        """自定义 days=3 时返回 3 条记录"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "3"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(len(data), 3)
+
+    def test_today_total_correct(self):
+        """今日合计值正确"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "2"})
+        data = response.json()["data"]
+        today_str = str(date.today())
+        today_item = next(item for item in data if item["date"] == today_str)
+        self.assertEqual(today_item["total_kwh"], 70)
+        self.assertEqual(today_item["cooling_kwh"], 70)
+        self.assertEqual(today_item["heating_kwh"], 0)
+
+    def test_yesterday_total_correct(self):
+        """昨日合计值正确（制冷+制热）"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "2"})
+        data = response.json()["data"]
+        yesterday_str = str(date.today() - timedelta(days=1))
+        yesterday_item = next(item for item in data if item["date"] == yesterday_str)
+        self.assertEqual(yesterday_item["total_kwh"], 80)
+        self.assertEqual(yesterday_item["cooling_kwh"], 50)
+        self.assertEqual(yesterday_item["heating_kwh"], 30)
+
+    def test_missing_day_filled_with_zeros(self):
+        """无数据的日期填充为 0，不缺少记录"""
+        UsageQuantityDaily.objects.all().delete()
+        response = self.client.get(reverse("dashboard-trend"), {"days": "5"})
+        data = response.json()["data"]
+        self.assertEqual(len(data), 5)
+        for item in data:
+            self.assertEqual(item["total_kwh"], 0)
+            self.assertEqual(item["cooling_kwh"], 0)
+            self.assertEqual(item["heating_kwh"], 0)
+
+    def test_invalid_days_returns_400(self):
+        """非法 days 参数返回 400"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "abc"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+
+    def test_days_zero_returns_400(self):
+        """days=0 返回 400"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "0"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_days_exceeds_365_returns_400(self):
+        """days=366 返回 400"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "366"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_unauthenticated_returns_401(self):
+        client = APIClient()
+        response = client.get(reverse("dashboard-trend"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_result_ordered_by_date_ascending(self):
+        """返回结果按日期升序排列"""
+        response = self.client.get(reverse("dashboard-trend"), {"days": "5"})
+        data = response.json()["data"]
+        dates = [item["date"] for item in data]
+        self.assertEqual(dates, sorted(dates))
+
+
+class DashboardServicesAPITest(TestCase):
+    """看板 API 5：系统服务状态测试（Mock subprocess）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dash_services_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    @patch("api.views.subprocess.run")
+    def test_all_services_active(self, mock_run):
+        """所有服务均 active 时 is_active=True"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("dashboard-services"))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        services = body["data"]
+        # 有 5 个受监控服务
+        self.assertEqual(len(services), 5)
+        for svc in services:
+            self.assertTrue(svc["is_active"])
+            self.assertEqual(svc["status"], "active")
+
+    @patch("api.views.subprocess.run")
+    def test_service_inactive(self, mock_run):
+        """服务 inactive 时 is_active=False"""
+        mock_result = MagicMock()
+        mock_result.stdout = "inactive\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("dashboard-services"))
+        services = response.json()["data"]
+        for svc in services:
+            self.assertFalse(svc["is_active"])
+            self.assertEqual(svc["status"], "inactive")
+
+    @patch("api.views.subprocess.run", side_effect=Exception("systemctl not found"))
+    def test_subprocess_exception_returns_unknown(self, mock_run):
+        """subprocess 异常时状态为 unknown，不抛出 500"""
+        response = self.client.get(reverse("dashboard-services"))
+        self.assertEqual(response.status_code, 200)
+        services = response.json()["data"]
+        for svc in services:
+            self.assertEqual(svc["status"], "unknown")
+            self.assertFalse(svc["is_active"])
+
+    @patch("api.views.subprocess.run")
+    def test_service_names_in_response(self, mock_run):
+        """响应中包含所有受监控的服务名"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("dashboard-services"))
+        service_names = [svc["name"] for svc in response.json()["data"]]
+        for expected_name in [
+            "freeark-prod-web",
+            "freeark-prod-mqtt",
+            "freeark-prod-daily",
+            "freeark-prod-monthly",
+            "freeark-prod-cleanup",
+        ]:
+            self.assertIn(expected_name, service_names)
+
+    @patch("api.views.subprocess.run")
+    def test_subprocess_called_for_each_service(self, mock_run):
+        """每个服务都触发了一次 subprocess.run 调用"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        self.client.get(reverse("dashboard-services"))
+        self.assertEqual(mock_run.call_count, 5)
+
+    def test_unauthenticated_returns_401(self):
+        client = APIClient()
+        response = client.get(reverse("dashboard-services"))
+        self.assertEqual(response.status_code, 401)
+
+
+class DashboardActivitiesAPITest(TestCase):
+    """看板 API 6：最近活动测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dash_activities_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        # 创建 3 条 PLC 状态变化历史
+        for i in range(3):
+            PLCStatusChangeHistory.objects.create(
+                specific_part=f"3-1-7-70{i+1}",
+                status="online" if i % 2 == 0 else "offline",
+                building="3",
+                unit="1",
+                room_number=f"70{i+1}",
+            )
+
+    def test_returns_activities(self):
+        """正常返回最近活动列表"""
+        response = self.client.get(reverse("dashboard-activities"))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        self.assertIsInstance(body["data"], list)
+
+    def test_default_limit_20(self):
+        """默认 limit=20"""
+        response = self.client.get(reverse("dashboard-activities"))
+        body = response.json()
+        self.assertLessEqual(len(body["data"]), 20)
+
+    def test_custom_limit(self):
+        """自定义 limit=1 时最多返回 1 条"""
+        response = self.client.get(reverse("dashboard-activities"), {"limit": "1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(response.json()["data"]), 1)
+
+    def test_activity_structure(self):
+        """活动记录包含必要字段"""
+        response = self.client.get(reverse("dashboard-activities"))
+        activities = response.json()["data"]
+        if activities:
+            item = activities[0]
+            self.assertIn("type", item)
+            self.assertIn("timestamp", item)
+            self.assertIn("message", item)
+
+    def test_no_data_returns_empty_list(self):
+        """无 PLC 历史记录时返回空列表，不报错"""
+        PLCStatusChangeHistory.objects.all().delete()
+        response = self.client.get(reverse("dashboard-activities"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"], [])
+
+    def test_invalid_limit_returns_400(self):
+        """非法 limit 参数返回 400"""
+        response = self.client.get(reverse("dashboard-activities"), {"limit": "abc"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+
+    def test_limit_zero_returns_400(self):
+        """limit=0 返回 400"""
+        response = self.client.get(reverse("dashboard-activities"), {"limit": "0"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_unauthenticated_returns_401(self):
+        client = APIClient()
+        response = client.get(reverse("dashboard-activities"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_plc_status_change_appears_in_activities(self):
+        """PLC 状态变化事件出现在活动列表中"""
+        response = self.client.get(reverse("dashboard-activities"))
+        data = response.json()["data"]
+        types = [item["type"] for item in data]
+        self.assertIn("plc_status", types)
+
+
+# ===========================================================================
 # 八、CSRF Token 接口测试
 # ===========================================================================
 

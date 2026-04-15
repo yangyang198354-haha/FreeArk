@@ -1,11 +1,13 @@
 import calendar
 import logging
+import subprocess
+from datetime import date, timedelta
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
-from django.db.models import Min, Max, Count, Case, When, IntegerField
+from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum
 from django.views.decorators.csrf import csrf_exempt
 from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo
 from .serializers import (
@@ -765,7 +767,7 @@ def get_bill_list(request):
         
         logger.info(f"历史用能数据查询成功 - 找到 {len(result_data)} 条记录")
         return Response(response_data, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         logger.error(f"查询历史用能数据时发生错误: {str(e)}", exc_info=True)
         return Response({
@@ -773,3 +775,276 @@ def get_bill_list(request):
             "message": f"查询历史用能数据时发生错误: {str(e)}",
             "data": []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===========================================================================
+# 看板（Dashboard）API
+# ===========================================================================
+
+def _parse_date_param(date_str, param_name):
+    """解析日期字符串，严格要求 YYYY-MM-DD 格式，失败时抛出 ValueError"""
+    try:
+        from datetime import datetime as _dt
+        return _dt.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        raise ValueError(f"参数 {param_name} 格式非法，请使用 YYYY-MM-DD")
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_total_energy(request):
+    """
+    看板 API 1：总电量查询（支持自定义时间段）
+    GET /api/dashboard/total-energy/?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    若未传参数，默认返回当年数据。
+    """
+    today = date.today()
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
+
+    # 参数校验
+    if start_date_str:
+        try:
+            start_date = _parse_date_param(start_date_str, 'start_date')
+        except ValueError as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        start_date = date(today.year, 1, 1)
+
+    if end_date_str:
+        try:
+            end_date = _parse_date_param(end_date_str, 'end_date')
+        except ValueError as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        end_date = today
+
+    queryset = UsageQuantityDaily.objects.filter(
+        time_period__gte=start_date,
+        time_period__lte=end_date,
+    )
+
+    agg = queryset.aggregate(
+        cooling_kwh=Sum(Case(When(energy_mode='制冷', then='usage_quantity'), output_field=IntegerField())),
+        heating_kwh=Sum(Case(When(energy_mode='制热', then='usage_quantity'), output_field=IntegerField())),
+        total_kwh=Sum('usage_quantity'),
+    )
+
+    return Response({
+        'success': True,
+        'data': {
+            'start_date': str(start_date),
+            'end_date': str(end_date),
+            'cooling_kwh': agg['cooling_kwh'] or 0,
+            'heating_kwh': agg['heating_kwh'] or 0,
+            'total_kwh': agg['total_kwh'] or 0,
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_summary(request):
+    """
+    看板 API 2：今日/本月累计用电量
+    GET /api/dashboard/summary/
+    返回 today_kwh, month_kwh
+    """
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+
+    today_agg = UsageQuantityDaily.objects.filter(
+        time_period=today
+    ).aggregate(total=Sum('usage_quantity'))
+
+    month_agg = UsageQuantityDaily.objects.filter(
+        time_period__gte=month_start,
+        time_period__lte=today,
+    ).aggregate(total=Sum('usage_quantity'))
+
+    return Response({
+        'success': True,
+        'data': {
+            'today_kwh': today_agg['total'] or 0,
+            'month_kwh': month_agg['total'] or 0,
+            'date': str(today),
+            'month': today.strftime('%Y-%m'),
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_plc_online_rate(request):
+    """
+    看板 API 3：PLC 系统运行率
+    GET /api/dashboard/plc-online-rate/
+    返回 online_count, total_count, rate（百分比，0-100）
+    """
+    stats = PLCConnectionStatus.objects.aggregate(
+        total_count=Count('id'),
+        online_count=Count(Case(When(connection_status='online', then=1), output_field=IntegerField())),
+    )
+    total = stats['total_count'] or 0
+    online = stats['online_count'] or 0
+    rate = round((online / total) * 100, 2) if total > 0 else 0.0
+
+    return Response({
+        'success': True,
+        'data': {
+            'online_count': online,
+            'offline_count': total - online,
+            'total_count': total,
+            'rate': rate,
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_trend(request):
+    """
+    看板 API 4：近 N 天用电量趋势
+    GET /api/dashboard/trend/?days=7
+    返回每天日期 + 用电量（cooling/heating/total）数组
+    """
+    days_str = request.GET.get('days', '7')
+    try:
+        days = int(days_str)
+        if days <= 0 or days > 365:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return Response(
+            {'success': False, 'error': '参数 days 必须为 1-365 之间的正整数'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    today = date.today()
+    start_date = today - timedelta(days=days - 1)
+
+    queryset = UsageQuantityDaily.objects.filter(
+        time_period__gte=start_date,
+        time_period__lte=today,
+    ).values('time_period', 'energy_mode').annotate(day_total=Sum('usage_quantity'))
+
+    # 按日期聚合
+    day_map = {}
+    for row in queryset:
+        d = str(row['time_period'])
+        if d not in day_map:
+            day_map[d] = {'date': d, 'cooling_kwh': 0, 'heating_kwh': 0, 'total_kwh': 0}
+        kwh = row['day_total'] or 0
+        if row['energy_mode'] == '制冷':
+            day_map[d]['cooling_kwh'] += kwh
+        elif row['energy_mode'] == '制热':
+            day_map[d]['heating_kwh'] += kwh
+        day_map[d]['total_kwh'] += kwh
+
+    # 补全无数据的日期（值为 0）
+    result = []
+    for i in range(days):
+        d = str(start_date + timedelta(days=i))
+        if d in day_map:
+            result.append(day_map[d])
+        else:
+            result.append({'date': d, 'cooling_kwh': 0, 'heating_kwh': 0, 'total_kwh': 0})
+
+    return Response({
+        'success': True,
+        'data': result,
+    })
+
+
+# 受监控的 systemctl 服务列表
+MONITORED_SERVICES = [
+    'freeark-prod-web',
+    'freeark-prod-mqtt',
+    'freeark-prod-daily',
+    'freeark-prod-monthly',
+    'freeark-prod-cleanup',
+]
+
+
+def _get_service_status(service_name):
+    """调用 systemctl is-active 获取单个服务的状态，失败时返回 'unknown'"""
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', service_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() or 'unknown'
+    except Exception:
+        return 'unknown'
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_services(request):
+    """
+    看板 API 5：系统服务状态
+    GET /api/dashboard/services/
+    通过 subprocess 调用 systemctl is-active 查询各服务状态。
+    """
+    services = []
+    for name in MONITORED_SERVICES:
+        svc_status = _get_service_status(name)
+        services.append({
+            'name': name,
+            'status': svc_status,
+            'is_active': svc_status == 'active',
+        })
+
+    return Response({
+        'success': True,
+        'data': services,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_activities(request):
+    """
+    看板 API 6：最近活动
+    GET /api/dashboard/activities/?limit=20
+    返回：当前用户的操作日志（PLCStatusChangeHistory）+ 系统服务运行事件（占位）
+    合并后按时间倒序返回最近 limit 条。
+    """
+    limit_str = request.GET.get('limit', '20')
+    try:
+        limit = int(limit_str)
+        if limit <= 0 or limit > 200:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return Response(
+            {'success': False, 'error': '参数 limit 必须为 1-200 之间的正整数'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 从 PLCStatusChangeHistory 取最近 PLC 状态变化事件
+    plc_events = PLCStatusChangeHistory.objects.order_by('-change_time')[:limit]
+    activities = []
+    for event in plc_events:
+        label = '上线' if event.status == 'online' else '离线'
+        activities.append({
+            'type': 'plc_status',
+            'timestamp': event.change_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'message': f"PLC {event.specific_part} {label}",
+            'detail': {
+                'specific_part': event.specific_part,
+                'status': event.status,
+                'building': event.building,
+                'unit': event.unit,
+                'room_number': event.room_number,
+            },
+        })
+
+    # 按时间倒序截取 limit 条
+    activities = activities[:limit]
+
+    return Response({
+        'success': True,
+        'data': activities,
+        'total': len(activities),
+    })

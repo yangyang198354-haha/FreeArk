@@ -38,4 +38,12 @@ urlpatterns = [
     
     # 计费管理接口
     path('billing/list/', views.get_bill_list, name='get-bill-list'),
+
+    # 看板（Dashboard）接口
+    path('dashboard/total-energy/', views.dashboard_total_energy, name='dashboard-total-energy'),
+    path('dashboard/summary/', views.dashboard_summary, name='dashboard-summary'),
+    path('dashboard/plc-online-rate/', views.dashboard_plc_online_rate, name='dashboard-plc-online-rate'),
+    path('dashboard/trend/', views.dashboard_trend, name='dashboard-trend'),
+    path('dashboard/services/', views.dashboard_services, name='dashboard-services'),
+    path('dashboard/activities/', views.dashboard_activities, name='dashboard-activities'),
 ]
