@@ -104,6 +104,10 @@ export default defineConfig(({ mode }) => {
     },
     // 添加API代理配置
     proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
       '/ark/billing-managerment/list': {
         target: 'http://localhost:8000',
         changeOrigin: true,

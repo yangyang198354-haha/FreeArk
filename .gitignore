@@ -131,3 +131,14 @@ docs/_build/
 .history/
 .trae/documents/
 .trae/documents/*
+
+# Claude Code 记忆目录
+.claude/
+
+# 临时诊断脚本
+debug_ssh.py
+diag.py
+diagnose_and_fix.py
+run_ssh_diag.py
+run_tests.py
+ssh_check.py

@@ -137,16 +137,24 @@ export default {
         }
       } catch (error) {
         console.error('加载用户信息失败:', error)
-        // 如果加载失败，尝试从localStorage获取
+        // 401 / "未登录" 直接清空 token，跳转到登录页
+        const isAuthError = error.message && (
+          error.message.includes('401') ||
+          error.message.includes('未登录') ||
+          error.message.includes('认证失败')
+        )
+        if (isAuthError) {
+          handleLogout()
+          return
+        }
+        // 其他网络/服务器错误：先尝试从 localStorage 降级展示
         const savedUserInfo = localStorage.getItem('userInfo')
         if (savedUserInfo) {
           const userInfo = JSON.parse(savedUserInfo)
-          // 优先显示用户姓名，其次是用户名
           const fullName = formatFullName(userInfo.first_name, userInfo.last_name)
           username.value = fullName || userInfo.username || '用户'
           userRole.value = userInfo.role || 'user'
         } else {
-          // 清除认证状态，跳转到登录页
           handleLogout()
         }
       } finally {

@@ -27,8 +27,6 @@
 </template>
 
 <script>
-import axios from 'axios'
-
 export default {
   name: 'LoginView',
   data() {
@@ -56,41 +54,47 @@ export default {
           this.loading = true
           this.error = ''
           try {
-            // 使用axios默认配置，直接调用API
-            const response = await axios.post('/api/auth/login/', this.loginForm, {
-              withCredentials: true
+            // 使用与 api.js 相同的 origin，避免在生产环境回退到 localhost:8000
+            const baseUrl = import.meta.env.VITE_API_BASE_URL ||
+              (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+            const loginUrl = `${baseUrl}/api/auth/login/`;
+
+            const resp = await fetch(loginUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(this.loginForm)
             });
-            
+
+            if (!resp.ok) {
+              const errData = await resp.json().catch(() => ({}));
+              throw { response: { data: errData } };
+            }
+
+            const data = await resp.json();
+
             // 登录成功
-            if (response.data.token) {
-              // 存储token到localStorage
-              localStorage.setItem('userToken', response.data.token);
+            if (data.token) {
+              // 存储 token 到 localStorage
+              localStorage.setItem('userToken', data.token);
               localStorage.setItem('isAuthenticated', 'true');
-              
-              // 安全地设置cookie
-              const cookieOptions = {
-                path: '/',
-                maxAge: 3600,
-                sameSite: 'Lax',
-                secure: window.location.protocol === 'https:'
-              };
-              
-              let cookieString = `auth_token=${encodeURIComponent(response.data.token)}; path=${cookieOptions.path}; max-age=${cookieOptions.maxAge}`;
-              if (cookieOptions.sameSite) cookieString += `; SameSite=${cookieOptions.sameSite}`;
-              if (cookieOptions.secure) cookieString += '; Secure';
-              
+
+              // 设置 cookie，有效期 24 小时（与后端 session 对齐）
+              const secure = window.location.protocol === 'https:';
+              let cookieString = `auth_token=${encodeURIComponent(data.token)}; path=/; max-age=86400; SameSite=Lax`;
+              if (secure) cookieString += '; Secure';
               document.cookie = cookieString;
-              
+
               // 跳转到首页
               this.$router.push('/');
             }
           } catch (error) {
             let errorMessage = '登录失败，请检查用户名和密码';
             if (error.response) {
-              errorMessage = error.response.data?.non_field_errors?.[0] || 
-                           error.response.data?.detail || 
+              errorMessage = error.response.data?.non_field_errors?.[0] ||
+                           error.response.data?.detail ||
                            errorMessage;
-            } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+            } else if (error.message && (error.message.includes('NetworkError') || error.message.includes('Failed to fetch'))) {
               errorMessage = '网络连接异常，请检查您的网络';
             }
             this.error = errorMessage;

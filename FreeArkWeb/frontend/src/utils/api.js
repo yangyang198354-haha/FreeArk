@@ -144,12 +144,15 @@ const api = {
     });
     
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error(`认证失败(401): Token 无效或已过期，请重新登录`);
+      }
       throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
     }
-    
+
     return response.json();
   },
-  
+
   // POST请求
   async post(endpoint, data = {}) {
     const response = await authenticatedFetch(endpoint, {
