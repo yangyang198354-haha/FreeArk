@@ -9,12 +9,12 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo, OwnerInfo
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
     UsageQuantityDailySerializer, UsageQuantityMonthlySerializer,
-    PLCConnectionStatusSerializer
+    PLCConnectionStatusSerializer, OwnerInfoSerializer
 )
 
 # 获取logger实例
@@ -1051,3 +1051,101 @@ def dashboard_activities(request):
         'data': activities,
         'total': len(activities),
     })
+
+
+# ===========================================================================
+# 业主信息管理 API
+# ===========================================================================
+
+class OwnerListCreateView(generics.ListCreateAPIView):
+    """
+    业主信息列表与创建视图
+    GET  /api/owners/  — 分页列表，支持过滤（all users）
+    POST /api/owners/  — 创建新记录（admin only）
+    """
+    serializer_class = OwnerInfoSerializer
+
+    def get_permissions(self):
+        if self.request.method in permissions.SAFE_METHODS:
+            return [permissions.IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def get_queryset(self):
+        from django.db.models import Q
+        queryset = OwnerInfo.objects.all().order_by('building', 'unit', 'room_number')
+        building = self.request.GET.get('building')
+        unit = self.request.GET.get('unit')
+        bind_status = self.request.GET.get('bind_status')
+        search = self.request.GET.get('search')
+        if building:
+            queryset = queryset.filter(building=building)
+        if unit:
+            queryset = queryset.filter(unit=unit)
+        if bind_status:
+            queryset = queryset.filter(bind_status=bind_status)
+        if search:
+            queryset = queryset.filter(
+                Q(specific_part__icontains=search) |
+                Q(location_name__icontains=search) |
+                Q(room_number__icontains=search)
+            )
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+        total = queryset.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        serializer = self.get_serializer(queryset[start:end], many=True)
+        return Response({
+            'success': True,
+            'data': serializer.data,
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+        })
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'success': True, 'data': serializer.data}, status=status.HTTP_201_CREATED)
+        return Response({'success': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class OwnerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    业主信息详情、更新、删除视图
+    GET    /api/owners/<id>/  — 详情（all users）
+    PUT    /api/owners/<id>/  — 全量更新（admin only）
+    PATCH  /api/owners/<id>/  — 部分更新（admin only）
+    DELETE /api/owners/<id>/  — 删除（admin only）
+    """
+    queryset = OwnerInfo.objects.all()
+    serializer_class = OwnerInfoSerializer
+
+    def get_permissions(self):
+        if self.request.method in permissions.SAFE_METHODS:
+            return [permissions.IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({'success': True, 'data': serializer.data})
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'success': True, 'data': serializer.data})
+        return Response({'success': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({'success': True, 'message': '删除成功'}, status=status.HTTP_204_NO_CONTENT)

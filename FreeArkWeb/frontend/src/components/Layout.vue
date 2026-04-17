@@ -66,6 +66,12 @@
             <el-menu-item index="/create-user">创建用户</el-menu-item>
             <el-menu-item index="/user-list">用户列表</el-menu-item>
           </el-sub-menu>
+
+          <!-- 只有管理员才能看到业主管理菜单 -->
+          <el-menu-item index="/owner-management" v-if="userRole === 'admin'">
+            <el-icon><House /></el-icon>
+            <span>业主管理</span>
+          </el-menu-item>
         </el-menu>
       </aside>
       
@@ -87,7 +93,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 // 导入 Element Plus 图标组件
-import { User, ArrowDown, HomeFilled, Document, Setting } from '@element-plus/icons-vue'
+import { User, ArrowDown, HomeFilled, Document, Setting, House } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 
 export default {
@@ -97,7 +103,8 @@ export default {
     ArrowDown,
     HomeFilled,
     Document,
-    Setting
+    Setting,
+    House
   },
   setup() {
     const router = useRouter()

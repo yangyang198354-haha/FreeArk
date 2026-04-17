@@ -72,6 +72,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/owner-management',
+    name: 'OwnerManagement',
+    component: () => import('../views/OwnerManagementView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

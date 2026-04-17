@@ -46,4 +46,8 @@ urlpatterns = [
     path('dashboard/trend/', views.dashboard_trend, name='dashboard-trend'),
     path('dashboard/services/', views.dashboard_services, name='dashboard-services'),
     path('dashboard/activities/', views.dashboard_activities, name='dashboard-activities'),
+
+    # 业主信息管理接口
+    path('owners/', views.OwnerListCreateView.as_view(), name='owner-list-create'),
+    path('owners/<int:pk>/', views.OwnerRetrieveUpdateDestroyView.as_view(), name='owner-detail'),
 ]

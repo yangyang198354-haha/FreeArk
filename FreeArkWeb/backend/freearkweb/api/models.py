@@ -301,3 +301,46 @@ class SpecificPartInfo(models.Model):
     
     def __str__(self):
         return f"{self.screenMAC} - {self.specific_part}"
+
+
+class OwnerInfo(models.Model):
+    """业主信息表，持久化 all_owner.json 中的业主数据"""
+    # 专有部分标识符，格式为 "楼-单-层-户"，如 "1-1-2-201"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分', unique=True, db_index=True)
+    # 专有部分坐落描述
+    location_name = models.CharField(max_length=100, verbose_name='专有部分坐落', blank=True)
+    # 楼栋，如 "1栋"
+    building = models.CharField(max_length=10, verbose_name='楼栋', db_index=True)
+    # 单元，如 "1单元"
+    unit = models.CharField(max_length=10, verbose_name='单元', db_index=True)
+    # 楼层，如 "2楼"
+    floor = models.CharField(max_length=10, verbose_name='楼层', blank=True)
+    # 户号，如 "201"
+    room_number = models.CharField(max_length=10, verbose_name='户号')
+    # 绑定状态，如 "已绑定" / "未绑定"
+    bind_status = models.CharField(max_length=20, verbose_name='绑定状态', blank=True, db_index=True)
+    # 设备 IP 地址
+    ip_address = models.CharField(max_length=50, verbose_name='IP地址', blank=True)
+    # 唯一标识符（screenMAC）
+    unique_id = models.CharField(max_length=50, verbose_name='唯一标识符', blank=True, db_index=True)
+    # PLC 设备 IP 地址
+    plc_ip_address = models.CharField(max_length=50, verbose_name='PLC IP地址', blank=True)
+    # 记录创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='记录创建时间')
+    # 记录更新时间
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='记录更新时间')
+
+    class Meta:
+        db_table = 'owner_info'
+        verbose_name = '业主信息'
+        verbose_name_plural = '业主信息'
+        indexes = [
+            models.Index(fields=['building'], name='owner_info_building_idx'),
+            models.Index(fields=['unit'], name='owner_info_unit_idx'),
+            models.Index(fields=['bind_status'], name='owner_info_bind_status_idx'),
+            models.Index(fields=['building', 'unit'], name='owner_info_building_unit_idx'),
+            models.Index(fields=['building', 'unit', 'bind_status'], name='owner_info_bldg_unit_bind_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.specific_part} - {self.location_name}"
