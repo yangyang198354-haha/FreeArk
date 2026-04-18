@@ -225,7 +225,24 @@ class MQTTConsumer:
             try:
                 payload = self._safe_json_parse(payload_str)
                 logger.debug(f"成功解析JSON，数据类型: {type(payload).__name__}")
-                
+
+                # 解析后记录 device_id 及参数统计
+                if isinstance(payload, dict) and len(payload) == 1:
+                    _dbg_device_id = next(iter(payload))
+                    _dbg_device_info = payload[_dbg_device_id]
+                    if isinstance(_dbg_device_info, dict) and 'data' in _dbg_device_info:
+                        _dbg_params = _dbg_device_info['data']
+                        _dbg_total = len(_dbg_params) if isinstance(_dbg_params, dict) else 0
+                        _dbg_success = sum(
+                            1 for p in _dbg_params.values()
+                            if isinstance(p, dict) and p.get('success')
+                        ) if isinstance(_dbg_params, dict) else 0
+                        _dbg_failed = _dbg_total - _dbg_success
+                        logger.debug(
+                            f"[on_message] payload 解析摘要: device_id={_dbg_device_id}, "
+                            f"param_count={_dbg_total}, success={_dbg_success}, failed={_dbg_failed}"
+                        )
+
                 # 处理消息
                 self.process_message(msg.topic, payload)
                 

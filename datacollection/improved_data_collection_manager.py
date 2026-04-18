@@ -447,12 +447,26 @@ class ImprovedDataCollectionManager:
             k = (config['db_num'], config['offset'])
             key_map[k] = (config.get('device_id'), config.get('param_key'))
 
+        # 统计参与本次读取的设备数和参数数
+        device_ids_in_configs = set(c.get('device_id') for c in configs if c.get('device_id'))
+        logger.debug(
+            f"[_read_single_plc] plc_ip={plc_ip} key_map 构建完成: "
+            f"设备数={len(device_ids_in_configs)}, 参数数={len(key_map)}"
+        )
+
         raw_results = self.plc_manager._read_single_plc_multiple_params(plc_ip, configs)
 
         results = []
         for i, raw in enumerate(raw_results):
             config = configs[i]
-            device_id, param_key = key_map.get((config['db_num'], config['offset']), (None, None))
+            db_num = config['db_num']
+            offset = config['offset']
+            device_id, param_key = key_map.get((db_num, offset), (None, None))
+            if device_id is None or param_key is None:
+                logger.warning(
+                    f"[_read_single_plc] key_map 未命中: plc_ip={plc_ip}, "
+                    f"db_num={db_num}, offset={offset} -> device_id={device_id}, param_key={param_key}"
+                )
             results.append({
                 'ip': plc_ip,
                 'device_id': device_id,
@@ -527,7 +541,7 @@ class ImprovedDataCollectionManager:
         for result in results:
             device_id = result.get('device_id')
             param_key = result.get('param_key')
-            
+
             if device_id and device_id in organized_results and param_key:
                 # 存储参数结果，添加时间戳
                 organized_results[device_id]['data'][param_key] = {
@@ -536,7 +550,7 @@ class ImprovedDataCollectionManager:
                     'message': result.get('message'),
                     'timestamp': current_time_str  # 为每个参数添加时间戳
                 }
-                
+
                 # 更新设备状态
                 if result.get('success'):
                     organized_results[device_id]['status'] = 'success'
@@ -545,9 +559,23 @@ class ImprovedDataCollectionManager:
                     logger.info(f"✅ 设备 {device_id} 参数 {param_key} 读取成功，值：{result.get('value')}")
                 else:
                     organized_results[device_id]['status'] = 'partial_success' if organized_results[device_id]['status'] == 'success' else 'failed'
-        
+                    logger.debug(
+                        f"[_organize_results] 参数读取失败: device_id={device_id}, "
+                        f"param_key={param_key}, message={result.get('message', '')}"
+                    )
+
         logger.info(f"📊 数据收集结果统计：成功 {success_count}/{total_count} 个参数读取任务")
-        
+
+        # 按设备汇总成功/失败参数数量
+        for dev_id, dev_data in organized_results.items():
+            params = dev_data.get('data', {})
+            dev_success = sum(1 for p in params.values() if p.get('success'))
+            dev_fail = len(params) - dev_success
+            logger.debug(
+                f"[_organize_results] 设备汇总: device_id={dev_id}, "
+                f"成功参数数={dev_success}, 失败参数数={dev_fail}"
+            )
+
         return organized_results
 
     def save_results_to_json(self, building_file: str, output_file: str = None) -> bool:
@@ -682,13 +710,28 @@ class ImprovedDataCollectionManager:
                     # 创建只包含当前设备信息的消息数据
                     single_record = {device_id: device_info}
                     
+                    # 发布前记录 DEBUG 信息
+                    payload_bytes = len(json.dumps(single_record, ensure_ascii=False).encode('utf-8'))
+                    dev_params = device_info.get('data', {})
+                    dev_success_params = sum(1 for p in dev_params.values() if isinstance(p, dict) and p.get('success'))
+                    dev_fail_params = len(dev_params) - dev_success_params
+                    logger.debug(
+                        f"[send_results_to_mqtt] 准备发布: device_id={device_id}, "
+                        f"unique_identifier={unique_identifier}, payload_size={payload_bytes}bytes, "
+                        f"success_params={dev_success_params}, failed_params={dev_fail_params}"
+                    )
+
                     # 发送数据
                     success = mqtt_client.publish(mqtt_topic, single_record, qos=qos, retain=retain)
-                    
+
                     if success:
                         success_count += 1
                         logger.info(f"✅ 设备 {device_id} 数据已成功发送到MQTT主题: {mqtt_topic}")
                     else:
+                        logger.warning(
+                            f"[send_results_to_mqtt] 发布失败: device_id={device_id}, "
+                            f"topic={mqtt_topic}, payload_size={payload_bytes}bytes"
+                        )
                         logger.info(f"❌ 设备 {device_id} 数据发送到MQTT主题失败: {mqtt_topic}")
                 
                 # 返回整体发送结果

@@ -660,14 +660,30 @@ class PLCLatestDataHandler(MessageHandler):
         if not isinstance(data_dict, dict):
             return
 
+        total_params = len(data_dict)
         records = []
+        skipped_excluded = 0
+        skipped_not_dict = 0
+        skipped_failed = 0
+
         for param_name, param_data in data_dict.items():
             # 排除由 PLCDataHandler 处理的参数
             if param_name in _EXCLUDED_PARAMS:
+                skipped_excluded += 1
+                logger.debug(
+                    f"PLCLatestDataHandler: 跳过 excluded 参数: "
+                    f"topic={topic}, device_id={specific_part}, param={param_name}, 原因=in _EXCLUDED_PARAMS"
+                )
                 continue
             if not isinstance(param_data, dict):
+                skipped_not_dict += 1
+                logger.debug(
+                    f"PLCLatestDataHandler: 跳过非 dict 参数: "
+                    f"topic={topic}, device_id={specific_part}, param={param_name}, type={type(param_data).__name__}"
+                )
                 continue
             if not param_data.get('success', False):
+                skipped_failed += 1
                 logger.debug(
                     f"PLCLatestDataHandler: 跳过失败参数 {specific_part}/{param_name}: "
                     f"{param_data.get('message', '')}"
@@ -695,6 +711,13 @@ class PLCLatestDataHandler(MessageHandler):
                 'unit': unit,
                 'room_number': room_number,
             })
+
+        valid_count = len(records)
+        logger.debug(
+            f"PLCLatestDataHandler: 消息处理摘要 - topic={topic}, device_id={specific_part}, "
+            f"总参数数={total_params}, 有效参数数={valid_count}, "
+            f"跳过(excluded={skipped_excluded}, not_dict={skipped_not_dict}, failed={skipped_failed})"
+        )
 
         if not records:
             logger.debug(f"PLCLatestDataHandler: {specific_part} 无有效参数需要写入")
@@ -740,10 +763,20 @@ class PLCLatestDataHandler(MessageHandler):
                         to_create.append(PLCLatestData(**rec))
 
                 if to_create:
+                    for obj in to_create:
+                        logger.debug(
+                            f"PLCLatestDataHandler: [INSERT] specific_part={obj.specific_part}, "
+                            f"param_name={obj.param_name}, value={obj.value}"
+                        )
                     PLCLatestData.objects.bulk_create(to_create)
                     logger.info(f"PLCLatestDataHandler: 批量插入完成，共 {len(to_create)} 条")
 
                 if to_update:
+                    for obj in to_update:
+                        logger.debug(
+                            f"PLCLatestDataHandler: [UPDATE] specific_part={obj.specific_part}, "
+                            f"param_name={obj.param_name}, value={obj.value}"
+                        )
                     PLCLatestData.objects.bulk_update(
                         to_update,
                         fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number'],
