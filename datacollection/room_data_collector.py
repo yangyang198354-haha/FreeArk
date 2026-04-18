@@ -63,8 +63,8 @@ class RoomDataCollector:
     
     def load_plc_config(self) -> Dict[str, Dict[str, Any]]:
         """加载PLC配置文件"""
-        config_path = os.path.join(self.resource_dir, 'plc_config.json')
-        
+        config_path = os.path.join(self.resource_dir, 'plc_energy_config.json')
+
         if not os.path.exists(config_path):
             logger.info(f"❌ PLC配置文件不存在: {config_path}")
             return {}
@@ -114,7 +114,7 @@ class RoomDataCollector:
     
     def load_plc_config(self) -> Dict[str, Dict[str, Any]]:
         """加载PLC配置文件"""
-        config_path = os.path.join(self.resource_dir, 'plc_config.json')
+        config_path = os.path.join(self.resource_dir, 'plc_energy_config.json')
         if not os.path.exists(config_path):
             logger.info(f"❌ PLC配置文件不存在：{config_path}")
             return {}

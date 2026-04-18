@@ -38,8 +38,9 @@ class ImprovedDataCollectionManager:
         """获取资源目录，支持多种运行环境"""
         # 尝试从多个位置获取资源目录
         possible_dirs = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resource'),  # 模块同级resource目录（含完整参数）
             os.path.join(os.getcwd(), 'resource'),  # 当前工作目录下的resource
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),  # 项目resource目录
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),  # 项目根resource目录
         ]
         
         # 优先选择存在的目录
