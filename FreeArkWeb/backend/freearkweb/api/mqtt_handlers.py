@@ -3,7 +3,7 @@ from datetime import datetime
 from abc import ABC, abstractmethod
 from django.db import transaction
 from django.utils import timezone
-from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory
+from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -585,3 +585,171 @@ class ConnectionStatusHandler(MessageHandler):
                 
         except Exception as e:
             logger.error(f"ConnectionStatusHandler: 更新连接状态失败 - {specific_part}: {e}", exc_info=True)
+
+
+# 不写入 PLCLatestData 的参数（由 PLCDataHandler 处理）
+_EXCLUDED_PARAMS = frozenset({'total_hot_quantity', 'total_cold_quantity'})
+
+# 支持的时间戳格式
+_TIMESTAMP_FORMATS = (
+    '%Y-%m-%d %H:%M:%S',
+    '%Y-%m-%dT%H:%M:%S',
+    '%Y-%m-%d %H:%M:%S.%f',
+    '%Y-%m-%dT%H:%M:%S.%f',
+)
+
+
+def _parse_timestamp(ts_str):
+    """将时间戳字符串解析为 naive datetime，解析失败返回 None。"""
+    if not isinstance(ts_str, str):
+        return None
+    for fmt in _TIMESTAMP_FORMATS:
+        try:
+            return datetime.strptime(ts_str, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_building_parts(specific_part):
+    """从 specific_part（格式 楼-单-层-户 或 楼-单-户）解析 building/unit/room_number。"""
+    if '-' not in specific_part:
+        return '', '', ''
+    parts = specific_part.split('-')
+    if len(parts) >= 4:
+        return parts[0], parts[1], parts[3]
+    if len(parts) == 3:
+        return parts[0], parts[1], parts[2]
+    return '', '', ''
+
+
+class PLCLatestDataHandler(MessageHandler):
+    """处理 MQTT PLC 消息，将各参数最新值 upsert 到 PLCLatestData 表。
+
+    - 排除 total_hot_quantity / total_cold_quantity（由 PLCDataHandler 负责）
+    - success=false 的参数丢弃，不写入
+    - 以 (specific_part, param_name) 为唯一键执行 update-or-create
+    """
+
+    def handle(self, topic, payload, building_file=None):
+        logger.debug(f"PLCLatestDataHandler: 处理消息 - 主题={topic}")
+
+        if not isinstance(payload, dict):
+            logger.warning(f"PLCLatestDataHandler: 不支持的 payload 类型: {type(payload).__name__}")
+            return
+
+        # 仅处理 improved_data_collection_manager 格式：{device_id: device_info}
+        if not (len(payload) == 1 and not any(
+            k in payload for k in ('data', 'device_id', 'param_key', 'results')
+        )):
+            logger.debug("PLCLatestDataHandler: payload 不符合目标格式，跳过")
+            return
+
+        device_id = next(iter(payload))
+        device_info = payload[device_id]
+
+        if not isinstance(device_info, dict) or 'data' not in device_info:
+            logger.debug(f"PLCLatestDataHandler: device_info 缺少 data 字段，跳过: {device_id}")
+            return
+
+        specific_part = device_id
+        plc_ip = device_info.get('PLC IP地址', '') or device_info.get('IP地址', '')
+        building, unit, room_number = _parse_building_parts(specific_part)
+
+        data_dict = device_info['data']
+        if not isinstance(data_dict, dict):
+            return
+
+        records = []
+        for param_name, param_data in data_dict.items():
+            # 排除由 PLCDataHandler 处理的参数
+            if param_name in _EXCLUDED_PARAMS:
+                continue
+            if not isinstance(param_data, dict):
+                continue
+            if not param_data.get('success', False):
+                logger.debug(
+                    f"PLCLatestDataHandler: 跳过失败参数 {specific_part}/{param_name}: "
+                    f"{param_data.get('message', '')}"
+                )
+                continue
+
+            raw_value = param_data.get('value')
+            try:
+                int_value = int(raw_value) if raw_value is not None else None
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"PLCLatestDataHandler: 参数 {param_name} 的值无法转换为整数: {raw_value!r}，置为 None"
+                )
+                int_value = None
+
+            collected_at = _parse_timestamp(param_data.get('timestamp'))
+
+            records.append({
+                'specific_part': specific_part,
+                'param_name': param_name,
+                'value': int_value,
+                'collected_at': collected_at,
+                'plc_ip': plc_ip,
+                'building': building,
+                'unit': unit,
+                'room_number': room_number,
+            })
+
+        if not records:
+            logger.debug(f"PLCLatestDataHandler: {specific_part} 无有效参数需要写入")
+            return
+
+        self._bulk_upsert(records)
+
+    def _bulk_upsert(self, records):
+        """批量 upsert PLCLatestData 记录。"""
+        if not records:
+            return
+
+        logger.debug(f"PLCLatestDataHandler: 开始批量 upsert，共 {len(records)} 条记录")
+
+        try:
+            with transaction.atomic():
+                # 按唯一键分组，同一批消息内相同键取最后一条
+                keyed = {}
+                for rec in records:
+                    keyed[(rec['specific_part'], rec['param_name'])] = rec
+
+                keys = list(keyed.keys())
+                existing_qs = PLCLatestData.objects.filter(
+                    specific_part__in=[k[0] for k in keys],
+                    param_name__in=[k[1] for k in keys],
+                )
+                existing_map = {(r.specific_part, r.param_name): r for r in existing_qs}
+
+                to_create = []
+                to_update = []
+
+                for key, rec in keyed.items():
+                    if key in existing_map:
+                        obj = existing_map[key]
+                        obj.value = rec['value']
+                        obj.collected_at = rec['collected_at']
+                        obj.plc_ip = rec['plc_ip']
+                        obj.building = rec['building']
+                        obj.unit = rec['unit']
+                        obj.room_number = rec['room_number']
+                        to_update.append(obj)
+                    else:
+                        to_create.append(PLCLatestData(**rec))
+
+                if to_create:
+                    PLCLatestData.objects.bulk_create(to_create)
+                    logger.info(f"PLCLatestDataHandler: 批量插入完成，共 {len(to_create)} 条")
+
+                if to_update:
+                    PLCLatestData.objects.bulk_update(
+                        to_update,
+                        fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number'],
+                    )
+                    logger.info(f"PLCLatestDataHandler: 批量更新完成，共 {len(to_update)} 条")
+
+        except Exception as e:
+            logger.error(f"PLCLatestDataHandler: 批量 upsert 失败: {e}", exc_info=True)
+            raise

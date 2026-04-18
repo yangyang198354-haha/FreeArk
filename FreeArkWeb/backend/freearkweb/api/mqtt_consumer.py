@@ -13,7 +13,7 @@ from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError as DjangoOperationalError
 from django.utils import timezone
 from .models import PLCData
-from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler
+from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -79,7 +79,8 @@ class MQTTConsumer:
         # 初始化消息处理器
         self.handlers = [
             PLCDataHandler(),
-            ConnectionStatusHandler()
+            ConnectionStatusHandler(),
+            PLCLatestDataHandler(),
         ]
     
     def on_connect(self, client, userdata, flags, rc):

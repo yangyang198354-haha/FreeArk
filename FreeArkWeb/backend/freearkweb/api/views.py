@@ -9,12 +9,13 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
     UsageQuantityDailySerializer, UsageQuantityMonthlySerializer,
-    PLCConnectionStatusSerializer, OwnerInfoSerializer
+    PLCConnectionStatusSerializer, OwnerInfoSerializer,
+    PLCLatestDataParamSerializer,
 )
 
 # 获取logger实例
@@ -1149,3 +1150,51 @@ class OwnerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         instance.delete()
         return Response({'success': True, 'message': '删除成功'}, status=status.HTTP_204_NO_CONTENT)
+
+
+# ===========================================================================
+# PLC 最新参数数据 API
+# ===========================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_plc_latest_data(request):
+    """
+    查询 PLCLatestData 表中的最新参数值。
+
+    GET /api/plc-latest/?specific_part=3-1-7-702
+        返回该专有部分所有参数的最新值列表。
+
+    GET /api/plc-latest/?specific_part=3-1-7-702&param_name=living_room_temperature
+        返回该专有部分指定参数的最新值。
+
+    响应格式：
+    {
+        "specific_part": "3-1-7-702",
+        "params": [
+            {"param_name": "living_room_temperature", "value": 245, "collected_at": "2026-04-18 10:42:55"},
+            ...
+        ]
+    }
+    """
+    specific_part = request.GET.get('specific_part', '').strip()
+    param_name = request.GET.get('param_name', '').strip()
+
+    if not specific_part:
+        return Response(
+            {'detail': '参数 specific_part 为必填项'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    qs = PLCLatestData.objects.filter(specific_part=specific_part)
+
+    if param_name:
+        qs = qs.filter(param_name=param_name)
+
+    qs = qs.order_by('param_name')
+
+    serializer = PLCLatestDataParamSerializer(qs, many=True)
+    return Response({
+        'specific_part': specific_part,
+        'params': serializer.data,
+    })

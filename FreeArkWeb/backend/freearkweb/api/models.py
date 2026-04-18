@@ -316,3 +316,41 @@ class OwnerInfo(models.Model):
 
     def __str__(self):
         return f"{self.specific_part} - {self.location_name}"
+
+
+class PLCLatestData(models.Model):
+    """PLC最新参数数据表，每个设备每个参数只保留最新一条记录（非时序）"""
+    # 专有部分，格式为 "3-1-7-702"
+    specific_part = models.CharField(max_length=20, verbose_name='专有部分', db_index=True)
+    # 参数名称，如 "living_room_temperature"
+    param_name = models.CharField(max_length=100, verbose_name='参数名称')
+    # 参数值（BigIntegerField 可容纳整数/浮点转整数/字节表示的整数）
+    value = models.BigIntegerField(verbose_name='参数值', null=True, blank=True)
+    # 最新采集时间戳，来自消息的 timestamp 字段
+    collected_at = models.DateTimeField(verbose_name='采集时间', null=True, blank=True)
+    # PLC 设备 IP 地址
+    plc_ip = models.CharField(max_length=50, verbose_name='PLC IP地址', blank=True, default='')
+    # 楼栋
+    building = models.CharField(max_length=10, verbose_name='楼栋', blank=True, default='')
+    # 单元
+    unit = models.CharField(max_length=10, verbose_name='单元', blank=True, default='')
+    # 房号
+    room_number = models.CharField(max_length=10, verbose_name='房号', blank=True, default='')
+    # 记录更新时间（由 ORM auto_now 维护，反映最后一次 upsert 时间）
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='记录更新时间')
+
+    class Meta:
+        db_table = 'plc_latest_data'
+        verbose_name = 'PLC最新参数数据'
+        verbose_name_plural = 'PLC最新参数数据'
+        # 唯一约束：每个设备每个参数只有一条记录
+        unique_together = [['specific_part', 'param_name']]
+        indexes = [
+            models.Index(fields=['specific_part']),
+            models.Index(fields=['param_name']),
+            models.Index(fields=['specific_part', 'param_name']),
+            models.Index(fields=['collected_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.specific_part} - {self.param_name} = {self.value}"

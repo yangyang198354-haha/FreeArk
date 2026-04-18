@@ -50,4 +50,7 @@ urlpatterns = [
     # 业主信息管理接口
     path('owners/', views.OwnerListCreateView.as_view(), name='owner-list-create'),
     path('owners/<int:pk>/', views.OwnerRetrieveUpdateDestroyView.as_view(), name='owner-detail'),
+
+    # PLC 最新参数数据查询接口
+    path('plc-latest/', views.get_plc_latest_data, name='get-plc-latest-data'),
 ]

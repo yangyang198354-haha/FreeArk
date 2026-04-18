@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, OwnerInfo
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, OwnerInfo, PLCLatestData
 
 class UserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
@@ -122,3 +122,18 @@ class OwnerInfoSerializer(serializers.ModelSerializer):
             'unique_id', 'plc_ip_address', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PLCLatestDataParamSerializer(serializers.ModelSerializer):
+    """单个参数条目序列化器（用于 PLCLatestData 列表响应中的 params 数组）"""
+    collected_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PLCLatestData
+        fields = ['param_name', 'value', 'collected_at']
+
+    def get_collected_at(self, obj):
+        if obj.collected_at is None:
+            return None
+        # 返回与 MQTT 消息中 timestamp 字段格式一致的字符串
+        return obj.collected_at.strftime('%Y-%m-%d %H:%M:%S')
