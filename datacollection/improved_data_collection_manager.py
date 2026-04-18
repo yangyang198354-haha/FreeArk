@@ -377,8 +377,8 @@ class ImprovedDataCollectionManager:
         
         # 如果输出类型为MQTT或者MQTT输出已启用，则通过MQTT发送数据
         if output_type == 'MQTT' or mqtt_enabled:
-            # 通过MQTT发送数据
-            self.send_results_to_mqtt(building_file)
+            # 直接传入 organized_results，避免 self.results 被其他线程覆盖导致发送错误数据
+            self.send_results_to_mqtt(building_file, results_data=organized_results)
         
         return organized_results
 
@@ -599,21 +599,22 @@ class ImprovedDataCollectionManager:
             logger.info(f"❌ 保存改进版结果失败：{str(e)}")
             return False
     
-    def send_results_to_mqtt(self, building_file: str) -> bool:
+    def send_results_to_mqtt(self, building_file: str, results_data: dict = None) -> bool:
         """通过MQTT发送结果数据，为每条记录单独发送消息"""
         # 获取输出配置
         output_config = self.load_output_config()
         mqtt_config = output_config['output'].get('mqtt', {})
-        
+
         # 检查MQTT是否启用
         mqtt_enabled = mqtt_config.get('enabled', False)
         if not mqtt_enabled:
             logger.info(f"⚠️  MQTT输出未启用")
             return False
-            
-        if building_file not in self.results:
-            logger.info(f"❌ 没有找到楼栋 {building_file} 的结果数据")
-            return False
+
+        if results_data is None:
+            if building_file not in self.results:
+                logger.info(f"❌ 没有找到楼栋 {building_file} 的结果数据")
+                return False
         
         # 获取MQTT服务器配置
         server_config = mqtt_config.get('server', {})
@@ -633,9 +634,9 @@ class ImprovedDataCollectionManager:
         retain = mqtt_config.get('retain', False)
         
         try:
-            # 获取结果数据
-            results = self.results[building_file]
-            
+            # 获取结果数据：优先使用调用方传入的 results_data（避免竞争条件）
+            results = results_data if results_data is not None else self.results[building_file]
+
             # 深拷贝结果数据，避免修改原始数据
             results_copy = copy.deepcopy(results)
             
