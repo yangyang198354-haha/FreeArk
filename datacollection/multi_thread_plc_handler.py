@@ -210,138 +210,36 @@ class PLCReadWriter:
 
 
     def write_multi(self, configs: List[Dict], max_retries: int = 2) -> List[Tuple[bool, str]]:
-        """批量写入多个参数，使用一次请求提高效率"""
-        retries = 0
-        while retries <= max_retries:
-            try:
-                if not self.connected:
-                    return [(False, "未连接到PLC") for _ in configs]
+        """顺序写入多个参数，兼容所有 snap7 版本"""
+        if not self.connected:
+            return [(False, "未连接到PLC") for _ in configs]
 
-                # 构造multi_write请求
-                write_requests = []
-                for req in configs:
-                    db_num = req['db_num']
-                    offset = req['offset']
-                    value = req['value']
-                    data_type = req['data_type']
-                    
-                    # 打包数据
-                    packed_data = self._pack_data(value, data_type)
-                    if packed_data is None:
-                        write_requests.append((0x84, db_num, offset, 0x00, b""))  # 无效数据
-                    else:
-                        write_requests.append(
-                            (0x84, db_num, offset, 0x00, packed_data)  # DB区域类型0x84
-                        )
-
-                # 执行批量写入
-                results = self.client.write_multi(write_requests)
-
-                # 处理结果
-                processed_results = []
-                for i, (success, result_code) in enumerate(results):
-                    if success:
-                        processed_results.append((True, "写入成功"))
-                    else:
-                        req = configs[i]
-                        processed_results.append((False, f"写入失败，错误码：{result_code}"))
-
-                return processed_results
-            except Exception as e:
-                retries += 1
-                if retries > max_retries:
-                    return [(False, f"批量写入异常（已重试{max_retries}次）：{str(e)}") for _ in configs]
-                logger.info(f"⚠️  批量写入异常，第{retries}次重试：{str(e)}")
-                time.sleep(0.1 * retries)  # 指数退避策略
+        results = []
+        for req in configs:
+            result = self.write_db_data(
+                req['db_num'], req['offset'], req['value'], req['data_type'], max_retries
+            )
+            if result is None:
+                results.append((False, "写入返回None"))
+            else:
+                results.append(result)
+        return results
 
     def read_multi(self, requests: List[Dict], max_retries: int = 2) -> List[Tuple[bool, str, any]]:
-        """批量读取多个参数，使用一次请求提高效率"""
-        retries = 0
-        while retries <= max_retries:
-            try:
-                if not self.connected:
-                    return [(False, "未连接到PLC", None) for _ in requests]
+        """顺序读取多个参数，兼容所有 snap7 版本"""
+        if not self.connected:
+            return [(False, "未连接到PLC", None) for _ in requests]
 
-                # 构造multi_read请求
-                read_requests = []
-                for req in requests:
-                    db_num = req['db_num']
-                    offset = req['offset']
-                    length = req['length']
-                    
-                    # Snap7的read_multi需要指定数据区域类型
-                    # DB块区域类型为0x84 (S7AreaDB)
-                    read_requests.append(
-                        (0x84, db_num, offset, length, 0x00)  # 最后一个参数是数据类型代码，0x00表示按字节读取
-                    )
-
-                # 执行批量读取
-                results = self.client.read_multi(read_requests)
-
-                # 解析结果
-                parsed_results = []
-                for i, (success, data) in enumerate(results):
-                    if success:
-                        req = requests[i]
-                        data_type = req['data_type']
-                        parsed_value = self._parse_data(data, data_type)  # 使用正确的_parse_data方法
-                        if parsed_value is not None:
-                            parsed_results.append((True, "读取成功", parsed_value))
-                        else:
-                            parsed_results.append((False, f"数据解析失败：{data_type}", None))
-                    else:
-                        parsed_results.append((False, "批量读取失败", None))
-
-                return parsed_results
-            except Exception as e:
-                retries += 1
-                if retries > max_retries:
-                    return [(False, f"批量读取异常（已重试{max_retries}次）：{str(e)}", None) for _ in requests]
-                logger.info(f"⚠️  批量读取异常，第{retries}次重试：{str(e)}")
-                time.sleep(0.1 * retries)  # 指数退避策略
-        """批量写入多个参数，使用一次请求提高效率"""
-        retries = 0
-        while retries <= max_retries:
-            try:
-                if not self.connected:
-                    return [(False, "未连接到PLC") for _ in requests]
-
-                # 构造multi_write请求
-                write_requests = []
-                for req in requests:
-                    db_num = req['db_num']
-                    offset = req['offset']
-                    value = req['value']
-                    data_type = req['data_type']
-                    
-                    # 打包数据
-                    packed_data = self._pack_data(value, data_type)
-                    if packed_data is None:
-                        write_requests.append((0x84, db_num, offset, 0x00, b""))  # 无效数据
-                    else:
-                        write_requests.append(
-                            (0x84, db_num, offset, 0x00, packed_data)  # DB区域类型0x84
-                        )
-
-                # 执行批量写入
-                results = self.client.write_multi(write_requests)
-
-                # 处理结果
-                processed_results = []
-                for i, (success, result_code) in enumerate(results):
-                    if success:
-                        processed_results.append((True, "写入成功"))
-                    else:
-                        req = requests[i]
-                        processed_results.append((False, f"写入失败，错误码：{result_code}"))
-
-                return processed_results
-            except Exception as e:
-                retries += 1
-                if retries > max_retries:
-                    return [(False, f"批量写入异常（已重试{max_retries}次）：{str(e)}") for _ in requests]
-                logger.info(f"⚠️  批量写入异常，第{retries}次重试：{str(e)}")
-                time.sleep(0.1 * retries)  # 指数退避策略
+        results = []
+        for req in requests:
+            result = self.read_db_data(
+                req['db_num'], req['offset'], req['length'], req['data_type'], max_retries
+            )
+            if result is None:
+                results.append((False, "读取返回None", None))
+            else:
+                results.append(result)
+        return results
 
 # S7 PDU 限制：单次 read_multi 请求最多携带的参数数量
 # 每个请求项约占 12 字节请求头 + 数据长度；保守取 12 个参数/请求确保不超 240 字节有效载荷
