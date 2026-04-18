@@ -3,7 +3,7 @@ import sys
 import json
 import time
 import threading
-from typing import Dict, List
+from typing import Dict, List, Optional, Set
 import signal
 import atexit
 
@@ -16,7 +16,7 @@ def get_resource_path(relative_path):
     except Exception:
         # 正常开发环境
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
+
     return os.path.join(base_path, relative_path)
 
 # 添加FreeArk目录到Python路径，确保模块可以正确导入
@@ -30,193 +30,301 @@ from datacollection.improved_data_collection_manager import ImprovedDataCollecti
 # 获取logger
 logger = get_logger('task_scheduler')
 
+
+class IntervalGroup:
+    """表示一个频率分组：包含参数名集合与调度间隔"""
+
+    def __init__(self, name: str, interval_seconds: int, param_names: List[str]):
+        self.name = name
+        self.interval_seconds = interval_seconds
+        # param_names 含 "*" 时表示通配符（由 TaskScheduler 负责在运行时展开）
+        self.param_names: List[str] = param_names
+
+    def is_wildcard(self) -> bool:
+        return "*" in self.param_names
+
+    def __repr__(self):
+        return (f"IntervalGroup(name={self.name!r}, interval={self.interval_seconds}s, "
+                f"params={self.param_names!r})")
+
+
 class TaskScheduler:
     def __init__(self):
         """初始化任务调度器"""
-        self.config = {}
-        self.scheduler_thread = None
+        self.config: Dict = {}
         self.stop_event = threading.Event()
-        self.data_collection_manager = ImprovedDataCollectionManager()
+        self.group_threads: List[threading.Thread] = []
+        self.data_collection_manager: Optional[ImprovedDataCollectionManager] = None
         self.load_config()
-        
+
         # 设置信号处理
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         # 确保在程序退出时停止调度器
         atexit.register(self.stop)
-    
-    def _get_resource_dir(self):
+
+    # ------------------------------------------------------------------
+    # 配置相关
+    # ------------------------------------------------------------------
+
+    def _get_resource_dir(self) -> str:
         """获取资源目录，支持多种运行环境"""
-        # 尝试从多个位置获取资源目录
         possible_dirs = [
-            os.path.join(os.getcwd(), 'resource'),  # 当前工作目录下的resource
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),  # 项目resource目录
+            os.path.join(os.getcwd(), 'resource'),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),
         ]
-        
-        # 优先选择存在的目录
         for dir_path in possible_dirs:
             if os.path.exists(dir_path) and os.path.isdir(dir_path):
                 return dir_path
-        
-        # 如果都不存在，返回当前工作目录
         return os.getcwd()
-    
+
     def load_config(self):
         """加载任务调度器配置"""
         resource_dir = self._get_resource_dir()
         config_path = os.path.join(resource_dir, 'task_scheduler_config.json')
-        
-        # 默认配置
+
         default_config = {
             "scheduler": {
-                "interval_seconds": 300,  # 默认5分钟执行一次
-                "building_files": []
+                "interval_seconds": 300,
+                "building_files": [],
+                "thread_pool_size": 10
             }
         }
-        
+
         if not os.path.exists(config_path):
-            logger.warning(f"⚠️  配置文件不存在，使用默认配置：{config_path}")
+            logger.warning(f"配置文件不存在，使用默认配置：{config_path}")
             self.config = default_config
             return
-        
+
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 self.config = json.load(f)
-                logger.info(f"✅ 成功加载任务调度器配置文件")
-                # 验证配置结构
-                if 'scheduler' not in self.config:
-                    logger.warning("⚠️  配置文件格式不正确，缺少scheduler字段，使用默认配置")
+                logger.info("成功加载任务调度器配置文件")
+                sched = self.config.get('scheduler', {})
+                if not sched:
+                    logger.warning("配置文件缺少 scheduler 字段，使用默认配置")
                     self.config = default_config
-                elif 'interval_seconds' not in self.config['scheduler']:
-                    logger.warning("⚠️  配置文件缺少interval_seconds字段，使用默认值300秒")
-                    self.config['scheduler']['interval_seconds'] = 300
-                elif 'building_files' not in self.config['scheduler']:
-                    logger.warning("⚠️  配置文件缺少building_files字段，使用空列表")
-                    self.config['scheduler']['building_files'] = []
+                else:
+                    # 填充缺失的默认值
+                    sched.setdefault('interval_seconds', 300)
+                    sched.setdefault('building_files', [])
+                    sched.setdefault('thread_pool_size', 10)
         except Exception as e:
-            logger.error(f"❌ 加载配置文件失败，使用默认配置：{str(e)}")
+            logger.error(f"加载配置文件失败，使用默认配置：{str(e)}")
             self.config = default_config
-    
-    def _run_task(self):
-        """运行数据收集任务"""
-        scheduler_config = self.config.get('scheduler', {})
-        building_files = scheduler_config.get('building_files', [])
-        
+
+    def _resolve_interval_groups(self) -> List[IntervalGroup]:
+        """解析配置中的 interval_groups，返回 IntervalGroup 列表。
+
+        若配置中不存在 interval_groups，则退化为单组（全部参数，使用 interval_seconds）。
+        通配符 "*" 组：param_names 被替换为「所有参数中不属于其他具名组的参数集合」。
+        """
+        sched = self.config.get('scheduler', {})
+        raw_groups = sched.get('interval_groups')
+
+        if not raw_groups:
+            # 向后兼容：单频率模式
+            interval = sched.get('interval_seconds', 300)
+            logger.info(f"未配置 interval_groups，使用单频率模式（{interval}s，全部参数）")
+            return [IntervalGroup(name='default', interval_seconds=interval, param_names=['*'])]
+
+        groups = [
+            IntervalGroup(
+                name=g.get('name', f'group_{i}'),
+                interval_seconds=int(g.get('interval_seconds', 300)),
+                param_names=list(g.get('param_names', ['*']))
+            )
+            for i, g in enumerate(raw_groups)
+        ]
+
+        # 展开通配符：先收集所有明确指定的参数名
+        all_plc_params = self._load_all_param_names()
+        named_params: Set[str] = set()
+        for g in groups:
+            if not g.is_wildcard():
+                named_params.update(g.param_names)
+
+        wildcard_params = all_plc_params - named_params
+
+        for g in groups:
+            if g.is_wildcard():
+                g.param_names = list(wildcard_params)
+                logger.info(
+                    f"IntervalGroup '{g.name}' 通配符展开：{len(g.param_names)} 个参数"
+                )
+
+        # 过滤掉展开后为空的组
+        valid_groups = [g for g in groups if g.param_names]
+        if not valid_groups:
+            logger.warning("所有 IntervalGroup 展开后均为空，退化为全参数单频率模式")
+            interval = sched.get('interval_seconds', 300)
+            return [IntervalGroup(name='default', interval_seconds=interval, param_names=list(all_plc_params))]
+
+        for g in valid_groups:
+            logger.info(f"  - {g}")
+
+        return valid_groups
+
+    def _load_all_param_names(self) -> Set[str]:
+        """从 plc_config.json 加载所有参数名"""
+        if self.data_collection_manager:
+            params = self.data_collection_manager.load_plc_config()
+            return set(params.keys())
+        # data_collection_manager 还未初始化时，临时加载
+        resource_dirs = [
+            os.path.join(os.getcwd(), 'resource'),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),
+        ]
+        for d in resource_dirs:
+            p = os.path.join(d, 'plc_config.json')
+            if os.path.exists(p):
+                try:
+                    with open(p, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        return set(data.get('parameters', {}).keys())
+                except Exception:
+                    pass
+        logger.warning("无法加载 plc_config.json，param 集合为空")
+        return set()
+
+    # ------------------------------------------------------------------
+    # 调度循环
+    # ------------------------------------------------------------------
+
+    def _run_group_task(self, group: IntervalGroup):
+        """执行一个频率分组的数据采集任务"""
+        sched = self.config.get('scheduler', {})
+        building_files: List[str] = sched.get('building_files', [])
+
         if not building_files:
-            logger.warning("⚠️  没有配置楼栋文件，跳过数据收集")
+            logger.warning(f"[{group.name}] 没有配置楼栋文件，跳过数据收集")
             return
-        
-        logger.info(f"🚀 开始执行周期性数据收集任务，共{len(building_files)}个楼栋文件")
-        
+
+        param_filter: Set[str] = set(group.param_names) if group.param_names else None
+        logger.info(
+            f"[{group.name}] 开始数据收集，参数数量：{len(param_filter) if param_filter else '全部'}，"
+            f"楼栋文件数：{len(building_files)}"
+        )
+
         for building_file in building_files:
             try:
-                logger.info(f"📁 开始处理楼栋文件：{building_file}")
-                # 调用数据收集管理器的方法
-                results = self.data_collection_manager.collect_data_for_building(building_file)
+                logger.info(f"[{group.name}] 处理楼栋文件：{building_file}")
+                results = self.data_collection_manager.collect_data_for_building(
+                    building_file, param_filter=param_filter
+                )
                 if results:
-                    logger.info(f"✅ 楼栋文件 {building_file} 处理完成")
+                    logger.info(f"[{group.name}] 楼栋文件 {building_file} 处理完成")
                 else:
-                    logger.warning(f"⚠️  楼栋文件 {building_file} 处理失败或无数据")
+                    logger.warning(f"[{group.name}] 楼栋文件 {building_file} 处理失败或无数据")
             except Exception as e:
-                logger.error(f"❌ 处理楼栋文件 {building_file} 时发生错误：{str(e)}")
-        
-        logger.info("📋 本轮数据收集任务执行完成")
-    
-    def _scheduler_loop(self):
-        """调度器主循环"""
-        scheduler_config = self.config.get('scheduler', {})
-        interval_seconds = scheduler_config.get('interval_seconds', 300)
-        
-        logger.info(f"⏰ 任务调度器启动，运行间隔：{interval_seconds}秒")
-        
+                logger.error(f"[{group.name}] 处理楼栋文件 {building_file} 时发生错误：{str(e)}")
+
+        logger.info(f"[{group.name}] 本轮任务执行完成")
+
+    def _group_loop(self, group: IntervalGroup):
+        """单个频率分组的调度主循环"""
+        logger.info(f"[{group.name}] 调度循环启动，间隔：{group.interval_seconds}秒")
+
         while not self.stop_event.is_set():
             try:
-                # 立即执行一次任务
-                self._run_task()
-                
-                # 等待下一次执行，同时监听停止信号
-                if self.stop_event.wait(interval_seconds):
+                self._run_group_task(group)
+                if self.stop_event.wait(group.interval_seconds):
                     break
             except Exception as e:
-                logger.error(f"❌ 调度器循环发生错误：{str(e)}")
-                # 出错后等待一段时间再继续，避免频繁出错
-                if self.stop_event.wait(30):  # 等待30秒
+                logger.error(f"[{group.name}] 调度循环发生错误：{str(e)}")
+                if self.stop_event.wait(30):
                     break
-        
-        logger.info("✅ 任务调度器已停止")
-    
+
+        logger.info(f"[{group.name}] 调度循环已停止")
+
+    # ------------------------------------------------------------------
+    # 生命周期
+    # ------------------------------------------------------------------
+
     def _signal_handler(self, sig, frame):
-        """处理信号"""
         signal_name = signal.Signals(sig).name
-        logger.info(f"⚠️  接收到信号 {signal_name}，正在停止调度器...")
+        logger.info(f"接收到信号 {signal_name}，正在停止调度器...")
         self.stop()
-    
+
     def start(self):
-        """启动任务调度器"""
-        if self.scheduler_thread and self.scheduler_thread.is_alive():
-            logger.warning("⚠️  任务调度器已经在运行")
+        """启动任务调度器（为每个 IntervalGroup 启动独立线程）"""
+        if self.group_threads and any(t.is_alive() for t in self.group_threads):
+            logger.warning("任务调度器已经在运行")
             return
-        
-        # 启动数据收集管理器
+
+        # 初始化数据收集管理器
+        sched = self.config.get('scheduler', {})
+        pool_size = sched.get('thread_pool_size', 10)
+        self.data_collection_manager = ImprovedDataCollectionManager(max_workers=pool_size)
         self.data_collection_manager.start()
-        
+
+        # 解析调度分组（需在 data_collection_manager 初始化后调用，以便读取 plc_config）
+        groups = self._resolve_interval_groups()
+
         # 重置停止事件
         self.stop_event.clear()
-        
-        # 创建并启动调度器线程
-        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
-        self.scheduler_thread.start()
-        
-        logger.info("✅ 任务调度器已启动")
-    
+        self.group_threads = []
+
+        for group in groups:
+            t = threading.Thread(
+                target=self._group_loop,
+                args=(group,),
+                name=f"Scheduler-{group.name}",
+                daemon=True
+            )
+            t.start()
+            self.group_threads.append(t)
+            logger.info(f"启动调度线程：{t.name}（间隔 {group.interval_seconds}s）")
+
+        logger.info(f"任务调度器已启动，共 {len(self.group_threads)} 个调度分组")
+
     def stop(self):
-        """停止任务调度器"""
-        if not self.scheduler_thread or not self.scheduler_thread.is_alive():
-            logger.warning("⚠️  任务调度器未在运行")
+        """停止所有调度线程"""
+        if not self.group_threads or not any(t.is_alive() for t in self.group_threads):
             return
-        
-        # 设置停止事件
+
         self.stop_event.set()
-        
-        # 等待调度器线程结束
-        if self.scheduler_thread.is_alive():
-            self.scheduler_thread.join(timeout=10)  # 最多等待10秒
-        
-        # 停止数据收集管理器
-        self.data_collection_manager.stop()
-        
-        logger.info("✅ 任务调度器已停止")
-    
-    def update_interval(self, interval_seconds: int):
-        """更新调度间隔（下次启动时生效）"""
+
+        for t in self.group_threads:
+            if t.is_alive():
+                t.join(timeout=15)
+
+        if self.data_collection_manager:
+            self.data_collection_manager.stop()
+
+        self.group_threads = []
+        logger.info("任务调度器已停止")
+
+    # ------------------------------------------------------------------
+    # 兼容旧接口
+    # ------------------------------------------------------------------
+
+    def update_interval(self, interval_seconds: int) -> bool:
+        """更新默认调度间隔（下次启动时生效）"""
         if interval_seconds <= 0:
-            logger.error("❌ 调度间隔必须大于0")
+            logger.error("调度间隔必须大于0")
             return False
-        
         self.config['scheduler']['interval_seconds'] = interval_seconds
-        logger.info(f"✅ 更新调度间隔为：{interval_seconds}秒")
+        logger.info(f"已更新默认调度间隔为：{interval_seconds}秒")
         return True
-    
-    def update_building_files(self, building_files: List[str]):
+
+    def update_building_files(self, building_files: List[str]) -> bool:
         """更新楼栋文件列表（下次启动时生效）"""
         self.config['scheduler']['building_files'] = building_files
-        logger.info(f"✅ 更新楼栋文件列表，共{len(building_files)}个文件")
+        logger.info(f"已更新楼栋文件列表，共{len(building_files)}个文件")
         return True
 
 
 if __name__ == "__main__":
-    # 创建并启动任务调度器
     scheduler = TaskScheduler()
-    
+
     try:
         scheduler.start()
-        logger.info("📝 任务调度器正在运行，按Ctrl+C停止...")
-        
-        # 主线程保持运行
+        logger.info("任务调度器正在运行，按Ctrl+C停止...")
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("📝 接收到用户中断，正在停止...")
+        logger.info("接收到用户中断，正在停止...")
     finally:
         scheduler.stop()
-        logger.info("📋 程序已退出")
+        logger.info("程序已退出")

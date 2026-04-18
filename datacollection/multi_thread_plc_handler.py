@@ -118,7 +118,11 @@ class PLCReadWriter:
     def _parse_data(self, raw_data: bytes, data_type: str) -> Optional[any]:
         """根据数据类型解析原始数据"""
         try:
-            if data_type == "int8":
+            if data_type == "byte":
+                if len(raw_data) != 1:
+                    return None
+                return struct.unpack('>B', raw_data)[0]  # 大端模式8位无符号整数
+            elif data_type == "int8":
                 if len(raw_data) != 1:
                     return None
                 return struct.unpack('>b', raw_data)[0]  # 大端模式8位有符号整数
@@ -339,6 +343,11 @@ class PLCReadWriter:
                 logger.info(f"⚠️  批量写入异常，第{retries}次重试：{str(e)}")
                 time.sleep(0.1 * retries)  # 指数退避策略
 
+# S7 PDU 限制：单次 read_multi 请求最多携带的参数数量
+# 每个请求项约占 12 字节请求头 + 数据长度；保守取 12 个参数/请求确保不超 240 字节有效载荷
+PDU_CHUNK_SIZE = 12
+
+
 class PLCManager:
     def __init__(self, max_workers: int = 5):
         """初始化PLC管理器，配置线程池大小"""
@@ -528,16 +537,15 @@ class PLCManager:
             logger.info("=" * 60)
 
     def _read_single_plc_multiple_params(self, plc_ip: str, configs: List[Dict]) -> List[Dict]:
-        """读取单个PLC的多个参数 - 使用线程安全的客户端缓存，采用批量读取提高效率"""
+        """读取单个PLC的多个参数 - 使用线程安全的客户端缓存，分块批量读取以遵守S7 PDU限制"""
         results = []
-        
-        # 获取或创建PLC读取器
+
+        # 获取或创建PLC读取器（连接复用）
         reader = self._get_or_create_reader(plc_ip)
-        
+
         try:
             # 确保已连接
             if not reader.connect():
-                # 连接失败，为所有配置添加失败结果
                 for config in configs:
                     results.append({
                         'ip': plc_ip,
@@ -545,27 +553,43 @@ class PLCManager:
                         'offset': config['offset'],
                         'success': False,
                         'message': "PLC连接失败",
-                        'value': None
+                        'value': None,
+                        'read_time': 0
                     })
                 return results
-            
+
             # 更新活跃连接统计
             with self.stats_lock:
                 self.connection_stats[plc_ip]['active_connections'] = 1
-            
-            # 批量读取所有参数
+
+            # 将参数列表分成若干块，每块不超过 PDU_CHUNK_SIZE 个参数
+            chunks = [configs[i:i + PDU_CHUNK_SIZE] for i in range(0, len(configs), PDU_CHUNK_SIZE)]
+            logger.debug(f"🔧 PLC {plc_ip}: 共{len(configs)}个参数，分{len(chunks)}块读取（每块≤{PDU_CHUNK_SIZE}个）")
+
             start_read_time = time.time()
-            read_results = reader.read_multi(configs)
+            all_read_results: List[Tuple[bool, str, any]] = []
+
+            for chunk_idx, chunk in enumerate(chunks):
+                try:
+                    chunk_results = reader.read_multi(chunk)
+                    all_read_results.extend(chunk_results)
+                    logger.debug(f"🔧 PLC {plc_ip}: 第{chunk_idx + 1}/{len(chunks)}块读取完成，{len(chunk)}个参数")
+                except Exception as chunk_err:
+                    logger.info(f"❌ PLC {plc_ip} 第{chunk_idx + 1}块读取异常：{str(chunk_err)}")
+                    # 该块所有参数标记失败，继续下一块
+                    for _ in chunk:
+                        all_read_results.append((False, f"分块读取异常：{str(chunk_err)}", None))
+
             total_read_time = time.time() - start_read_time
-            
-            # 处理批量读取结果
-            for i, (success, message, value) in enumerate(read_results):
+            read_duration_per_param = total_read_time / len(configs) if configs else 0
+
+            # 处理所有块的结果
+            for i, (success, message, value) in enumerate(all_read_results):
                 config = configs[i]
                 db_num = config['db_num']
                 offset = config['offset']
                 data_type = config['data_type']
-                read_duration = total_read_time / len(configs)  # 计算单次参数读取耗时
-                
+
                 result = {
                     'ip': plc_ip,
                     'db_num': db_num,
@@ -573,20 +597,18 @@ class PLCManager:
                     'success': success,
                     'message': message,
                     'value': value,
-                    'read_time': read_duration
+                    'read_time': read_duration_per_param
                 }
                 results.append(result)
-                
-                # 记录详细的读取日志
+
                 if success:
-                    logger.debug(f"✅ 成功读取PLC数据: {plc_ip}, DB{db_num}, 偏移量{offset}, 数据类型: {data_type}, 耗时: {read_duration:.3f}秒")
+                    logger.debug(f"✅ 成功读取PLC数据: {plc_ip}, DB{db_num}, 偏移量{offset}, 类型:{data_type}")
                 else:
                     logger.debug(f"❌ 读取PLC数据失败: {plc_ip}, DB{db_num}, 偏移量{offset}, 原因: {message}")
-            
+
             return results
         except Exception as e:
             logger.info(f"❌ PLC多参数读取异常：{plc_ip} - {str(e)}")
-            # 为所有配置添加异常结果
             for config in configs:
                 results.append({
                     'ip': plc_ip,

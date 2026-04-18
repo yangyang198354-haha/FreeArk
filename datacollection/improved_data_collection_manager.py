@@ -274,27 +274,40 @@ class ImprovedDataCollectionManager:
             logger.info(f"❌ 加载输出配置文件失败，使用默认配置：{str(e)}")
             return default_config
 
-    def collect_data_for_building(self, building_file: str) -> Dict[str, Dict[str, Any]]:
-        """为指定楼栋收集数据，使用PLC IP地址而不是设备IP地址"""
+    def collect_data_for_building(self, building_file: str,
+                                    param_filter: set = None) -> Dict[str, Dict[str, Any]]:
+        """为指定楼栋收集数据，使用PLC IP地址而不是设备IP地址。
+
+        Args:
+            building_file: 楼栋JSON文件名（相对于resource目录）
+            param_filter:  若提供，则只采集该集合内的参数名；为 None 时采集全部参数。
+        """
         # 加载楼栋数据和PLC配置
         building_data = self.load_building_json(building_file)
         if not building_data:
             return {}
-        
+
         plc_config = self.load_plc_config()
         if not plc_config:
             return {}
-        
+
+        # 若指定了参数过滤集合，只保留其中存在于 plc_config 的参数
+        if param_filter is not None:
+            plc_config = {k: v for k, v in plc_config.items() if k in param_filter}
+            if not plc_config:
+                logger.warning(f"⚠️  param_filter 过滤后无有效参数，跳过楼栋 {building_file}")
+                return {}
+
         # 创建PLC读取配置列表
         plc_read_configs = []
         ip_to_device_map = {}
-        
+
         # 为每个设备的每个参数创建读取配置
         for device_id, device_info in building_data.items():
-                
+
             # 优先使用设备信息中的PLC IP地址
             plc_ip = device_info.get('PLC IP地址')
-            
+
             if not plc_ip:
                 # 如果仍然没有PLC IP，使用设备的IP地址作为后备方案
                 plc_ip = device_info.get('IP地址')
@@ -302,7 +315,7 @@ class ImprovedDataCollectionManager:
                     logger.info(f"⚠️  设备 {device_id} 没有可用的IP地址")
                     continue
                 logger.info(f"⚠️  设备 {device_id} 没有PLC IP，使用设备IP: {plc_ip}")
-            
+
             # 为每个参数创建配置
             for param_key, param_info in plc_config.items():
                 config = {
@@ -316,7 +329,7 @@ class ImprovedDataCollectionManager:
                     'original_device_ip': device_info.get('IP地址')
                 }
                 plc_read_configs.append(config)
-                
+
                 # 记录PLC IP到设备的映射
                 if plc_ip not in ip_to_device_map:
                     ip_to_device_map[plc_ip] = []
@@ -370,7 +383,7 @@ class ImprovedDataCollectionManager:
         return organized_results
 
     def _read_all_plc_data(self, plc_read_configs: List[Dict]) -> List[Dict]:
-        """读取所有PLC数据"""
+        """读取所有PLC数据，按IP分组后并行提交线程池，各IP内部分块批量读取"""
         # 按PLC IP地址对参数配置进行分组
         ip_to_configs = {}
         for config in plc_read_configs:
@@ -378,23 +391,35 @@ class ImprovedDataCollectionManager:
             if plc_ip not in ip_to_configs:
                 ip_to_configs[plc_ip] = []
             ip_to_configs[plc_ip].append(config)
-        
-        # 提交所有任务到线程池（每个IP一个任务）
+
+        # 通过 PLCManager 线程池提交任务（每个IP一个任务，内部分块+连接复用）
         future_to_ip = {}
         for plc_ip, configs in ip_to_configs.items():
-            future = self.plc_manager.thread_pool.submit(self._read_single_plc_with_multiple_params, plc_ip, configs)
+            future = self.plc_manager.thread_pool.submit(
+                self._read_single_plc_with_multiple_params, plc_ip, configs
+            )
             future_to_ip[future] = plc_ip
-        
+
         # 收集结果
         results = []
         for future in concurrent.futures.as_completed(future_to_ip):
             plc_ip = future_to_ip[future]
             try:
-                ip_results = future.result()
+                ip_results = future.result(timeout=60)
                 results.extend(ip_results)
+            except concurrent.futures.TimeoutError:
+                logger.info(f"❌ PLC任务超时（60s）：{plc_ip}")
+                for config in ip_to_configs.get(plc_ip, []):
+                    results.append({
+                        'ip': config['ip'],
+                        'device_id': config.get('device_id'),
+                        'param_key': config.get('param_key'),
+                        'success': False,
+                        'message': "任务执行超时（60秒）",
+                        'value': None
+                    })
             except Exception as e:
                 logger.info(f"❌ PLC任务执行异常：{plc_ip} - {str(e)}")
-                # 为该IP下的所有配置添加失败结果
                 for config in ip_to_configs.get(plc_ip, []):
                     results.append({
                         'ip': config['ip'],
@@ -404,54 +429,39 @@ class ImprovedDataCollectionManager:
                         'message': f"任务执行异常：{str(e)}",
                         'value': None
                     })
-        
+
         return results
-    
+
     def _read_single_plc_with_multiple_params(self, plc_ip: str, configs: List[Dict]) -> List[Dict]:
-        """读取单个PLC的多个参数"""
+        """读取单个PLC的多个参数——委托给 PLCManager 以复用连接并进行分块批量读取。
+
+        PLCManager._read_single_plc_multiple_params 已实现：
+          - clients_cache 连接复用（同一 IP 跨轮次不断开）
+          - PDU_CHUNK_SIZE 分块（≤12 参数/请求）
+        本方法额外将 PLCManager 结果格式转换为包含 device_id / param_key 的格式。
+        """
+        # PLCManager 方法返回的结果键为 db_num/offset，不含 device_id/param_key
+        # 先建立 (db_num, offset) -> (device_id, param_key) 映射
+        key_map = {}
+        for config in configs:
+            k = (config['db_num'], config['offset'])
+            key_map[k] = (config.get('device_id'), config.get('param_key'))
+
+        raw_results = self.plc_manager._read_single_plc_multiple_params(plc_ip, configs)
+
         results = []
-        
-        # 创建一个PLC读取器并连接
-        reader = PLCReadWriter(plc_ip)
-        try:
-            if not reader.connect():
-                # 只连接PLC IP，如果失败直接标记为失败
-                logger.info(f"❌ PLC IP连接失败: {plc_ip}")
-                for config in configs:
-                    results.append({
-                        'ip': plc_ip,
-                        'device_id': config.get('device_id'),
-                        'param_key': config.get('param_key'),
-                        'success': False,
-                        'message': "PLC IP连接失败",
-                        'value': None
-                    })
-                return results
-            
-            # 依次读取每个参数
-            for config in configs:
-                db_num = config['db_num']
-                offset = config['offset']
-                length = config['length']
-                data_type = config['data_type']
-                device_id = config.get('device_id')
-                param_key = config.get('param_key')
-                
-                # 读取数据
-                success, message, value = reader.read_db_data(db_num, offset, length, data_type)
-                results.append({
-                    'ip': plc_ip,
-                    'device_id': device_id,
-                    'param_key': param_key,
-                    'success': success,
-                    'message': message,
-                    'value': value
-                })
-                
-            return results
-        finally:
-            # 确保断开连接
-            reader.disconnect()
+        for i, raw in enumerate(raw_results):
+            config = configs[i]
+            device_id, param_key = key_map.get((config['db_num'], config['offset']), (None, None))
+            results.append({
+                'ip': plc_ip,
+                'device_id': device_id,
+                'param_key': param_key,
+                'success': raw.get('success', False),
+                'message': raw.get('message', ''),
+                'value': raw.get('value')
+            })
+        return results
     
     # 原有的_read_single_plc_with_param方法可以保留或删除，根据是否有其他地方调用决定
     def _read_single_plc_with_param(self, config: Dict) -> Dict:

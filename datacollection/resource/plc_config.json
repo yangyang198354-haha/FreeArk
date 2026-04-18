@@ -1,5 +1,13 @@
 {
   "parameters": {
+    "fresh_air_fault_status": {
+      "name": "fresh_air_fault_status",
+      "description": "新风机故障状态",
+      "db_num": 14,
+      "offset": 388,
+      "length": 2,
+      "data_type": "int16"
+    },
     "total_hot_quantity": {
       "name": "total_hot_quantity",
       "description": "累计制热量",
@@ -15,10 +23,698 @@
       "offset": 448,
       "length": 4,
       "data_type": "int32"
+    },
+    "operation_mode": {
+      "name": "operation_mode",
+      "description": "运行模式",
+      "db_num": 14,
+      "offset": 89,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "system_switch": {
+      "name": "system_switch",
+      "description": "系统开关",
+      "db_num": 14,
+      "offset": 91,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "living_room_switch": {
+      "name": "living_room_switch",
+      "description": "客厅开关",
+      "db_num": 14,
+      "offset": 1335,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "living_room_temperature": {
+      "name": "living_room_temperature",
+      "description": "客厅实际温度",
+      "db_num": 14,
+      "offset": 1324,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_humidity": {
+      "name": "living_room_humidity",
+      "description": "客厅相对湿度",
+      "db_num": 14,
+      "offset": 1328,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_temp_setting": {
+      "name": "living_room_temp_setting",
+      "description": "客厅温度设置",
+      "db_num": 14,
+      "offset": 1336,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_ntc_temp": {
+      "name": "living_room_ntc_temp",
+      "description": "客厅NTC温度传感器元件温度",
+      "db_num": 14,
+      "offset": 1326,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_dew_point_setting": {
+      "name": "living_room_dew_point_setting",
+      "description": "客厅面板露点温度设置",
+      "db_num": 14,
+      "offset": 1330,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_temp_sensor_error": {
+      "name": "living_room_temp_sensor_error",
+      "description": "客厅面板内置温度传感器故障",
+      "db_num": 14,
+      "offset": 1346,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_humidity_sensor_error": {
+      "name": "living_room_humidity_sensor_error",
+      "description": "客厅面板湿度传感器故障",
+      "db_num": 14,
+      "offset": 1348,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_external_temp_sensor_error": {
+      "name": "living_room_external_temp_sensor_error",
+      "description": "客厅面板外置温度传感器故障",
+      "db_num": 14,
+      "offset": 1350,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_condensation_alert": {
+      "name": "living_room_condensation_alert",
+      "description": "客厅面板凝露提醒",
+      "db_num": 14,
+      "offset": 1352,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "living_room_communication_error": {
+      "name": "living_room_communication_error",
+      "description": "客厅面板通讯故障",
+      "db_num": 14,
+      "offset": 1358,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_switch": {
+      "name": "bedroom_switch",
+      "description": "三房主卧四房次卧开关",
+      "db_num": 14,
+      "offset": 1455,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "bedroom_temperature": {
+      "name": "bedroom_temperature",
+      "description": "三房主卧四房次卧实际温度",
+      "db_num": 14,
+      "offset": 1444,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_humidity": {
+      "name": "bedroom_humidity",
+      "description": "三房主卧四房次卧相对湿度",
+      "db_num": 14,
+      "offset": 1448,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_temp_setting": {
+      "name": "bedroom_temp_setting",
+      "description": "三房主卧四房次卧温度设置",
+      "db_num": 14,
+      "offset": 1456,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_ntc_temperature": {
+      "name": "bedroom_ntc_temperature",
+      "description": "三房主卧四房次卧NTC温度传感器元件温度",
+      "db_num": 14,
+      "offset": 1446,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_dew_point_setting": {
+      "name": "bedroom_dew_point_setting",
+      "description": "三房主卧四房次卧面板露点温度设置",
+      "db_num": 14,
+      "offset": 1450,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_switch": {
+      "name": "study_room_switch",
+      "description": "三房次卧四房书房开关",
+      "db_num": 14,
+      "offset": 1515,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "study_room_temperature": {
+      "name": "study_room_temperature",
+      "description": "三房次卧四房书房实际温度",
+      "db_num": 14,
+      "offset": 1504,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_humidity": {
+      "name": "study_room_humidity",
+      "description": "三房次卧四房书房相对湿度",
+      "db_num": 14,
+      "offset": 1508,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_temp_setting": {
+      "name": "study_room_temp_setting",
+      "description": "三房次卧四房书房温度设置",
+      "db_num": 14,
+      "offset": 1516,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_ntc_temperature": {
+      "name": "study_room_ntc_temperature",
+      "description": "三房次卧四房书房NTC温度传感器元件温度",
+      "db_num": 14,
+      "offset": 1506,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_dew_point_setting": {
+      "name": "study_room_dew_point_setting",
+      "description": "三房次卧四房书房面板露点温度设置",
+      "db_num": 14,
+      "offset": 1510,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_temp_sensor_error": {
+      "name": "study_room_temp_sensor_error",
+      "description": "三房次卧四房书房面板内置温度传感器故障",
+      "db_num": 14,
+      "offset": 1526,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_humidity_sensor_error": {
+      "name": "study_room_humidity_sensor_error",
+      "description": "三房次卧四房书房面板湿度传感器故障",
+      "db_num": 14,
+      "offset": 1528,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_external_temp_sensor_error": {
+      "name": "study_room_external_temp_sensor_error",
+      "description": "三房次卧四房书房面板外置温度传感器故障",
+      "db_num": 14,
+      "offset": 1530,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_condensation_alert": {
+      "name": "study_room_condensation_alert",
+      "description": "三房次卧四房书房面板凝露提醒",
+      "db_num": 14,
+      "offset": 1532,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "study_room_communication_error": {
+      "name": "study_room_communication_error",
+      "description": "三房次卧四房书房面板通讯故障",
+      "db_num": 14,
+      "offset": 1538,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_switch": {
+      "name": "children_room_switch",
+      "description": "三房儿童房四房主卧开关",
+      "db_num": 14,
+      "offset": 1395,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "children_room_temperature": {
+      "name": "children_room_temperature",
+      "description": "三房儿童房四房主卧实际温度",
+      "db_num": 14,
+      "offset": 1384,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_humidity": {
+      "name": "children_room_humidity",
+      "description": "三房儿童房四房主卧相对湿度",
+      "db_num": 14,
+      "offset": 1388,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_temp_setting": {
+      "name": "children_room_temp_setting",
+      "description": "三房儿童房四房主卧温度设置",
+      "db_num": 14,
+      "offset": 1396,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_ntc_temperature": {
+      "name": "children_room_ntc_temperature",
+      "description": "三房儿童房四房主卧NTC温度传感器元件温度",
+      "db_num": 14,
+      "offset": 1386,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_dew_point_setting": {
+      "name": "children_room_dew_point_setting",
+      "description": "三房儿童房四房主卧面板露点温度设置",
+      "db_num": 14,
+      "offset": 1390,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "plcip_address": {
+      "name": "plcip_address",
+      "description": "PLC网关IP",
+      "db_num": 14,
+      "offset": 170,
+      "length": 4,
+      "data_type": "byte"
+    },
+    "plc_ip_address": {
+      "name": "plc_ip_address",
+      "description": "PLCIP地址",
+      "db_num": 14,
+      "offset": 154,
+      "length": 4,
+      "data_type": "byte"
+    },
+    "central_energy_supply": {
+      "name": "central_energy_supply",
+      "description": "集中能源供给",
+      "db_num": 14,
+      "offset": 103,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "humidification_switch": {
+      "name": "humidification_switch",
+      "description": "加湿功能开关",
+      "db_num": 14,
+      "offset": 319,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "away_energy_saving": {
+      "name": "away_energy_saving",
+      "description": "离家节能标识",
+      "db_num": 14,
+      "offset": 105,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "hydraulic_module_outlet_temp": {
+      "name": "hydraulic_module_outlet_temp",
+      "description": "水力模块二次水出水温度检测值",
+      "db_num": 14,
+      "offset": 126,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "hydraulic_module_inlet_temp": {
+      "name": "hydraulic_module_inlet_temp",
+      "description": "水力模块二次水进水温度检测值",
+      "db_num": 14,
+      "offset": 128,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "hydraulic_module_valve_opening": {
+      "name": "hydraulic_module_valve_opening",
+      "description": "水力模块一次阀门开度",
+      "db_num": 14,
+      "offset": 132,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fresh_air_valve_opening": {
+      "name": "fresh_air_valve_opening",
+      "description": "新风机一次阀门开度反馈",
+      "db_num": 14,
+      "offset": 360,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "pm25": {
+      "name": "pm25",
+      "description": "PM2.5",
+      "db_num": 14,
+      "offset": 500,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "co2": {
+      "name": "co2",
+      "description": "CO2",
+      "db_num": 14,
+      "offset": 508,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "system_air_volume_setting": {
+      "name": "system_air_volume_setting",
+      "description": "系统风量设置",
+      "db_num": 14,
+      "offset": 93,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "fan_speed": {
+      "name": "fan_speed",
+      "description": "风机转速",
+      "db_num": 14,
+      "offset": 362,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fan_gear_feedback": {
+      "name": "fan_gear_feedback",
+      "description": "风机档位反馈",
+      "db_num": 14,
+      "offset": 359,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "filter_alarm_hours_setting": {
+      "name": "filter_alarm_hours_setting",
+      "description": "滤网报警小时数设置",
+      "db_num": 14,
+      "offset": 326,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "filter_used_hours": {
+      "name": "filter_used_hours",
+      "description": "滤网使用小时数",
+      "db_num": 14,
+      "offset": 422,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "supply_air_temp_setting": {
+      "name": "supply_air_temp_setting",
+      "description": "出风温度设定",
+      "db_num": 14,
+      "offset": 350,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "coil_supply_air_temp": {
+      "name": "coil_supply_air_temp",
+      "description": "过盘管出风温度",
+      "db_num": 14,
+      "offset": 368,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fresh_air_inlet_temp": {
+      "name": "fresh_air_inlet_temp",
+      "description": "新风入口温度",
+      "db_num": 14,
+      "offset": 372,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "coil_inlet_temp": {
+      "name": "coil_inlet_temp",
+      "description": "盘管进水温度",
+      "db_num": 14,
+      "offset": 378,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "coil_outlet_temp": {
+      "name": "coil_outlet_temp",
+      "description": "盘管出水温度",
+      "db_num": 14,
+      "offset": 380,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "humidification_humidity_upper_limit": {
+      "name": "humidification_humidity_upper_limit",
+      "description": "加湿湿度上限设置",
+      "db_num": 14,
+      "offset": 314,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "humidification_humidity_lower_limit": {
+      "name": "humidification_humidity_lower_limit",
+      "description": "加湿湿度下限设置",
+      "db_num": 14,
+      "offset": 316,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "work_time": {
+      "name": "work_time",
+      "description": "工作时间",
+      "db_num": 14,
+      "offset": 464,
+      "length": 4,
+      "data_type": "uint32"
+    },
+    "fourth_children_room_switch": {
+      "name": "fourth_children_room_switch",
+      "description": "四房儿童房开关",
+      "db_num": 14,
+      "offset": 1575,
+      "length": 1,
+      "data_type": "byte"
+    },
+    "fourth_children_room_temperature": {
+      "name": "fourth_children_room_temperature",
+      "description": "四房儿童房实际温度",
+      "db_num": 14,
+      "offset": 1564,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_humidity": {
+      "name": "fourth_children_room_humidity",
+      "description": "四房儿童房相对湿度",
+      "db_num": 14,
+      "offset": 1568,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_temp_setting": {
+      "name": "fourth_children_room_temp_setting",
+      "description": "四房儿童房温度设置",
+      "db_num": 14,
+      "offset": 1576,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_ntc_temperature": {
+      "name": "fourth_children_room_ntc_temperature",
+      "description": "四房儿童房NTC温度传感器元件温度",
+      "db_num": 14,
+      "offset": 1566,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_dew_point_setting": {
+      "name": "fourth_children_room_dew_point_setting",
+      "description": "四房儿童房面板露点温度设置",
+      "db_num": 14,
+      "offset": 1570,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_temp_sensor_error": {
+      "name": "bedroom_temp_sensor_error",
+      "description": "三房主卧四房次卧面板内置温度传感器故障",
+      "db_num": 14,
+      "offset": 1466,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_humidity_sensor_error": {
+      "name": "bedroom_humidity_sensor_error",
+      "description": "三房主卧四房次卧面板湿度传感器故障",
+      "db_num": 14,
+      "offset": 1468,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_external_temp_sensor_error": {
+      "name": "bedroom_external_temp_sensor_error",
+      "description": "三房主卧四房次卧面板外置温度传感器故障",
+      "db_num": 14,
+      "offset": 1470,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_condensation_alert": {
+      "name": "bedroom_condensation_alert",
+      "description": "三房主卧四房次卧面板凝露提醒",
+      "db_num": 14,
+      "offset": 1472,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "bedroom_communication_error": {
+      "name": "bedroom_communication_error",
+      "description": "三房主卧四房次卧面板通讯故障",
+      "db_num": 14,
+      "offset": 1478,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_temp_sensor_error": {
+      "name": "children_room_temp_sensor_error",
+      "description": "三房儿童房四房主卧面板内置温度传感器故障",
+      "db_num": 14,
+      "offset": 1406,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_humidity_sensor_error": {
+      "name": "children_room_humidity_sensor_error",
+      "description": "三房儿童房四房主卧面板湿度传感器故障",
+      "db_num": 14,
+      "offset": 1408,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_external_temp_sensor_error": {
+      "name": "children_room_external_temp_sensor_error",
+      "description": "三房儿童房四房主卧面板外置温度传感器故障",
+      "db_num": 14,
+      "offset": 1410,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_condensation_alert": {
+      "name": "children_room_condensation_alert",
+      "description": "三房儿童房四房主卧面板凝露提醒",
+      "db_num": 14,
+      "offset": 1412,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "children_room_communication_error": {
+      "name": "children_room_communication_error",
+      "description": "三房儿童房四房主卧面板通讯故障",
+      "db_num": 14,
+      "offset": 1418,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_temp_sensor_error": {
+      "name": "fourth_children_room_temp_sensor_error",
+      "description": "四房儿童房面板内置温度传感器故障",
+      "db_num": 14,
+      "offset": 1586,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_humidity_sensor_error": {
+      "name": "fourth_children_room_humidity_sensor_error",
+      "description": "四房儿童房面板湿度传感器故障",
+      "db_num": 14,
+      "offset": 1588,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_external_temp_sensor_error": {
+      "name": "fourth_children_room_external_temp_sensor_error",
+      "description": "四房儿童房面板外置温度传感器故障",
+      "db_num": 14,
+      "offset": 1590,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_condensation_alert": {
+      "name": "fourth_children_room_condensation_alert",
+      "description": "四房儿童房面板凝露提醒",
+      "db_num": 14,
+      "offset": 1592,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fourth_children_room_communication_error": {
+      "name": "fourth_children_room_communication_error",
+      "description": "四房儿童房面板通讯故障",
+      "db_num": 14,
+      "offset": 1598,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fresh_air_unit_stop_error": {
+      "name": "fresh_air_unit_stop_error",
+      "description": "新风机停机故障",
+      "db_num": 14,
+      "offset": 164,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "hydraulic_module_low_temp_error": {
+      "name": "hydraulic_module_low_temp_error",
+      "description": "水力模块低温故障",
+      "db_num": 14,
+      "offset": 140,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "fresh_air_unit_communication_error": {
+      "name": "fresh_air_unit_communication_error",
+      "description": "新风机通信故障",
+      "db_num": 14,
+      "offset": 386,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "air_quality_sensor_communication_error": {
+      "name": "air_quality_sensor_communication_error",
+      "description": "空气品质传感器通讯故障",
+      "db_num": 14,
+      "offset": 530,
+      "length": 2,
+      "data_type": "int16"
+    },
+    "energy_meter_status_communication_error": {
+      "name": "energy_meter_status_communication_error",
+      "description": "能耗表状态及通讯故障",
+      "db_num": 14,
+      "offset": 496,
+      "length": 2,
+      "data_type": "int16"
     }
   },
   "config_info": {
-    "version": "1.0",
+    "version": "1.1",
     "create_time": "2024-07-11",
     "description": "PLC数据读取配置文件"
   }
