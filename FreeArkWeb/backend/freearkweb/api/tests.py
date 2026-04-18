@@ -3,7 +3,7 @@ FreeArk API 单元测试
 
 覆盖范围：
 - 数据模型（CustomUser, PLCData, UsageQuantityDaily, UsageQuantityMonthly,
-           PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo）
+           PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo）
 - DailyUsageCalculator 核心计算逻辑
 - MonthlyUsageCalculator 核心计算逻辑
 - PLCDataHandler / ConnectionStatusHandler（MQTT 消息处理）
@@ -31,7 +31,7 @@ from .models import (
     UsageQuantityMonthly,
     PLCConnectionStatus,
     PLCStatusChangeHistory,
-    SpecificPartInfo,
+    OwnerInfo,
 )
 from .daily_usage_calculator import DailyUsageCalculator
 from .monthly_usage_calculator import MonthlyUsageCalculator
@@ -265,30 +265,35 @@ class PLCStatusChangeHistoryModelTest(TestCase):
         self.assertEqual(record.specific_part, "3-1-7-702")
 
 
-class SpecificPartInfoModelTest(TestCase):
-    """SpecificPartInfo 模型测试"""
+class OwnerInfoUniqueIdTest(TestCase):
+    """OwnerInfo.unique_id 字段测试（billing 查询路径）"""
 
     def setUp(self):
-        SpecificPartInfo.objects.create(
-            screenMAC="00:11:22:33:44:55",
+        OwnerInfo.objects.create(
             specific_part="1-1-2-201",
+            building="1栋",
+            unit="1单元",
+            room_number="201",
+            unique_id="00:11:22:33:44:55",
         )
 
-    def test_creation(self):
-        obj = SpecificPartInfo.objects.get(screenMAC="00:11:22:33:44:55")
+    def test_lookup_by_unique_id(self):
+        obj = OwnerInfo.objects.get(unique_id="00:11:22:33:44:55")
         self.assertEqual(obj.specific_part, "1-1-2-201")
 
-    def test_screenmac_unique(self):
+    def test_specific_part_unique(self):
         from django.db import IntegrityError
         with self.assertRaises(IntegrityError):
-            SpecificPartInfo.objects.create(
-                screenMAC="00:11:22:33:44:55",
-                specific_part="1-1-2-202",
+            OwnerInfo.objects.create(
+                specific_part="1-1-2-201",
+                building="1栋",
+                unit="1单元",
+                room_number="201",
+                unique_id="FF:EE:DD:CC:BB:AA",
             )
 
     def test_str_representation(self):
-        obj = SpecificPartInfo.objects.get(screenMAC="00:11:22:33:44:55")
-        self.assertIn("00:11:22:33:44:55", str(obj))
+        obj = OwnerInfo.objects.get(unique_id="00:11:22:33:44:55")
         self.assertIn("1-1-2-201", str(obj))
 
 
@@ -1317,9 +1322,12 @@ class BillingAPITest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        SpecificPartInfo.objects.create(
-            screenMAC="AA:BB:CC:DD:EE:FF",
+        OwnerInfo.objects.create(
             specific_part="3-1-7-702",
+            building="3栋",
+            unit="1单元",
+            room_number="702",
+            unique_id="AA:BB:CC:DD:EE:FF",
         )
         make_monthly_record(
             specific_part="3-1-7-702",
@@ -2549,7 +2557,7 @@ class IntegrationTestBillingCalculation(TestCase):
     """
     集成测试：账单金额计算端到端验证
 
-    预置 SpecificPartInfo + UsageQuantityMonthly → POST /api/billing/list/
+    预置 OwnerInfo + UsageQuantityMonthly → POST /api/billing/list/
     验证 billAmount、billingCycle、chargeItems 等字段计算正确，覆盖制冷/制热两种场景。
     """
 
@@ -2558,9 +2566,12 @@ class IntegrationTestBillingCalculation(TestCase):
     def setUp(self):
         self.client = Client()
         self.screen_mac = "BB:CC:DD:EE:FF:00"
-        SpecificPartInfo.objects.create(
-            screenMAC=self.screen_mac,
+        OwnerInfo.objects.create(
             specific_part="3-1-7-702",
+            building="3栋",
+            unit="1单元",
+            room_number="702",
+            unique_id=self.screen_mac,
         )
 
     def _post_billing(self, body):
@@ -2738,9 +2749,12 @@ class E2ETestBillingFlow(TestCase):
         self.api_client = APIClient()
         # 预置数据
         self.screen_mac = "CC:DD:EE:FF:00:11"
-        SpecificPartInfo.objects.create(
-            screenMAC=self.screen_mac,
+        OwnerInfo.objects.create(
             specific_part="3-1-7-702",
+            building="3栋",
+            unit="1单元",
+            room_number="702",
+            unique_id=self.screen_mac,
         )
         make_monthly_record(
             specific_part="3-1-7-702",

@@ -9,7 +9,7 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, SpecificPartInfo, OwnerInfo
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
@@ -662,12 +662,12 @@ def get_bill_list(request):
                 "data": []
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # 使用screenMAC查询specific_part_info表，获取对应的specific_part
+        # 使用screenMAC查询owner_info表，获取对应的specific_part
         try:
-            specific_part_info = SpecificPartInfo.objects.get(screenMAC=screen_mac)
-            specific_part = specific_part_info.specific_part
+            owner = OwnerInfo.objects.get(unique_id=screen_mac)
+            specific_part = owner.specific_part
             logger.info(f"screenMAC {screen_mac} 对应的specific_part: {specific_part}")
-        except SpecificPartInfo.DoesNotExist:
+        except OwnerInfo.DoesNotExist:
             logger.error(f"screenMAC {screen_mac} 未找到对应的专有部分信息")
             return Response({
                 "code": 404,
