@@ -23,7 +23,7 @@
       "topic": {
         "prefix": "/datacollection/plc/to/collector/"
       },
-      "qos": 1,
+      "qos": 0,
       "retain": false
     }
   },

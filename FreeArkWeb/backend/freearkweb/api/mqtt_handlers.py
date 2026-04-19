@@ -743,7 +743,6 @@ class PLCLatestDataHandler(MessageHandler):
             PLCLatestData.objects.bulk_create(
                 objs,
                 update_conflicts=True,
-                unique_fields=['specific_part', 'param_name'],
                 update_fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number'],
             )
             logger.debug(f"PLCLatestDataHandler: upsert 完成，共 {len(objs)} 条")
