@@ -12,30 +12,30 @@ class Migration(migrations.Migration):
             name='DeviceConfig',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('device_id', models.CharField(max_length=100, unique=True, verbose_name='设备标识')),
+                ('param_name', models.CharField(max_length=100, unique=True, verbose_name='参数名')),
                 ('display_name', models.CharField(max_length=200, verbose_name='显示名称')),
-                ('group', models.CharField(max_length=50, verbose_name='设备分组', db_index=True)),
-                ('sub_type', models.CharField(max_length=50, verbose_name='设备子类型', db_index=True)),
+                ('group', models.CharField(db_index=True, max_length=50, verbose_name='设备分组')),
+                ('sub_type', models.CharField(db_index=True, max_length=50, verbose_name='设备子类型')),
                 ('group_display', models.CharField(max_length=100, verbose_name='分组显示名称')),
                 ('sub_type_display', models.CharField(max_length=100, verbose_name='子类型显示名称')),
-                ('is_active', models.BooleanField(default=True, verbose_name='是否激活', db_index=True)),
+                ('is_active', models.BooleanField(db_index=True, default=True, verbose_name='是否激活')),
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='创建时间')),
             ],
             options={
                 'verbose_name': '设备配置',
                 'verbose_name_plural': '设备配置',
                 'db_table': 'device_config',
-                'ordering': ['group', 'sub_type', 'display_name'],
+                'ordering': ['group', 'sub_type', 'param_name'],
             },
         ),
         migrations.CreateModel(
             name='DeviceParamHistory',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('device_id', models.CharField(max_length=100, verbose_name='设备标识', db_index=True)),
+                ('specific_part', models.CharField(db_index=True, max_length=50, verbose_name='专有部分')),
                 ('param_name', models.CharField(max_length=100, verbose_name='参数名称')),
-                ('value', models.TextField(null=True, blank=True, verbose_name='参数值')),
-                ('collected_at', models.DateTimeField(verbose_name='采集时间', db_index=True)),
+                ('value', models.TextField(blank=True, null=True, verbose_name='参数值')),
+                ('collected_at', models.DateTimeField(db_index=True, verbose_name='采集时间')),
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='记录创建时间')),
             ],
             options={
@@ -46,10 +46,10 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='deviceparamhistory',
-            index=models.Index(fields=['device_id', 'collected_at'], name='dev_hist_did_cat_idx'),
+            index=models.Index(fields=['specific_part', 'collected_at'], name='dev_hist_sp_cat_idx'),
         ),
         migrations.AddIndex(
             model_name='deviceparamhistory',
-            index=models.Index(fields=['device_id', 'param_name', 'collected_at'], name='dev_hist_did_pn_cat_idx'),
+            index=models.Index(fields=['specific_part', 'param_name', 'collected_at'], name='dev_hist_sp_pn_cat_idx'),
         ),
     ]

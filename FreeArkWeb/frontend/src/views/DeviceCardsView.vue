@@ -3,7 +3,9 @@
     <div class="page-header">
       <div class="header-left">
         <h2>设备实时参数</h2>
-        <p class="page-subtitle">非PLC设备实时参数卡片面板，按系统和设备类型分组展示</p>
+        <p class="page-subtitle" v-if="specificPart">
+          专有部分：{{ specificPart }}
+        </p>
       </div>
       <div class="header-right">
         <el-select v-model="groupFilter" placeholder="全部系统" clearable @change="fetchData" style="width: 160px; margin-right: 12px;">
@@ -16,54 +18,56 @@
       </div>
     </div>
 
-    <!-- 加载骨架 -->
-    <el-skeleton :rows="6" animated v-if="loading && !hasData" />
+    <!-- 未选择专有部分时的提示 -->
+    <el-alert
+      v-if="!specificPart"
+      title="请先选择专有部分"
+      description="设备卡片面板需要在已选择专有部分的上下文中查看，请从专有部分详情页进入。"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 20px;"
+    />
 
-    <!-- 无数据提示 -->
-    <el-empty description="暂无设备配置数据" v-else-if="!loading && !hasData" />
+    <template v-else>
+      <!-- 加载骨架 -->
+      <el-skeleton :rows="6" animated v-if="loading && !hasData" />
 
-    <!-- 分组展示 -->
-    <div v-else>
-      <div v-for="(groupData, groupKey) in deviceData" :key="groupKey" class="group-section">
-        <h3 class="group-title">{{ groupData.display }}</h3>
+      <!-- 无数据提示 -->
+      <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
 
-        <div v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey" class="subtype-section">
-          <h4 class="subtype-title">{{ subTypeData.display }}</h4>
+      <!-- 分组展示 -->
+      <div v-else>
+        <div v-for="(groupData, groupKey) in deviceData" :key="groupKey" class="group-section">
+          <h3 class="group-title">{{ groupData.display }}</h3>
 
-          <div class="cards-grid">
-            <el-card
-              v-for="device in subTypeData.devices"
-              :key="device.device_id"
-              class="device-card"
-              shadow="hover"
-            >
-              <template #header>
-                <div class="card-header">
-                  <span class="card-title">{{ device.name }}</span>
-                  <el-button
-                    type="primary"
-                    link
-                    size="small"
-                    @click="goToHistory(device.device_id)"
-                  >
-                    历史数据 >
-                  </el-button>
-                </div>
-              </template>
+          <div v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey" class="subtype-section">
+            <div class="subtype-header">
+              <h4 class="subtype-title">{{ subTypeData.display }}</h4>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="goToHistory(subKey, subTypeData.display)"
+              >
+                历史数据 >
+              </el-button>
+            </div>
 
-              <!-- 无参数提示 -->
-              <div v-if="device.params.length === 0" class="no-params">
-                <el-text type="info">暂无参数数据</el-text>
-              </div>
+            <!-- 无参数提示 -->
+            <div v-if="subTypeData.params.length === 0" class="no-params">
+              <el-text type="info">暂无参数数据</el-text>
+            </div>
 
-              <!-- 参数键值对列表 -->
-              <div v-else class="params-list">
+            <!-- 参数键值对列表（卡片形式） -->
+            <el-card v-else class="subtype-card" shadow="hover">
+              <div class="params-list">
                 <div
-                  v-for="param in device.params"
+                  v-for="param in subTypeData.params"
                   :key="param.param_name"
                   class="param-row"
                 >
-                  <span class="param-name">{{ param.param_name }}</span>
+                  <span class="param-name">{{ param.display_name || param.param_name }}</span>
                   <span class="param-value">
                     {{ param.value !== null && param.value !== undefined ? param.value : '-' }}
                     <el-tag
@@ -76,21 +80,21 @@
                 </div>
               </div>
 
-              <div class="card-footer" v-if="device.params.length > 0">
+              <div class="card-footer">
                 <el-text type="info" size="small">
-                  最后更新: {{ getLastUpdated(device.params) }}
+                  最后更新: {{ getLastUpdated(subTypeData.params) }}
                 </el-text>
               </div>
             </el-card>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- 自动刷新提示 -->
-    <div class="refresh-tip" v-if="hasData">
-      <el-text type="info" size="small">每 30 秒自动刷新一次</el-text>
-    </div>
+      <!-- 自动刷新提示 -->
+      <div class="refresh-tip" v-if="hasData">
+        <el-text type="info" size="small">每 30 秒自动刷新一次</el-text>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -112,22 +116,38 @@ export default {
     }
   },
   computed: {
+    specificPart() {
+      return this.$route.query.specific_part || ''
+    },
     hasData() {
       return Object.keys(this.deviceData).length > 0
     },
   },
   mounted() {
-    this.fetchData()
-    this.startAutoRefresh()
+    if (this.specificPart) {
+      this.fetchData()
+      this.startAutoRefresh()
+    }
+  },
+  watch: {
+    specificPart(newVal) {
+      this.deviceData = {}
+      this.stopAutoRefresh()
+      if (newVal) {
+        this.fetchData()
+        this.startAutoRefresh()
+      }
+    },
   },
   beforeUnmount() {
     this.stopAutoRefresh()
   },
   methods: {
     async fetchData() {
+      if (!this.specificPart) return
       this.loading = true
       try {
-        const params = {}
+        const params = { specific_part: this.specificPart }
         if (this.groupFilter) {
           params.group = this.groupFilter
         }
@@ -146,8 +166,15 @@ export default {
       }
     },
 
-    goToHistory(deviceId) {
-      this.$router.push({ name: 'DeviceParamHistory', params: { deviceId } })
+    goToHistory(subType, subTypeDisplay) {
+      this.$router.push({
+        name: 'DeviceParamHistory',
+        query: {
+          specific_part: this.specificPart,
+          sub_type: subType,
+          sub_type_display: subTypeDisplay,
+        },
+      })
     },
 
     getLastUpdated(params) {
@@ -234,36 +261,26 @@ export default {
   margin-bottom: 24px;
 }
 
+.subtype-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .subtype-title {
   font-size: 15px;
   font-weight: 500;
   color: #606266;
-  margin: 0 0 12px 0;
+  margin: 0;
   padding-left: 10px;
   border-left: 3px solid #409eff;
 }
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.device-card {
+.subtype-card {
   border-radius: 8px;
   transition: box-shadow 0.2s;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.card-title {
-  font-weight: 500;
-  font-size: 15px;
-  color: #303133;
+  max-width: 600px;
 }
 
 .no-params {

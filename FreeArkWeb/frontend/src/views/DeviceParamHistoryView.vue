@@ -3,7 +3,10 @@
     <div class="page-header">
       <div class="header-left">
         <h2>设备历史参数</h2>
-        <p class="page-subtitle">设备 {{ deviceId }} 的历史参数记录</p>
+        <p class="page-subtitle">
+          专有部分：{{ specificPart }}
+          <span v-if="subTypeDisplay"> | 子系统：{{ subTypeDisplay }}</span>
+        </p>
       </div>
       <div class="header-right">
         <el-button @click="goBack">
@@ -109,7 +112,6 @@ export default {
   },
   data() {
     return {
-      deviceId: this.$route.params.deviceId || '',
       loading: false,
       filterParamName: '',
       filterStartTime: '',
@@ -120,29 +122,45 @@ export default {
       pageSize: 50,
     }
   },
+  computed: {
+    specificPart() {
+      return this.$route.query.specific_part || ''
+    },
+    subType() {
+      return this.$route.query.sub_type || ''
+    },
+    subTypeDisplay() {
+      return this.$route.query.sub_type_display || this.subType
+    },
+  },
   mounted() {
     this.fetchHistory()
   },
   watch: {
-    '$route.params.deviceId'(newVal) {
-      this.deviceId = newVal || ''
+    '$route.query'() {
       this.currentPage = 1
       this.fetchHistory()
     },
   },
   methods: {
     async fetchHistory() {
+      if (!this.specificPart) return
       this.loading = true
       try {
         const params = {
+          specific_part: this.specificPart,
           page: this.currentPage,
           page_size: this.pageSize,
         }
-        if (this.filterParamName) params.param_name = this.filterParamName
+        if (this.filterParamName) {
+          params.param_name = this.filterParamName
+        } else if (this.subType) {
+          params.sub_type = this.subType
+        }
         if (this.filterStartTime) params.start_time = this.filterStartTime
         if (this.filterEndTime) params.end_time = this.filterEndTime
 
-        const response = await api.get(`/api/devices/param-history/${this.deviceId}/`, params)
+        const response = await api.get('/api/devices/param-history/', params)
         if (response && response.success) {
           this.historyList = response.results || []
           this.totalRecords = response.count || 0
@@ -189,7 +207,10 @@ export default {
     },
 
     goBack() {
-      this.$router.push({ name: 'DeviceCards' })
+      this.$router.push({
+        name: 'DeviceCards',
+        query: { specific_part: this.specificPart },
+      })
     },
   },
 }

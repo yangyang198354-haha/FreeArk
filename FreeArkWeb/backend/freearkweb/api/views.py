@@ -1212,37 +1212,39 @@ _STALE_THRESHOLD_SECONDS = 600  # 10 分钟
 @permission_classes([permissions.AllowAny])
 def get_device_realtime_params(request):
     """
-    GET /api/devices/realtime-params/
-    返回非专有部分设备实时参数，按 group -> sub_type -> devices 嵌套结构。
+    GET /api/devices/realtime-params/?specific_part=9-1-31-3104[&group=hvac]
+    返回指定专有部分的设备实时参数，按 group -> sub_type -> params 嵌套结构。
 
     Query params:
-      group (str, optional) — 过滤指定设备分组（如 hvac）
+      specific_part (str, required) — 住宅专有部分标识，如 9-1-31-3104
+      group         (str, optional) — 过滤指定设备分组（如 hvac）
     """
     from datetime import datetime as _dt
 
+    specific_part = request.GET.get('specific_part', '').strip()
+    if not specific_part:
+        return Response(
+            {'success': False, 'error': 'specific_part 参数为必填项'},
+            status=400,
+        )
+
     group_filter = request.GET.get('group', '').strip()
 
-    # 查询激活的设备配置
+    # 查询该专有部分的所有最新 PLC 参数（一次批量查询）
+    latest_data_qs = PLCLatestData.objects.filter(specific_part=specific_part)
+
+    # 构建 param_name -> PLCLatestData 记录的映射
+    latest_by_param = {record.param_name: record for record in latest_data_qs}
+
+    # 查询激活的 DeviceConfig（param_name -> group/sub_type 的映射表）
     configs_qs = DeviceConfig.objects.filter(is_active=True)
     if group_filter:
         configs_qs = configs_qs.filter(group=group_filter)
 
-    # 预取所有相关 PLCLatestData（批量查询，避免 N+1）
-    device_ids = list(configs_qs.values_list('device_id', flat=True))
-    latest_data_qs = PLCLatestData.objects.filter(specific_part__in=device_ids)
-
-    # 按 device_id 分组
-    latest_by_device = {}
-    for record in latest_data_qs:
-        did = record.specific_part
-        if did not in latest_by_device:
-            latest_by_device[did] = []
-        latest_by_device[did].append(record)
-
     # 计算超时阈值时间
     now = _dt.now()
 
-    # 构建嵌套响应结构
+    # 构建嵌套响应结构：group -> sub_type -> params
     result = {}
     for cfg in configs_qs:
         group_key = cfg.group
@@ -1256,35 +1258,40 @@ def get_device_realtime_params(request):
         if sub_key not in result[group_key]['sub_types']:
             result[group_key]['sub_types'][sub_key] = {
                 'display': cfg.sub_type_display,
-                'devices': [],
+                'params': [],
             }
 
-        # 组装该设备的参数列表
-        records = latest_by_device.get(cfg.device_id, [])
-        params = []
-        for r in sorted(records, key=lambda x: x.param_name):
-            is_stale = False
-            if r.collected_at is None:
-                is_stale = True
-            else:
-                delta = (now - r.collected_at).total_seconds()
-                is_stale = delta > _STALE_THRESHOLD_SECONDS
+        # 在当前专有部分的 PLCLatestData 中查找该 param_name 的记录
+        record = latest_by_param.get(cfg.param_name)
+        if record is None:
+            # 该参数在此专有部分暂无数据，跳过（只展示有数据的参数）
+            continue
 
-            params.append({
-                'param_name': r.param_name,
-                'value': r.value,
-                'collected_at': r.collected_at.strftime('%Y-%m-%d %H:%M:%S') if r.collected_at else None,
-                'is_stale': is_stale,
-            })
+        is_stale = False
+        if record.collected_at is None:
+            is_stale = True
+        else:
+            delta = (now - record.collected_at).total_seconds()
+            is_stale = delta > _STALE_THRESHOLD_SECONDS
 
-        result[group_key]['sub_types'][sub_key]['devices'].append({
-            'device_id': cfg.device_id,
-            'name': cfg.display_name,
-            'params': params,
-            'history_url': f'/device-history/{cfg.device_id}',
+        result[group_key]['sub_types'][sub_key]['params'].append({
+            'param_name': cfg.param_name,
+            'display_name': cfg.display_name,
+            'value': record.value,
+            'collected_at': record.collected_at.strftime('%Y-%m-%d %H:%M:%S') if record.collected_at else None,
+            'is_stale': is_stale,
         })
 
-    return Response({'success': True, 'data': result})
+    # 移除没有任何参数数据的 sub_type，保持响应整洁
+    for group_key in list(result.keys()):
+        sub_types = result[group_key]['sub_types']
+        empty_subs = [k for k, v in sub_types.items() if not v['params']]
+        for sub_key in empty_subs:
+            del sub_types[sub_key]
+        if not sub_types:
+            del result[group_key]
+
+    return Response({'success': True, 'specific_part': specific_part, 'data': result})
 
 
 # ===========================================================================
@@ -1293,18 +1300,28 @@ def get_device_realtime_params(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
-def get_device_param_history(request, device_id):
+def get_device_param_history(request):
     """
-    GET /api/devices/param-history/<device_id>/
-    返回指定设备的历史参数记录，按 collected_at 倒序分页。
+    GET /api/devices/param-history/?specific_part=9-1-31-3104[&sub_type=main_thermostat][&param_name=living_room_temperature]
+    返回指定专有部分的历史参数记录，按 collected_at 倒序分页。
 
     Query params:
-      param_name  (str, optional)  — 过滤参数名称
-      start_time  (str, optional)  — 开始时间 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD
-      end_time    (str, optional)  — 结束时间 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD
-      page        (int, default 1)
-      page_size   (int, default 50)
+      specific_part (str, required)  — 住宅专有部分标识，如 9-1-31-3104
+      sub_type      (str, optional)  — 过滤子类型（通过 DeviceConfig 找到该 sub_type 的 param_name 列表）
+      param_name    (str, optional)  — 精确过滤单个参数名称
+      start_time    (str, optional)  — 开始时间 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD
+      end_time      (str, optional)  — 结束时间 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD
+      page          (int, default 1)
+      page_size     (int, default 50)
     """
+    specific_part = request.GET.get('specific_part', '').strip()
+    if not specific_part:
+        return Response(
+            {'success': False, 'error': 'specific_part 参数为必填项'},
+            status=400,
+        )
+
+    sub_type = request.GET.get('sub_type', '').strip()
     param_name = request.GET.get('param_name', '').strip()
     start_time = request.GET.get('start_time', '').strip()
     end_time = request.GET.get('end_time', '').strip()
@@ -1318,10 +1335,21 @@ def get_device_param_history(request, device_id):
     except (ValueError, TypeError):
         page_size = 50
 
-    qs = DeviceParamHistory.objects.filter(device_id=device_id)
+    qs = DeviceParamHistory.objects.filter(specific_part=specific_part)
 
     if param_name:
         qs = qs.filter(param_name=param_name)
+    elif sub_type:
+        # 通过 DeviceConfig 查出该 sub_type 下的所有 param_name
+        sub_type_params = list(
+            DeviceConfig.objects.filter(sub_type=sub_type, is_active=True)
+            .values_list('param_name', flat=True)
+        )
+        if sub_type_params:
+            qs = qs.filter(param_name__in=sub_type_params)
+        else:
+            qs = qs.none()
+
     if start_time:
         qs = qs.filter(collected_at__gte=start_time)
     if end_time:
@@ -1337,7 +1365,7 @@ def get_device_param_history(request, device_id):
     serializer = DeviceParamHistorySerializer(page_qs, many=True)
     return Response({
         'success': True,
-        'device_id': device_id,
+        'specific_part': specific_part,
         'count': total,
         'page': page,
         'page_size': page_size,

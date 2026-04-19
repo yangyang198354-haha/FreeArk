@@ -78,13 +78,16 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // specific_part 通过 query param 传入，如 /device-cards?specific_part=9-1-31-3104
     path: '/device-cards',
     name: 'DeviceCards',
     component: () => import('../views/DeviceCardsView.vue'),
     meta: { requiresAuth: true }
   },
   {
-    path: '/device-history/:deviceId',
+    // specific_part 和 sub_type 通过 query param 传入
+    // 如 /device-history?specific_part=9-1-31-3104&sub_type=main_thermostat
+    path: '/device-history',
     name: 'DeviceParamHistory',
     component: () => import('../views/DeviceParamHistoryView.vue'),
     meta: { requiresAuth: true }

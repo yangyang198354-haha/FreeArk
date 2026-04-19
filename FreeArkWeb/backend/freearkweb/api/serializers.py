@@ -143,7 +143,7 @@ class DeviceConfigSerializer(serializers.ModelSerializer):
     """设备配置序列化器（只读）"""
     class Meta:
         model = DeviceConfig
-        fields = ['device_id', 'display_name', 'group', 'sub_type', 'group_display', 'sub_type_display', 'is_active']
+        fields = ['param_name', 'display_name', 'group', 'sub_type', 'group_display', 'sub_type_display', 'is_active']
         read_only_fields = fields
 
 

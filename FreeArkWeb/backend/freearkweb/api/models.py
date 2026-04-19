@@ -357,10 +357,10 @@ class PLCLatestData(models.Model):
 
 
 class DeviceConfig(models.Model):
-    """非专有部分设备配置表，定义设备分组和子类型元数据"""
-    # 设备唯一标识，对应 PLCLatestData.specific_part 中存储的自定义 device_id
-    device_id = models.CharField(max_length=100, unique=True, verbose_name='设备标识')
-    # 卡片显示名称，如"书房-温控面板"
+    """设备参数分组配置表，定义每个 param_name 属于哪个 group/sub_type"""
+    # PLC 参数名（唯一），与 PLCLatestData.param_name 对应
+    param_name = models.CharField(max_length=100, unique=True, verbose_name='参数名')
+    # 参数在 sub_type 内的显示名，如"客厅温度"（可选，用于前端展示）
     display_name = models.CharField(max_length=200, verbose_name='显示名称')
     # 系统分组，如 "hvac"
     group = models.CharField(max_length=50, verbose_name='设备分组', db_index=True)
@@ -370,7 +370,7 @@ class DeviceConfig(models.Model):
     group_display = models.CharField(max_length=100, verbose_name='分组显示名称')
     # 子类型中文显示名称，如"主温控器"
     sub_type_display = models.CharField(max_length=100, verbose_name='子类型显示名称')
-    # 是否激活（未激活的设备不出现在卡片面板）
+    # 是否激活（未激活的参数不出现在卡片面板）
     is_active = models.BooleanField(default=True, verbose_name='是否激活', db_index=True)
     # 记录创建时间
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
@@ -379,17 +379,17 @@ class DeviceConfig(models.Model):
         db_table = 'device_config'
         verbose_name = '设备配置'
         verbose_name_plural = '设备配置'
-        ordering = ['group', 'sub_type', 'display_name']
+        ordering = ['group', 'sub_type', 'param_name']
 
     def __str__(self):
-        return f"{self.display_name} ({self.device_id})"
+        return f"{self.sub_type_display} - {self.param_name}"
 
 
 class DeviceParamHistory(models.Model):
-    """非专有部分设备参数历史记录表（追加写入，时序数据）"""
-    # 设备标识，对应 DeviceConfig.device_id
-    device_id = models.CharField(max_length=100, verbose_name='设备标识', db_index=True)
-    # 参数名称
+    """设备参数历史记录表（追加写入，时序数据）"""
+    # 专有部分标识，格式如 9-1-31-3104，来自前端上下文
+    specific_part = models.CharField(max_length=50, verbose_name='专有部分', db_index=True)
+    # 参数名称，与 PLCLatestData.param_name 对应
     param_name = models.CharField(max_length=100, verbose_name='参数名称')
     # 参数值（TextField 兼容整数和字符串，如 "正常"、"关闭"、"26.0"）
     value = models.TextField(null=True, blank=True, verbose_name='参数值')
@@ -403,9 +403,9 @@ class DeviceParamHistory(models.Model):
         verbose_name = '设备参数历史'
         verbose_name_plural = '设备参数历史'
         indexes = [
-            models.Index(fields=['device_id', 'collected_at'], name='dev_hist_did_cat_idx'),
-            models.Index(fields=['device_id', 'param_name', 'collected_at'], name='dev_hist_did_pn_cat_idx'),
+            models.Index(fields=['specific_part', 'collected_at'], name='dev_hist_sp_cat_idx'),
+            models.Index(fields=['specific_part', 'param_name', 'collected_at'], name='dev_hist_sp_pn_cat_idx'),
         ]
 
     def __str__(self):
-        return f"{self.device_id} - {self.param_name} = {self.value} @ {self.collected_at}"
+        return f"{self.specific_part} - {self.param_name} = {self.value} @ {self.collected_at}"

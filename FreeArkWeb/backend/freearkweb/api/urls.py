@@ -57,5 +57,6 @@ urlpatterns = [
     # 非专有部分设备实时参数卡片接口 (REQ-FUNC-033)
     path('devices/realtime-params/', views.get_device_realtime_params, name='device-realtime-params'),
     # 非专有部分设备历史参数查询接口 (REQ-FUNC-034)
-    path('devices/param-history/<str:device_id>/', views.get_device_param_history, name='device-param-history'),
+    # 使用 query param 方式：?specific_part=9-1-31-3104[&sub_type=...][&param_name=...]
+    path('devices/param-history/', views.get_device_param_history, name='device-param-history'),
 ]
