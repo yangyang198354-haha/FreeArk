@@ -726,63 +726,27 @@ class PLCLatestDataHandler(MessageHandler):
         self._bulk_upsert(records)
 
     def _bulk_upsert(self, records):
-        """批量 upsert PLCLatestData 记录。"""
+        """批量 upsert PLCLatestData 记录（单条 INSERT … ON DUPLICATE KEY UPDATE）。"""
         if not records:
             return
 
         logger.debug(f"PLCLatestDataHandler: 开始批量 upsert，共 {len(records)} 条记录")
 
+        # 同一批消息内相同唯一键取最后一条
+        keyed = {}
+        for rec in records:
+            keyed[(rec['specific_part'], rec['param_name'])] = rec
+
+        objs = [PLCLatestData(**rec) for rec in keyed.values()]
+
         try:
-            with transaction.atomic():
-                # 按唯一键分组，同一批消息内相同键取最后一条
-                keyed = {}
-                for rec in records:
-                    keyed[(rec['specific_part'], rec['param_name'])] = rec
-
-                keys = list(keyed.keys())
-                existing_qs = PLCLatestData.objects.filter(
-                    specific_part__in=[k[0] for k in keys],
-                    param_name__in=[k[1] for k in keys],
-                )
-                existing_map = {(r.specific_part, r.param_name): r for r in existing_qs}
-
-                to_create = []
-                to_update = []
-
-                for key, rec in keyed.items():
-                    if key in existing_map:
-                        obj = existing_map[key]
-                        obj.value = rec['value']
-                        obj.collected_at = rec['collected_at']
-                        obj.plc_ip = rec['plc_ip']
-                        obj.building = rec['building']
-                        obj.unit = rec['unit']
-                        obj.room_number = rec['room_number']
-                        to_update.append(obj)
-                    else:
-                        to_create.append(PLCLatestData(**rec))
-
-                if to_create:
-                    for obj in to_create:
-                        logger.debug(
-                            f"PLCLatestDataHandler: [INSERT] specific_part={obj.specific_part}, "
-                            f"param_name={obj.param_name}, value={obj.value}"
-                        )
-                    PLCLatestData.objects.bulk_create(to_create)
-                    logger.info(f"PLCLatestDataHandler: 批量插入完成，共 {len(to_create)} 条")
-
-                if to_update:
-                    for obj in to_update:
-                        logger.debug(
-                            f"PLCLatestDataHandler: [UPDATE] specific_part={obj.specific_part}, "
-                            f"param_name={obj.param_name}, value={obj.value}"
-                        )
-                    PLCLatestData.objects.bulk_update(
-                        to_update,
-                        fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number'],
-                    )
-                    logger.info(f"PLCLatestDataHandler: 批量更新完成，共 {len(to_update)} 条")
-
+            PLCLatestData.objects.bulk_create(
+                objs,
+                update_conflicts=True,
+                unique_fields=['specific_part', 'param_name'],
+                update_fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number'],
+            )
+            logger.debug(f"PLCLatestDataHandler: upsert 完成，共 {len(objs)} 条")
         except Exception as e:
             logger.error(f"PLCLatestDataHandler: 批量 upsert 失败: {e}", exc_info=True)
             raise
