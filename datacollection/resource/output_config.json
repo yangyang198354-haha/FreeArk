@@ -1,21 +1,20 @@
 {
   "output": {
-    "type": "Excel",
+    "type": "MQTT",
     "excel": {
-      "enabled": true,
-
+      "enabled": false,
       "file_name": "累计用量",
       "directory": "./output/",
       "include_all_params": false
     },
     "json": {
-      "enabled": true
+      "enabled": false
     },
     "mqtt": {
-      "enabled": false,
+      "enabled": true,
       "server": {
-        "host": "192.168.31.141",
-        "port": 11883,
+        "host": "192.168.31.98",
+        "port": 32788,
         "username": "",
         "password": "",
         "tls_enabled": false,

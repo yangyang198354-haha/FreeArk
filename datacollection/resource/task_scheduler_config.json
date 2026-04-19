@@ -1,0 +1,21 @@
+{
+  "scheduler": {
+    "interval_seconds": 300,
+    "building_files": [
+      "all_owner.json"
+    ],
+    "interval_groups": [
+      {
+        "name": "energy",
+        "interval_seconds": 300,
+        "param_names": ["total_hot_quantity", "total_cold_quantity"]
+      },
+      {
+        "name": "general",
+        "interval_seconds": 600,
+        "param_names": ["*"]
+      }
+    ],
+    "thread_pool_size": 10
+  }
+}

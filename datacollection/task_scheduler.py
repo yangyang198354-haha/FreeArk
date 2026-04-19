@@ -70,6 +70,7 @@ class TaskScheduler:
     def _get_resource_dir(self) -> str:
         """获取资源目录，支持多种运行环境"""
         possible_dirs = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resource'),  # 模块同级resource目录（优先）
             os.path.join(os.getcwd(), 'resource'),
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),
         ]
@@ -172,6 +173,7 @@ class TaskScheduler:
             return set(params.keys())
         # data_collection_manager 还未初始化时，临时加载
         resource_dirs = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resource'),
             os.path.join(os.getcwd(), 'resource'),
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resource'),
         ]
