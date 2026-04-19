@@ -661,6 +661,7 @@ class ImprovedDataCollectionManager:
         # 获取其他MQTT配置
         qos = mqtt_config.get('qos', 1)
         retain = mqtt_config.get('retain', False)
+        publish_interval = mqtt_config.get('publish_interval_ms', 0) / 1000.0
         
         try:
             # 获取结果数据：优先使用调用方传入的 results_data（避免竞争条件）
@@ -724,6 +725,8 @@ class ImprovedDataCollectionManager:
 
                     # 发送数据
                     success = mqtt_client.publish(mqtt_topic, single_record, qos=qos, retain=retain)
+                    if publish_interval > 0:
+                        time.sleep(publish_interval)
 
                     if success:
                         success_count += 1

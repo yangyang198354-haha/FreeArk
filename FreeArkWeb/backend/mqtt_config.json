@@ -7,5 +7,5 @@
   "topic": "/datacollection/plc/to/collector/#",
   "qos": 0,
   "retain": false,
-  "keepalive": 60
+  "keepalive": 120
 }

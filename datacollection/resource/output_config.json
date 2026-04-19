@@ -24,7 +24,8 @@
         "prefix": "/datacollection/plc/to/collector/"
       },
       "qos": 0,
-      "retain": false
+      "retain": false,
+      "publish_interval_ms": 20
     }
   },
   "config_info": {
