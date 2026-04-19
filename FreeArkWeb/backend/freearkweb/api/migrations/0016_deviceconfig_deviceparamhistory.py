@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
             name='DeviceConfig',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('param_name', models.CharField(max_length=100, unique=True, verbose_name='参数名')),
+                ('device_id', models.CharField(max_length=100, unique=True, verbose_name='设备标识')),
                 ('display_name', models.CharField(max_length=200, verbose_name='显示名称')),
                 ('group', models.CharField(db_index=True, max_length=50, verbose_name='设备分组')),
                 ('sub_type', models.CharField(db_index=True, max_length=50, verbose_name='设备子类型')),
@@ -25,14 +25,14 @@ class Migration(migrations.Migration):
                 'verbose_name': '设备配置',
                 'verbose_name_plural': '设备配置',
                 'db_table': 'device_config',
-                'ordering': ['group', 'sub_type', 'param_name'],
+                'ordering': ['group', 'sub_type', 'display_name'],
             },
         ),
         migrations.CreateModel(
             name='DeviceParamHistory',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('specific_part', models.CharField(db_index=True, max_length=50, verbose_name='专有部分')),
+                ('device_id', models.CharField(db_index=True, max_length=100, verbose_name='设备标识')),
                 ('param_name', models.CharField(max_length=100, verbose_name='参数名称')),
                 ('value', models.TextField(blank=True, null=True, verbose_name='参数值')),
                 ('collected_at', models.DateTimeField(db_index=True, verbose_name='采集时间')),
@@ -46,10 +46,10 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='deviceparamhistory',
-            index=models.Index(fields=['specific_part', 'collected_at'], name='dev_hist_sp_cat_idx'),
+            index=models.Index(fields=['device_id', 'collected_at'], name='dev_hist_did_cat_idx'),
         ),
         migrations.AddIndex(
             model_name='deviceparamhistory',
-            index=models.Index(fields=['specific_part', 'param_name', 'collected_at'], name='dev_hist_sp_pn_cat_idx'),
+            index=models.Index(fields=['device_id', 'param_name', 'collected_at'], name='dev_hist_did_pn_cat_idx'),
         ),
     ]
