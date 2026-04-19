@@ -6,6 +6,10 @@
         <p class="page-subtitle">查看PLC设备的连接状态和状态变化历史</p>
       </div>
       <div class="header-right">
+        <el-button type="success" @click="goToDeviceCards">
+          <el-icon><Monitor /></el-icon>
+          设备面板
+        </el-button>
         <el-button type="primary" @click="goBack">
           <el-icon><Back /></el-icon>
           返回列表
@@ -121,13 +125,14 @@
 </template>
 
 <script>
-import { Back } from '@element-plus/icons-vue'
+import { Back, Monitor } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 
 export default {
   name: 'SpecificPartDetailView',
   components: {
-    Back
+    Back,
+    Monitor,
   },
   data() {
     return {
@@ -166,9 +171,12 @@ export default {
     }
   },
   methods: {
-    // 返回列表页
     goBack() {
       this.$router.push('/plc-status')
+    },
+
+    goToDeviceCards() {
+      this.$router.push({ name: 'DeviceCards', query: { specific_part: this.specificPart } })
     },
     
     // 获取设备基本信息

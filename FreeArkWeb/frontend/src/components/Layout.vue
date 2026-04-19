@@ -72,6 +72,11 @@
             <el-icon><House /></el-icon>
             <span>业主管理</span>
           </el-menu-item>
+
+          <el-menu-item index="/device-cards">
+            <el-icon><Monitor /></el-icon>
+            <span>设备面板</span>
+          </el-menu-item>
         </el-menu>
       </aside>
       
@@ -93,7 +98,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 // 导入 Element Plus 图标组件
-import { User, ArrowDown, HomeFilled, Document, Setting, House } from '@element-plus/icons-vue'
+import { User, ArrowDown, HomeFilled, Document, Setting, House, Monitor } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 
 export default {
@@ -104,7 +109,8 @@ export default {
     HomeFilled,
     Document,
     Setting,
-    House
+    House,
+    Monitor,
   },
   setup() {
     const router = useRouter()
