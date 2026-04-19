@@ -9,13 +9,14 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
     UsageQuantityDailySerializer, UsageQuantityMonthlySerializer,
     PLCConnectionStatusSerializer, OwnerInfoSerializer,
     PLCLatestDataParamSerializer,
+    DeviceParamHistorySerializer,
 )
 
 # 获取logger实例
@@ -1197,4 +1198,148 @@ def get_plc_latest_data(request):
     return Response({
         'specific_part': specific_part,
         'params': serializer.data,
+    })
+
+
+# ===========================================================================
+# 非专有部分设备实时参数卡片 API  (REQ-FUNC-033)
+# ===========================================================================
+
+_STALE_THRESHOLD_SECONDS = 600  # 10 分钟
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_device_realtime_params(request):
+    """
+    GET /api/devices/realtime-params/
+    返回非专有部分设备实时参数，按 group -> sub_type -> devices 嵌套结构。
+
+    Query params:
+      group (str, optional) — 过滤指定设备分组（如 hvac）
+    """
+    from datetime import datetime as _dt
+
+    group_filter = request.GET.get('group', '').strip()
+
+    # 查询激活的设备配置
+    configs_qs = DeviceConfig.objects.filter(is_active=True)
+    if group_filter:
+        configs_qs = configs_qs.filter(group=group_filter)
+
+    # 预取所有相关 PLCLatestData（批量查询，避免 N+1）
+    device_ids = list(configs_qs.values_list('device_id', flat=True))
+    latest_data_qs = PLCLatestData.objects.filter(specific_part__in=device_ids)
+
+    # 按 device_id 分组
+    latest_by_device = {}
+    for record in latest_data_qs:
+        did = record.specific_part
+        if did not in latest_by_device:
+            latest_by_device[did] = []
+        latest_by_device[did].append(record)
+
+    # 计算超时阈值时间
+    now = _dt.now()
+
+    # 构建嵌套响应结构
+    result = {}
+    for cfg in configs_qs:
+        group_key = cfg.group
+        sub_key = cfg.sub_type
+
+        if group_key not in result:
+            result[group_key] = {
+                'display': cfg.group_display,
+                'sub_types': {},
+            }
+        if sub_key not in result[group_key]['sub_types']:
+            result[group_key]['sub_types'][sub_key] = {
+                'display': cfg.sub_type_display,
+                'devices': [],
+            }
+
+        # 组装该设备的参数列表
+        records = latest_by_device.get(cfg.device_id, [])
+        params = []
+        for r in sorted(records, key=lambda x: x.param_name):
+            is_stale = False
+            if r.collected_at is None:
+                is_stale = True
+            else:
+                delta = (now - r.collected_at).total_seconds()
+                is_stale = delta > _STALE_THRESHOLD_SECONDS
+
+            params.append({
+                'param_name': r.param_name,
+                'value': r.value,
+                'collected_at': r.collected_at.strftime('%Y-%m-%d %H:%M:%S') if r.collected_at else None,
+                'is_stale': is_stale,
+            })
+
+        result[group_key]['sub_types'][sub_key]['devices'].append({
+            'device_id': cfg.device_id,
+            'name': cfg.display_name,
+            'params': params,
+            'history_url': f'/device-history/{cfg.device_id}',
+        })
+
+    return Response({'success': True, 'data': result})
+
+
+# ===========================================================================
+# 非专有部分设备历史参数查询 API  (REQ-FUNC-034)
+# ===========================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_device_param_history(request, device_id):
+    """
+    GET /api/devices/param-history/<device_id>/
+    返回指定设备的历史参数记录，按 collected_at 倒序分页。
+
+    Query params:
+      param_name  (str, optional)  — 过滤参数名称
+      start_time  (str, optional)  — 开始时间 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD
+      end_time    (str, optional)  — 结束时间 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD
+      page        (int, default 1)
+      page_size   (int, default 50)
+    """
+    param_name = request.GET.get('param_name', '').strip()
+    start_time = request.GET.get('start_time', '').strip()
+    end_time = request.GET.get('end_time', '').strip()
+
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = max(1, min(500, int(request.GET.get('page_size', 50))))
+    except (ValueError, TypeError):
+        page_size = 50
+
+    qs = DeviceParamHistory.objects.filter(device_id=device_id)
+
+    if param_name:
+        qs = qs.filter(param_name=param_name)
+    if start_time:
+        qs = qs.filter(collected_at__gte=start_time)
+    if end_time:
+        qs = qs.filter(collected_at__lte=end_time)
+
+    qs = qs.order_by('-collected_at')
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_qs = qs[start:end]
+
+    serializer = DeviceParamHistorySerializer(page_qs, many=True)
+    return Response({
+        'success': True,
+        'device_id': device_id,
+        'count': total,
+        'page': page,
+        'page_size': page_size,
+        'results': serializer.data,
     })

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, OwnerInfo, PLCLatestData
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory
 
 class UserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
@@ -136,4 +136,26 @@ class PLCLatestDataParamSerializer(serializers.ModelSerializer):
         if obj.collected_at is None:
             return None
         # 返回与 MQTT 消息中 timestamp 字段格式一致的字符串
+        return obj.collected_at.strftime('%Y-%m-%d %H:%M:%S')
+
+
+class DeviceConfigSerializer(serializers.ModelSerializer):
+    """设备配置序列化器（只读）"""
+    class Meta:
+        model = DeviceConfig
+        fields = ['device_id', 'display_name', 'group', 'sub_type', 'group_display', 'sub_type_display', 'is_active']
+        read_only_fields = fields
+
+
+class DeviceParamHistorySerializer(serializers.ModelSerializer):
+    """设备参数历史记录序列化器"""
+    collected_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DeviceParamHistory
+        fields = ['id', 'param_name', 'value', 'collected_at']
+
+    def get_collected_at(self, obj):
+        if obj.collected_at is None:
+            return None
         return obj.collected_at.strftime('%Y-%m-%d %H:%M:%S')

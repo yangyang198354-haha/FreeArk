@@ -304,6 +304,62 @@
 
 ---
 
+### 模块四续：非专有部分设备实时参数卡片
+
+---
+
+#### US-033：运维人员查看非PLC设备实时参数卡片
+
+**作为** 运维人员  
+**我希望** 在一个专属页面以卡片形式查看暖通等系统中没有 PLC 专有部分标识的设备的实时参数  
+**以便** 快速掌握主温控、各房间温控面板、新风机、能耗表、水力模块等设备的当前运行状态
+
+**验收标准（AC）：**
+
+- **Given** 系统已通过 MQTT 收到暖通设备最新参数（如 NTC温度=26.0°C、设备状态=正常、湿度=66.0%）  
+  **When** 运维人员访问设备卡片页面  
+  **Then** 页面按分组（暖通）→ 设备子类型（主温控器 / 温控面板 / 新风 / 能耗表 / 水力模块）展示设备卡片，每张卡片显示该设备的所有最新参数键值对
+
+- **Given** 暖通分组下存在"书房-温控面板"、"次卧-温控面板"、"主卧-温控面板"、"儿童房-温控面板"四台设备  
+  **When** 运维人员查看温控面板子区域  
+  **Then** 四张卡片横向排列展示，每张卡片独立显示 NTC温度、设备状态、凝露提醒、面板露点温度、湿度、开关、温度、设定温度、故障等参数
+
+- **Given** 设备卡片展示的参数  
+  **When** 运维人员点击某张卡片上的"历史数据 >"  
+  **Then** 跳转至该设备的历史参数记录页面，按时间倒序展示历史快照
+
+- **Given** 调用 `GET /api/devices/realtime-params/?group=hvac`  
+  **When** 系统处理请求  
+  **Then** 响应 JSON 按 `group → sub_type → devices[]` 嵌套结构返回，每个 device 包含 `device_id`、`device_name`、`params[]`（含 `name`、`value`、`collected_at`）
+
+- **Given** 某台设备超过 10 分钟未收到 MQTT 数据  
+  **When** 卡片展示该设备  
+  **Then** 参数值旁标注"数据超时"或灰色样式，告知运维人员数据可能过期
+
+---
+
+#### US-034：运维人员查看非PLC设备历史参数记录
+
+**作为** 运维人员  
+**我希望** 查看某台非PLC专有部分设备的历史参数变化记录  
+**以便** 追溯设备运行趋势和故障前状态
+
+**验收标准（AC）：**
+
+- **Given** 设备 `device_id="hvac-fresh-air"` 存在 100 条历史快照  
+  **When** 发送 `GET /api/devices/param-history/hvac-fresh-air/?page=1&page_size=50`  
+  **Then** 响应状态码 200，返回按 `collected_at` 倒序的 50 条记录，`total=100`
+
+- **Given** 使用 `param_name=NTC温度` 过滤  
+  **When** 发送 `GET /api/devices/param-history/hvac-fresh-air/?param_name=NTC温度`  
+  **Then** 只返回 `param_name=NTC温度` 的历史记录
+
+- **Given** 请求一个不存在的 `device_id`  
+  **When** 发送 `GET /api/devices/param-history/nonexistent/`  
+  **Then** 响应状态码 200，`data=[]`，`total=0`（无历史数据，非 404 错误）
+
+---
+
 ### 模块五：数据采集端行为
 
 ---
@@ -474,6 +530,8 @@
 | US-030 | REQ-FUNC-030 |
 | US-031 | REQ-FUNC-031 |
 | US-032 | REQ-FUNC-032 |
+| US-033 | REQ-FUNC-033 |
+| US-034 | REQ-FUNC-034 |
 | US-040 | REQ-DC-001, REQ-DC-002 |
 | US-041 | REQ-SVC-001 |
 | US-050 | REQ-SVC-002 |

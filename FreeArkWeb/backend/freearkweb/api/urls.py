@@ -53,4 +53,9 @@ urlpatterns = [
 
     # PLC 最新参数数据查询接口
     path('plc-latest/', views.get_plc_latest_data, name='get-plc-latest-data'),
+
+    # 非专有部分设备实时参数卡片接口 (REQ-FUNC-033)
+    path('devices/realtime-params/', views.get_device_realtime_params, name='device-realtime-params'),
+    # 非专有部分设备历史参数查询接口 (REQ-FUNC-034)
+    path('devices/param-history/<str:device_id>/', views.get_device_param_history, name='device-param-history'),
 ]

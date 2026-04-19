@@ -78,6 +78,18 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/device-cards',
+    name: 'DeviceCards',
+    component: () => import('../views/DeviceCardsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/device-history/:deviceId',
+    name: 'DeviceParamHistory',
+    component: () => import('../views/DeviceParamHistoryView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

@@ -354,3 +354,58 @@ class PLCLatestData(models.Model):
 
     def __str__(self):
         return f"{self.specific_part} - {self.param_name} = {self.value}"
+
+
+class DeviceConfig(models.Model):
+    """非专有部分设备配置表，定义设备分组和子类型元数据"""
+    # 设备唯一标识，对应 PLCLatestData.specific_part 中存储的自定义 device_id
+    device_id = models.CharField(max_length=100, unique=True, verbose_name='设备标识')
+    # 卡片显示名称，如"书房-温控面板"
+    display_name = models.CharField(max_length=200, verbose_name='显示名称')
+    # 系统分组，如 "hvac"
+    group = models.CharField(max_length=50, verbose_name='设备分组', db_index=True)
+    # 设备子类型，如 "main_thermostat"、"room_panel"
+    sub_type = models.CharField(max_length=50, verbose_name='设备子类型', db_index=True)
+    # 分组中文显示名称，如"暖通"
+    group_display = models.CharField(max_length=100, verbose_name='分组显示名称')
+    # 子类型中文显示名称，如"主温控器"
+    sub_type_display = models.CharField(max_length=100, verbose_name='子类型显示名称')
+    # 是否激活（未激活的设备不出现在卡片面板）
+    is_active = models.BooleanField(default=True, verbose_name='是否激活', db_index=True)
+    # 记录创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+
+    class Meta:
+        db_table = 'device_config'
+        verbose_name = '设备配置'
+        verbose_name_plural = '设备配置'
+        ordering = ['group', 'sub_type', 'display_name']
+
+    def __str__(self):
+        return f"{self.display_name} ({self.device_id})"
+
+
+class DeviceParamHistory(models.Model):
+    """非专有部分设备参数历史记录表（追加写入，时序数据）"""
+    # 设备标识，对应 DeviceConfig.device_id
+    device_id = models.CharField(max_length=100, verbose_name='设备标识', db_index=True)
+    # 参数名称
+    param_name = models.CharField(max_length=100, verbose_name='参数名称')
+    # 参数值（TextField 兼容整数和字符串，如 "正常"、"关闭"、"26.0"）
+    value = models.TextField(null=True, blank=True, verbose_name='参数值')
+    # 采集时间戳（来自 MQTT 消息）
+    collected_at = models.DateTimeField(verbose_name='采集时间', db_index=True)
+    # 记录写入时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='记录创建时间')
+
+    class Meta:
+        db_table = 'device_param_history'
+        verbose_name = '设备参数历史'
+        verbose_name_plural = '设备参数历史'
+        indexes = [
+            models.Index(fields=['device_id', 'collected_at'], name='dev_hist_did_cat_idx'),
+            models.Index(fields=['device_id', 'param_name', 'collected_at'], name='dev_hist_did_pn_cat_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.device_id} - {self.param_name} = {self.value} @ {self.collected_at}"
