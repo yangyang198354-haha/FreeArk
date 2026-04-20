@@ -37,7 +37,7 @@
       <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
 
       <!-- 分组展示 -->
-      <div v-else>
+      <div v-else class="groups-row">
         <div v-for="(groupData, groupKey) in deviceData" :key="groupKey" class="group-section">
           <h3 class="group-title">{{ groupData.display }}</h3>
 
@@ -243,8 +243,20 @@ export default {
   font-size: 14px;
 }
 
+.groups-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 24px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
 .group-section {
-  margin-bottom: 32px;
+  flex: 0 0 auto;
+  min-width: 320px;
+  max-width: 480px;
+  margin-bottom: 0;
 }
 
 .group-title {
@@ -280,7 +292,6 @@ export default {
 .subtype-card {
   border-radius: 8px;
   transition: box-shadow 0.2s;
-  max-width: 600px;
 }
 
 .no-params {

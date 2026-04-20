@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import queue
 import re
 import time
 import threading
@@ -42,10 +43,10 @@ def load_mqtt_config(config_path=MQTT_CONFIG_PATH):
 
 
 class MQTTConsumer:
-    def __init__(self):
+    def __init__(self, num_workers=4, queue_maxsize=2000):
         # 加载MQTT配置
         mqtt_config = load_mqtt_config()
-        
+
         # MQTT配置 - 从配置文件读取，环境变量作为备份
         self.mqtt_broker = os.environ.get('MQTT_BROKER', mqtt_config.get('host', '192.168.31.97'))
         self.mqtt_port = int(os.environ.get('MQTT_PORT', mqtt_config.get('port', 32795)))
@@ -57,32 +58,40 @@ class MQTTConsumer:
         self.qos = mqtt_config.get('qos', 1)
         self.retain = mqtt_config.get('retain', False)
         self.tls_enabled = mqtt_config.get('tls_enabled', False)
-        
+
         # 创建MQTT客户端
         self.client = mqtt.Client(client_id=self.mqtt_client_id, clean_session=True)
-        
+
         # 设置回调函数
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
         self.client.on_log = self.on_log
-        
+
         # 设置用户名和密码
         if self.mqtt_username and self.mqtt_password:
             self.client.username_pw_set(self.mqtt_username, self.mqtt_password)
-        
+
         # 数据库连接维护配置
         self.db_maintenance_interval = 300  # 定期检查数据库连接的间隔（秒）
         self.db_maintenance_thread = None
         self.db_maintenance_running = False
-        
+
         # 初始化消息处理器
         self.handlers = [
             PLCDataHandler(),
             ConnectionStatusHandler(),
             PLCLatestDataHandler(),
         ]
-    
+
+        # --- 异步队列 + Worker 线程池 ---
+        # 有界队列：防止内存无限增长；队列满时丢弃消息并记 WARNING，绝不阻塞网络线程
+        self._msg_queue = queue.Queue(maxsize=queue_maxsize)
+        self._num_workers = num_workers
+        self._worker_threads = []
+        # 停止信号：set() 后 worker 在队列清空时退出
+        self.stop_event = threading.Event()
+
     def on_connect(self, client, userdata, flags, rc):
         """连接到MQTT代理后的回调函数"""
         if rc == 0:
@@ -92,7 +101,7 @@ class MQTTConsumer:
             logger.info(f"已订阅主题: {self.mqtt_topic} (QoS: {self.qos})")
         else:
             logger.error(f"连接到MQTT代理失败，返回代码: {rc}")
-    
+
     def _safe_json_parse(self, json_str):
         """增强的JSON解析功能，专门处理格式错误的JSON字符串"""
         try:
@@ -101,38 +110,38 @@ class MQTTConsumer:
         except json.JSONDecodeError as e:
             logger.error(f"JSON解析错误: {str(e)}，消息内容前200字节: {json_str[:200]}")
             logger.error(f"错误位置上下文: '{json_str[max(0, e.pos-20):e.pos+20]}' (位置: {e.pos})")
-            
+
             # 1. 尝试使用简单的修复方法 - 专注于已知的问题点
             try:
                 # 直接使用手动解析方法，因为这是最可靠的方式
                 # 从日志中我们知道消息格式是相对固定的
-                
+
                 # 提取device_id（格式如"9-1-31-3104"）
                 device_id_match = re.search(r'"([0-9\-]+)"\s*:\s*\{', json_str)
                 if not device_id_match:
                     raise ValueError("无法提取device_id")
                 device_id = device_id_match.group(1)
                 logger.info(f"提取到device_id: {device_id}")
-                
+
                 # 提取PLC IP地址
                 plc_ip_match = re.search(r'"PLC IP地址"\s*:\s*"([^"]*)"', json_str)
                 plc_ip = plc_ip_match.group(1) if plc_ip_match else "未知"
                 logger.debug(f"提取到PLC IP地址: {plc_ip}")
-                
+
                 # 提取total_hot_quantity相关信息
                 hot_value_match = re.search(r'"total_hot_quantity"\s*:\s*\{[^}]*"value"\s*:\s*([^,}]*)', json_str)
                 hot_success_match = re.search(r'"total_hot_quantity"\s*:\s*\{[^}]*"success"\s*:\s*([^,}]*)', json_str)
                 hot_message_match = re.search(r'"total_hot_quantity"\s*:\s*\{[^}]*"message"\s*:\s*"([^"]*)"', json_str)
-                
+
                 # 提取total_cold_quantity相关信息
                 cold_value_match = re.search(r'"total_cold_quantity"\s*:\s*\{[^}]*"value"\s*:\s*([^,}]*)', json_str)
                 cold_success_match = re.search(r'"total_cold_quantity"\s*:\s*\{[^}]*"success"\s*:\s*([^,}]*)', json_str)
                 cold_message_match = re.search(r'"total_cold_quantity"\s*:\s*\{[^}]*"message"\s*:\s*"([^"]*)"', json_str)
-                
+
                 # 提取时间戳
                 timestamp_match = re.search(r'"timestamp"\s*:\s*"([^"]*)"', json_str)
                 timestamp = timestamp_match.group(1) if timestamp_match else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
+
                 # 构建完整的结果字典
                 manual_result = {
                     device_id: {
@@ -140,7 +149,7 @@ class MQTTConsumer:
                         "data": {}
                     }
                 }
-                
+
                 # 添加制热数据
                 if hot_value_match:
                     hot_value = hot_value_match.group(1).strip()
@@ -151,7 +160,7 @@ class MQTTConsumer:
                         "timestamp": timestamp
                     }
                     logger.debug(f"提取到制热数据: value={manual_result[device_id]['data']['total_hot_quantity']['value']}, success={manual_result[device_id]['data']['total_hot_quantity']['success']}")
-                
+
                 # 添加制冷数据
                 if cold_value_match:
                     cold_value = cold_value_match.group(1).strip()
@@ -162,13 +171,13 @@ class MQTTConsumer:
                         "timestamp": timestamp
                     }
                     logger.debug(f"提取到制冷数据: value={manual_result[device_id]['data']['total_cold_quantity']['value']}, success={manual_result[device_id]['data']['total_cold_quantity']['success']}")
-                
+
                 logger.debug("成功通过手动解析构建JSON数据")
                 return manual_result
-                
+
             except Exception as e:
                 logger.error(f"手动解析过程中发生错误: {str(e)}")
-                
+
                 # 作为最后的备选方案，尝试直接从字符串中提取关键信息
                 try:
                     # 最简单的方法：只提取我们真正需要的数据
@@ -189,86 +198,132 @@ class MQTTConsumer:
                         return minimal_result
                 except Exception:
                     logger.error("最小化解析也失败")
-            
+
             # 所有修复尝试都失败
             logger.error("所有JSON解析修复尝试都失败")
             raise
-    
+
+    # ------------------------------------------------------------------
+    # 核心修改：on_message 仅入队，零阻塞网络线程
+    # ------------------------------------------------------------------
     def on_message(self, client, userdata, msg):
-        """收到MQTT消息后的回调函数"""
-        # 主动释放当前线程（paho-mqtt 回调线程）中已过期或已断开的 Django DB 连接。
-        # paho-mqtt 的 loop_start() 在独立线程中回调此方法，Django 的 connection 是
-        # thread-local 的，DB 维护线程保活的是它自己的连接，与本线程无关。
-        # 若不在此处清理，MySQL wait_timeout（默认 8h）过后连接会被服务端断开，
-        # 导致后续所有 ORM 操作静默失败。
+        """收到MQTT消息后的回调函数。
+
+        仅将原始 payload 放入内部队列并立即返回（目标 < 1ms），
+        不执行任何 I/O 或 DB 操作，确保 paho 网络线程不被阻塞，
+        从而能持续发送 PINGREQ，避免 EMQX rc=16 断连。
+        """
+        try:
+            self._msg_queue.put_nowait((msg.topic, msg.payload, msg.qos))
+            logger.debug("消息入队: topic=%s, size=%d bytes", msg.topic, len(msg.payload))
+        except queue.Full:
+            logger.warning("消息队列已满(maxsize=%d)，丢弃消息: topic=%s",
+                           self._msg_queue.maxsize, msg.topic)
+
+    # ------------------------------------------------------------------
+    # 新增：_dispatch — 原 on_message 的解码+解析+分发逻辑，由 worker 调用
+    # ------------------------------------------------------------------
+    def _dispatch(self, topic: str, payload_bytes: bytes):
+        """解码 payload 并调用 process_message，在 worker 线程中执行。"""
+        # 确保本 worker 线程的 DB 连接有效
         close_old_connections()
 
+        logger.info(f"[dispatch] 处理消息: 主题={topic}, 长度={len(payload_bytes)}字节")
+
+        # 解码
+        payload_str = None
         try:
-            logger.info(f"收到消息: 主题={msg.topic}, 长度={len(msg.payload)}字节, QoS={msg.qos}, 保留={msg.retain}")
-            
-            # 先解码消息负载
-            payload_str = None
             try:
-                # 尝试UTF-8解码，如果失败尝试其他编码
-                try:
-                    payload_str = msg.payload.decode('utf-8')
-                except UnicodeDecodeError:
-                    # 尝试Latin-1作为备选编码
-                    payload_str = msg.payload.decode('latin-1')
-                
-                logger.debug(f"消息内容: {payload_str[:500]}{'...' if len(payload_str) > 500 else ''}")
-            except UnicodeDecodeError as e:
-                logger.error(f"消息解码错误: {e}，原始字节: {str(msg.payload[:100])}")
-                return
-            
-            # 使用安全的JSON解析方法
-            try:
-                payload = self._safe_json_parse(payload_str)
-                logger.debug(f"成功解析JSON，数据类型: {type(payload).__name__}")
+                payload_str = payload_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                payload_str = payload_bytes.decode('latin-1')
+            logger.debug(f"消息内容: {payload_str[:500]}{'...' if len(payload_str) > 500 else ''}")
+        except UnicodeDecodeError as e:
+            logger.error(f"消息解码错误: {e}，原始字节: {str(payload_bytes[:100])}")
+            return
 
-                # 解析后记录 device_id 及参数统计
-                if isinstance(payload, dict) and len(payload) == 1:
-                    _dbg_device_id = next(iter(payload))
-                    _dbg_device_info = payload[_dbg_device_id]
-                    if isinstance(_dbg_device_info, dict) and 'data' in _dbg_device_info:
-                        _dbg_params = _dbg_device_info['data']
-                        _dbg_total = len(_dbg_params) if isinstance(_dbg_params, dict) else 0
-                        _dbg_success = sum(
-                            1 for p in _dbg_params.values()
-                            if isinstance(p, dict) and p.get('success')
-                        ) if isinstance(_dbg_params, dict) else 0
-                        _dbg_failed = _dbg_total - _dbg_success
-                        logger.debug(
-                            f"[on_message] payload 解析摘要: device_id={_dbg_device_id}, "
-                            f"param_count={_dbg_total}, success={_dbg_success}, failed={_dbg_failed}"
-                        )
+        # JSON 解析
+        try:
+            payload = self._safe_json_parse(payload_str)
+            logger.debug(f"成功解析JSON，数据类型: {type(payload).__name__}")
 
-                # 处理消息
-                self.process_message(msg.topic, payload)
-                
-            except json.JSONDecodeError as e:
-                # 确保payload_str已定义
-                content_preview = payload_str[:200] if payload_str else "无法解码"
-                logger.error(f"JSON解析错误: {e}，消息内容前200字节: {content_preview}")
-                # 尝试找出错误位置附近的字符
-                error_pos = min(e.pos, len(payload_str)-1) if payload_str and hasattr(e, 'pos') else 0
-                context_start = max(0, error_pos - 20)
-                context_end = min(len(payload_str), error_pos + 20) if payload_str else 0
-                if payload_str:
-                    logger.error(f"错误位置上下文: '{payload_str[context_start:context_end]}' (位置: {error_pos})")
-                    # 记录完整的消息内容用于调试
-                    logger.debug(f"完整消息内容: {payload_str}")
-            
+            # 记录 payload 摘要（与原 on_message 保持一致）
+            if isinstance(payload, dict) and len(payload) == 1:
+                _dbg_device_id = next(iter(payload))
+                _dbg_device_info = payload[_dbg_device_id]
+                if isinstance(_dbg_device_info, dict) and 'data' in _dbg_device_info:
+                    _dbg_params = _dbg_device_info['data']
+                    _dbg_total = len(_dbg_params) if isinstance(_dbg_params, dict) else 0
+                    _dbg_success = sum(
+                        1 for p in _dbg_params.values()
+                        if isinstance(p, dict) and p.get('success')
+                    ) if isinstance(_dbg_params, dict) else 0
+                    _dbg_failed = _dbg_total - _dbg_success
+                    logger.debug(
+                        f"[dispatch] payload 解析摘要: device_id={_dbg_device_id}, "
+                        f"param_count={_dbg_total}, success={_dbg_success}, failed={_dbg_failed}"
+                    )
+
+            # 调用原有的 process_message（含重试 + handler 分发）
+            self.process_message(topic, payload)
+
+        except json.JSONDecodeError as e:
+            content_preview = payload_str[:200] if payload_str else "无法解码"
+            logger.error(f"JSON解析错误: {e}，消息内容前200字节: {content_preview}")
+            error_pos = min(e.pos, len(payload_str) - 1) if payload_str and hasattr(e, 'pos') else 0
+            context_start = max(0, error_pos - 20)
+            context_end = min(len(payload_str), error_pos + 20) if payload_str else 0
+            if payload_str:
+                logger.error(f"错误位置上下文: '{payload_str[context_start:context_end]}' (位置: {error_pos})")
+                logger.debug(f"完整消息内容: {payload_str}")
+
         except Exception as e:
-            logger.error(f"处理消息时发生意外错误: {e}", exc_info=True)
-    
+            logger.error(f"[dispatch] 处理消息时发生意外错误: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # 新增：_worker_loop — worker 线程入口
+    # ------------------------------------------------------------------
+    def _worker_loop(self):
+        """Worker 线程主循环：从队列取消息 → _dispatch → task_done。
+
+        每个 worker 线程持有独立的 Django thread-local DB 连接。
+        stop_event.set() 后，继续消费直到队列清空再退出。
+        """
+        thread_name = threading.current_thread().name
+        # 初始化本线程的 Django DB 连接（thread-local，与其他线程隔离）
+        close_old_connections()
+        logger.info(f"[{thread_name}] Worker 线程启动")
+
+        while not self.stop_event.is_set() or not self._msg_queue.empty():
+            try:
+                topic, payload_bytes, qos = self._msg_queue.get(timeout=1)
+            except queue.Empty:
+                # 超时：重新检查 stop_event
+                continue
+
+            t_start = time.monotonic()
+            try:
+                self._dispatch(topic, payload_bytes)
+            except Exception as e:
+                logger.error(
+                    f"[{thread_name}] 处理消息异常: topic={topic}, error={e}",
+                    exc_info=True
+                )
+            finally:
+                # 无论成功或失败，必须调用 task_done，确保 queue.join() 能正确解除阻塞
+                self._msg_queue.task_done()
+                elapsed_ms = (time.monotonic() - t_start) * 1000
+                logger.info(f"[{thread_name}] 消息处理完成: topic={topic}, 耗时={elapsed_ms:.1f}ms")
+
+        logger.info(f"[{thread_name}] Worker 线程退出")
+
     def on_disconnect(self, client, userdata, rc):
         """与MQTT代理断开连接后的回调函数"""
         if rc != 0:
             logger.warning(f"意外断开与MQTT代理的连接，返回代码: {rc}")
         else:
             logger.info("已断开与MQTT代理的连接")
-    
+
     def on_log(self, client, userdata, level, buf):
         """MQTT日志回调函数"""
         # 可以根据需要调整日志级别
@@ -280,40 +335,40 @@ class MQTTConsumer:
             logger.info(f"MQTT信息: {buf}")
         elif level == mqtt.MQTT_LOG_DEBUG and settings.DEBUG:
             logger.debug(f"MQTT调试: {buf}")
-    
+
     def process_message(self, topic, payload):
         """处理接收到的消息并保存到数据库"""
         logger.debug(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
-        
+
         max_retries = 3  # 最大重试次数
         retry_count = 0
-        
+
         while retry_count <= max_retries:
             try:
                 logger.debug(f" 开始处理消息内容: 主题={topic}, 重试次数={retry_count}")
-                
+
                 # 从topic中提取楼栋文件名（如果存在）
                 building_file = None
                 topic_parts = topic.split('/')
                 logger.debug(f"主题解析: 部分数量={len(topic_parts)}, 内容={topic_parts}")
-                
+
                 if len(topic_parts) > 4:
                     building_file = topic_parts[4]  # 假设格式为 /datacollection/plc/to/collector/[building_file]
                     logger.debug(f"从主题提取楼栋文件名: {building_file}")
-                
+
                 # 使用Handler机制处理消息
                 for handler in self.handlers:
                     try:
                         handler.handle(topic, payload, building_file)
                     except Exception as e:
                         logger.error(f"处理器 {handler.__class__.__name__} 处理消息时发生错误: {e}", exc_info=True)
-                
+
                 # 处理成功
                 logger.info(f"✅ 消息处理完成: 主题={topic}")
                 break  # 成功处理，跳出循环
-                
-            except (MySQLdb.OperationalError, MySQLdb.InterfaceError, 
-                    DjangoOperationalError, ConnectionResetError, 
+
+            except (MySQLdb.OperationalError, MySQLdb.InterfaceError,
+                    DjangoOperationalError, ConnectionResetError,
                     ConnectionAbortedError, BrokenPipeError) as e:
                 error_msg = str(e)
                 logger.error(f"❌ 数据库操作错误: {error_msg}")
@@ -343,20 +398,20 @@ class MQTTConsumer:
                 else:
                     logger.error("❌ 非连接类数据库错误，不重试")
                 break  # 跳出循环
-            
+
             except Exception as e:
                 # 处理其他错误
                 logger.error(f"处理消息时发生错误: {e}", exc_info=True)
                 break  # 跳出循环
-    
+
     def _check_and_reconnect_db(self, with_diagnostic=True):
         """检查数据库连接并在需要时重新连接，增强版包含重试机制和完整连接重置"""
         max_reconnect_attempts = 3  # 保持足够的重试次数
         reconnect_delay = 1  # 保持合适的初始重连延迟
-        
+
         logger.debug(f"开始检查数据库连接状态，当前线程ID: {threading.get_ident()}")
         logger.debug(f"初始连接状态: connection_id={id(django_connection)}")
-        
+
         def is_connection_valid():
             """更彻底地检查连接有效性，包括实际执行SQL查询"""
             try:
@@ -366,7 +421,7 @@ class MQTTConsumer:
                     cursor.execute("SELECT 1")
                     result = cursor.fetchone()
                     logger.debug(f"连接验证查询结果: {result}")
-                    
+
                     # 获取连接ID信息
                     cursor.execute("SELECT CONNECTION_ID()")
                     connection_id = cursor.fetchone()[0]
@@ -376,19 +431,19 @@ class MQTTConsumer:
             except Exception as e:
                 logger.debug(f"连接验证失败: {e}")
                 return False
-        
+
         for attempt in range(max_reconnect_attempts):
             try:
                 if is_connection_valid():
                     return True
-                
+
                 logger.error(f"✗ 数据库连接检查失败 (尝试 {attempt+1}/{max_reconnect_attempts})")
-                
+
                 if attempt == max_reconnect_attempts - 1:
                     # 最后一次尝试失败
                     logger.warning("✗ 所有数据库连接检查尝试都失败，准备强制重建连接")
                     break
-                
+
                 # 等待后重试
                 wait_time = reconnect_delay * (2 ** attempt)
                 logger.debug(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")
@@ -401,7 +456,7 @@ class MQTTConsumer:
                 wait_time = reconnect_delay * (2 ** attempt)
                 logger.debug(f"⏱ 等待 {wait_time} 秒后尝试重新检查数据库连接...")
                 time.sleep(wait_time)
-        
+
         try:
             # 1. 关闭旧连接
             logger.info("🔄 正在关闭旧的数据库连接...")
@@ -409,30 +464,30 @@ class MQTTConsumer:
             logger.debug(f"旧连接ID: {old_connection_id}")
             django_connection.close()
             logger.info(f"✅ 已关闭旧的数据库连接 [ID: {old_connection_id}]")
-            
+
             # 2. 清除连接状态，确保完全重置
             if hasattr(django_connection, '_cursor') and django_connection._cursor:
                 logger.debug("关闭并重置连接游标...")
                 django_connection._cursor.close()
                 django_connection._cursor = None
                 logger.debug("✅ 游标已重置")
-            
+
             # 3. 清除连接池中的其他可能失效连接
             if hasattr(django_connection, '_connections'):
                 conn_count = len(django_connection._connections)
                 django_connection._connections.clear()
                 logger.debug(f"✅ 已清除连接池中的 {conn_count} 个连接")
-            
+
             # 4. 延迟一下，给数据库服务器时间处理连接关闭
             logger.debug("等待数据库服务器处理连接关闭...")
             time.sleep(0.5)
-            
+
             # 5. 尝试重新建立连接
             logger.info("🔄 正在尝试重新建立数据库连接...")
             django_connection.connect()
             new_connection_id = id(django_connection)
             logger.info(f"✅ 数据库连接已成功重新建立 [新ID: {new_connection_id}]")
-            
+
             # 6. 验证新连接是否真正可用
             logger.debug("验证新连接有效性...")
             if is_connection_valid():
@@ -440,13 +495,13 @@ class MQTTConsumer:
             else:
                 logger.error("❌ 新连接验证失败")
                 return False
-            
+
             # 7. 可选的诊断功能（仅在调试模式下或显式请求时启用）
             if with_diagnostic and settings.DEBUG:
                 try:
                     logger.debug("🔍 正在使用原始MySQLdb连接进行诊断...")
                     db_config = settings.DATABASES['default']
-                    
+
                     direct_conn = MySQLdb.connect(
                         host=db_config['HOST'],
                         port=int(db_config['PORT']) if db_config['PORT'] else 3306,
@@ -460,19 +515,19 @@ class MQTTConsumer:
                     logger.debug("✅ 原始MySQLdb连接诊断成功")
                 except Exception as diag_error:
                     logger.debug(f"⚠️ 原始MySQLdb连接诊断失败: {diag_error}")
-            
+
             return True
-            
+
         except Exception as re_conn_error:
             logger.error(f"✗ 数据库重新连接失败: {re_conn_error}", exc_info=True)
-            
+
             # 仅在调试模式下进行详细诊断
             if with_diagnostic and settings.DEBUG:
                 try:
                     logger.debug("🔍 正在进行详细的数据库连接诊断...")
                     from django.conf import settings
                     db_config = settings.DATABASES['default']
-                    
+
                     direct_conn = MySQLdb.connect(
                         host=db_config['HOST'],
                         port=int(db_config['PORT']) if db_config['PORT'] else 3306,
@@ -487,13 +542,13 @@ class MQTTConsumer:
                 except Exception as diag_error:
                     logger.debug(f"⚠️ 原始MySQLdb连接诊断失败: {diag_error}")
                     logger.error("✗ 数据库连接问题可能与网络、认证或数据库服务器配置有关")
-            
+
             return False
-    
+
     def _db_maintenance_thread(self):
         """数据库连接维护线程，定期检查连接可用性"""
         logger.info(f"启动数据库连接维护线程，间隔 {self.db_maintenance_interval} 秒")
-        
+
         while self.db_maintenance_running:
             try:
                 logger.debug("执行定期数据库连接检查...")
@@ -502,82 +557,138 @@ class MQTTConsumer:
                     cursor.execute("SELECT 1")
                     result = cursor.fetchone()
                 logger.debug(f"定期连接检查结果: {result}")
-                
-            except (MySQLdb.OperationalError, MySQLdb.InterfaceError, 
-                    DjangoOperationalError, ConnectionResetError, 
+
+            except (MySQLdb.OperationalError, MySQLdb.InterfaceError,
+                    DjangoOperationalError, ConnectionResetError,
                     ConnectionAbortedError, BrokenPipeError) as e:
                 error_msg = str(e)
                 logger.error(f"定期数据库连接检查失败: {error_msg}")
                 # 尝试重新连接
                 logger.warning("🔄 定期检查发现连接断开，尝试重新连接...")
                 self._check_and_reconnect_db(with_diagnostic=False)
-            
+
             except Exception as e:
                 logger.error(f"定期数据库连接检查发生未知错误: {e}")
-            
+
             # 等待下一次检查
             for _ in range(self.db_maintenance_interval):
                 if not self.db_maintenance_running:
                     break
                 time.sleep(1)
-        
+
         logger.info("数据库连接维护线程已停止")
-    
+
     def connect(self):
         """连接到MQTT代理"""
         try:
             logger.info(f"正在连接到MQTT代理: {self.mqtt_broker}:{self.mqtt_port}")
-            
+
             # 如果启用了TLS，则配置TLS
             if self.tls_enabled:
                 logger.info("启用TLS连接")
                 # 可以根据需要添加ca_certs、certfile、keyfile等参数
                 self.client.tls_set()
-            
+
             # 连接到MQTT代理
             self.client.connect(self.mqtt_broker, self.mqtt_port, self.keepalive)
             return True
         except Exception as e:
             logger.error(f"连接到MQTT代理失败: {e}")
             return False
-    
+
     def start(self):
         """启动MQTT客户端循环"""
         try:
             if not self.connect():
                 return False
-            
+
+            # 重置停止信号（支持重启场景）
+            self.stop_event.clear()
+
+            # 启动 worker 线程（在 paho loop_start 之前，确保 worker 就绪）
+            self._worker_threads = []
+            for i in range(self._num_workers):
+                t = threading.Thread(
+                    target=self._worker_loop,
+                    name=f"mqtt-worker-{i}",
+                    daemon=True,
+                )
+                t.start()
+                self._worker_threads.append(t)
+            logger.info(f"已启动 {self._num_workers} 个 mqtt-worker 线程")
+
             logger.info("启动MQTT客户端循环")
             # 使用loop_start()在后台线程中运行MQTT客户端
             self.client.loop_start()
-            
+
             # 启动数据库连接维护线程
             self.db_maintenance_running = True
-            self.db_maintenance_thread = threading.Thread(target=self._db_maintenance_thread, daemon=True)
+            self.db_maintenance_thread = threading.Thread(
+                target=self._db_maintenance_thread,
+                name="db-maintenance",
+                daemon=True,
+            )
             self.db_maintenance_thread.start()
-            
+
             return True
         except Exception as e:
             logger.error(f"启动MQTT客户端时发生错误: {e}")
             return False
-    
+
     def stop(self):
-        """停止MQTT客户端"""
+        """停止MQTT客户端（优雅关闭）。
+
+        停止顺序：
+        1. 通知 worker 不再接受新消息（stop_event.set）
+        2. 停止 paho 网络线程（不再产生新消息入队）
+        3. 等待队列中剩余消息全部消费完毕（queue.join，最长 30s）
+        4. 等待 worker 线程退出
+        5. 停止 db_maintenance_thread
+        """
         try:
-            logger.info("停止MQTT客户端")
-            # 使用loop_stop()停止后台线程
+            logger.info("开始优雅关闭 MQTT 消费者...")
+
+            # 1. 通知 worker 进入"消费完即退出"模式
+            self.stop_event.set()
+            logger.info("stop_event 已设置，worker 将在队列清空后退出")
+
+            # 2. 停止 paho 网络线程（不再产生新的入队消息）
+            logger.info("停止 paho 网络线程...")
             self.client.loop_stop()
-            # 断开连接
             self.client.disconnect()
-            
-            # 停止数据库连接维护线程
+            logger.info("paho 已停止")
+
+            # 3. 等待队列清空（最长 30s）
+            queue_size = self._msg_queue.qsize()
+            if queue_size > 0:
+                logger.info(f"等待队列中 {queue_size} 条消息处理完毕（最长 30s）...")
+            deadline = time.monotonic() + 30
+            # queue.Queue.join() 在 Python 标准库中无 timeout 参数，
+            # 使用轮询方式实现有界等待
+            while not self._msg_queue.empty() and time.monotonic() < deadline:
+                time.sleep(0.2)
+            if not self._msg_queue.empty():
+                remaining = self._msg_queue.qsize()
+                logger.warning(f"优雅关闭超时(30s)，仍有 {remaining} 条消息未处理，强制退出")
+            else:
+                logger.info("队列已清空，优雅关闭完成")
+
+            # 4. 等待 worker 线程退出
+            for t in self._worker_threads:
+                t.join(timeout=5)
+                if t.is_alive():
+                    logger.warning(f"worker 线程 {t.name} 未在 5s 内退出")
+            logger.info("所有 worker 线程已退出")
+
+            # 5. 停止数据库连接维护线程
             logger.info("停止数据库连接维护线程")
             self.db_maintenance_running = False
             if self.db_maintenance_thread:
-                self.db_maintenance_thread.join(timeout=5)  # 添加超时防止阻塞
+                self.db_maintenance_thread.join(timeout=5)
                 if self.db_maintenance_thread.is_alive():
                     logger.warning("数据库连接维护线程未能在超时内停止")
-            
+
+            logger.info("MQTT 消费者已完全停止")
             return True
         except Exception as e:
             logger.error(f"停止MQTT客户端时发生错误: {e}")
