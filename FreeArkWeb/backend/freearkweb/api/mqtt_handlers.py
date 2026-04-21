@@ -55,19 +55,24 @@ class PLCDataHandler(MessageHandler):
                     
                     for param_key, param_data in device_info['data'].items():
                         if isinstance(param_data, dict):
+                            # 只处理能耗参数，其余参数由 PLCLatestDataHandler 负责
+                            if param_key not in param_to_energy_mode:
+                                logger.debug(f"PLCDataHandler: 跳过非能耗参数: {param_key}")
+                                continue
+
                             success = param_data.get('success', False)
-                            
+
                             # 对于success为false的数据，只记录日志不保存
                             if not success:
                                 message = param_data.get('message', '未知错误')
                                 logger.warning(f"PLCDataHandler: 跳过失败的数据: specific_part={specific_part}, param_key={param_key}, message={message}")
                                 continue
-                            
+
                             # 处理success为true的数据
                             logger.debug(f"PLCDataHandler: 处理数据项: param_key={param_key}, 数据={param_data}")
-                            
+
                             # 映射参数名到energy_mode
-                            energy_mode = param_to_energy_mode.get(param_key, param_key)
+                            energy_mode = param_to_energy_mode[param_key]
                             logger.debug(f"PLCDataHandler: 参数映射: {param_key} -> {energy_mode}")
                             
                             # 构建数据点
@@ -720,7 +725,13 @@ class PLCLatestDataHandler(MessageHandler):
         )
 
         if not records:
-            logger.debug(f"PLCLatestDataHandler: {specific_part} 无有效参数需要写入")
+            if skipped_failed > 0 and valid_count == 0:
+                logger.warning(
+                    f"PLCLatestDataHandler: {specific_part} 所有 {total_params} 个参数均无有效数据 "
+                    f"(excluded={skipped_excluded}, failed={skipped_failed})，本次跳过写入"
+                )
+            else:
+                logger.debug(f"PLCLatestDataHandler: {specific_part} 无有效参数需要写入")
             return
 
         self._bulk_upsert(records)
@@ -743,7 +754,8 @@ class PLCLatestDataHandler(MessageHandler):
             PLCLatestData.objects.bulk_create(
                 objs,
                 update_conflicts=True,
-                update_fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number'],
+                unique_fields=['specific_part', 'param_name'],
+                update_fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number', 'updated_at'],
             )
             logger.debug(f"PLCLatestDataHandler: upsert 完成，共 {len(objs)} 条")
         except Exception as e:
