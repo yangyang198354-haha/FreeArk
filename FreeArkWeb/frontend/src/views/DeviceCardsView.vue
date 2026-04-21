@@ -1,24 +1,6 @@
 <template>
-  <div class="device-cards-container">
-    <div class="page-header">
-      <div class="header-left">
-        <h2>设备实时参数</h2>
-        <p class="page-subtitle" v-if="specificPart">
-          专有部分：{{ specificPart }}
-        </p>
-      </div>
-      <div class="header-right">
-        <el-select v-model="groupFilter" placeholder="全部系统" clearable @change="fetchData" style="width: 160px; margin-right: 12px;">
-          <el-option label="暖通 (HVAC)" value="hvac" />
-        </el-select>
-        <el-button type="primary" :loading="loading" @click="fetchData">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 未选择专有部分时的提示 -->
+  <div class="device-panel">
+    <!-- 无专有部分提示 -->
     <el-alert
       v-if="!specificPart"
       title="请先选择专有部分"
@@ -26,73 +8,80 @@
       type="warning"
       show-icon
       :closable="false"
-      style="margin-bottom: 20px;"
     />
 
     <template v-else>
-      <!-- 加载骨架 -->
-      <el-skeleton :rows="6" animated v-if="loading && !hasData" />
-
-      <!-- 无数据提示 -->
-      <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
-
-      <!-- 分组展示 -->
-      <div v-else class="groups-row">
-        <div v-for="(groupData, groupKey) in deviceData" :key="groupKey" class="group-section">
-          <h3 class="group-title">{{ groupData.display }}</h3>
-
-          <div v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey" class="subtype-section">
-            <div class="subtype-header">
-              <h4 class="subtype-title">{{ subTypeData.display }}</h4>
+      <!-- 顶部导航栏：每个子系统一个标签 + 历史数据链接 -->
+      <div class="panel-nav-bar">
+        <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
+          <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
+            <div class="nav-item">
+              <span class="nav-label">{{ subTypeData.display }}</span>
               <el-button
                 type="primary"
                 link
                 size="small"
+                class="nav-history-btn"
                 @click="goToHistory(subKey, subTypeData.display)"
-              >
-                历史数据 >
-              </el-button>
+              >历史数据 ›</el-button>
             </div>
+            <div class="nav-divider" />
+          </template>
+        </template>
 
-            <!-- 无参数提示 -->
-            <div v-if="subTypeData.params.length === 0" class="no-params">
-              <el-text type="info">暂无参数数据</el-text>
-            </div>
-
-            <!-- 参数键值对列表（卡片形式） -->
-            <el-card v-else class="subtype-card" shadow="hover">
-              <div class="params-list">
-                <div
-                  v-for="param in subTypeData.params"
-                  :key="param.param_name"
-                  class="param-row"
-                >
-                  <span class="param-name">{{ param.display_name || param.param_name }}</span>
-                  <span class="param-value">
-                    {{ param.value !== null && param.value !== undefined ? param.value : '-' }}
-                    <el-tag
-                      v-if="param.is_stale"
-                      type="warning"
-                      size="small"
-                      class="stale-tag"
-                    >数据超时</el-tag>
-                  </span>
-                </div>
-              </div>
-
-              <div class="card-footer">
-                <el-text type="info" size="small">
-                  最后更新: {{ getLastUpdated(subTypeData.params) }}
-                </el-text>
-              </div>
-            </el-card>
-          </div>
-        </div>
+        <el-button
+          type="primary"
+          :loading="loading"
+          size="small"
+          @click="fetchData"
+          class="nav-refresh-btn"
+        >
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
       </div>
 
-      <!-- 自动刷新提示 -->
-      <div class="refresh-tip" v-if="hasData">
-        <el-text type="info" size="small">每 30 秒自动刷新一次</el-text>
+      <!-- 骨架屏 -->
+      <el-skeleton :rows="8" animated v-if="loading && !hasData" style="padding: 16px;" />
+
+      <!-- 无数据 -->
+      <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
+
+      <!-- 横向卡片行：每个 sub_type 一列 -->
+      <div v-else class="cards-scroll-row">
+        <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
+          <div
+            v-for="(subTypeData, subKey) in groupData.sub_types"
+            :key="subKey"
+            class="subtype-col"
+          >
+            <div class="col-header">
+              <span class="col-title">{{ subTypeData.display }}</span>
+            </div>
+            <div class="params-list">
+              <div
+                v-for="param in subTypeData.params"
+                :key="param.param_name"
+                class="param-row"
+              >
+                <span class="param-label">{{ param.display_name }}</span>
+                <span class="param-value" :class="{ 'is-stale': param.is_stale }">
+                  {{ formatValue(param.param_name, param.value) }}
+                  <el-tag
+                    v-if="param.is_stale"
+                    type="warning"
+                    size="small"
+                    class="stale-tag"
+                  >超时</el-tag>
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="panel-footer" v-if="hasData">
+        <el-text type="info" size="small">每 30 秒自动刷新</el-text>
       </div>
     </template>
   </div>
@@ -102,15 +91,55 @@
 import { Refresh } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 
+// 温度字段（int16 ÷10, °C）
+const TEMP_PARAMS = new Set([
+  'living_room_temperature', 'living_room_ntc_temp', 'living_room_dew_point_setting',
+  'study_room_temperature', 'study_room_ntc_temperature', 'study_room_dew_point_setting',
+  'bedroom_temperature', 'bedroom_ntc_temperature', 'bedroom_dew_point_setting',
+  'children_room_temperature', 'children_room_ntc_temperature', 'children_room_dew_point_setting',
+  'fourth_children_room_temperature', 'fourth_children_room_ntc_temperature', 'fourth_children_room_dew_point_setting',
+  'hydraulic_module_inlet_temp', 'hydraulic_module_outlet_temp',
+  'fresh_air_inlet_temp', 'coil_inlet_temp', 'coil_outlet_temp', 'coil_supply_air_temp',
+  'supply_air_temp_setting',
+])
+
+// 湿度字段（int16 ÷10, %）
+const HUMIDITY_PARAMS = new Set([
+  'living_room_humidity', 'study_room_humidity', 'bedroom_humidity',
+  'children_room_humidity', 'fourth_children_room_humidity',
+])
+
+// 开关字段（0→关闭, 1→开启）
+const SWITCH_PARAMS = new Set([
+  'living_room_switch', 'study_room_switch', 'bedroom_switch',
+  'children_room_switch', 'fourth_children_room_switch',
+  'system_switch', 'humidification_switch',
+])
+
+// 故障字段（0→无, 其他→故障）
+const FAULT_PARAMS = new Set([
+  'living_room_temp_sensor_error', 'living_room_humidity_sensor_error',
+  'living_room_external_temp_sensor_error', 'living_room_communication_error',
+  'study_room_temp_sensor_error', 'study_room_humidity_sensor_error',
+  'study_room_external_temp_sensor_error', 'study_room_communication_error',
+  'bedroom_temp_sensor_error', 'bedroom_humidity_sensor_error',
+  'bedroom_external_temp_sensor_error', 'bedroom_communication_error',
+  'children_room_temp_sensor_error', 'children_room_humidity_sensor_error',
+  'children_room_external_temp_sensor_error', 'children_room_communication_error',
+  'fourth_children_room_temp_sensor_error', 'fourth_children_room_humidity_sensor_error',
+  'fourth_children_room_external_temp_sensor_error', 'fourth_children_room_communication_error',
+  'fresh_air_fault_status', 'fresh_air_unit_stop_error', 'fresh_air_unit_communication_error',
+  'hydraulic_module_low_temp_error',
+  'energy_meter_status_communication_error',
+  'air_quality_sensor_communication_error',
+])
+
 export default {
   name: 'DeviceCardsView',
-  components: {
-    Refresh,
-  },
+  components: { Refresh },
   data() {
     return {
       loading: false,
-      groupFilter: '',
       deviceData: {},
       refreshTimer: null,
     }
@@ -147,11 +176,9 @@ export default {
       if (!this.specificPart) return
       this.loading = true
       try {
-        const params = { specific_part: this.specificPart }
-        if (this.groupFilter) {
-          params.group = this.groupFilter
-        }
-        const response = await api.get('/api/devices/realtime-params/', params)
+        const response = await api.get('/api/devices/realtime-params/', {
+          specific_part: this.specificPart,
+        })
         if (response && response.success) {
           this.deviceData = response.data || {}
         } else {
@@ -177,19 +204,82 @@ export default {
       })
     },
 
-    getLastUpdated(params) {
-      const timestamps = params
-        .filter(p => p.collected_at)
-        .map(p => p.collected_at)
-        .sort()
-        .reverse()
-      return timestamps.length > 0 ? timestamps[0] : '-'
+    formatValue(paramName, rawValue) {
+      if (rawValue === null || rawValue === undefined) return '-'
+      const v = Number(rawValue)
+
+      if (TEMP_PARAMS.has(paramName)) {
+        return (v / 10).toFixed(1) + '°C'
+      }
+
+      if (HUMIDITY_PARAMS.has(paramName)) {
+        return (v / 10).toFixed(1) + '%'
+      }
+
+      if (SWITCH_PARAMS.has(paramName)) {
+        return v === 0 ? '关闭' : '开启'
+      }
+
+      if (FAULT_PARAMS.has(paramName)) {
+        return v === 0 ? '无' : '故障(' + v + ')'
+      }
+
+      if (paramName === 'hydraulic_module_valve_opening' || paramName === 'fresh_air_valve_opening') {
+        return (v / 10).toFixed(1)
+      }
+
+      if (paramName === 'filter_alarm_hours_setting' || paramName === 'filter_used_hours') {
+        return v + 'h'
+      }
+
+      if (paramName === 'work_time') {
+        return v + 'h'
+      }
+
+      if (paramName === 'total_hot_quantity' || paramName === 'total_cold_quantity') {
+        return v + 'kw·h'
+      }
+
+      if (paramName === 'co2') {
+        return v + 'ppm'
+      }
+
+      if (paramName === 'pm25') {
+        return v + 'μg/m³'
+      }
+
+      if (paramName === 'humidification_humidity_upper_limit' || paramName === 'humidification_humidity_lower_limit') {
+        return v + '%'
+      }
+
+      if (paramName === 'fan_gear_feedback' || paramName === 'system_air_volume_setting') {
+        const gears = { 0: '低速', 1: '中速', 2: '高速' }
+        return gears[v] !== undefined ? gears[v] : String(v)
+      }
+
+      if (paramName === 'operation_mode') {
+        const modes = { 0: '制冷', 1: '制热', 2: '通风', 3: '除湿' }
+        return modes[v] !== undefined ? modes[v] : String(v)
+      }
+
+      if (paramName === 'central_energy_supply') {
+        return v === 0 ? '无' : '有'
+      }
+
+      if (paramName === 'away_energy_saving') {
+        return v === 0 ? '关闭' : '开启'
+      }
+
+      if (paramName === 'living_room_condensation_alert' ||
+          paramName.endsWith('_condensation_alert')) {
+        return String(v)
+      }
+
+      return String(rawValue)
     },
 
     startAutoRefresh() {
-      this.refreshTimer = setInterval(() => {
-        this.fetchData()
-      }, 30000)
+      this.refreshTimer = setInterval(() => { this.fetchData() }, 30000)
     },
 
     stopAutoRefresh() {
@@ -203,151 +293,145 @@ export default {
 </script>
 
 <style scoped>
-.device-cards-container {
+.device-panel {
   width: 100%;
-  padding: 20px;
   background-color: #f5f7fa;
   min-height: 100vh;
   box-sizing: border-box;
 }
 
-.page-header {
+/* 顶部导航栏 */
+.panel-nav-bar {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: nowrap;
   align-items: center;
-  margin-bottom: 25px;
-  padding-bottom: 15px;
+  gap: 0;
+  background: #fff;
   border-bottom: 1px solid #e4e7ed;
+  padding: 6px 12px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
-.header-left {
-  flex: 1;
-}
-
-.header-right {
-  display: flex;
+.nav-item {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
+  padding: 0 6px;
+  flex-shrink: 0;
 }
 
-.page-header h2 {
-  margin: 0;
+.nav-label {
+  font-size: 13px;
+  font-weight: 500;
   color: #303133;
-  font-size: 22px;
-  font-weight: 600;
 }
 
-.page-subtitle {
-  margin: 8px 0 0 0;
-  color: #909399;
-  font-size: 14px;
+.nav-history-btn {
+  font-size: 12px;
+  padding: 0 2px;
 }
 
-.groups-row {
+.nav-divider {
+  width: 1px;
+  height: 16px;
+  background: #dcdfe6;
+  flex-shrink: 0;
+}
+
+.nav-refresh-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* 横向卡片滚动行 */
+.cards-scroll-row {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 24px;
+  gap: 0;
   overflow-x: auto;
-  padding-bottom: 12px;
+  padding: 12px 12px 16px;
+  align-items: flex-start;
 }
 
-.group-section {
+/* 每个 sub_type 列 */
+.subtype-col {
   flex: 0 0 auto;
-  min-width: 320px;
-  max-width: 480px;
-  margin-bottom: 0;
+  min-width: 160px;
+  max-width: 260px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-right: none;
 }
 
-.group-title {
-  font-size: 18px;
+.subtype-col:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.subtype-col:last-child {
+  border-right: 1px solid #e4e7ed;
+  border-radius: 0 4px 4px 0;
+}
+
+.col-header {
+  padding: 8px 10px 6px;
+  border-bottom: 2px solid #409eff;
+  background: #f0f6ff;
+}
+
+.col-title {
+  font-size: 13px;
   font-weight: 600;
   color: #303133;
-  margin: 0 0 16px 0;
-  padding: 8px 0;
-  border-bottom: 2px solid #409eff;
-  display: inline-block;
+  white-space: nowrap;
 }
 
-.subtype-section {
-  margin-bottom: 24px;
-}
-
-.subtype-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.subtype-title {
-  font-size: 15px;
-  font-weight: 500;
-  color: #606266;
-  margin: 0;
-  padding-left: 10px;
-  border-left: 3px solid #409eff;
-}
-
-.subtype-card {
-  border-radius: 8px;
-  transition: box-shadow 0.2s;
-}
-
-.no-params {
-  padding: 12px 0;
-  text-align: center;
-}
-
+/* 参数列表 */
 .params-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  padding: 4px 0;
 }
 
 .param-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 3px 10px;
   border-bottom: 1px solid #f2f3f5;
-  font-size: 13px;
+  font-size: 12px;
+  min-height: 24px;
 }
 
 .param-row:last-child {
   border-bottom: none;
 }
 
-.param-name {
+.param-label {
   color: #606266;
   flex: 1;
   margin-right: 8px;
-  word-break: break-all;
+  white-space: nowrap;
 }
 
 .param-value {
   font-weight: 500;
   color: #303133;
+  white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: 6px;
-  text-align: right;
+  gap: 4px;
+}
+
+.param-value.is-stale {
+  color: #e6a23c;
 }
 
 .stale-tag {
   flex-shrink: 0;
 }
 
-.card-footer {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid #f2f3f5;
-  text-align: right;
-}
-
-.refresh-tip {
+.panel-footer {
   text-align: center;
-  margin-top: 24px;
-  padding-bottom: 16px;
+  padding: 8px 0 16px;
 }
 </style>
