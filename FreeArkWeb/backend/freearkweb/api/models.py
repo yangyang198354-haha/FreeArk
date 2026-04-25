@@ -358,8 +358,8 @@ class PLCLatestData(models.Model):
 
 class DeviceConfig(models.Model):
     """设备参数分组配置表，定义每个 param_name 属于哪个 group/sub_type"""
-    # PLC 参数名（唯一），与 PLCLatestData.param_name 对应
-    param_name = models.CharField(max_length=100, unique=True, verbose_name='参数名')
+    # PLC 参数名，与 PLCLatestData.param_name 对应；同一参数可出现在多个 sub_type
+    param_name = models.CharField(max_length=100, verbose_name='参数名')
     # 参数在 sub_type 内的显示名，如"客厅温度"（可选，用于前端展示）
     display_name = models.CharField(max_length=200, verbose_name='显示名称')
     # 系统分组，如 "hvac"
@@ -380,6 +380,7 @@ class DeviceConfig(models.Model):
         verbose_name = '设备配置'
         verbose_name_plural = '设备配置'
         ordering = ['group', 'sub_type', 'param_name']
+        unique_together = [['param_name', 'sub_type']]
 
     def __str__(self):
         return f"{self.sub_type_display} - {self.param_name}"

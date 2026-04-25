@@ -702,6 +702,14 @@ HVAC_PARAM_CONFIGS = [
         'sub_type_display': '水力模块',
     },
     {
+        'param_name': 'system_switch',
+        'display_name': '系统开关',
+        'group': 'hvac',
+        'sub_type': 'hydraulic_module',
+        'group_display': '暖通',
+        'sub_type_display': '水力模块',
+    },
+    {
         'param_name': 'hydraulic_module_low_temp_error',
         'display_name': '低温故障',
         'group': 'hvac',
@@ -759,10 +767,10 @@ class Command(BaseCommand):
         for cfg in HVAC_PARAM_CONFIGS:
             obj, created = DeviceConfig.objects.get_or_create(
                 param_name=cfg['param_name'],
+                sub_type=cfg['sub_type'],
                 defaults={
                     'display_name': cfg['display_name'],
                     'group': cfg['group'],
-                    'sub_type': cfg['sub_type'],
                     'group_display': cfg['group_display'],
                     'sub_type_display': cfg['sub_type_display'],
                     'is_active': True,

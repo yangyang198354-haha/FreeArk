@@ -93,11 +93,11 @@ import api from '@/utils/api.js'
 
 // 温度字段（int16 ÷10, °C）
 const TEMP_PARAMS = new Set([
-  'living_room_temperature', 'living_room_ntc_temp', 'living_room_dew_point_setting',
-  'study_room_temperature', 'study_room_ntc_temperature', 'study_room_dew_point_setting',
-  'bedroom_temperature', 'bedroom_ntc_temperature', 'bedroom_dew_point_setting',
-  'children_room_temperature', 'children_room_ntc_temperature', 'children_room_dew_point_setting',
-  'fourth_children_room_temperature', 'fourth_children_room_ntc_temperature', 'fourth_children_room_dew_point_setting',
+  'living_room_temperature', 'living_room_ntc_temp', 'living_room_dew_point_setting', 'living_room_temp_setting',
+  'study_room_temperature', 'study_room_ntc_temperature', 'study_room_dew_point_setting', 'study_room_temp_setting',
+  'bedroom_temperature', 'bedroom_ntc_temperature', 'bedroom_dew_point_setting', 'bedroom_temp_setting',
+  'children_room_temperature', 'children_room_ntc_temperature', 'children_room_dew_point_setting', 'children_room_temp_setting',
+  'fourth_children_room_temperature', 'fourth_children_room_ntc_temperature', 'fourth_children_room_dew_point_setting', 'fourth_children_room_temp_setting',
   'hydraulic_module_inlet_temp', 'hydraulic_module_outlet_temp',
   'fresh_air_inlet_temp', 'coil_inlet_temp', 'coil_outlet_temp', 'coil_supply_air_temp',
   'supply_air_temp_setting',

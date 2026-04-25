@@ -1237,7 +1237,8 @@ def get_device_realtime_params(request):
     latest_by_param = {record.param_name: record for record in latest_data_qs}
 
     # 查询激活的 DeviceConfig（param_name -> group/sub_type 的映射表）
-    configs_qs = DeviceConfig.objects.filter(is_active=True)
+    # order_by('id') 保证子面板顺序与 seed_device_config 插入顺序一致
+    configs_qs = DeviceConfig.objects.filter(is_active=True).order_by('id')
     if group_filter:
         configs_qs = configs_qs.filter(group=group_filter)
 
