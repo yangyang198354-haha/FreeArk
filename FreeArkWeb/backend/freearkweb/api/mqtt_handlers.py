@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from abc import ABC, abstractmethod
-from django.db import transaction
+from django.db import transaction, connection
 from django.utils import timezone
 from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData
 
@@ -751,12 +751,14 @@ class PLCLatestDataHandler(MessageHandler):
         objs = [PLCLatestData(**rec) for rec in keyed.values()]
 
         try:
-            PLCLatestData.objects.bulk_create(
-                objs,
+            # MySQL 不支持 unique_fields（使用表约束自动冲突检测），SQLite/PostgreSQL 需要显式指定
+            kwargs = dict(
                 update_conflicts=True,
-                unique_fields=['specific_part', 'param_name'],
                 update_fields=['value', 'collected_at', 'plc_ip', 'building', 'unit', 'room_number', 'updated_at'],
             )
+            if connection.vendor != 'mysql':
+                kwargs['unique_fields'] = ['specific_part', 'param_name']
+            PLCLatestData.objects.bulk_create(objs, **kwargs)
             logger.debug(f"PLCLatestDataHandler: upsert 完成，共 {len(objs)} 条")
         except Exception as e:
             logger.error(f"PLCLatestDataHandler: 批量 upsert 失败: {e}", exc_info=True)

@@ -42,8 +42,19 @@ def load_mqtt_config(config_path=MQTT_CONFIG_PATH):
         return {}
 
 
+
+# energy 消息 ~580B，general 消息 ~11KB；以 2000B 为分界线路由到不同队列
+_ENERGY_PAYLOAD_MAX_SIZE = 2000
+NUM_ENERGY_WORKERS = 3
+NUM_GENERAL_WORKERS = 6
+# 每个 worker 每处理 N 条消息才调用一次 close_old_connections，避免频繁 MySQL 握手
+_CLOSE_CONN_EVERY_N = 50
+
+
 class MQTTConsumer:
-    def __init__(self, num_workers=4, queue_maxsize=2000):
+    def __init__(self, num_energy_workers=NUM_ENERGY_WORKERS,
+                 num_general_workers=NUM_GENERAL_WORKERS,
+                 queue_maxsize=2000):
         # 加载MQTT配置
         mqtt_config = load_mqtt_config()
 
@@ -77,17 +88,24 @@ class MQTTConsumer:
         self.db_maintenance_thread = None
         self.db_maintenance_running = False
 
-        # 初始化消息处理器
-        self.handlers = [
+        # 消息处理器：energy 消息含连接状态更新，general 消息跳过（节省 ~150ms/条）
+        self.energy_handlers = [
             PLCDataHandler(),
             ConnectionStatusHandler(),
             PLCLatestDataHandler(),
         ]
+        self.general_handlers = [
+            PLCDataHandler(),
+            PLCLatestDataHandler(),
+        ]
 
-        # --- 异步队列 + Worker 线程池 ---
-        # 有界队列：防止内存无限增长；队列满时丢弃消息并记 WARNING，绝不阻塞网络线程
-        self._msg_queue = queue.Queue(maxsize=queue_maxsize)
-        self._num_workers = num_workers
+        # --- 双队列 + 专用 Worker 线程池 ---
+        # energy 队列：小消息（~580B），3 个专用 worker
+        # general 队列：大消息（~11KB），6 个专用 worker，避免被 energy 消息阻塞
+        self._energy_queue = queue.Queue(maxsize=queue_maxsize)
+        self._general_queue = queue.Queue(maxsize=queue_maxsize)
+        self._num_energy_workers = num_energy_workers
+        self._num_general_workers = num_general_workers
         self._worker_threads = []
         # 停止信号：set() 后 worker 在队列清空时退出
         self.stop_event = threading.Event()
@@ -209,25 +227,32 @@ class MQTTConsumer:
     def on_message(self, client, userdata, msg):
         """收到MQTT消息后的回调函数。
 
-        仅将原始 payload 放入内部队列并立即返回（目标 < 1ms），
+        仅将原始 payload 放入对应队列并立即返回（目标 < 1ms），
         不执行任何 I/O 或 DB 操作，确保 paho 网络线程不被阻塞，
         从而能持续发送 PINGREQ，避免 EMQX rc=16 断连。
+
+        路由规则：payload < 2000B → energy_queue，否则 → general_queue。
         """
+        payload_size = len(msg.payload)
+        is_general = payload_size >= _ENERGY_PAYLOAD_MAX_SIZE
+        target_queue = self._general_queue if is_general else self._energy_queue
+        queue_name = 'general' if is_general else 'energy'
         try:
-            self._msg_queue.put_nowait((msg.topic, msg.payload, msg.qos))
-            logger.debug("消息入队: topic=%s, size=%d bytes", msg.topic, len(msg.payload))
+            target_queue.put_nowait((msg.topic, msg.payload, msg.qos))
+            logger.debug("消息入队: topic=%s, size=%d bytes, queue=%s", msg.topic, payload_size, queue_name)
         except queue.Full:
-            logger.warning("消息队列已满(maxsize=%d)，丢弃消息: topic=%s",
-                           self._msg_queue.maxsize, msg.topic)
+            logger.warning("消息队列已满(%s, maxsize=%d)，丢弃消息: topic=%s",
+                           queue_name, target_queue.maxsize, msg.topic)
 
     # ------------------------------------------------------------------
     # 新增：_dispatch — 原 on_message 的解码+解析+分发逻辑，由 worker 调用
     # ------------------------------------------------------------------
-    def _dispatch(self, topic: str, payload_bytes: bytes):
-        """解码 payload 并调用 process_message，在 worker 线程中执行。"""
-        # 确保本 worker 线程的 DB 连接有效
-        close_old_connections()
+    def _dispatch(self, topic: str, payload_bytes: bytes, is_general: bool = False):
+        """解码 payload 并调用 process_message，在 worker 线程中执行。
 
+        close_old_connections/ensure_connection 由调用方 _worker_loop 负责，
+        已在进入此方法前完成，无需在此重复调用。
+        """
         logger.info(f"[dispatch] 处理消息: 主题={topic}, 长度={len(payload_bytes)}字节")
 
         # 解码
@@ -265,7 +290,7 @@ class MQTTConsumer:
                     )
 
             # 调用原有的 process_message（含重试 + handler 分发）
-            self.process_message(topic, payload)
+            self.process_message(topic, payload, is_general=is_general)
 
         except json.JSONDecodeError as e:
             content_preview = payload_str[:200] if payload_str else "无法解码"
@@ -283,35 +308,42 @@ class MQTTConsumer:
     # ------------------------------------------------------------------
     # 新增：_worker_loop — worker 线程入口
     # ------------------------------------------------------------------
-    def _worker_loop(self):
+    def _worker_loop(self, msg_queue: queue.Queue, is_general: bool):
         """Worker 线程主循环：从队列取消息 → _dispatch → task_done。
 
         每个 worker 线程持有独立的 Django thread-local DB 连接。
         stop_event.set() 后，继续消费直到队列清空再退出。
+
+        close_old_connections 降频：每处理 _CLOSE_CONN_EVERY_N 条消息调用一次，
+        避免每条消息都触发 MySQL 握手重建（节省约 10ms/次）。
         """
         thread_name = threading.current_thread().name
-        # 初始化本线程的 Django DB 连接（thread-local，与其他线程隔离）
         close_old_connections()
-        logger.info(f"[{thread_name}] Worker 线程启动")
+        django_connection.ensure_connection()
+        logger.info(f"[{thread_name}] Worker 线程启动 (类型={'general' if is_general else 'energy'})")
 
-        while not self.stop_event.is_set() or not self._msg_queue.empty():
+        msg_counter = 0
+        while not self.stop_event.is_set() or not msg_queue.empty():
             try:
-                topic, payload_bytes, qos = self._msg_queue.get(timeout=1)
+                topic, payload_bytes, qos = msg_queue.get(timeout=1)
             except queue.Empty:
-                # 超时：重新检查 stop_event
                 continue
 
             t_start = time.monotonic()
             try:
-                self._dispatch(topic, payload_bytes)
+                msg_counter += 1
+                if msg_counter % _CLOSE_CONN_EVERY_N == 0:
+                    close_old_connections()
+                django_connection.ensure_connection()
+
+                self._dispatch(topic, payload_bytes, is_general=is_general)
             except Exception as e:
                 logger.error(
                     f"[{thread_name}] 处理消息异常: topic={topic}, error={e}",
                     exc_info=True
                 )
             finally:
-                # 无论成功或失败，必须调用 task_done，确保 queue.join() 能正确解除阻塞
-                self._msg_queue.task_done()
+                msg_queue.task_done()
                 elapsed_ms = (time.monotonic() - t_start) * 1000
                 logger.info(f"[{thread_name}] 消息处理完成: topic={topic}, 耗时={elapsed_ms:.1f}ms")
 
@@ -336,9 +368,12 @@ class MQTTConsumer:
         elif level == mqtt.MQTT_LOG_DEBUG and settings.DEBUG:
             logger.debug(f"MQTT调试: {buf}")
 
-    def process_message(self, topic, payload):
+    def process_message(self, topic, payload, is_general: bool = False):
         """处理接收到的消息并保存到数据库"""
         logger.debug(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
+
+        # general 消息跳过 ConnectionStatusHandler，节省约 150ms/条
+        handlers = self.general_handlers if is_general else self.energy_handlers
 
         max_retries = 3  # 最大重试次数
         retry_count = 0
@@ -357,7 +392,7 @@ class MQTTConsumer:
                     logger.debug(f"从主题提取楼栋文件名: {building_file}")
 
                 # 使用Handler机制处理消息
-                for handler in self.handlers:
+                for handler in handlers:
                     try:
                         handler.handle(topic, payload, building_file)
                     except Exception as e:
@@ -607,15 +642,28 @@ class MQTTConsumer:
 
             # 启动 worker 线程（在 paho loop_start 之前，确保 worker 就绪）
             self._worker_threads = []
-            for i in range(self._num_workers):
+            for i in range(self._num_energy_workers):
                 t = threading.Thread(
                     target=self._worker_loop,
-                    name=f"mqtt-worker-{i}",
+                    args=(self._energy_queue, False),
+                    name=f"mqtt-energy-worker-{i}",
                     daemon=True,
                 )
                 t.start()
                 self._worker_threads.append(t)
-            logger.info(f"已启动 {self._num_workers} 个 mqtt-worker 线程")
+            for i in range(self._num_general_workers):
+                t = threading.Thread(
+                    target=self._worker_loop,
+                    args=(self._general_queue, True),
+                    name=f"mqtt-general-worker-{i}",
+                    daemon=True,
+                )
+                t.start()
+                self._worker_threads.append(t)
+            logger.info(
+                f"已启动 {self._num_energy_workers} 个 energy worker + "
+                f"{self._num_general_workers} 个 general worker"
+            )
 
             logger.info("启动MQTT客户端循环")
             # 使用loop_start()在后台线程中运行MQTT客户端
@@ -658,17 +706,19 @@ class MQTTConsumer:
             self.client.disconnect()
             logger.info("paho 已停止")
 
-            # 3. 等待队列清空（最长 30s）
-            queue_size = self._msg_queue.qsize()
-            if queue_size > 0:
-                logger.info(f"等待队列中 {queue_size} 条消息处理完毕（最长 30s）...")
+            # 3. 等待两个队列均清空（最长 30s）
+            energy_size = self._energy_queue.qsize()
+            general_size = self._general_queue.qsize()
+            if energy_size + general_size > 0:
+                logger.info(
+                    f"等待队列消息处理完毕（energy={energy_size}, general={general_size}，最长 30s）..."
+                )
             deadline = time.monotonic() + 30
-            # queue.Queue.join() 在 Python 标准库中无 timeout 参数，
-            # 使用轮询方式实现有界等待
-            while not self._msg_queue.empty() and time.monotonic() < deadline:
+            while (not self._energy_queue.empty() or not self._general_queue.empty()) \
+                    and time.monotonic() < deadline:
                 time.sleep(0.2)
-            if not self._msg_queue.empty():
-                remaining = self._msg_queue.qsize()
+            remaining = self._energy_queue.qsize() + self._general_queue.qsize()
+            if remaining > 0:
                 logger.warning(f"优雅关闭超时(30s)，仍有 {remaining} 条消息未处理，强制退出")
             else:
                 logger.info("队列已清空，优雅关闭完成")

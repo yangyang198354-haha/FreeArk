@@ -729,6 +729,58 @@ class PLCDataHandlerTest(TestCase):
         cold = PLCData.objects.get(specific_part="3-1-7-702", energy_mode="制冷")
         self.assertEqual(cold.value, 9999)
 
+    def test_non_energy_params_are_excluded_from_plc_data(self):
+        """
+        非能耗参数（白名单之外）不得写入 PLCData 表。
+
+        Given: MQTT 消息同时包含能耗参数（total_cold_quantity）和通用参数
+               （living_room_temperature、living_room_switch）
+        When:  PLCDataHandler.handle() 被调用
+        Then:  PLCData 表只有 1 条记录（制冷），通用参数未被写入，
+               energy_mode 字段不出现参数名本身（历史脏数据的根因）
+        """
+        payload = {
+            "3-1-7-702": {
+                "PLC IP地址": "192.168.1.1",
+                "data": {
+                    "total_cold_quantity": {
+                        "success": True,
+                        "value": 5000,
+                        "message": "ok",
+                        "timestamp": self.today.strftime("%Y-%m-%d") + " 10:00:00",
+                    },
+                    "living_room_temperature": {
+                        "success": True,
+                        "value": 245,
+                        "message": "ok",
+                        "timestamp": self.today.strftime("%Y-%m-%d") + " 10:00:00",
+                    },
+                    "living_room_switch": {
+                        "success": True,
+                        "value": 1,
+                        "message": "ok",
+                        "timestamp": self.today.strftime("%Y-%m-%d") + " 10:00:00",
+                    },
+                }
+            }
+        }
+        topic = "/datacollection/plc/to/collector/3#"
+        self.handler.handle(topic, payload)
+
+        # 只有 total_cold_quantity 写入 PLCData（1 条，energy_mode='制冷'）
+        self.assertEqual(PLCData.objects.count(), 1)
+        record = PLCData.objects.get()
+        self.assertEqual(record.energy_mode, "制冷")
+        self.assertEqual(record.value, 5000)
+
+        # 通用参数名不能出现在 energy_mode 字段中（历史脏数据的根因验证）
+        self.assertFalse(
+            PLCData.objects.filter(energy_mode="living_room_temperature").exists()
+        )
+        self.assertFalse(
+            PLCData.objects.filter(energy_mode="living_room_switch").exists()
+        )
+
 
 class ConnectionStatusHandlerTest(TestCase):
     """ConnectionStatusHandler 测试"""

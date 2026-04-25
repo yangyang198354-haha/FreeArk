@@ -417,10 +417,16 @@ LOGGING = {
             'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
-        # api.mqtt_consumer 专属日志文件（同时保留 console）
+        # api.mqtt_consumer 专属日志文件（级别固定 INFO，防止 DEBUG 日志淹没 journald）
         'api.mqtt_consumer': {
             'handlers': ['console', 'mqtt_consumer_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # api.mqtt_handlers 级别固定 INFO（general 消息每条产生 200+ 行 DEBUG，严重拖慢性能）
+        'api.mqtt_handlers': {
+            'handlers': ['console', 'mqtt_consumer_log'],
+            'level': 'INFO',
             'propagate': False,
         },
         # 后台服务日志器（各自写专属文件，同时在 DEBUG 模式下输出控制台）
