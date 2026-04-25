@@ -285,6 +285,7 @@ UsageQuantityMonthly 表
   - 响应格式：按分组 → 子类型 → 设备列表嵌套的 JSON
 - 后端数据来源：MQTT 消息写入 `PLCLatestData`（设备标识可使用自定义 `device_id`，不强制遵从 `C-002` 格式）
 - 卡片展示的参数支持动态配置（不硬编码参数名），以适应不同设备类型
+- `PLCLatestDataHandler` 不得排除任何参数，包括 `total_hot_quantity`（累计制热量）和 `total_cold_quantity`（累计制冷量）——这两个参数同时由 `PLCDataHandler` 写入能耗统计表，两个路径并行互不干扰；能耗表子面板须展示这两个参数
 
 #### REQ-FUNC-034：非专有部分设备历史参数查询
 - 接口：`GET /api/devices/param-history/<device_id>/`

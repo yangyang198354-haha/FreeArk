@@ -336,6 +336,10 @@
   **When** 卡片展示该设备  
   **Then** 参数值旁标注"数据超时"或灰色样式，告知运维人员数据可能过期
 
+- **Given** MQTT 消息中携带 `total_hot_quantity`（累计制热量）和 `total_cold_quantity`（累计制冷量）  
+  **When** `PLCLatestDataHandler` 处理该消息  
+  **Then** 两个参数写入 `PLCLatestData`，不被排除；能耗表子面板显示"累计制热量"和"累计制冷量"两行，格式为原始值加 `kw·h` 单位
+
 ---
 
 #### US-034：运维人员查看非PLC设备历史参数记录

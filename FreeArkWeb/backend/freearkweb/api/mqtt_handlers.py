@@ -592,8 +592,10 @@ class ConnectionStatusHandler(MessageHandler):
             logger.error(f"ConnectionStatusHandler: 更新连接状态失败 - {specific_part}: {e}", exc_info=True)
 
 
-# 不写入 PLCLatestData 的参数（由 PLCDataHandler 处理）
-_EXCLUDED_PARAMS = frozenset({'total_hot_quantity', 'total_cold_quantity'})
+# 不写入 PLCLatestData 的参数（当前无排除项）
+# 注：total_hot_quantity / total_cold_quantity 同时由 PLCDataHandler 写能耗表、
+#     由 PLCLatestDataHandler 写 PLCLatestData，两个路径并行互不干扰。
+_EXCLUDED_PARAMS = frozenset()
 
 # 支持的时间戳格式
 _TIMESTAMP_FORMATS = (
@@ -631,7 +633,7 @@ def _parse_building_parts(specific_part):
 class PLCLatestDataHandler(MessageHandler):
     """处理 MQTT PLC 消息，将各参数最新值 upsert 到 PLCLatestData 表。
 
-    - 排除 total_hot_quantity / total_cold_quantity（由 PLCDataHandler 负责）
+    - total_hot_quantity / total_cold_quantity 同时也由 PLCDataHandler 写能耗表，此处照常写入
     - success=false 的参数丢弃，不写入
     - 以 (specific_part, param_name) 为唯一键执行 update-or-create
     """

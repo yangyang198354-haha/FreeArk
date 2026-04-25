@@ -100,12 +100,12 @@ class TestDeviceConfigModel(TestCase):
         self.assertEqual(cfg.sub_type, 'main_thermostat')
         self.assertTrue(cfg.is_active)
 
-    # GWT-DC-02: param_name 唯一约束
-    def test_param_name_unique_constraint(self):
+    # GWT-DC-02: (param_name, sub_type) 联合唯一约束
+    def test_param_name_sub_type_unique_constraint(self):
         """
-        Given: 已存在 param_name='living_room_temperature' 的配置
-        When:  尝试创建相同 param_name 的第二条记录
-        Then:  抛出 IntegrityError（唯一约束违反）
+        Given: 已存在 param_name='living_room_temperature', sub_type='main_thermostat' 的配置
+        When:  尝试创建相同 (param_name, sub_type) 的第二条记录
+        Then:  抛出 IntegrityError（联合唯一约束违反）
         """
         make_device_config()
         from django.db import IntegrityError
@@ -118,6 +118,25 @@ class TestDeviceConfigModel(TestCase):
                 group_display='暖通',
                 sub_type_display='主温控器',
             )
+
+    # GWT-DC-06: 同一 param_name 可出现在不同 sub_type（系统开关双面板场景）
+    def test_same_param_in_different_subtypes(self):
+        """
+        Given: param_name='system_switch' 已在 main_thermostat 下配置
+        When:  在 hydraulic_module 下创建相同 param_name 的配置
+        Then:  成功创建，两条记录共存（(param_name, sub_type) 联合唯一，不同 sub_type 不冲突）
+        """
+        make_device_config(param_name='system_switch', sub_type='main_thermostat',
+                           display_name='系统开关')
+        DeviceConfig.objects.create(
+            param_name='system_switch',
+            display_name='系统开关',
+            group='hvac',
+            sub_type='hydraulic_module',
+            group_display='暖通',
+            sub_type_display='水力模块',
+        )
+        self.assertEqual(DeviceConfig.objects.filter(param_name='system_switch').count(), 2)
 
     # GWT-DC-03: is_active 默认为 True
     def test_is_active_default_true(self):
@@ -469,6 +488,48 @@ class TestDeviceRealtimeParamsAPI(TestCase):
         # control sub_type 应不存在（因为 params 为空被过滤掉）
         control = data.get('hvac', {}).get('sub_types', {}).get('control')
         self.assertIsNone(control)
+
+    # GWT-API-13: 能耗表参数（total_hot_quantity / total_cold_quantity）出现在设备面板
+    def test_energy_meter_params_in_device_panel(self):
+        """
+        Given: total_hot_quantity / total_cold_quantity 已写入 PLCLatestData，
+               DeviceConfig 已将两个参数配置到 energy_meter 子类型
+        When:  GET /api/devices/realtime-params/?specific_part=9-1-31-3104
+        Then:  energy_meter.params 中包含两个参数，值正确，is_stale=False
+        """
+        make_device_config(
+            param_name='total_hot_quantity',
+            display_name='累计制热量',
+            group='hvac',
+            sub_type='energy_meter',
+            group_display='暖通',
+            sub_type_display='能耗表',
+        )
+        make_device_config(
+            param_name='total_cold_quantity',
+            display_name='累计制冷量',
+            group='hvac',
+            sub_type='energy_meter',
+            group_display='暖通',
+            sub_type_display='能耗表',
+        )
+        now_fresh = datetime.now() - timedelta(minutes=5)
+        make_plc_latest(SPECIFIC_PART, 'total_hot_quantity', 9455, now_fresh)
+        make_plc_latest(SPECIFIC_PART, 'total_cold_quantity', 11726, now_fresh)
+
+        resp = self.client.get('/api/devices/realtime-params/', {'specific_part': SPECIFIC_PART})
+        self.assertEqual(resp.status_code, 200)
+        energy_meter = (resp.json()['data']
+                        .get('hvac', {})
+                        .get('sub_types', {})
+                        .get('energy_meter', {}))
+        self.assertIn('params', energy_meter)
+        param_names = {p['param_name'] for p in energy_meter['params']}
+        self.assertIn('total_hot_quantity', param_names)
+        self.assertIn('total_cold_quantity', param_names)
+        hot = next(p for p in energy_meter['params'] if p['param_name'] == 'total_hot_quantity')
+        self.assertEqual(str(hot['value']), '9455')
+        self.assertFalse(hot['is_stale'])
 
     # GWT-API-12: 未认证用户可以访问（AllowAny）
     def test_unauthenticated_access_allowed(self):
