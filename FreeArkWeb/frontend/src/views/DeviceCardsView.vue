@@ -128,7 +128,7 @@ const FAULT_PARAMS = new Set([
   'children_room_external_temp_sensor_error', 'children_room_communication_error',
   'fourth_children_room_temp_sensor_error', 'fourth_children_room_humidity_sensor_error',
   'fourth_children_room_external_temp_sensor_error', 'fourth_children_room_communication_error',
-  'fresh_air_fault_status', 'fresh_air_unit_stop_error', 'fresh_air_unit_communication_error',
+  'fresh_air_unit_stop_error', 'fresh_air_unit_communication_error',
   'hydraulic_module_low_temp_error',
   'energy_meter_status_communication_error',
   'air_quality_sensor_communication_error',
@@ -218,6 +218,13 @@ export default {
 
       if (SWITCH_PARAMS.has(paramName)) {
         return v === 0 ? '关闭' : '开启'
+      }
+
+      if (paramName === 'fresh_air_fault_status') {
+        if (v === 0) return '无'
+        const BITS = ['风机状态故障','出风温度异常','进风温度传感器故障','回水温度传感器故障',
+          '进水温度传感器故障','加湿器故障','新风水阀故障','防冻保护故障','出风温度传感器故障']
+        return BITS.filter((_, i) => v & (1 << i)).join(' | ') || '故障(' + v + ')'
       }
 
       if (FAULT_PARAMS.has(paramName)) {

@@ -103,12 +103,12 @@ class TestPLCLatestDataHandlerBasic(TestCase):
             PLCLatestData.objects.filter(specific_part=DEVICE, param_name='living_room_switch').exists()
         )
 
-    # GWT-03: 排除 total_hot_quantity / total_cold_quantity
-    def test_excluded_params_not_written(self):
+    # GWT-03: total_hot_quantity / total_cold_quantity 写入 PLCLatestData
+    def test_energy_params_written_to_latest(self):
         """
         Given: MQTT 消息包含 total_hot_quantity 和 total_cold_quantity（success=true）
         When:  handler.handle() 被调用
-        Then:  PLCLatestData 表中不存在这两个参数
+        Then:  PLCLatestData 表中存在这两个参数（_EXCLUDED_PARAMS 为空集，能耗表参数不再排除）
         """
         payload = _make_payload(DEVICE, {
             'total_hot_quantity': (12345, True, TS),
@@ -116,13 +116,13 @@ class TestPLCLatestDataHandlerBasic(TestCase):
             'living_room_temperature': (245, True, TS),
         })
         self.handler.handle('/datacollection/plc/to/collector/' + DEVICE, payload)
-        self.assertFalse(
+        self.assertTrue(
             PLCLatestData.objects.filter(param_name='total_hot_quantity').exists()
         )
-        self.assertFalse(
+        self.assertTrue(
             PLCLatestData.objects.filter(param_name='total_cold_quantity').exists()
         )
-        self.assertEqual(PLCLatestData.objects.filter(specific_part=DEVICE).count(), 1)
+        self.assertEqual(PLCLatestData.objects.filter(specific_part=DEVICE).count(), 3)
 
     # GWT-04: upsert 逻辑——重复写入应更新而不新增
     def test_upsert_updates_existing_record(self):
