@@ -33,7 +33,7 @@
             <div class="nav-item">
               <span class="nav-label">{{ subTypeData.display }}</span>
               <el-button
-                v-if="['main_thermostat', 'fresh_air'].includes(subKey)"
+                v-if="['main_thermostat', 'fresh_air', 'energy_meter', 'hydraulic_module'].includes(subKey)"
                 type="primary"
                 link
                 size="small"

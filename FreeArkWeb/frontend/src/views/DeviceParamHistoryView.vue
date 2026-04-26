@@ -112,10 +112,23 @@ const SUB_TYPE_PARAMS = {
     ],
   },
   energy_meter: {
-    maxSelect: 2,
+    maxSelect: 3,
+    defaultSelect: 2,
     params: [
-      { label: '总热量', param: 'total_hot_quantity',  unit: 'kW·h' },
-      { label: '总冷量', param: 'total_cold_quantity', unit: 'kW·h' },
+      { label: '累计热量', param: 'total_hot_quantity',  unit: 'kW·h' },
+      { label: '累计冷量', param: 'total_cold_quantity', unit: 'kW·h' },
+      { label: '工作时间', param: 'work_time',           unit: 'h' },
+    ],
+  },
+  hydraulic_module: {
+    maxSelect: 4,
+    params: [
+      { label: '模式',         param: 'operation_mode',               unit: '', isEnum: true, enumMap: { 0: '制冷', 1: '制热', 2: '通风', 3: '除湿' } },
+      { label: '系统开关',     param: 'system_switch',                unit: '', isSwitch: true },
+      { label: '离家节能',     param: 'away_energy_saving',           unit: '', isSwitch: true },
+      { label: '出水温度',     param: 'hydraulic_module_outlet_temp', unit: '°C', scale: 0.1 },
+      { label: '进水温度',     param: 'hydraulic_module_inlet_temp',  unit: '°C', scale: 0.1 },
+      { label: '阀门开度',     param: 'hydraulic_module_valve_opening', unit: '', scale: 0.1 },
     ],
   },
 }
@@ -157,7 +170,8 @@ export default {
   },
 
   mounted() {
-    this.selectedParams = this.availableParams.slice(0, this.maxSelect).map(p => p.param)
+    const n = this.subTypeDef.defaultSelect ?? this.maxSelect
+    this.selectedParams = this.availableParams.slice(0, n).map(p => p.param)
     this.handleQuery()
   },
 
@@ -217,7 +231,8 @@ export default {
     },
 
     handleReset() {
-      this.selectedParams = this.availableParams.slice(0, this.maxSelect).map(p => p.param)
+      const n = this.subTypeDef.defaultSelect ?? this.maxSelect
+      this.selectedParams = this.availableParams.slice(0, n).map(p => p.param)
       this.dateRange = defaultDateRange()
       this.chartData = {}
       this.queried = false
@@ -239,6 +254,7 @@ export default {
           const def = this.getParamDef(param)
           const v = Number(rec.value)
           if (def.isSwitch) row.push(v === 0 ? '关闭' : '开启')
+          else if (def.isEnum) row.push(def.enumMap[v] ?? String(v))
           else if (def.scale) row.push(+(v * def.scale).toFixed(1))
           else row.push(v)
         }
@@ -271,22 +287,32 @@ export default {
     },
 
     buildOption(def, rawData) {
+      const isDiscrete = def.isSwitch || def.isEnum
       const seriesData = rawData.map(r => {
         const v = Number(r.value)
-        const y = def.isSwitch ? v : (def.scale ? +(v * def.scale).toFixed(2) : v)
+        const y = isDiscrete ? v : (def.scale ? +(v * def.scale).toFixed(2) : v)
         return [r.collected_at, y]
       })
 
-      const yAxis = def.isSwitch
-        ? {
-            type: 'value',
-            min: 0, max: 1, interval: 1,
-            axisLabel: { formatter: v => v === 0 ? '关闭' : '开启' },
-          }
-        : {
-            type: 'value',
-            axisLabel: { formatter: v => v + (def.unit ? ' ' + def.unit : '') },
-          }
+      let yAxis
+      if (def.isSwitch) {
+        yAxis = {
+          type: 'value', min: 0, max: 1, interval: 1,
+          axisLabel: { formatter: v => v === 0 ? '关闭' : '开启' },
+        }
+      } else if (def.isEnum) {
+        const keys = Object.keys(def.enumMap).map(Number)
+        yAxis = {
+          type: 'value',
+          min: Math.min(...keys), max: Math.max(...keys), interval: 1,
+          axisLabel: { formatter: v => def.enumMap[v] ?? String(v) },
+        }
+      } else {
+        yAxis = {
+          type: 'value',
+          axisLabel: { formatter: v => v + (def.unit ? ' ' + def.unit : '') },
+        }
+      }
 
       return {
         grid: { left: 72, right: 24, top: 20, bottom: 60 },
@@ -304,8 +330,8 @@ export default {
         series: [{
           type: 'line',
           data: seriesData,
-          smooth: !def.isSwitch,
-          step: def.isSwitch ? 'end' : false,
+          smooth: !isDiscrete,
+          step: isDiscrete ? 'end' : false,
           symbol: 'none',
           lineStyle: { color: '#00b4a6', width: 2 },
           areaStyle: {
@@ -329,7 +355,9 @@ export default {
             const v = p.value[1]
             const vStr = def.isSwitch
               ? (v === 0 ? '关闭' : '开启')
-              : v.toFixed(def.scale ? 1 : 0) + (def.unit ? ' ' + def.unit : '')
+              : def.isEnum
+                ? (def.enumMap[v] ?? String(v))
+                : v.toFixed(def.scale ? 1 : 0) + (def.unit ? ' ' + def.unit : '')
             return `${t}<br/>${def.label}: <b>${vStr}</b>`
           },
         },
