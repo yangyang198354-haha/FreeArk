@@ -15,10 +15,10 @@
       <div class="panel-nav-bar">
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
           <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
-            <!-- 在第一个房间子面板前插入"房间面板"历史入口 -->
+            <!-- 在第一个房间子面板前插入"温控面板"历史入口 -->
             <template v-if="subKey === 'study_room'">
               <div class="nav-item">
-                <span class="nav-label">房间面板</span>
+                <span class="nav-label">温控面板</span>
                 <el-button
                   type="primary"
                   link
@@ -80,7 +80,7 @@
                 :key="param.param_name"
                 class="param-row"
               >
-                <span class="param-label">{{ param.display_name }}</span>
+                <span class="param-label" :title="param.display_name">{{ param.display_name }}</span>
                 <span class="param-value" :class="{ 'is-stale': param.is_stale }">
                   {{ formatValue(param.param_name, param.value) }}
                   <el-tag
@@ -410,12 +410,12 @@ export default {
 
 /* 每个 sub_type 列 */
 .subtype-col {
-  flex: 0 0 auto;
-  min-width: 160px;
-  max-width: 260px;
+  flex: 0 0 178px;
+  width: 178px;
   background: #fff;
   border: 1px solid #e4e7ed;
   border-right: none;
+  overflow: hidden;
 }
 
 .subtype-col:first-child {
@@ -428,16 +428,20 @@ export default {
 }
 
 .col-header {
-  padding: 8px 10px 6px;
+  padding: 7px 8px 5px;
   border-bottom: 2px solid #409eff;
   background: #f0f6ff;
+  overflow: hidden;
 }
 
 .col-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #303133;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 /* 参数列表 */
@@ -449,7 +453,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border-bottom: 1px solid #f2f3f5;
   font-size: 12px;
   min-height: 24px;
@@ -459,11 +463,18 @@ export default {
   border-bottom: none;
 }
 
+.param-row:nth-child(even) {
+  background-color: #f9fafb;
+}
+
 .param-label {
   color: #606266;
   flex: 1;
-  margin-right: 8px;
+  min-width: 0;
+  margin-right: 6px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .param-value {
