@@ -93,6 +93,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // specific_part 通过 query param 传入
+    path: '/room-history',
+    name: 'RoomHistory',
+    component: () => import('../views/RoomHistoryView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

@@ -15,10 +15,25 @@
       <div class="panel-nav-bar">
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
           <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
+            <!-- 在第一个房间子面板前插入"房间面板"历史入口 -->
+            <template v-if="subKey === 'study_room'">
+              <div class="nav-item">
+                <span class="nav-label">房间面板</span>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  class="nav-history-btn"
+                  @click="goToRoomHistory"
+                >历史数据 ›</el-button>
+              </div>
+              <div class="nav-divider" />
+            </template>
+
             <div class="nav-item">
               <span class="nav-label">{{ subTypeData.display }}</span>
               <el-button
-                v-if="['main_thermostat', 'fresh_air', 'energy_meter'].includes(subKey)"
+                v-if="['main_thermostat', 'fresh_air'].includes(subKey)"
                 type="primary"
                 link
                 size="small"
@@ -198,6 +213,13 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+
+    goToRoomHistory() {
+      this.$router.push({
+        name: 'RoomHistory',
+        query: { specific_part: this.specificPart },
+      })
     },
 
     goToHistory(subType, subTypeDisplay) {

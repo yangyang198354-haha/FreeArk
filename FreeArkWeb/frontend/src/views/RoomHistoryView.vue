@@ -1,8 +1,8 @@
 <template>
-  <div class="history-page">
+  <div class="room-history-page">
     <div class="page-header">
       <div class="header-left">
-        <h2>{{ subTypeDisplay }} 历史数据</h2>
+        <h2>房间面板 历史数据</h2>
         <p class="subtitle">专有部分：{{ specificPart }}</p>
       </div>
       <el-button @click="goBack">
@@ -11,6 +11,17 @@
       </el-button>
     </div>
 
+    <!-- 房间 Tab -->
+    <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="room-tabs">
+      <el-tab-pane
+        v-for="room in ROOM_TABS"
+        :key="room.key"
+        :label="room.label"
+        :name="room.key"
+      />
+    </el-tabs>
+
+    <!-- 过滤栏 -->
     <el-card class="filter-card">
       <el-form inline @submit.prevent="handleQuery">
         <el-form-item label="属性">
@@ -23,11 +34,11 @@
             style="width: 260px;"
           >
             <el-option
-              v-for="p in availableParams"
+              v-for="p in currentRoomParams"
               :key="p.param"
               :label="p.label"
               :value="p.param"
-              :disabled="selectedParams.length >= maxSelect && !selectedParams.includes(p.param)"
+              :disabled="selectedParams.length >= 4 && !selectedParams.includes(p.param)"
             />
           </el-select>
         </el-form-item>
@@ -87,38 +98,52 @@ import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import api from '@/utils/api.js'
 
-const SUB_TYPE_PARAMS = {
-  main_thermostat: {
-    maxSelect: 4,
+const ROOM_TABS = [
+  {
+    key: 'study_room',
+    label: '书房',
     params: [
-      { label: '开关',   param: 'living_room_switch',           unit: '',    isSwitch: true },
-      { label: '湿度',   param: 'living_room_humidity',         unit: '%',   scale: 0.1 },
-      { label: '温度',   param: 'living_room_temperature',      unit: '°C',  scale: 0.1 },
+      { label: '开关',    param: 'study_room_switch',           unit: '',    isSwitch: true },
+      { label: '湿度',    param: 'study_room_humidity',         unit: '%',   scale: 0.1 },
+      { label: '温度',    param: 'study_room_temperature',      unit: '°C',  scale: 0.1 },
       { label: '系统开关', param: 'system_switch',              unit: '',    isSwitch: true },
-      { label: '凝露提醒', param: 'living_room_dew_point_setting', unit: '°C', scale: 0.1 },
+      { label: '凝露提醒', param: 'study_room_dew_point_setting', unit: '°C', scale: 0.1 },
     ],
   },
-  fresh_air: {
-    maxSelect: 4,
+  {
+    key: 'bedroom',
+    label: '次卧',
     params: [
-      { label: '加湿使能',       param: 'humidification_switch',   unit: '',    isSwitch: true },
-      { label: '滤网使用小时数', param: 'filter_used_hours',       unit: 'h' },
-      { label: '一次水阀开度反馈', param: 'fresh_air_valve_opening', unit: '',   scale: 0.1 },
-      { label: '风机转速反馈',   param: 'fan_speed',               unit: '' },
-      { label: '过盘管出风温度', param: 'coil_supply_air_temp',     unit: '°C', scale: 0.1 },
-      { label: '新风入口温度',   param: 'fresh_air_inlet_temp',    unit: '°C', scale: 0.1 },
-      { label: '盘管出水温度',   param: 'coil_outlet_temp',        unit: '°C', scale: 0.1 },
-      { label: '盘管进水温度',   param: 'coil_inlet_temp',         unit: '°C', scale: 0.1 },
+      { label: '开关',    param: 'bedroom_switch',              unit: '',    isSwitch: true },
+      { label: '湿度',    param: 'bedroom_humidity',            unit: '%',   scale: 0.1 },
+      { label: '温度',    param: 'bedroom_temperature',         unit: '°C',  scale: 0.1 },
+      { label: '系统开关', param: 'system_switch',              unit: '',    isSwitch: true },
+      { label: '凝露提醒', param: 'bedroom_dew_point_setting',  unit: '°C',  scale: 0.1 },
     ],
   },
-  energy_meter: {
-    maxSelect: 2,
+  {
+    key: 'children_room',
+    label: '主卧',
     params: [
-      { label: '总热量', param: 'total_hot_quantity',  unit: 'kW·h' },
-      { label: '总冷量', param: 'total_cold_quantity', unit: 'kW·h' },
+      { label: '开关',    param: 'children_room_switch',        unit: '',    isSwitch: true },
+      { label: '湿度',    param: 'children_room_humidity',      unit: '%',   scale: 0.1 },
+      { label: '温度',    param: 'children_room_temperature',   unit: '°C',  scale: 0.1 },
+      { label: '系统开关', param: 'system_switch',              unit: '',    isSwitch: true },
+      { label: '凝露提醒', param: 'children_room_dew_point_setting', unit: '°C', scale: 0.1 },
     ],
   },
-}
+  {
+    key: 'fourth_children_room',
+    label: '儿童房',
+    params: [
+      { label: '开关',    param: 'fourth_children_room_switch',   unit: '',   isSwitch: true },
+      { label: '湿度',    param: 'fourth_children_room_humidity', unit: '%',  scale: 0.1 },
+      { label: '温度',    param: 'fourth_children_room_temperature', unit: '°C', scale: 0.1 },
+      { label: '系统开关', param: 'system_switch',               unit: '',   isSwitch: true },
+      { label: '凝露提醒', param: 'fourth_children_room_dew_point_setting', unit: '°C', scale: 0.1 },
+    ],
+  },
+]
 
 function defaultDateRange() {
   const end = new Date()
@@ -129,11 +154,13 @@ function defaultDateRange() {
 }
 
 export default {
-  name: 'DeviceParamHistoryView',
+  name: 'RoomHistoryView',
   components: { Back },
 
   data() {
     return {
+      ROOM_TABS,
+      activeTab: ROOM_TABS[0].key,
       loading: false,
       queried: false,
       selectedParams: [],
@@ -146,18 +173,17 @@ export default {
 
   computed: {
     specificPart() { return this.$route.query.specific_part || '' },
-    subType()       { return this.$route.query.sub_type || '' },
-    subTypeDisplay(){ return this.$route.query.sub_type_display || this.subType },
-    subTypeDef()    { return SUB_TYPE_PARAMS[this.subType] || { maxSelect: 4, params: [] } },
-    availableParams(){ return this.subTypeDef.params },
-    maxSelect()     { return this.subTypeDef.maxSelect },
+    currentRoomDef() {
+      return ROOM_TABS.find(r => r.key === this.activeTab) || ROOM_TABS[0]
+    },
+    currentRoomParams() { return this.currentRoomDef.params },
     hasData() {
       return Object.values(this.chartData).some(arr => arr.length > 0)
     },
   },
 
   mounted() {
-    this.selectedParams = this.availableParams.slice(0, this.maxSelect).map(p => p.param)
+    this.resetParamSelection()
     this.handleQuery()
   },
 
@@ -166,6 +192,18 @@ export default {
   },
 
   methods: {
+    resetParamSelection() {
+      this.selectedParams = this.currentRoomParams.slice(0, 4).map(p => p.param)
+    },
+
+    handleTabChange() {
+      this.destroyAllCharts()
+      this.chartData = {}
+      this.queried = false
+      this.resetParamSelection()
+      this.handleQuery()
+    },
+
     setChartRef(param, el) {
       if (el) {
         this.chartDomMap[param] = el
@@ -179,7 +217,7 @@ export default {
     },
 
     getParamDef(param) {
-      return this.availableParams.find(p => p.param === param) || { label: param, unit: '' }
+      return this.currentRoomParams.find(p => p.param === param) || { label: param, unit: '' }
     },
 
     async handleQuery() {
@@ -217,10 +255,11 @@ export default {
     },
 
     handleReset() {
-      this.selectedParams = this.availableParams.slice(0, this.maxSelect).map(p => p.param)
+      this.resetParamSelection()
       this.dateRange = defaultDateRange()
       this.chartData = {}
       this.queried = false
+      this.destroyAllCharts()
     },
 
     handleExport() {
@@ -248,7 +287,7 @@ export default {
       const ws = XLSX.utils.aoa_to_sheet(rows)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '历史数据')
-      XLSX.writeFile(wb, `${this.subTypeDisplay}_${this.dateRange[0]}_${this.dateRange[1]}.xlsx`)
+      XLSX.writeFile(wb, `${this.currentRoomDef.label}_${this.dateRange[0]}_${this.dateRange[1]}.xlsx`)
     },
 
     initAllCharts() {
@@ -278,26 +317,17 @@ export default {
       })
 
       const yAxis = def.isSwitch
-        ? {
-            type: 'value',
-            min: 0, max: 1, interval: 1,
-            axisLabel: { formatter: v => v === 0 ? '关闭' : '开启' },
-          }
-        : {
-            type: 'value',
-            axisLabel: { formatter: v => v + (def.unit ? ' ' + def.unit : '') },
-          }
+        ? { type: 'value', min: 0, max: 1, interval: 1,
+            axisLabel: { formatter: v => v === 0 ? '关闭' : '开启' } }
+        : { type: 'value',
+            axisLabel: { formatter: v => v + (def.unit ? ' ' + def.unit : '') } }
 
       return {
         grid: { left: 72, right: 24, top: 20, bottom: 60 },
         xAxis: {
           type: 'time',
           axisLabel: {
-            formatter: {
-              day: '{MM}-{dd}',
-              hour: '{MM}-{dd} {HH}:{mm}',
-              minute: '{HH}:{mm}',
-            },
+            formatter: { day: '{MM}-{dd}', hour: '{MM}-{dd} {HH}:{mm}', minute: '{HH}:{mm}' },
           },
         },
         yAxis,
@@ -348,7 +378,7 @@ export default {
 </script>
 
 <style scoped>
-.history-page {
+.room-history-page {
   width: 100%;
   padding: 20px;
   background-color: #f5f7fa;
@@ -360,7 +390,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   padding-bottom: 15px;
   border-bottom: 1px solid #e4e7ed;
 }
@@ -377,6 +407,8 @@ export default {
   color: #909399;
   font-size: 13px;
 }
+
+.room-tabs { margin-bottom: 8px; }
 
 .filter-card { margin-bottom: 16px; }
 
