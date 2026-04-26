@@ -1324,8 +1324,10 @@ def get_device_param_history(request):
 
     sub_type = request.GET.get('sub_type', '').strip()
     param_name = request.GET.get('param_name', '').strip()
+    param_names_raw = request.GET.get('param_names', '').strip()
     start_time = request.GET.get('start_time', '').strip()
     end_time = request.GET.get('end_time', '').strip()
+    is_chart = request.GET.get('chart', '').lower() == 'true'
 
     try:
         page = max(1, int(request.GET.get('page', 1)))
@@ -1340,6 +1342,9 @@ def get_device_param_history(request):
 
     if param_name:
         qs = qs.filter(param_name=param_name)
+    elif param_names_raw:
+        pnames = [p.strip() for p in param_names_raw.split(',') if p.strip()]
+        qs = qs.filter(param_name__in=pnames) if pnames else qs.none()
     elif sub_type:
         # 通过 DeviceConfig 查出该 sub_type 下的所有 param_name
         sub_type_params = list(
@@ -1355,6 +1360,18 @@ def get_device_param_history(request):
         qs = qs.filter(collected_at__gte=start_time)
     if end_time:
         qs = qs.filter(collected_at__lte=end_time)
+
+    # 图表模式：返回全量数据（按时间正序，上限 10000 条），不分页
+    if is_chart:
+        qs = qs.order_by('collected_at')
+        results = list(qs[:10000])
+        serializer = DeviceParamHistorySerializer(results, many=True)
+        return Response({
+            'success': True,
+            'specific_part': specific_part,
+            'count': len(results),
+            'results': serializer.data,
+        })
 
     qs = qs.order_by('-collected_at')
 

@@ -1,223 +1,352 @@
 <template>
-  <div class="device-history-container">
+  <div class="history-page">
     <div class="page-header">
       <div class="header-left">
-        <h2>设备历史参数</h2>
-        <p class="page-subtitle">
-          专有部分：{{ specificPart }}
-          <span v-if="subTypeDisplay"> | 子系统：{{ subTypeDisplay }}</span>
-        </p>
+        <h2>{{ subTypeDisplay }} 历史数据</h2>
+        <p class="subtitle">专有部分：{{ specificPart }}</p>
       </div>
-      <div class="header-right">
-        <el-button @click="goBack">
-          <el-icon><Back /></el-icon>
-          返回卡片面板
-        </el-button>
-      </div>
+      <el-button @click="goBack">
+        <el-icon><Back /></el-icon>
+        返回卡片面板
+      </el-button>
     </div>
 
-    <!-- 过滤条件 -->
     <el-card class="filter-card">
-      <el-form :inline="true" @submit.prevent="handleSearch">
-        <el-form-item label="参数名称">
-          <el-input
-            v-model="filterParamName"
-            placeholder="输入参数名称过滤"
-            clearable
-            style="width: 220px;"
-            @keyup.enter="handleSearch"
-          />
+      <el-form inline @submit.prevent="handleQuery">
+        <el-form-item label="属性">
+          <el-select
+            v-model="selectedParams"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="请选择参数"
+            style="width: 260px;"
+          >
+            <el-option
+              v-for="p in availableParams"
+              :key="p.param"
+              :label="p.label"
+              :value="p.param"
+              :disabled="selectedParams.length >= maxSelect && !selectedParams.includes(p.param)"
+            />
+          </el-select>
         </el-form-item>
-        <el-form-item label="开始时间">
+
+        <el-form-item label="时间">
           <el-date-picker
-            v-model="filterStartTime"
-            type="datetime"
-            placeholder="选择开始时间"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
-            style="width: 200px;"
+            v-model="dateRange"
+            type="daterange"
+            range-separator="-"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            style="width: 260px;"
           />
         </el-form-item>
-        <el-form-item label="结束时间">
-          <el-date-picker
-            v-model="filterEndTime"
-            type="datetime"
-            placeholder="选择结束时间"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
-            style="width: 200px;"
-          />
-        </el-form-item>
+
         <el-form-item>
-          <el-button type="primary" @click="handleSearch" :loading="loading">查询</el-button>
+          <el-button type="primary" @click="handleQuery" :loading="loading">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleExport" :disabled="!hasData">导出</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <!-- 数据表格 -->
-    <el-card class="data-table-card">
-      <template #header>
-        <div class="card-header">
-          <span>历史记录（共 {{ totalRecords }} 条）</span>
-        </div>
-      </template>
+    <el-skeleton v-if="loading" :rows="10" animated style="margin-top:16px;" />
 
-      <el-skeleton :rows="5" animated v-if="loading" />
+    <el-empty
+      v-else-if="queried && !hasData"
+      description="所选时间段内暂无历史数据"
+      style="margin-top:40px;"
+    />
 
-      <el-empty description="暂无历史数据" v-else-if="historyList.length === 0" />
-
-      <el-table
-        v-else
-        :data="historyList"
-        style="width: 100%"
-        border
-        stripe
-        :header-cell-style="{ backgroundColor: '#f5f7fa' }"
+    <template v-else>
+      <el-card
+        v-for="param in selectedParams"
+        :key="param"
+        class="chart-card"
       >
-        <el-table-column type="index" label="#" width="60" :index="indexMethod" />
-        <el-table-column prop="param_name" label="参数名称" min-width="220" />
-        <el-table-column prop="value" label="参数值" min-width="120" align="right">
-          <template #default="scope">
-            {{ scope.row.value !== null && scope.row.value !== undefined ? scope.row.value : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="collected_at" label="采集时间" min-width="180" />
-      </el-table>
-
-      <!-- 分页 -->
-      <div class="pagination-container" v-if="totalRecords > 0">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[20, 50, 100, 200]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="totalRecords"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+        <template #header>
+          <span class="chart-title">
+            {{ getParamDef(param).label }}
+            <span v-if="getParamDef(param).unit" class="chart-unit">（{{ getParamDef(param).unit }}）</span>
+          </span>
+        </template>
+        <div
+          :ref="(el) => setChartRef(param, el)"
+          class="chart-box"
         />
-      </div>
-    </el-card>
+      </el-card>
+    </template>
   </div>
 </template>
 
 <script>
 import { Back } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
+import * as XLSX from 'xlsx'
 import api from '@/utils/api.js'
+
+const SUB_TYPE_PARAMS = {
+  main_thermostat: {
+    maxSelect: 4,
+    params: [
+      { label: '开关',   param: 'living_room_switch',           unit: '',    isSwitch: true },
+      { label: '湿度',   param: 'living_room_humidity',         unit: '%',   scale: 0.1 },
+      { label: '温度',   param: 'living_room_temperature',      unit: '°C',  scale: 0.1 },
+      { label: '系统开关', param: 'system_switch',              unit: '',    isSwitch: true },
+      { label: '凝露提醒', param: 'living_room_dew_point_setting', unit: '°C', scale: 0.1 },
+    ],
+  },
+  fresh_air: {
+    maxSelect: 4,
+    params: [
+      { label: '进风温度',     param: 'fresh_air_inlet_temp',   unit: '°C', scale: 0.1 },
+      { label: '盘管进水温度', param: 'coil_inlet_temp',        unit: '°C', scale: 0.1 },
+      { label: '盘管出水温度', param: 'coil_outlet_temp',       unit: '°C', scale: 0.1 },
+      { label: '盘管送风温度', param: 'coil_supply_air_temp',   unit: '°C', scale: 0.1 },
+      { label: '送风温度设定', param: 'supply_air_temp_setting', unit: '°C', scale: 0.1 },
+      { label: '新风阀开度',   param: 'fresh_air_valve_opening', unit: '',  scale: 0.1 },
+    ],
+  },
+  energy_meter: {
+    maxSelect: 2,
+    params: [
+      { label: '总热量', param: 'total_hot_quantity',  unit: 'kW·h' },
+      { label: '总冷量', param: 'total_cold_quantity', unit: 'kW·h' },
+    ],
+  },
+}
+
+function defaultDateRange() {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - 6)
+  const fmt = d => d.toISOString().slice(0, 10)
+  return [fmt(start), fmt(end)]
+}
 
 export default {
   name: 'DeviceParamHistoryView',
-  components: {
-    Back,
-  },
+  components: { Back },
+
   data() {
     return {
       loading: false,
-      filterParamName: '',
-      filterStartTime: '',
-      filterEndTime: '',
-      historyList: [],
-      totalRecords: 0,
-      currentPage: 1,
-      pageSize: 50,
+      queried: false,
+      selectedParams: [],
+      dateRange: defaultDateRange(),
+      chartData: {},
+      chartDomMap: {},
+      chartInstMap: {},
     }
   },
-  computed: {
-    specificPart() {
-      return this.$route.query.specific_part || ''
-    },
-    subType() {
-      return this.$route.query.sub_type || ''
-    },
-    subTypeDisplay() {
-      return this.$route.query.sub_type_display || this.subType
-    },
-  },
-  mounted() {
-    this.fetchHistory()
-  },
-  watch: {
-    '$route.query'() {
-      this.currentPage = 1
-      this.fetchHistory()
-    },
-  },
-  methods: {
-    async fetchHistory() {
-      if (!this.specificPart) return
-      this.loading = true
-      try {
-        const params = {
-          specific_part: this.specificPart,
-          page: this.currentPage,
-          page_size: this.pageSize,
-        }
-        if (this.filterParamName) {
-          params.param_name = this.filterParamName
-        } else if (this.subType) {
-          params.sub_type = this.subType
-        }
-        if (this.filterStartTime) params.start_time = this.filterStartTime
-        if (this.filterEndTime) params.end_time = this.filterEndTime
 
-        const response = await api.get('/api/devices/param-history/', params)
-        if (response && response.success) {
-          this.historyList = response.results || []
-          this.totalRecords = response.count || 0
-        } else {
-          this.historyList = []
-          this.totalRecords = 0
+  computed: {
+    specificPart() { return this.$route.query.specific_part || '' },
+    subType()       { return this.$route.query.sub_type || '' },
+    subTypeDisplay(){ return this.$route.query.sub_type_display || this.subType },
+    subTypeDef()    { return SUB_TYPE_PARAMS[this.subType] || { maxSelect: 4, params: [] } },
+    availableParams(){ return this.subTypeDef.params },
+    maxSelect()     { return this.subTypeDef.maxSelect },
+    hasData() {
+      return Object.values(this.chartData).some(arr => arr.length > 0)
+    },
+  },
+
+  mounted() {
+    this.selectedParams = this.availableParams.slice(0, this.maxSelect).map(p => p.param)
+    this.handleQuery()
+  },
+
+  beforeUnmount() {
+    this.destroyAllCharts()
+  },
+
+  methods: {
+    setChartRef(param, el) {
+      if (el) {
+        this.chartDomMap[param] = el
+      } else {
+        delete this.chartDomMap[param]
+        if (this.chartInstMap[param]) {
+          this.chartInstMap[param].dispose()
+          delete this.chartInstMap[param]
         }
-      } catch (error) {
-        console.error('获取历史参数失败:', error)
-        this.historyList = []
-        this.totalRecords = 0
-        this.$message.error('获取历史数据失败，请稍后重试')
-      } finally {
-        this.loading = false
       }
     },
 
-    handleSearch() {
-      this.currentPage = 1
-      this.fetchHistory()
+    getParamDef(param) {
+      return this.availableParams.find(p => p.param === param) || { label: param, unit: '' }
+    },
+
+    async handleQuery() {
+      if (!this.specificPart || !this.selectedParams.length || !this.dateRange?.length) return
+      this.loading = true
+      this.queried = false
+      try {
+        const resp = await api.get('/api/devices/param-history/', {
+          specific_part: this.specificPart,
+          param_names: this.selectedParams.join(','),
+          start_time: `${this.dateRange[0]} 00:00:00`,
+          end_time: `${this.dateRange[1]} 23:59:59`,
+          chart: 'true',
+        })
+        if (resp && resp.success) {
+          const grouped = {}
+          for (const p of this.selectedParams) grouped[p] = []
+          for (const row of (resp.results || [])) {
+            if (grouped[row.param_name] !== undefined) grouped[row.param_name].push(row)
+          }
+          this.chartData = grouped
+        } else {
+          this.chartData = {}
+        }
+        this.queried = true
+      } catch (e) {
+        console.error('历史查询失败:', e)
+        this.$message.error('获取历史数据失败')
+        this.chartData = {}
+        this.queried = true
+      } finally {
+        this.loading = false
+        this.$nextTick(() => this.initAllCharts())
+      }
     },
 
     handleReset() {
-      this.filterParamName = ''
-      this.filterStartTime = ''
-      this.filterEndTime = ''
-      this.currentPage = 1
-      this.fetchHistory()
+      this.selectedParams = this.availableParams.slice(0, this.maxSelect).map(p => p.param)
+      this.dateRange = defaultDateRange()
+      this.chartData = {}
+      this.queried = false
     },
 
-    handleSizeChange(size) {
-      this.pageSize = size
-      this.currentPage = 1
-      this.fetchHistory()
+    handleExport() {
+      const header = ['时间', ...this.selectedParams.map(p => this.getParamDef(p).label)]
+      const timeSet = new Set()
+      for (const arr of Object.values(this.chartData))
+        for (const r of arr) timeSet.add(r.collected_at)
+      const times = [...timeSet].sort()
+
+      const rows = [header]
+      for (const t of times) {
+        const row = [t]
+        for (const param of this.selectedParams) {
+          const rec = (this.chartData[param] || []).find(r => r.collected_at === t)
+          if (!rec) { row.push(''); continue }
+          const def = this.getParamDef(param)
+          const v = Number(rec.value)
+          if (def.isSwitch) row.push(v === 0 ? '关闭' : '开启')
+          else if (def.scale) row.push(+(v * def.scale).toFixed(1))
+          else row.push(v)
+        }
+        rows.push(row)
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, '历史数据')
+      XLSX.writeFile(wb, `${this.subTypeDisplay}_${this.dateRange[0]}_${this.dateRange[1]}.xlsx`)
     },
 
-    handleCurrentChange(page) {
-      this.currentPage = page
-      this.fetchHistory()
+    initAllCharts() {
+      for (const param of this.selectedParams) {
+        const dom = this.chartDomMap[param]
+        if (!dom) continue
+        if (!this.chartInstMap[param]) {
+          this.chartInstMap[param] = echarts.init(dom)
+        }
+        const def = this.getParamDef(param)
+        const raw = this.chartData[param] || []
+        this.chartInstMap[param].setOption(this.buildOption(def, raw), true)
+      }
     },
 
-    indexMethod(index) {
-      return (this.currentPage - 1) * this.pageSize + index + 1
+    destroyAllCharts() {
+      for (const c of Object.values(this.chartInstMap)) c.dispose()
+      this.chartInstMap = {}
+      this.chartDomMap = {}
+    },
+
+    buildOption(def, rawData) {
+      const seriesData = rawData.map(r => {
+        const v = Number(r.value)
+        const y = def.isSwitch ? v : (def.scale ? +(v * def.scale).toFixed(2) : v)
+        return [r.collected_at, y]
+      })
+
+      const yAxis = def.isSwitch
+        ? {
+            type: 'value',
+            min: 0, max: 1, interval: 1,
+            axisLabel: { formatter: v => v === 0 ? '关闭' : '开启' },
+          }
+        : {
+            type: 'value',
+            axisLabel: { formatter: v => v + (def.unit ? ' ' + def.unit : '') },
+          }
+
+      return {
+        grid: { left: 72, right: 24, top: 20, bottom: 60 },
+        xAxis: {
+          type: 'time',
+          axisLabel: {
+            formatter: {
+              day: '{MM}-{dd}',
+              hour: '{MM}-{dd} {HH}:{mm}',
+              minute: '{HH}:{mm}',
+            },
+          },
+        },
+        yAxis,
+        series: [{
+          type: 'line',
+          data: seriesData,
+          smooth: !def.isSwitch,
+          step: def.isSwitch ? 'end' : false,
+          symbol: 'none',
+          lineStyle: { color: '#00b4a6', width: 2 },
+          areaStyle: {
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(0,180,166,0.28)' },
+                { offset: 1, color: 'rgba(0,180,166,0)' },
+              ],
+            },
+          },
+        }],
+        tooltip: {
+          trigger: 'axis',
+          formatter: params => {
+            if (!params.length) return ''
+            const p = params[0]
+            const t = typeof p.axisValue === 'number'
+              ? new Date(p.axisValue).toLocaleString('zh-CN', { hour12: false })
+              : p.axisValue
+            const v = p.value[1]
+            const vStr = def.isSwitch
+              ? (v === 0 ? '关闭' : '开启')
+              : v.toFixed(def.scale ? 1 : 0) + (def.unit ? ' ' + def.unit : '')
+            return `${t}<br/>${def.label}: <b>${vStr}</b>`
+          },
+        },
+        dataZoom: [
+          { type: 'inside', xAxisIndex: 0 },
+          { type: 'slider', xAxisIndex: 0, bottom: 5, height: 18, borderColor: 'transparent' },
+        ],
+      }
     },
 
     goBack() {
-      this.$router.push({
-        name: 'DeviceCards',
-        query: { specific_part: this.specificPart },
-      })
+      this.$router.push({ name: 'DeviceCards', query: { specific_part: this.specificPart } })
     },
   },
 }
 </script>
 
 <style scoped>
-.device-history-container {
+.history-page {
   width: 100%;
   padding: 20px;
   background-color: #f5f7fa;
@@ -229,18 +358,9 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
   padding-bottom: 15px;
   border-bottom: 1px solid #e4e7ed;
-}
-
-.header-left {
-  flex: 1;
-}
-
-.header-right {
-  display: flex;
-  gap: 10px;
 }
 
 .page-header h2 {
@@ -250,32 +370,19 @@ export default {
   font-weight: 600;
 }
 
-.page-subtitle {
-  margin: 8px 0 0 0;
+.subtitle {
+  margin: 6px 0 0;
   color: #909399;
-  font-size: 14px;
+  font-size: 13px;
 }
 
-.filter-card {
-  margin-bottom: 20px;
-}
+.filter-card { margin-bottom: 16px; }
 
-.data-table-card {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-}
+.chart-card { margin-bottom: 16px; }
 
-.card-header {
-  font-weight: 500;
-  font-size: 15px;
-}
+.chart-title { font-weight: 500; font-size: 15px; }
 
-.pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 15px;
-  border-top: 1px solid #e4e7ed;
-}
+.chart-unit { color: #909399; font-size: 13px; }
+
+.chart-box { height: 260px; width: 100%; }
 </style>

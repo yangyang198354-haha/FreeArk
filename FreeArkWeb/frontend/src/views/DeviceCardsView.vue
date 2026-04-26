@@ -18,6 +18,7 @@
             <div class="nav-item">
               <span class="nav-label">{{ subTypeData.display }}</span>
               <el-button
+                v-if="['main_thermostat', 'fresh_air', 'energy_meter'].includes(subKey)"
                 type="primary"
                 link
                 size="small"

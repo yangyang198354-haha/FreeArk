@@ -3,7 +3,7 @@ from datetime import datetime
 from abc import ABC, abstractmethod
 from django.db import transaction, connection
 from django.utils import timezone
-from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData
+from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData, DeviceParamHistory
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -737,6 +737,24 @@ class PLCLatestDataHandler(MessageHandler):
             return
 
         self._bulk_upsert(records)
+        self._write_history(records)
+
+    def _write_history(self, records):
+        """追加写入 DeviceParamHistory（时序历史，append-only）。"""
+        hist_objs = [
+            DeviceParamHistory(
+                specific_part=r['specific_part'],
+                param_name=r['param_name'],
+                value=str(r['value']) if r['value'] is not None else None,
+                collected_at=r['collected_at'],
+            )
+            for r in records
+        ]
+        try:
+            DeviceParamHistory.objects.bulk_create(hist_objs)
+            logger.debug(f"PLCLatestDataHandler: 历史追加 {len(hist_objs)} 条")
+        except Exception as e:
+            logger.error(f"PLCLatestDataHandler: 历史写入失败: {e}", exc_info=True)
 
     def _bulk_upsert(self, records):
         """批量 upsert PLCLatestData 记录（单条 INSERT … ON DUPLICATE KEY UPDATE）。"""
