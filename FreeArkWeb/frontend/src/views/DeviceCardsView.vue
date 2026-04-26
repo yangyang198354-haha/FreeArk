@@ -16,7 +16,7 @@
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
           <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
             <!-- 在第一个房间子面板前插入"温控面板"历史入口 -->
-            <template v-if="subKey === 'study_room'">
+            <template v-if="subKey === 'panel_study_room'">
               <div class="nav-item">
                 <span class="nav-label">温控面板</span>
                 <el-button
