@@ -336,7 +336,9 @@ export default {
           data: seriesData,
           smooth: !def.isSwitch,
           step: def.isSwitch ? 'end' : false,
-          symbol: 'none',
+          symbol: 'circle',
+          symbolSize: 5,
+          showSymbol: false,
           lineStyle: { color: '#00b4a6', width: 2 },
           areaStyle: {
             color: {
@@ -350,6 +352,7 @@ export default {
         }],
         tooltip: {
           trigger: 'axis',
+          axisPointer: { type: 'cross', crossStyle: { color: '#999' } },
           formatter: params => {
             if (!params.length) return ''
             const p = params[0]
