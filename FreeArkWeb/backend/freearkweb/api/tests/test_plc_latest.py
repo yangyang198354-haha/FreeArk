@@ -16,8 +16,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 
-from api.models import PLCLatestData, CustomUser
+from api.models import PLCLatestData, DeviceParamHistory, CustomUser
 from api.mqtt_handlers import PLCLatestDataHandler
+import api.mqtt_handlers as _handlers_module
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +204,72 @@ class TestPLCLatestDataHandlerBasic(TestCase):
         })
         self.handler.handle('/datacollection/plc/to/collector/' + DEVICE, payload)
         self.assertEqual(PLCLatestData.objects.count(), 0)
+
+
+# ---------------------------------------------------------------------------
+# 单元测试：_write_history 每小时去重逻辑
+# ---------------------------------------------------------------------------
+
+TS_H10A = '2026-04-18 10:05:00'  # 10点第一次
+TS_H10B = '2026-04-18 10:15:00'  # 10点第二次（同小时）
+TS_H11  = '2026-04-18 11:05:00'  # 11点（新小时）
+
+
+class TestHistoryHourlyDedup(TestCase):
+    """验证 _write_history 对 general 参数的每小时去重逻辑"""
+
+    def setUp(self):
+        # 每个测试前清空去重缓存，避免用例间干扰
+        _handlers_module._general_hist_last_hour.clear()
+        self.handler = PLCLatestDataHandler()
+
+    # GWT-16: general 参数同小时第二次调用不写入历史
+    def test_general_param_same_hour_deduped(self):
+        """
+        Given: living_room_temperature 在 10:05 写入历史
+        When:  同一小时 10:15 再次触发 handle()
+        Then:  DeviceParamHistory 仍只有 1 条（第二次被去重跳过）
+        """
+        payload1 = _make_payload(DEVICE, {'living_room_temperature': (245, True, TS_H10A)})
+        payload2 = _make_payload(DEVICE, {'living_room_temperature': (246, True, TS_H10B)})
+        self.handler.handle('/topic/' + DEVICE, payload1)
+        self.handler.handle('/topic/' + DEVICE, payload2)
+        count = DeviceParamHistory.objects.filter(
+            specific_part=DEVICE, param_name='living_room_temperature'
+        ).count()
+        self.assertEqual(count, 1)
+
+    # GWT-17: general 参数跨小时时写入新样本
+    def test_general_param_new_hour_writes(self):
+        """
+        Given: living_room_temperature 在 10:05 写入历史
+        When:  11:05（新小时）再次触发 handle()
+        Then:  DeviceParamHistory 有 2 条记录
+        """
+        payload1 = _make_payload(DEVICE, {'living_room_temperature': (245, True, TS_H10A)})
+        payload2 = _make_payload(DEVICE, {'living_room_temperature': (248, True, TS_H11)})
+        self.handler.handle('/topic/' + DEVICE, payload1)
+        self.handler.handle('/topic/' + DEVICE, payload2)
+        count = DeviceParamHistory.objects.filter(
+            specific_part=DEVICE, param_name='living_room_temperature'
+        ).count()
+        self.assertEqual(count, 2)
+
+    # GWT-18: energy 参数每次都写入历史，不受小时限制
+    def test_energy_param_always_written(self):
+        """
+        Given: total_hot_quantity 在 10:05 写入历史
+        When:  同一小时 10:15 再次触发 handle()
+        Then:  DeviceParamHistory 有 2 条（energy 参数不去重）
+        """
+        payload1 = _make_payload(DEVICE, {'total_hot_quantity': (1000, True, TS_H10A)})
+        payload2 = _make_payload(DEVICE, {'total_hot_quantity': (1001, True, TS_H10B)})
+        self.handler.handle('/topic/' + DEVICE, payload1)
+        self.handler.handle('/topic/' + DEVICE, payload2)
+        count = DeviceParamHistory.objects.filter(
+            specific_part=DEVICE, param_name='total_hot_quantity'
+        ).count()
+        self.assertEqual(count, 2)
 
 
 # ---------------------------------------------------------------------------

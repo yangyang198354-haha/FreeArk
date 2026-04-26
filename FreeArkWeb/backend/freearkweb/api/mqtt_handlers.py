@@ -597,6 +597,14 @@ class ConnectionStatusHandler(MessageHandler):
 #     由 PLCLatestDataHandler 写 PLCLatestData，两个路径并行互不干扰。
 _EXCLUDED_PARAMS = frozenset()
 
+# Energy 参数由独立采集任务每 5 分钟推送，历史数据全量保留。
+# General 参数每 10 分钟一轮，历史只保留每小时第一条，降低存储量约 6 倍。
+_ENERGY_PARAM_NAMES = frozenset(['total_hot_quantity', 'total_cold_quantity'])
+
+# 内存去重缓存：(specific_part, param_name) -> 'YYYY-MM-DD-HH'
+# Python GIL 保证单次 dict get/set 的原子性；极端情况同一小时最多多写一条，可接受。
+_general_hist_last_hour: dict = {}
+
 # 支持的时间戳格式
 _TIMESTAMP_FORMATS = (
     '%Y-%m-%d %H:%M:%S',
@@ -740,16 +748,36 @@ class PLCLatestDataHandler(MessageHandler):
         self._write_history(records)
 
     def _write_history(self, records):
-        """追加写入 DeviceParamHistory（时序历史，append-only）。"""
-        hist_objs = [
-            DeviceParamHistory(
+        """追加写入 DeviceParamHistory（时序历史，append-only）。
+
+        - Energy 参数（total_hot/cold_quantity）：每次全量写入（5分钟采集周期）
+        - General 参数：每小时写入第一条，通过模块级内存缓存去重（10分钟采集，保留1条/小时）
+        """
+        hist_objs = []
+        for r in records:
+            param_name = r['param_name']
+            collected_at = r['collected_at']  # datetime or None
+
+            if param_name not in _ENERGY_PARAM_NAMES:
+                # General 参数：无时间戳则跳过；否则按小时去重
+                if collected_at is None:
+                    continue
+                hour_key = collected_at.strftime('%Y-%m-%d-%H')
+                cache_key = (r['specific_part'], param_name)
+                if _general_hist_last_hour.get(cache_key) == hour_key:
+                    continue  # 本小时已有样本，跳过
+                _general_hist_last_hour[cache_key] = hour_key
+
+            hist_objs.append(DeviceParamHistory(
                 specific_part=r['specific_part'],
-                param_name=r['param_name'],
+                param_name=param_name,
                 value=str(r['value']) if r['value'] is not None else None,
-                collected_at=r['collected_at'],
-            )
-            for r in records
-        ]
+                collected_at=collected_at,
+            ))
+
+        if not hist_objs:
+            logger.debug("PLCLatestDataHandler: 历史写入跳过（均已在本小时记录）")
+            return
         try:
             DeviceParamHistory.objects.bulk_create(hist_objs)
             logger.debug(f"PLCLatestDataHandler: 历史追加 {len(hist_objs)} 条")
