@@ -60,7 +60,7 @@
             </div>
             <div class="params-list">
               <div
-                v-for="param in subTypeData.params"
+                v-for="param in expandParams(subTypeData.params)"
                 :key="param.param_name"
                 class="param-row"
               >
@@ -115,6 +115,12 @@ const SWITCH_PARAMS = new Set([
   'children_room_switch', 'fourth_children_room_switch',
   'system_switch', 'humidification_switch',
 ])
+
+// 新风机故障状态位定义（DB14.DBW388 bit 0-8）
+const FRESH_AIR_FAULT_BITS = [
+  '风机状态故障', '出风温度异常状态', '进风温度传感器故障', '回水温度传感器故障',
+  '进水温度传感器故障', '加湿器故障', '新风水阀故障', '防冻保护故障', '出风温度传感器故障',
+]
 
 // 故障字段（0→无, 其他→故障）
 const FAULT_PARAMS = new Set([
@@ -204,6 +210,26 @@ export default {
       })
     },
 
+    expandParams(params) {
+      const result = []
+      for (const param of params) {
+        if (param.param_name === 'fresh_air_fault_status') {
+          const raw = param.value !== null && param.value !== undefined ? Number(param.value) : 0
+          FRESH_AIR_FAULT_BITS.forEach((name, i) => {
+            result.push({
+              param_name: `fresh_air_fault_bit_${i}`,
+              display_name: name,
+              value: (raw >> i) & 1,
+              is_stale: param.is_stale,
+            })
+          })
+        } else {
+          result.push(param)
+        }
+      }
+      return result
+    },
+
     formatValue(paramName, rawValue) {
       if (rawValue === null || rawValue === undefined) return '-'
       const v = Number(rawValue)
@@ -220,11 +246,8 @@ export default {
         return v === 0 ? '关闭' : '开启'
       }
 
-      if (paramName === 'fresh_air_fault_status') {
-        if (v === 0) return '无'
-        const BITS = ['风机状态故障','出风温度异常','进风温度传感器故障','回水温度传感器故障',
-          '进水温度传感器故障','加湿器故障','新风水阀故障','防冻保护故障','出风温度传感器故障']
-        return BITS.filter((_, i) => v & (1 << i)).join(' | ') || '故障(' + v + ')'
+      if (paramName.startsWith('fresh_air_fault_bit_')) {
+        return v === 0 ? '无' : '故障'
       }
 
       if (FAULT_PARAMS.has(paramName)) {
