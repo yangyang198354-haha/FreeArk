@@ -73,6 +73,7 @@
           >
             <div class="col-header">
               <span class="col-title">{{ subTypeData.display }}</span>
+              <span class="col-time">{{ getCollectedAt(subTypeData.params) }}</span>
             </div>
             <div class="params-list">
               <div
@@ -81,15 +82,7 @@
                 class="param-row"
               >
                 <span class="param-label" :title="param.display_name">{{ param.display_name }}</span>
-                <span class="param-value" :class="{ 'is-stale': param.is_stale }">
-                  {{ formatValue(param.param_name, param.value) }}
-                  <el-tag
-                    v-if="param.is_stale"
-                    type="warning"
-                    size="small"
-                    class="stale-tag"
-                  >超时</el-tag>
-                </span>
+                <span class="param-value">{{ formatValue(param.param_name, param.value) }}</span>
               </div>
             </div>
           </div>
@@ -233,6 +226,12 @@ export default {
       })
     },
 
+    getCollectedAt(params) {
+      if (!params || !params.length) return ''
+      const t = params.find(p => p.collected_at)?.collected_at
+      return t ? t.slice(11, 16) : ''
+    },
+
     expandParams(params) {
       const result = []
       for (const param of params) {
@@ -243,7 +242,6 @@ export default {
               param_name: `fresh_air_fault_bit_${i}`,
               display_name: name,
               value: (raw >> i) & 1,
-              is_stale: param.is_stale,
             })
           })
         } else {
@@ -428,7 +426,7 @@ export default {
 }
 
 .col-header {
-  padding: 7px 8px 5px;
+  padding: 6px 8px 4px;
   border-bottom: 2px solid #409eff;
   background: #f0f6ff;
   overflow: hidden;
@@ -442,6 +440,13 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
+}
+
+.col-time {
+  font-size: 11px;
+  color: #909399;
+  display: block;
+  margin-top: 1px;
 }
 
 /* 参数列表 */
@@ -481,17 +486,6 @@ export default {
   font-weight: 500;
   color: #303133;
   white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.param-value.is-stale {
-  color: #e6a23c;
-}
-
-.stale-tag {
-  flex-shrink: 0;
 }
 
 .panel-footer {

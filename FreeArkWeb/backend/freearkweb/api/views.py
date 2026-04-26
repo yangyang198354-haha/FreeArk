@@ -1205,7 +1205,6 @@ def get_plc_latest_data(request):
 # 非专有部分设备实时参数卡片 API  (REQ-FUNC-033)
 # ===========================================================================
 
-_STALE_THRESHOLD_SECONDS = 600  # 10 分钟
 
 
 @api_view(['GET'])
@@ -1242,9 +1241,6 @@ def get_device_realtime_params(request):
     if group_filter:
         configs_qs = configs_qs.filter(group=group_filter)
 
-    # 计算超时阈值时间
-    now = _dt.now()
-
     # 构建嵌套响应结构：group -> sub_type -> params
     result = {}
     for cfg in configs_qs:
@@ -1268,19 +1264,11 @@ def get_device_realtime_params(request):
             # 该参数在此专有部分暂无数据，跳过（只展示有数据的参数）
             continue
 
-        is_stale = False
-        if record.collected_at is None:
-            is_stale = True
-        else:
-            delta = (now - record.collected_at).total_seconds()
-            is_stale = delta > _STALE_THRESHOLD_SECONDS
-
         result[group_key]['sub_types'][sub_key]['params'].append({
             'param_name': cfg.param_name,
             'display_name': cfg.display_name,
             'value': record.value,
             'collected_at': record.collected_at.strftime('%Y-%m-%d %H:%M:%S') if record.collected_at else None,
-            'is_stale': is_stale,
         })
 
     # 移除没有任何参数数据的 sub_type，保持响应整洁
