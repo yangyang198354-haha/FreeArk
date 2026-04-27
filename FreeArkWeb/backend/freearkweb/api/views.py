@@ -1468,11 +1468,11 @@ def device_management_device_list(request):
     )
 
     # ---- 5. Subquery annotate：系统开关值（ADR-001）----
+    # FIX-001: PLCLatestData.building/unit/room_number 在生产 DB 中为空字符串（blank=True, default=''），
+    # 改为用 specific_part 直接关联，与 OwnerInfo.specific_part 格式一致（四段）。
     system_switch_sq = Subquery(
         PLCLatestData.objects.filter(
-            building=OuterRef('building'),
-            unit=OuterRef('unit'),
-            room_number=OuterRef('room_number'),
+            specific_part=OuterRef('specific_part'),
             param_name='system_switch',
         ).values('value')[:1]
     )

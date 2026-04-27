@@ -17,7 +17,9 @@
 
 import json
 import logging
+import os
 import socket
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -158,12 +160,34 @@ class ScreenConnectivityTask:
         """从数据库直接读取 OwnerInfo（避免 HTTP 依赖，ADR-002 MINOR 注记）。
 
         通过 Django ORM 直接访问 MySQL/SQLite（datacollection 进程复用同一 DB）。
+
+        FIX-002: 在 datacollection 独立进程中 Django 未必已由调用方初始化。
+        此处检测并按需调用 django.setup()，避免 AppRegistryNotReady 导致本轮静默跳过。
         """
         try:
             import django
-            import os
-            # Django 已由调用方（main_datacollection.py）初始化，直接导入模型即可
-            from api.models import OwnerInfo  # noqa: 若 ORM 未初始化，此处会抛出异常
+
+            # 若 DJANGO_SETTINGS_MODULE 未设置，推断并设置默认值
+            if not os.environ.get('DJANGO_SETTINGS_MODULE'):
+                # datacollection/ 在 FreeArk/ 根目录下，settings 在 FreeArkWeb/backend/freearkweb/
+                _here = os.path.dirname(os.path.abspath(__file__))
+                _freeark_root = os.path.dirname(_here)
+                _django_root = os.path.join(_freeark_root, 'FreeArkWeb', 'backend', 'freearkweb')
+                if _django_root not in sys.path:
+                    sys.path.insert(0, _django_root)
+                os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'freearkweb.settings')
+                logger.info(
+                    "ScreenConnectivityTask: DJANGO_SETTINGS_MODULE 未设置，"
+                    f"已自动设置为 freearkweb.settings，sys.path 插入 {_django_root}"
+                )
+
+            # 若 Django 应用注册表尚未初始化，调用 setup()
+            # django.apps.registry.apps.ready 为 False 表示未初始化
+            if not django.apps.registry.apps.ready:
+                django.setup()
+                logger.info("ScreenConnectivityTask: django.setup() 调用完成")
+
+            from api.models import OwnerInfo  # noqa: 模型在 setup() 之后才可安全导入
 
             owners = list(
                 OwnerInfo.objects.values('specific_part', 'ip_address')
