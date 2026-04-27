@@ -182,8 +182,8 @@ class ScreenConnectivityTask:
                 )
 
             # 若 Django 应用注册表尚未初始化，调用 setup()
-            # django.apps.registry.apps.ready 为 False 表示未初始化
-            if not django.apps.registry.apps.ready:
+            from django.apps import apps as _django_apps
+            if not _django_apps.ready:
                 django.setup()
                 logger.info("ScreenConnectivityTask: django.setup() 调用完成")
 
