@@ -237,10 +237,14 @@ class MQTTConsumer:
         不执行任何 I/O 或 DB 操作，确保 paho 网络线程不被阻塞，
         从而能持续发送 PINGREQ，避免 EMQX rc=16 断连。
 
-        路由规则：payload < 2000B → energy_queue，否则 → general_queue。
+        路由规则：screen/connectivity → general_queue（避免被 PLC 消息挤满的 energy 队列丢弃）；
+        其余 payload < 2000B → energy_queue，否则 → general_queue。
         """
         payload_size = len(msg.payload)
-        is_general = payload_size >= _ENERGY_PAYLOAD_MAX_SIZE
+        if msg.topic == self.SCREEN_CONNECTIVITY_TOPIC:
+            is_general = True  # screen 消息走 general 队列，避免 energy 队列满时被丢弃
+        else:
+            is_general = payload_size >= _ENERGY_PAYLOAD_MAX_SIZE
         target_queue = self._general_queue if is_general else self._energy_queue
         queue_name = 'general' if is_general else 'energy'
         try:
