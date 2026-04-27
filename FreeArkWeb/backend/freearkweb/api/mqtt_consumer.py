@@ -14,7 +14,7 @@ from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError as DjangoOperationalError
 from django.utils import timezone
 from .models import PLCData
-from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler
+from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler, ScreenConnectivityHandler
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -110,6 +110,9 @@ class MQTTConsumer:
         # 停止信号：set() 后 worker 在队列清空时退出
         self.stop_event = threading.Event()
 
+    # MQTT topic for screen connectivity (MOD-MQTT-01)
+    SCREEN_CONNECTIVITY_TOPIC = '/datacollection/screen/connectivity'
+
     def on_connect(self, client, userdata, flags, rc):
         """连接到MQTT代理后的回调函数"""
         if rc == 0:
@@ -117,6 +120,9 @@ class MQTTConsumer:
             # 订阅主题，使用配置的QoS
             client.subscribe(self.mqtt_topic, qos=self.qos)
             logger.info(f"已订阅主题: {self.mqtt_topic} (QoS: {self.qos})")
+            # 订阅大屏连通性 topic（MOD-MQTT-01）
+            client.subscribe(self.SCREEN_CONNECTIVITY_TOPIC, qos=self.qos)
+            logger.info(f"已订阅主题: {self.SCREEN_CONNECTIVITY_TOPIC} (QoS: {self.qos})")
         else:
             logger.error(f"连接到MQTT代理失败，返回代码: {rc}")
 
@@ -371,6 +377,17 @@ class MQTTConsumer:
     def process_message(self, topic, payload, is_general: bool = False):
         """处理接收到的消息并保存到数据库"""
         logger.debug(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
+
+        # MOD-MQTT-01: 大屏连通性 topic 独立路由，由 ScreenConnectivityHandler 处理
+        if topic == self.SCREEN_CONNECTIVITY_TOPIC:
+            try:
+                handler = ScreenConnectivityHandler()
+                handler.handle(topic, payload)
+            except Exception as e:
+                logger.error(
+                    f"ScreenConnectivityHandler 处理消息时发生错误: {e}", exc_info=True
+                )
+            return
 
         # general 消息跳过 ConnectionStatusHandler，节省约 150ms/条
         handlers = self.general_handlers if is_general else self.energy_handlers

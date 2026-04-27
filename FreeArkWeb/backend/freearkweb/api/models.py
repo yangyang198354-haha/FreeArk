@@ -410,3 +410,30 @@ class DeviceParamHistory(models.Model):
 
     def __str__(self):
         return f"{self.specific_part} - {self.param_name} = {self.value} @ {self.collected_at}"
+
+
+class ScreenConnectivityStatus(models.Model):
+    """大屏连通性状态表（MOD-BE-02）
+    每户一条记录（upsert），记录大屏 IP 探测结果。
+    specific_part 格式为四段，如 "3-1-7-702"（与 OwnerInfo.specific_part 一致）。
+    """
+    # 四段专有部分标识，如 "3-1-7-702"；唯一约束确保 upsert 幂等
+    specific_part = models.CharField(max_length=20, unique=True, db_index=True, verbose_name='专有部分')
+    # 探测结果：online / offline
+    STATUS_CHOICES = (
+        ('online', '在线'),
+        ('offline', '离线'),
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, verbose_name='连通状态')
+    # 最近一次探测时间（由 datacollection 写入）
+    last_checked_at = models.DateTimeField(verbose_name='最近检测时间')
+    # 记录更新时间，auto_now 由 ORM 维护
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='记录更新时间')
+
+    class Meta:
+        db_table = 'screen_connectivity_status'
+        verbose_name = '大屏连通性状态'
+        verbose_name_plural = '大屏连通性状态'
+
+    def __str__(self):
+        return f"{self.specific_part} - {self.status}"

@@ -77,6 +77,15 @@
             <el-icon><Monitor /></el-icon>
             <span>设备面板</span>
           </el-menu-item>
+
+          <!-- 设备管理（MOD-FE-01, US-001） -->
+          <el-sub-menu index="device-management">
+            <template #title>
+              <el-icon><List /></el-icon>
+              <span>设备管理</span>
+            </template>
+            <el-menu-item index="/device-management/device-list">设备列表</el-menu-item>
+          </el-sub-menu>
         </el-menu>
       </aside>
       
@@ -98,7 +107,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 // 导入 Element Plus 图标组件
-import { User, ArrowDown, HomeFilled, Document, Setting, House, Monitor } from '@element-plus/icons-vue'
+import { User, ArrowDown, HomeFilled, Document, Setting, House, Monitor, List } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 
 export default {
@@ -111,6 +120,7 @@ export default {
     Setting,
     House,
     Monitor,
+    List,
   },
   setup() {
     const router = useRouter()

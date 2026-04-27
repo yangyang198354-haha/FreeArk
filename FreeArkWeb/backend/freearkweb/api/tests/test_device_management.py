@@ -1,0 +1,993 @@
+"""
+设备管理功能测试套件 — GROUP_D (PHASE_07 单元测试 + PHASE_08 集成测试 + PHASE_09 E2E验收)
+
+覆盖需求：US-001~007, NFR-001~005
+REQ-FUNC-001~005
+
+运行方式：
+    cd FreeArkWeb/backend/freearkweb
+    python manage.py test api.tests.test_device_management --settings=freearkweb.test_settings --verbosity=2
+
+测试数据库：SQLite in-memory（test_settings.py 强制配置）
+"""
+
+import json
+import os
+import socket
+import sys
+import threading
+import unittest
+from datetime import datetime
+from io import StringIO
+from unittest.mock import MagicMock, patch, call
+
+from django.test import TestCase
+from django.utils import timezone
+from rest_framework.authtoken.models import Token
+from rest_framework.test import APIClient
+
+from api.models import (
+    CustomUser,
+    OwnerInfo,
+    PLCLatestData,
+    ScreenConnectivityStatus,
+)
+from api.mqtt_handlers import ScreenConnectivityHandler
+
+# ---------------------------------------------------------------------------
+# Python 路径: 确保 datacollection 包可被导入
+# 文件路径: FreeArkWeb/backend/freearkweb/api/tests/test_device_management.py
+# 仓库根目录（含 datacollection/）: 从 tests/ 往上 5 层
+# tests(1) -> api(2) -> freearkweb(3) -> backend(4) -> FreeArkWeb(5) -> FreeArk/
+# ---------------------------------------------------------------------------
+_FREEARK_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..')
+)
+if _FREEARK_ROOT not in sys.path:
+    sys.path.insert(0, _FREEARK_ROOT)
+
+
+# ===========================================================================
+# 测试辅助函数
+# ===========================================================================
+
+def _make_user(username="testuser", role="user"):
+    user = CustomUser.objects.create_user(username=username, password="pass1234", role=role)
+    token, _ = Token.objects.get_or_create(user=user)
+    return user, token.key
+
+
+def _make_owner(specific_part="3-1-7-702", building="3", unit="1", room_number="702",
+                ip_address="192.168.1.100"):
+    return OwnerInfo.objects.create(
+        specific_part=specific_part,
+        location_name=f"测试坐落-{specific_part}",
+        building=building,
+        unit=unit,
+        floor="7楼",
+        room_number=room_number,
+        bind_status="已绑定",
+        ip_address=ip_address,
+        unique_id=specific_part.replace("-", ""),
+        plc_ip_address="192.168.2.100",
+    )
+
+
+def _make_screen_status(specific_part, status="online", checked_at=None):
+    if checked_at is None:
+        checked_at = datetime.now()
+    return ScreenConnectivityStatus.objects.create(
+        specific_part=specific_part,
+        status=status,
+        last_checked_at=checked_at,
+    )
+
+
+def _make_plc_latest(building, unit, room_number, param_name="system_switch", value=1):
+    return PLCLatestData.objects.create(
+        specific_part=f"{building}-1-{unit}-{room_number}",
+        param_name=param_name,
+        value=value,
+        building=building,
+        unit=unit,
+        room_number=room_number,
+        collected_at=datetime.now(),
+    )
+
+
+# ===========================================================================
+# PHASE_07: 单元测试
+# ===========================================================================
+
+class TC_U_001_ScreenConnectivityStatusModel(TestCase):
+    """TC-U-001: ScreenConnectivityStatus 模型基本 CRUD 与约束"""
+
+    def test_create_status_record(self):
+        """创建一条记录，字段存储正确"""
+        now = datetime.now()
+        obj = ScreenConnectivityStatus.objects.create(
+            specific_part="3-1-7-702",
+            status="online",
+            last_checked_at=now,
+        )
+        self.assertIsNotNone(obj.id)
+        self.assertEqual(obj.specific_part, "3-1-7-702")
+        self.assertEqual(obj.status, "online")
+        self.assertIsNotNone(obj.updated_at)
+
+    def test_unique_specific_part_constraint(self):
+        """specific_part 唯一约束：重复插入应抛出异常"""
+        ScreenConnectivityStatus.objects.create(
+            specific_part="3-1-7-702",
+            status="online",
+            last_checked_at=datetime.now(),
+        )
+        from django.db import IntegrityError
+        with self.assertRaises(Exception):
+            ScreenConnectivityStatus.objects.create(
+                specific_part="3-1-7-702",
+                status="offline",
+                last_checked_at=datetime.now(),
+            )
+
+    def test_str_representation(self):
+        """__str__ 返回 'specific_part - status'"""
+        obj = ScreenConnectivityStatus.objects.create(
+            specific_part="3-1-7-702",
+            status="offline",
+            last_checked_at=datetime.now(),
+        )
+        self.assertEqual(str(obj), "3-1-7-702 - offline")
+
+    def test_upsert_via_update_or_create(self):
+        """update_or_create 幂等：多次调用只产生一条记录，状态被更新"""
+        for status_val in ("online", "offline", "online"):
+            ScreenConnectivityStatus.objects.update_or_create(
+                specific_part="3-1-7-702",
+                defaults={"status": status_val, "last_checked_at": datetime.now()},
+            )
+        count = ScreenConnectivityStatus.objects.filter(specific_part="3-1-7-702").count()
+        self.assertEqual(count, 1)
+        latest = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
+        self.assertEqual(latest.status, "online")
+
+    def test_status_choices_online_offline(self):
+        """status 字段接受 online 和 offline"""
+        for s in ("online", "offline"):
+            obj = ScreenConnectivityStatus.objects.create(
+                specific_part=f"sp-{s}",
+                status=s,
+                last_checked_at=datetime.now(),
+            )
+            self.assertEqual(obj.status, s)
+
+
+class TC_U_002_ScreenConnectivityHandler(TestCase):
+    """TC-U-002: ScreenConnectivityHandler 单元测试（MQTT 消息处理器）"""
+
+    def setUp(self):
+        self.handler = ScreenConnectivityHandler()
+
+    # --- 正常路径 ---
+
+    def test_handle_online_payload_creates_record(self):
+        """合法 online payload 写入 ScreenConnectivityStatus"""
+        payload = {
+            "specific_part": "3-1-7-702",
+            "status": "online",
+            "checked_at": "2026-04-27T10:00:00",
+        }
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
+        self.assertEqual(obj.status, "online")
+
+    def test_handle_offline_payload_creates_record(self):
+        """合法 offline payload 写入 ScreenConnectivityStatus"""
+        payload = {
+            "specific_part": "3-1-7-801",
+            "status": "offline",
+            "checked_at": "2026-04-27T10:01:00",
+        }
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-801")
+        self.assertEqual(obj.status, "offline")
+
+    def test_handle_payload_updates_existing_record(self):
+        """对已存在记录的 payload 执行 update（upsert 幂等）"""
+        ScreenConnectivityStatus.objects.create(
+            specific_part="3-1-7-702",
+            status="offline",
+            last_checked_at=datetime.now(),
+        )
+        payload = {
+            "specific_part": "3-1-7-702",
+            "status": "online",
+            "checked_at": "2026-04-27T10:02:00",
+        }
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
+        self.assertEqual(obj.status, "online")
+        self.assertEqual(ScreenConnectivityStatus.objects.count(), 1)
+
+    def test_handle_uses_current_time_when_checked_at_missing(self):
+        """checked_at 缺失时使用当前时间，记录仍写入"""
+        payload = {
+            "specific_part": "3-1-7-702",
+            "status": "online",
+        }
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
+        self.assertIsNotNone(obj.last_checked_at)
+
+    def test_handle_uses_current_time_when_checked_at_malformed(self):
+        """checked_at 格式非法时使用当前时间，记录仍写入"""
+        payload = {
+            "specific_part": "3-1-7-702",
+            "status": "offline",
+            "checked_at": "not-a-datetime",
+        }
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
+        self.assertIsNotNone(obj.last_checked_at)
+
+    # --- 异常/边界路径 ---
+
+    def test_handle_non_dict_payload_is_ignored(self):
+        """payload 非 dict 时，不写入任何记录"""
+        self.handler.handle("/datacollection/screen/connectivity", "invalid_string")
+        self.assertEqual(ScreenConnectivityStatus.objects.count(), 0)
+
+    def test_handle_missing_specific_part_is_ignored(self):
+        """specific_part 为空时，丢弃消息，不写入"""
+        payload = {"specific_part": "", "status": "online", "checked_at": "2026-04-27T10:00:00"}
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        self.assertEqual(ScreenConnectivityStatus.objects.count(), 0)
+
+    def test_handle_invalid_status_is_ignored(self):
+        """status 非 online/offline 时，丢弃消息，不写入"""
+        payload = {"specific_part": "3-1-7-702", "status": "unknown", "checked_at": "2026-04-27T10:00:00"}
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+        self.assertEqual(ScreenConnectivityStatus.objects.count(), 0)
+
+
+class TC_U_003_ScreenConnectivityChecker(TestCase):
+    """TC-U-003: ScreenConnectivityChecker 探测逻辑单元测试"""
+
+    def setUp(self):
+        # 不实际发起网络连接，全部 mock
+        from datacollection.screen_connectivity_checker import ScreenConnectivityChecker
+        self.checker = ScreenConnectivityChecker(max_workers=5, timeout=1)
+
+    def test_probe_single_returns_true_on_success(self):
+        """probe_single: socket 连接成功时返回 True"""
+        with patch("socket.create_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+            result = self.checker.probe_single("192.168.1.100")
+        self.assertTrue(result)
+
+    def test_probe_single_returns_true_on_connection_refused(self):
+        """probe_single: ConnectionRefusedError（主机在线但端口关闭）返回 True"""
+        with patch("socket.create_connection", side_effect=ConnectionRefusedError()):
+            result = self.checker.probe_single("192.168.1.100")
+        self.assertTrue(result)
+
+    def test_probe_single_returns_false_on_timeout(self):
+        """probe_single: socket.timeout（主机不可达）返回 False"""
+        with patch("socket.create_connection", side_effect=socket.timeout()):
+            result = self.checker.probe_single("192.168.1.100")
+        self.assertFalse(result)
+
+    def test_probe_single_returns_false_on_oserror(self):
+        """probe_single: OSError（网络不可达）返回 False"""
+        with patch("socket.create_connection", side_effect=OSError()):
+            result = self.checker.probe_single("192.168.1.100")
+        self.assertFalse(result)
+
+    def test_check_all_skips_empty_ip(self):
+        """check_all: ip_address 为空字符串的条目被跳过，不出现在结果中"""
+        owner_list = [
+            {"specific_part": "3-1-7-702", "ip_address": ""},
+            {"specific_part": "3-1-7-703", "ip_address": "   "},
+        ]
+        results = self.checker.check_all(owner_list)
+        self.assertEqual(results, [])
+
+    def test_check_all_returns_empty_list_for_empty_input(self):
+        """check_all: 输入为空列表时返回空列表"""
+        results = self.checker.check_all([])
+        self.assertEqual(results, [])
+
+    def test_check_all_online_result(self):
+        """check_all: 单个 IP 探测在线，结果含 status=online"""
+        owner_list = [{"specific_part": "3-1-7-702", "ip_address": "192.168.1.100"}]
+        with patch.object(self.checker, "probe_single", return_value=True):
+            results = self.checker.check_all(owner_list)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["specific_part"], "3-1-7-702")
+        self.assertEqual(results[0]["status"], "online")
+        self.assertIn("checked_at", results[0])
+
+    def test_check_all_offline_result(self):
+        """check_all: 单个 IP 探测离线，结果含 status=offline"""
+        owner_list = [{"specific_part": "3-1-7-702", "ip_address": "192.168.1.100"}]
+        with patch.object(self.checker, "probe_single", return_value=False):
+            results = self.checker.check_all(owner_list)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], "offline")
+
+    def test_check_all_multiple_ips(self):
+        """check_all: 多个 IP 并发探测，结果数量与有效 IP 数相同"""
+        owner_list = [
+            {"specific_part": f"3-1-7-{700+i}", "ip_address": f"192.168.1.{100+i}"}
+            for i in range(5)
+        ]
+        side_effects = [True, False, True, True, False]
+        with patch.object(self.checker, "probe_single", side_effect=side_effects):
+            results = self.checker.check_all(owner_list)
+        self.assertEqual(len(results), 5)
+        # 验证字段完整性
+        for r in results:
+            self.assertIn("specific_part", r)
+            self.assertIn("status", r)
+            self.assertIn("checked_at", r)
+            self.assertIn(r["status"], ("online", "offline"))
+
+    def test_check_all_exception_in_probe_treated_as_offline(self):
+        """check_all: 探测异常时，该条结果 status=offline（不崩溃）"""
+        owner_list = [{"specific_part": "3-1-7-702", "ip_address": "192.168.1.100"}]
+        with patch.object(self.checker, "probe_single", side_effect=RuntimeError("mock error")):
+            results = self.checker.check_all(owner_list)
+        # check_all 捕获了异常，结果中该条记录 status=offline
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], "offline")
+
+
+class TC_U_004_DeviceListViewFiltering(TestCase):
+    """TC-U-004: device_management_device_list 视图过滤逻辑单元测试（不通过 HTTP）"""
+
+    def setUp(self):
+        from api.views import device_management_device_list
+        self.view = device_management_device_list
+
+        # 创建认证用户
+        self.user, self.token = _make_user("dm_unit_user")
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 创建测试数据：4 条 OwnerInfo
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701", ip_address="192.168.1.1")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702", ip_address="192.168.1.2")
+        _make_owner("3-2-7-301", building="3", unit="2", room_number="301", ip_address="192.168.1.3")
+        _make_owner("4-1-5-501", building="4", unit="1", room_number="501", ip_address="192.168.1.4")
+
+    def test_room_no_filter_building_only(self):
+        """room_no=3 只过滤 building=3 的记录"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+        for item in data["results"]:
+            self.assertEqual(item["building"], "3")
+
+    def test_room_no_filter_building_and_unit(self):
+        """room_no=3-1 过滤 building=3, unit=1"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 2)
+        for item in data["results"]:
+            self.assertEqual(item["building"], "3")
+            self.assertEqual(item["unit"], "1")
+
+    def test_room_no_filter_three_segments(self):
+        """room_no=3-1-702 过滤到单条记录"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "702")
+
+    def test_room_no_invalid_format_returns_400(self):
+        """room_no 超过3段返回 400"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-7-702")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    def test_room_no_empty_segment_returns_400(self):
+        """room_no 含空段（如 3--702）返回 400"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3--702")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_no_filter_returns_all(self):
+        """无过滤参数返回所有记录"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 4)
+
+
+# ===========================================================================
+# PHASE_08: 集成测试
+# ===========================================================================
+
+class TC_I_001_DeviceListAPIAuth(TestCase):
+    """TC-I-001: 设备列表 API 认证与权限集成测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = _make_user("dm_int_user")
+        _make_owner("3-1-7-702")
+
+    def test_unauthenticated_request_returns_401(self):
+        """未认证请求返回 401（US-001: 需要登录）"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_authenticated_user_gets_200(self):
+        """认证用户请求返回 200（普通用户亦可访问）"""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_post_method_not_allowed(self):
+        """POST 方法不允许，返回 405"""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+        resp = self.client.post("/api/device-management/device-list/", {})
+        self.assertEqual(resp.status_code, 405)
+
+
+class TC_I_002_DeviceListAPIResponseSchema(TestCase):
+    """TC-I-002: 响应 schema 完整性测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_schema_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        owner = _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_screen_status("3-1-7-702", status="online")
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-702",
+            param_name="system_switch",
+            value=1,
+            building="3",
+            unit="1",
+            room_number="702",
+            collected_at=datetime.now(),
+        )
+
+    def test_response_top_level_keys(self):
+        """响应顶层字段：count, page, page_size, results"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        for key in ("count", "page", "page_size", "results"):
+            self.assertIn(key, data, f"缺少顶层字段: {key}")
+
+    def test_result_item_fields(self):
+        """results 中每条记录含所有必需字段"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        self.assertGreater(len(data["results"]), 0)
+        item = data["results"][0]
+        required_fields = [
+            "specific_part", "building", "unit", "room_number",
+            "screen_status", "screen_last_checked_at",
+            "system_switch_value", "system_switch_display",
+        ]
+        for f in required_fields:
+            self.assertIn(f, item, f"result 条目缺少字段: {f}")
+
+    def test_screen_status_is_online(self):
+        """有 ScreenConnectivityStatus=online 的记录，screen_status 返回 online"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        item = next(r for r in data["results"] if r["specific_part"] == "3-1-7-702")
+        self.assertEqual(item["screen_status"], "online")
+        self.assertIsNotNone(item["screen_last_checked_at"])
+
+    def test_system_switch_display_on(self):
+        """system_switch_value=1 时，system_switch_display 返回 '开'"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        item = next(r for r in data["results"] if r["specific_part"] == "3-1-7-702")
+        self.assertEqual(item["system_switch_display"], "开")
+        self.assertEqual(item["system_switch_value"], 1)
+
+
+class TC_I_003_DeviceListAPIScreenStatusValues(TestCase):
+    """TC-I-003: 大屏状态三种值（online/offline/unknown）集成测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_screen_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+
+        _make_screen_status("3-1-7-701", status="online")
+        _make_screen_status("3-1-7-702", status="offline")
+        # 703 无 ScreenConnectivityStatus 记录 → unknown
+
+    def test_screen_status_online(self):
+        """有 online 记录的户，screen_status=online"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-701")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "online")
+
+    def test_screen_status_offline(self):
+        """有 offline 记录的户，screen_status=offline"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "offline")
+
+    def test_screen_status_unknown_when_no_record(self):
+        """无 ScreenConnectivityStatus 记录的户，screen_status=unknown"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-703")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "unknown")
+        self.assertIsNone(data["results"][0]["screen_last_checked_at"])
+
+    def test_filter_by_screen_status_online(self):
+        """screen_status=online 过滤：只返回在线记录"""
+        resp = self.client.get("/api/device-management/device-list/?screen_status=online")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "online")
+
+    def test_filter_by_screen_status_offline(self):
+        """screen_status=offline 过滤：只返回离线记录"""
+        resp = self.client.get("/api/device-management/device-list/?screen_status=offline")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "offline")
+
+    def test_filter_by_screen_status_unknown(self):
+        """screen_status=unknown 过滤：只返回无记录（unknown）的户"""
+        resp = self.client.get("/api/device-management/device-list/?screen_status=unknown")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "unknown")
+
+
+class TC_I_004_DeviceListAPISystemSwitch(TestCase):
+    """TC-I-004: 系统开关过滤集成测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_switch_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+
+        # 701: system_switch=1（开）
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-701", param_name="system_switch", value=1,
+            building="3", unit="1", room_number="701", collected_at=datetime.now(),
+        )
+        # 702: system_switch=0（关）
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-702", param_name="system_switch", value=0,
+            building="3", unit="1", room_number="702", collected_at=datetime.now(),
+        )
+        # 703: 无记录（未知）
+
+    def test_system_switch_on_display(self):
+        """value=1 → system_switch_display='开'"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-701")
+        data = resp.json()
+        self.assertEqual(data["results"][0]["system_switch_display"], "开")
+
+    def test_system_switch_off_display(self):
+        """value=0 → system_switch_display='关'"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        self.assertEqual(data["results"][0]["system_switch_display"], "关")
+
+    def test_system_switch_unknown_display(self):
+        """无记录 → system_switch_display='未知'"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-703")
+        data = resp.json()
+        self.assertEqual(data["results"][0]["system_switch_display"], "未知")
+        self.assertIsNone(data["results"][0]["system_switch_value"])
+
+    def test_filter_system_switch_on(self):
+        """system_switch=on 过滤：只返回 value!=0 且非空的记录"""
+        resp = self.client.get("/api/device-management/device-list/?system_switch=on")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "701")
+
+    def test_filter_system_switch_off(self):
+        """system_switch=off 过滤：返回 value=0 或无记录的户"""
+        resp = self.client.get("/api/device-management/device-list/?system_switch=off")
+        data = resp.json()
+        # 702 (value=0) + 703 (无记录，IS NULL 也视为 off)
+        self.assertEqual(data["count"], 2)
+        room_numbers = {r["room_number"] for r in data["results"]}
+        self.assertIn("702", room_numbers)
+        self.assertIn("703", room_numbers)
+
+
+class TC_I_005_DeviceListAPIPagination(TestCase):
+    """TC-I-005: 分页功能集成测试（NFR-003: 每页默认20，最大50）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_page_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 创建 25 条记录
+        for i in range(1, 26):
+            OwnerInfo.objects.create(
+                specific_part=f"3-1-7-{700 + i}",
+                location_name=f"测试-{i}",
+                building="3",
+                unit="1",
+                floor="7楼",
+                room_number=str(700 + i),
+                bind_status="已绑定",
+                ip_address=f"192.168.1.{i}",
+                unique_id=f"uid{i:05d}",
+                plc_ip_address=f"192.168.2.{i}",
+            )
+
+    def test_default_page_size_is_20(self):
+        """无分页参数时，page=1，page_size=20，results 最多20条"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["page_size"], 20)
+        self.assertEqual(len(data["results"]), 20)
+        self.assertEqual(data["count"], 25)
+
+    def test_page_2_returns_remaining(self):
+        """page=2&page_size=20：返回剩余5条"""
+        resp = self.client.get("/api/device-management/device-list/?page=2&page_size=20")
+        data = resp.json()
+        self.assertEqual(data["page"], 2)
+        self.assertEqual(len(data["results"]), 5)
+
+    def test_page_size_10(self):
+        """page_size=10：每页10条"""
+        resp = self.client.get("/api/device-management/device-list/?page_size=10")
+        data = resp.json()
+        self.assertEqual(data["page_size"], 10)
+        self.assertEqual(len(data["results"]), 10)
+
+    def test_page_size_capped_at_50(self):
+        """page_size=100：被 cap 到 50"""
+        resp = self.client.get("/api/device-management/device-list/?page_size=100")
+        data = resp.json()
+        self.assertEqual(data["page_size"], 50)
+        self.assertLessEqual(len(data["results"]), 50)
+
+    def test_invalid_page_defaults_to_1(self):
+        """page=abc 非法：回退到 page=1"""
+        resp = self.client.get("/api/device-management/device-list/?page=abc")
+        data = resp.json()
+        self.assertEqual(data["page"], 1)
+
+    def test_invalid_page_size_defaults_to_20(self):
+        """page_size=xyz 非法：回退到 page_size=20"""
+        resp = self.client.get("/api/device-management/device-list/?page_size=xyz")
+        data = resp.json()
+        self.assertEqual(data["page_size"], 20)
+
+    def test_results_sorted_by_building_unit_room(self):
+        """结果按 building/unit/room_number 升序排列"""
+        resp = self.client.get("/api/device-management/device-list/?page_size=25")
+        data = resp.json()
+        room_numbers = [r["room_number"] for r in data["results"]]
+        self.assertEqual(room_numbers, sorted(room_numbers))
+
+
+class TC_I_006_MQTTHandlerIntegration(TestCase):
+    """TC-I-006: ScreenConnectivityHandler 与数据库集成测试（真实 ORM，SQLite）"""
+
+    def setUp(self):
+        self.handler = ScreenConnectivityHandler()
+
+    def test_multiple_messages_upsert_single_record(self):
+        """同一 specific_part 多条消息只保留最新一条 DB 记录"""
+        for i, status_val in enumerate(["online", "offline", "online"]):
+            payload = {
+                "specific_part": "3-1-7-702",
+                "status": status_val,
+                "checked_at": f"2026-04-27T10:0{i}:00",
+            }
+            self.handler.handle("/datacollection/screen/connectivity", payload)
+
+        count = ScreenConnectivityStatus.objects.filter(specific_part="3-1-7-702").count()
+        self.assertEqual(count, 1)
+        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
+        self.assertEqual(obj.status, "online")
+
+    def test_different_specific_parts_create_separate_records(self):
+        """不同 specific_part 各自独立建行"""
+        for sp in ["3-1-7-701", "3-1-7-702", "3-1-7-703"]:
+            payload = {"specific_part": sp, "status": "online", "checked_at": "2026-04-27T10:00:00"}
+            self.handler.handle("/datacollection/screen/connectivity", payload)
+
+        self.assertEqual(ScreenConnectivityStatus.objects.count(), 3)
+
+    def test_api_reflects_handler_written_status(self):
+        """Handler 写入 DB 后，API 响应正确反映该状态（端到端链路验证）"""
+        # 写入 OwnerInfo
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        # Handler 写入 connectivity status
+        payload = {"specific_part": "3-1-7-702", "status": "offline", "checked_at": "2026-04-27T10:00:00"}
+        self.handler.handle("/datacollection/screen/connectivity", payload)
+
+        # 通过 API 查询
+        client = APIClient()
+        _, token = _make_user("dm_e2e_user")
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        resp = client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["screen_status"], "offline")
+
+
+# ===========================================================================
+# PHASE_09: E2E 验收测试（US-* 覆盖）
+# ===========================================================================
+
+class TC_E2E_US001_NavigationStructure(TestCase):
+    """TC-E2E-US001: US-001 — 设备管理导航入口存在（路由可访问）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us001")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+        _make_owner("3-1-7-702")
+
+    def test_device_list_url_is_accessible(self):
+        """GET /api/device-management/device-list/ 路由已注册且可访问（200）"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_url_not_found_for_wrong_path(self):
+        """错误路径返回 404，确认路由无歧义"""
+        resp = self.client.get("/api/device-management/")
+        self.assertIn(resp.status_code, (404, 405))
+
+
+class TC_E2E_US002_DisplayAllDevices(TestCase):
+    """TC-E2E-US002: US-002 — 设备列表展示所有专有部分"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us002")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 创建具代表性的多条记录
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("4-2-5-501", building="4", unit="2", room_number="501")
+
+    def test_all_owners_returned(self):
+        """无过滤时，返回所有 OwnerInfo 记录"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+
+    def test_results_contain_specific_part(self):
+        """每条结果包含 specific_part"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        sps = {r["specific_part"] for r in data["results"]}
+        self.assertIn("3-1-7-701", sps)
+        self.assertIn("3-1-7-702", sps)
+        self.assertIn("4-2-5-501", sps)
+
+
+class TC_E2E_US003_RoomNumberFilter(TestCase):
+    """TC-E2E-US003: US-003 — 房号过滤（三段格式）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us003")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        for r in ["701", "702", "703"]:
+            _make_owner(f"3-1-7-{r}", building="3", unit="1", room_number=r)
+        _make_owner("4-1-5-501", building="4", unit="1", room_number="501")
+
+    def test_filter_by_building_segment(self):
+        """room_no=3 仅返回 building=3 的记录"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3")
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+
+    def test_filter_by_building_unit(self):
+        """room_no=3-1 仅返回 building=3, unit=1 的记录"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1")
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+
+    def test_filter_exact_room(self):
+        """room_no=3-1-702 精确到单条"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "702")
+
+
+class TC_E2E_US004_ScreenStatusFilter(TestCase):
+    """TC-E2E-US004: US-004 — 大屏状态过滤"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us004")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+
+        _make_screen_status("3-1-7-701", "online")
+        _make_screen_status("3-1-7-702", "offline")
+
+    def test_filter_online(self):
+        resp = self.client.get("/api/device-management/device-list/?screen_status=online")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "701")
+
+    def test_filter_offline(self):
+        resp = self.client.get("/api/device-management/device-list/?screen_status=offline")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "702")
+
+    def test_filter_unknown(self):
+        resp = self.client.get("/api/device-management/device-list/?screen_status=unknown")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "703")
+
+
+class TC_E2E_US005_SystemSwitchFilter(TestCase):
+    """TC-E2E-US005: US-005 — 系统开关过滤"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us005")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        for room, sw_val in [("701", 1), ("702", 0)]:
+            _make_owner(f"3-1-7-{room}", building="3", unit="1", room_number=room)
+            PLCLatestData.objects.create(
+                specific_part=f"3-1-7-{room}", param_name="system_switch",
+                value=sw_val, building="3", unit="1", room_number=room,
+                collected_at=datetime.now(),
+            )
+        # 703: 无记录
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+
+    def test_filter_on(self):
+        resp = self.client.get("/api/device-management/device-list/?system_switch=on")
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "701")
+
+    def test_filter_off_includes_zero_and_null(self):
+        resp = self.client.get("/api/device-management/device-list/?system_switch=off")
+        data = resp.json()
+        # 702 (value=0) + 703 (NULL)
+        self.assertEqual(data["count"], 2)
+
+
+class TC_E2E_US006_ScreenStatusPipelineIntegration(TestCase):
+    """TC-E2E-US006: US-006 — 大屏状态写入管道（checker→handler→DB→API）集成"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us006")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+
+    def test_handler_pipeline_online_status_visible_in_api(self):
+        """Handler 写入 online → API 返回 online"""
+        handler = ScreenConnectivityHandler()
+        payload = {"specific_part": "3-1-7-702", "status": "online", "checked_at": "2026-04-27T12:00:00"}
+        handler.handle("/datacollection/screen/connectivity", payload)
+
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        self.assertEqual(data["results"][0]["screen_status"], "online")
+
+    def test_handler_status_update_reflects_in_api(self):
+        """Handler 先写 online 再写 offline → API 最终返回 offline"""
+        handler = ScreenConnectivityHandler()
+        handler.handle("/datacollection/screen/connectivity",
+                       {"specific_part": "3-1-7-702", "status": "online", "checked_at": "2026-04-27T12:00:00"})
+        handler.handle("/datacollection/screen/connectivity",
+                       {"specific_part": "3-1-7-702", "status": "offline", "checked_at": "2026-04-27T12:01:00"})
+
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        self.assertEqual(data["results"][0]["screen_status"], "offline")
+
+
+class TC_E2E_US007_DevicePanelEntry(TestCase):
+    """TC-E2E-US007: US-007 — 设备面板入口（specific_part 在响应中可用）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us007")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+
+    def test_specific_part_in_each_result(self):
+        """每条结果包含 specific_part，可作为设备面板入口参数"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        for item in data["results"]:
+            self.assertIn("specific_part", item)
+            self.assertTrue(item["specific_part"])  # 非空
+
+    def test_specific_part_format_four_segments(self):
+        """specific_part 格式为四段（楼-单-层-户）"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        for item in data["results"]:
+            parts = item["specific_part"].split("-")
+            self.assertEqual(len(parts), 4, f"specific_part 格式错误: {item['specific_part']}")
+
+
+class TC_E2E_NFR_Performance(TestCase):
+    """TC-E2E-NFR: NFR-003 — 响应时间与分页性能（50条以内，无严格时间要求于测试环境）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_nfr")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 创建 50 条测试数据（模拟真实数据量）
+        for i in range(1, 51):
+            OwnerInfo.objects.create(
+                specific_part=f"3-1-{i}-{700+i}",
+                location_name=f"NFR测试-{i}",
+                building="3",
+                unit="1",
+                floor=f"{i}楼",
+                room_number=str(700 + i),
+                bind_status="已绑定",
+                ip_address=f"192.168.{i//256}.{i%256}",
+                unique_id=f"nfr{i:05d}",
+                plc_ip_address=f"10.0.{i//256}.{i%256}",
+            )
+
+    def test_50_records_returned_with_page_size_50(self):
+        """50 条数据可在单页返回（NFR-003 分页上限）"""
+        resp = self.client.get("/api/device-management/device-list/?page_size=50")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 50)
+        self.assertEqual(len(data["results"]), 50)
+
+    def test_combined_filters_work_together(self):
+        """多个过滤条件同时生效（room_no + screen_status）"""
+        # 给前5条设置 online 状态
+        for i in range(1, 6):
+            ScreenConnectivityStatus.objects.create(
+                specific_part=f"3-1-{i}-{700+i}",
+                status="online",
+                last_checked_at=datetime.now(),
+            )
+
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1&screen_status=online")
+        data = resp.json()
+        self.assertEqual(data["count"], 5)
+        for item in data["results"]:
+            self.assertEqual(item["screen_status"], "online")

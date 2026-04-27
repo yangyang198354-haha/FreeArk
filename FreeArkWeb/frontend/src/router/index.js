@@ -100,6 +100,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 设备管理 — 设备列表（MOD-FE-01, US-001）
+    path: '/device-management/device-list',
+    name: 'DeviceManagementDeviceList',
+    component: () => import('../views/DeviceManagementDeviceListView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

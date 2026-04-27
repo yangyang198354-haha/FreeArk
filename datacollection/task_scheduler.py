@@ -26,6 +26,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datacollection.log_config_manager import get_logger
 # 导入改进的数据收集管理器
 from datacollection.improved_data_collection_manager import ImprovedDataCollectionManager
+# 导入大屏连通性探测任务（MOD-DC-01）
+from datacollection.screen_connectivity_checker import ScreenConnectivityTask
 
 # 获取logger
 logger = get_logger('task_scheduler')
@@ -55,6 +57,8 @@ class TaskScheduler:
         self.stop_event = threading.Event()
         self.group_threads: List[threading.Thread] = []
         self.data_collection_manager: Optional[ImprovedDataCollectionManager] = None
+        # MOD-DC-01: 大屏连通性探测线程
+        self._screen_connectivity_thread: Optional[threading.Thread] = None
         self.load_config()
 
         # 设置信号处理
@@ -280,6 +284,92 @@ class TaskScheduler:
 
         logger.info(f"任务调度器已启动，共 {len(self.group_threads)} 个调度分组")
 
+        # MOD-DC-01: 启动大屏连通性探测线程
+        self._start_screen_connectivity_task()
+
+    def _start_screen_connectivity_task(self):
+        """MOD-DC-01: 启动大屏连通性定时探测线程。
+
+        尝试从 MQTT 配置文件读取连接信息，创建独立 MQTTClient 后启动 ScreenConnectivityTask。
+        失败时记录 warning 并跳过（不影响 PLC 采集主流程）。
+        """
+        try:
+            from datacollection.mqtt_client import MQTTClient
+
+            # 从 task_scheduler_config.json 中读取 MQTT 配置（与现有 output.mqtt.server 一致）
+            resource_dir = self._get_resource_dir()
+            config_path = os.path.join(resource_dir, 'task_scheduler_config.json')
+            mqtt_host = '192.168.31.97'
+            mqtt_port = 32795
+            mqtt_username = ''
+            mqtt_password = ''
+
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        cfg = json.load(f)
+                    server_cfg = (
+                        cfg.get('scheduler', {})
+                        .get('output', {})
+                        .get('mqtt', {})
+                        .get('server', {})
+                    )
+                    if not server_cfg:
+                        # 尝试备选路径
+                        import glob as _glob
+                        output_cfgs = _glob.glob(os.path.join(resource_dir, '*.json'))
+                        for oc in output_cfgs:
+                            try:
+                                with open(oc, 'r', encoding='utf-8') as f2:
+                                    oc_data = json.load(f2)
+                                server_cfg = oc_data.get('output', {}).get('mqtt', {}).get('server', {})
+                                if server_cfg:
+                                    break
+                            except Exception:
+                                pass
+                    if server_cfg:
+                        mqtt_host = server_cfg.get('host', mqtt_host)
+                        mqtt_port = int(server_cfg.get('port', mqtt_port))
+                        mqtt_username = server_cfg.get('username', '')
+                        mqtt_password = server_cfg.get('password', '')
+                except Exception as e:
+                    logger.warning(f"ScreenConnectivity: 读取 MQTT 配置失败，使用默认值: {e}")
+
+            mqtt_client = MQTTClient(
+                host=mqtt_host,
+                port=mqtt_port,
+                client_id=f'screen_checker_{os.getpid()}',
+                username=mqtt_username or None,
+                password=mqtt_password or None,
+            )
+            connected = mqtt_client.connect()
+            if not connected:
+                logger.warning(
+                    "ScreenConnectivity: MQTT 连接失败，大屏探测任务未启动。"
+                    "请检查 MQTT broker 配置。"
+                )
+                return
+
+            task = ScreenConnectivityTask(
+                mqtt_client=mqtt_client,
+                stop_event=self.stop_event,
+            )
+            self._screen_connectivity_thread = threading.Thread(
+                target=task.run_loop,
+                name='ScreenConnectivity',
+                daemon=True,
+            )
+            self._screen_connectivity_thread.start()
+            logger.info(
+                f"ScreenConnectivity: 大屏探测线程已启动 "
+                f"(MQTT: {mqtt_host}:{mqtt_port})"
+            )
+        except Exception as e:
+            logger.warning(
+                f"ScreenConnectivity: 启动大屏探测任务失败（非致命，PLC 采集不受影响）: {e}",
+                exc_info=True,
+            )
+
     def stop(self):
         """停止所有调度线程"""
         if not self.group_threads or not any(t.is_alive() for t in self.group_threads):
@@ -290,6 +380,10 @@ class TaskScheduler:
         for t in self.group_threads:
             if t.is_alive():
                 t.join(timeout=15)
+
+        # MOD-DC-01: 等待大屏探测线程退出
+        if self._screen_connectivity_thread and self._screen_connectivity_thread.is_alive():
+            self._screen_connectivity_thread.join(timeout=10)
 
         if self.data_collection_manager:
             self.data_collection_manager.stop()

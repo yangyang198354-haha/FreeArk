@@ -7,9 +7,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
-from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum
+from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum, Subquery, OuterRef, Q
+from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory, ScreenConnectivityStatus
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
@@ -1376,4 +1377,169 @@ def get_device_param_history(request):
         'page': page,
         'page_size': page_size,
         'results': serializer.data,
+    })
+
+
+# ---------------------------------------------------------------------------
+# MOD-BE-01 — 设备管理：设备列表接口
+# REQ-FUNC-001~005, US-002~007, NFR-001~003
+# ---------------------------------------------------------------------------
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def device_management_device_list(request):
+    """
+    GET /api/device-management/device-list/
+
+    返回本小区所有专有部分的设备列表，支持三维过滤与分页。
+
+    Query 参数：
+      room_no        (str, 可选)  — 三段格式，如 "3-1-702"，1~3 段均可
+      screen_status  (str, 可选)  — "online" | "offline" | "unknown"
+      system_switch  (str, 可选)  — "on" | "off"
+      page           (int, 可选)  — 默认 1
+      page_size      (int, 可选)  — 可选 10/20/50，默认 20，最大 50
+
+    响应 200：
+      {
+        "count": <int>,
+        "page": <int>,
+        "page_size": <int>,
+        "results": [ {
+          "specific_part": <str>,
+          "building": <str>,
+          "unit": <str>,
+          "room_number": <str>,
+          "screen_status": "online"|"offline"|"unknown",
+          "screen_last_checked_at": <str|null>,
+          "system_switch_value": <int|null>,
+          "system_switch_display": "开"|"关"|"未知"
+        } ]
+      }
+    """
+    # ---- 1. 解析过滤参数 ----
+    room_no = request.GET.get('room_no', '').strip()
+    screen_status_filter = request.GET.get('screen_status', '').strip().lower()
+    system_switch_filter = request.GET.get('system_switch', '').strip().lower()
+
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = max(1, min(50, int(request.GET.get('page_size', 20))))
+    except (ValueError, TypeError):
+        page_size = 20
+
+    # ---- 2. 基础查询集（OwnerInfo 全量，按 building/unit/room_number 升序）----
+    qs = OwnerInfo.objects.all().order_by('building', 'unit', 'room_number')
+
+    # ---- 3. 房号过滤（三段解析，ADR-005）----
+    if room_no:
+        parts = room_no.split('-')
+        # 过滤非法字符（每段只允许数字/字母，最多3段）
+        if len(parts) > 3 or any(not p.strip() for p in parts):
+            return Response(
+                {'error': 'room_no 格式非法，期望 1~3 段数字，如 3-1-702'},
+                status=400,
+            )
+        try:
+            if len(parts) >= 1 and parts[0]:
+                qs = qs.filter(building=parts[0].strip())
+            if len(parts) >= 2 and parts[1]:
+                qs = qs.filter(unit=parts[1].strip())
+            if len(parts) >= 3 and parts[2]:
+                qs = qs.filter(room_number=parts[2].strip())
+        except Exception:
+            return Response(
+                {'error': 'room_no 格式非法，期望 1~3 段数字，如 3-1-702'},
+                status=400,
+            )
+
+    # ---- 4. Subquery annotate：大屏连通状态（ADR-001）----
+    screen_status_sq = Subquery(
+        ScreenConnectivityStatus.objects.filter(
+            specific_part=OuterRef('specific_part')
+        ).values('status')[:1]
+    )
+    screen_checked_sq = Subquery(
+        ScreenConnectivityStatus.objects.filter(
+            specific_part=OuterRef('specific_part')
+        ).values('last_checked_at')[:1]
+    )
+
+    # ---- 5. Subquery annotate：系统开关值（ADR-001）----
+    system_switch_sq = Subquery(
+        PLCLatestData.objects.filter(
+            building=OuterRef('building'),
+            unit=OuterRef('unit'),
+            room_number=OuterRef('room_number'),
+            param_name='system_switch',
+        ).values('value')[:1]
+    )
+
+    qs = qs.annotate(
+        _screen_status=screen_status_sq,
+        _screen_checked_at=screen_checked_sq,
+        _system_switch_value=system_switch_sq,
+    )
+
+    # ---- 6. 大屏状态过滤 ----
+    if screen_status_filter == 'online':
+        qs = qs.filter(_screen_status='online')
+    elif screen_status_filter == 'offline':
+        qs = qs.filter(_screen_status='offline')
+    elif screen_status_filter == 'unknown':
+        qs = qs.filter(_screen_status__isnull=True)
+
+    # ---- 7. 系统开关过滤 ----
+    if system_switch_filter == 'on':
+        qs = qs.filter(_system_switch_value__isnull=False).exclude(_system_switch_value=0)
+    elif system_switch_filter == 'off':
+        # value IS NULL OR value = 0
+        qs = qs.filter(Q(_system_switch_value__isnull=True) | Q(_system_switch_value=0))
+
+    # ---- 8. 分页 ----
+    total = qs.count()
+    start = (page - 1) * page_size
+    page_qs = qs[start:start + page_size]
+
+    # ---- 9. 序列化结果 ----
+    results = []
+    for owner in page_qs:
+        raw_status = owner._screen_status          # None / "online" / "offline"
+        checked_at = owner._screen_checked_at      # datetime | None
+        sw_value = owner._system_switch_value      # int | None
+
+        # 映射大屏状态显示
+        if raw_status == 'online':
+            screen_display = 'online'
+        elif raw_status == 'offline':
+            screen_display = 'offline'
+        else:
+            screen_display = 'unknown'
+
+        # 映射系统开关显示
+        if sw_value is None:
+            sw_display = '未知'
+        elif sw_value == 0:
+            sw_display = '关'
+        else:
+            sw_display = '开'
+
+        results.append({
+            'specific_part': owner.specific_part,
+            'building': owner.building,
+            'unit': owner.unit,
+            'room_number': owner.room_number,
+            'screen_status': screen_display,
+            'screen_last_checked_at': checked_at.isoformat() if checked_at else None,
+            'system_switch_value': sw_value,
+            'system_switch_display': sw_display,
+        })
+
+    return Response({
+        'count': total,
+        'page': page,
+        'page_size': page_size,
+        'results': results,
     })

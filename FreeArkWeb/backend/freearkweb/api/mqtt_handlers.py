@@ -3,7 +3,7 @@ from datetime import datetime
 from abc import ABC, abstractmethod
 from django.db import transaction, connection
 from django.utils import timezone
-from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData, DeviceParamHistory
+from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData, DeviceParamHistory, ScreenConnectivityStatus
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -811,3 +811,84 @@ class PLCLatestDataHandler(MessageHandler):
         except Exception as e:
             logger.error(f"PLCLatestDataHandler: 批量 upsert 失败: {e}", exc_info=True)
             raise
+
+
+# ---------------------------------------------------------------------------
+# MOD-MQTT-01 — ScreenConnectivityHandler
+# 订阅 /datacollection/screen/connectivity，将大屏探测结果写入 ScreenConnectivityStatus 表。
+# ---------------------------------------------------------------------------
+class ScreenConnectivityHandler(MessageHandler):
+    """处理大屏连通性探测结果（来自 datacollection 进程），upsert ScreenConnectivityStatus 表。
+
+    期望 payload 格式（JSON dict）：
+    {
+        "specific_part": <str>,          // 四段格式，如 "3-1-7-702"
+        "status": "online" | "offline",
+        "checked_at": <ISO8601 string>   // 如 "2026-04-26T02:00:00"
+    }
+
+    异常捕获：DB 写入失败记录日志，不中断消费进程。
+    """
+
+    ALLOWED_STATUSES = {'online', 'offline'}
+
+    def handle(self, topic, payload, building_file=None):
+        """处理单条大屏连通性消息，写入 ScreenConnectivityStatus 表。"""
+        if not isinstance(payload, dict):
+            logger.warning(
+                f"ScreenConnectivityHandler: payload 类型不正确 ({type(payload).__name__})，跳过"
+            )
+            return
+
+        specific_part = payload.get('specific_part', '').strip()
+        status_val = payload.get('status', '').strip().lower()
+        checked_at_str = payload.get('checked_at', '')
+
+        # 验证 specific_part 非空
+        if not specific_part:
+            logger.warning(
+                f"ScreenConnectivityHandler: specific_part 为空，丢弃消息: topic={topic}"
+            )
+            return
+
+        # 验证 status 在允许值内
+        if status_val not in self.ALLOWED_STATUSES:
+            logger.warning(
+                f"ScreenConnectivityHandler: status 值非法 '{status_val}'，"
+                f"期望 online|offline，丢弃消息: specific_part={specific_part}"
+            )
+            return
+
+        # 解析 checked_at
+        checked_at = None
+        if checked_at_str:
+            try:
+                checked_at = datetime.fromisoformat(str(checked_at_str))
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"ScreenConnectivityHandler: checked_at 格式无法解析 '{checked_at_str}'，"
+                    f"使用当前时间: specific_part={specific_part}"
+                )
+        if checked_at is None:
+            checked_at = datetime.now()
+
+        # upsert ScreenConnectivityStatus（ADR-003：update_or_create 确保每户一条）
+        try:
+            obj, created = ScreenConnectivityStatus.objects.update_or_create(
+                specific_part=specific_part,
+                defaults={
+                    'status': status_val,
+                    'last_checked_at': checked_at,
+                },
+            )
+            action = 'created' if created else 'updated'
+            logger.debug(
+                f"ScreenConnectivityHandler: {action} ScreenConnectivityStatus — "
+                f"specific_part={specific_part}, status={status_val}, checked_at={checked_at}"
+            )
+        except Exception as e:
+            logger.error(
+                f"ScreenConnectivityHandler: DB 写入失败 — specific_part={specific_part}, "
+                f"error={e}",
+                exc_info=True,
+            )

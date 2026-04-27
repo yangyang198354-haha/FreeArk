@@ -59,4 +59,7 @@ urlpatterns = [
     # 非专有部分设备历史参数查询接口 (REQ-FUNC-034)
     # 使用 query param 方式：?specific_part=9-1-31-3104[&sub_type=...][&param_name=...]
     path('devices/param-history/', views.get_device_param_history, name='device-param-history'),
+
+    # 设备管理 — 设备列表接口 (MOD-BE-01, US-002~007)
+    path('device-management/device-list/', views.device_management_device_list, name='device-management-device-list'),
 ]
