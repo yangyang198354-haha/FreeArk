@@ -1,9 +1,9 @@
-# MOD-DC-01 — 大屏连通性 TCP 探测模块
+# MOD-DC-01 — 大屏连通性 ICMP 探测模块
 # author_agent: sub_agent_software_developer
 # project: FreeArk_DeviceManagement
 # invocation_id: INVOKE-GROUP_C-001
 """
-每分钟对所有 OwnerInfo.ip_address 非空的户执行 TCP 连通性探测，
+每分钟对所有 OwnerInfo.ip_address 非空的户执行 ICMP ping 连通性探测，
 结果发布到 MQTT topic /datacollection/screen/connectivity。
 
 集成到 TaskScheduler：在 start() 中启动独立的 screen_connectivity 调度线程。
@@ -18,7 +18,7 @@
 import json
 import logging
 import os
-import socket
+import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,8 +31,7 @@ logger = logging.getLogger(__name__)
 # 探测配置（可通过外部传参覆盖）
 # ---------------------------------------------------------------------------
 DEFAULT_MAX_WORKERS = 20    # 最大并发探测线程数（ADR-002）
-DEFAULT_TIMEOUT_SECS = 3    # 单 IP TCP 探测超时（秒）
-DEFAULT_TCP_PORT = 80       # 探测端口
+DEFAULT_TIMEOUT_SECS = 2    # 单 IP ping 等待超时（秒）
 INTERVAL_SECONDS = 60       # 调度间隔（秒）
 
 
@@ -51,27 +50,25 @@ class ScreenConnectivityChecker:
         self,
         max_workers: int = DEFAULT_MAX_WORKERS,
         timeout: int = DEFAULT_TIMEOUT_SECS,
-        tcp_port: int = DEFAULT_TCP_PORT,
     ):
         self.max_workers = max_workers
         self.timeout = timeout
-        self.tcp_port = tcp_port
 
     def probe_single(self, ip: str, timeout: int = None) -> bool:
-        """对单个 IP 执行 TCP port 80 连通性探测。
+        """对单个 IP 执行 ICMP ping 连通性探测。
 
         Returns:
-            True  — 可达（连接成功或连接被拒（端口关闭但主机存在））
-            False — 不可达（超时或其他网络错误）
+            True  — ICMP 可达（ping returncode == 0）
+            False — 不可达或异常
         """
         t = timeout if timeout is not None else self.timeout
         try:
-            with socket.create_connection((ip, self.tcp_port), timeout=t):
-                return True
-        except ConnectionRefusedError:
-            # 主机可达，但端口拒绝连接（设备存在但服务未开启），视为在线
-            return True
-        except (socket.timeout, OSError):
+            result = subprocess.run(
+                ['ping', '-c', '1', '-W', str(t), ip],
+                capture_output=True,
+            )
+            return result.returncode == 0
+        except Exception:
             return False
 
     def check_all(
