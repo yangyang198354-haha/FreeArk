@@ -25,6 +25,11 @@ yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-mqtt-consumer
 yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-mqtt-consumer
 yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-mqtt-consumer
 
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-screen-heartbeat
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-screen-heartbeat
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-screen-heartbeat
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-screen-heartbeat
+
 yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-daily-usage
 yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-daily-usage
 yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-daily-usage
