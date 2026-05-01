@@ -37,7 +37,16 @@
             <el-icon><HomeFilled /></el-icon>
             <span>系统看板</span>
           </el-menu-item>
-          
+
+          <!-- 设备管理（MOD-FE-01, US-001）— 移至导航第二位 -->
+          <el-sub-menu index="device-management">
+            <template #title>
+              <el-icon><List /></el-icon>
+              <span>设备管理</span>
+            </template>
+            <el-menu-item index="/device-management/device-list">设备列表</el-menu-item>
+          </el-sub-menu>
+
           <el-sub-menu index="usage">
             <template #title>
               <el-icon><Document /></el-icon>
@@ -47,16 +56,15 @@
             <el-menu-item index="/daily-usage-report">能耗每日用量报表</el-menu-item>
             <el-menu-item index="/usage-query">用量查询</el-menu-item>
           </el-sub-menu>
-          
+
           <el-sub-menu index="services">
             <template #title>
               <el-icon><Setting /></el-icon>
               <span>服务管理</span>
             </template>
             <el-menu-item index="/services">服务列表</el-menu-item>
-            <el-menu-item index="/plc-status">PLC在线离线监控</el-menu-item>
           </el-sub-menu>
-          
+
           <!-- 只有管理员才能看到用户管理菜单 -->
           <el-sub-menu index="user" v-if="userRole === 'admin'">
             <template #title>
@@ -77,15 +85,6 @@
             <el-icon><Monitor /></el-icon>
             <span>设备面板</span>
           </el-menu-item>
-
-          <!-- 设备管理（MOD-FE-01, US-001） -->
-          <el-sub-menu index="device-management">
-            <template #title>
-              <el-icon><List /></el-icon>
-              <span>设备管理</span>
-            </template>
-            <el-menu-item index="/device-management/device-list">设备列表</el-menu-item>
-          </el-sub-menu>
         </el-menu>
       </aside>
       

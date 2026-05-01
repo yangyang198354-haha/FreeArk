@@ -2,9 +2,14 @@
   MOD-FE-02 — 设备管理：设备列表页面
   author_agent: sub_agent_software_developer
   project: FreeArk_DeviceManagement
-  invocation_id: INVOKE-GROUP_C-001
+  invocation_id: INVOKE-GROUP_C-002
 
-  US-002~007：分页表格、三维过滤（房号/大屏状态/系统开关）、操作列跳转至设备面板。
+  变更记录（2026-05-01）：
+  - 移除「大屏检测时间」列（screen_last_checked_at）
+  - 新增「PLC状态」列（绿/红/灰 el-tag）
+  - 新增「PLC最后在线时间」列
+  - 过滤栏新增「PLC状态」el-select 下拉
+  - 操作列新增「PLC历史」按钮，点击打开 el-dialog 弹窗
 -->
 <template>
   <div class="device-management-device-list">
@@ -43,6 +48,16 @@
         <el-option label="开" value="on" />
         <el-option label="关" value="off" />
       </el-select>
+      <el-select
+        v-model="filterPlcStatus"
+        placeholder="PLC状态"
+        clearable
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="在线" value="online" />
+        <el-option label="离线" value="offline" />
+      </el-select>
       <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
       <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
     </div>
@@ -68,9 +83,19 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="大屏检测时间" min-width="160" align="center">
+      <el-table-column label="PLC状态" width="120" align="center">
         <template #default="{ row }">
-          <span>{{ row.screen_last_checked_at || '—' }}</span>
+          <el-tag
+            :type="plcStatusTagType(row.plc_status)"
+            size="small"
+          >
+            {{ plcStatusLabel(row.plc_status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="PLC最后在线时间" min-width="160" align="center">
+        <template #default="{ row }">
+          <span>{{ formatDateTime(row.plc_last_online_time) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="系统开关" width="110" align="center">
@@ -83,7 +108,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" align="center" fixed="right">
+      <el-table-column label="操作" width="180" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
             type="primary"
@@ -92,6 +117,14 @@
             @click="handleGoToDevicePanel(row)"
           >
             设备面板
+          </el-button>
+          <el-button
+            type="info"
+            link
+            size="small"
+            @click="handleOpenPlcHistory(row)"
+          >
+            PLC历史
           </el-button>
         </template>
       </el-table-column>
@@ -110,6 +143,47 @@
         @current-change="handlePageChange"
       />
     </div>
+
+    <!-- PLC历史弹窗 -->
+    <el-dialog
+      v-model="plcHistoryDialogVisible"
+      :title="`PLC 状态历史 — ${plcHistorySpecificPart}`"
+      width="600px"
+      destroy-on-close
+    >
+      <div v-loading="plcHistoryLoading" class="plc-history-content">
+        <div v-if="!plcHistoryLoading && plcHistoryList.length === 0" class="no-data">
+          暂无 PLC 状态变化记录
+        </div>
+        <el-table
+          v-if="plcHistoryList.length > 0"
+          :data="plcHistoryList"
+          stripe
+          border
+          size="small"
+          style="width: 100%"
+        >
+          <el-table-column label="状态" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag
+                :type="row.status === 'online' ? 'success' : 'danger'"
+                size="small"
+              >
+                {{ row.status === 'online' ? '上线' : '离线' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="变化时间" align="center">
+            <template #default="{ row }">
+              <span>{{ formatDateTime(row.change_time) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="plcHistoryDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -137,6 +211,13 @@ export default {
     const filterRoomNo = ref('')
     const filterScreenStatus = ref('')
     const filterSystemSwitch = ref('')
+    const filterPlcStatus = ref('')
+
+    // PLC 历史弹窗状态
+    const plcHistoryDialogVisible = ref(false)
+    const plcHistoryLoading = ref(false)
+    const plcHistoryList = ref([])
+    const plcHistorySpecificPart = ref('')
 
     // --- API 调用 ---
     const fetchList = async () => {
@@ -154,6 +235,9 @@ export default {
         }
         if (filterSystemSwitch.value) {
           params.system_switch = filterSystemSwitch.value
+        }
+        if (filterPlcStatus.value) {
+          params.plc_status = filterPlcStatus.value
         }
 
         const queryString = new URLSearchParams(params).toString()
@@ -179,6 +263,28 @@ export default {
       }
     }
 
+    const fetchPlcHistory = async (specificPart) => {
+      plcHistoryLoading.value = true
+      plcHistoryList.value = []
+      try {
+        const response = await api.get(`/api/plc/status-change-history/${encodeURIComponent(specificPart)}/`)
+        // 响应格式：{ total, data: [...] }
+        if (response && Array.isArray(response.data)) {
+          // 倒序展示（最新的在最前面）
+          plcHistoryList.value = [...response.data].reverse()
+        } else if (Array.isArray(response)) {
+          plcHistoryList.value = [...response].reverse()
+        } else {
+          plcHistoryList.value = []
+        }
+      } catch (err) {
+        ElMessage.error('获取 PLC 历史记录失败')
+        plcHistoryList.value = []
+      } finally {
+        plcHistoryLoading.value = false
+      }
+    }
+
     // --- 事件处理 ---
     const handleSearch = () => {
       currentPage.value = 1
@@ -189,6 +295,7 @@ export default {
       filterRoomNo.value = ''
       filterScreenStatus.value = ''
       filterSystemSwitch.value = ''
+      filterPlcStatus.value = ''
       currentPage.value = 1
       fetchList()
     }
@@ -208,6 +315,12 @@ export default {
       router.push(`/device-cards?specific_part=${encodeURIComponent(row.specific_part)}`)
     }
 
+    const handleOpenPlcHistory = (row) => {
+      plcHistorySpecificPart.value = row.specific_part
+      plcHistoryDialogVisible.value = true
+      fetchPlcHistory(row.specific_part)
+    }
+
     // --- 辅助函数 ---
     const screenStatusLabel = (status) => {
       if (status === 'online') return '在线'
@@ -221,10 +334,33 @@ export default {
       return 'info'
     }
 
+    const plcStatusLabel = (status) => {
+      if (status === 'online') return '在线'
+      if (status === 'offline') return '离线'
+      return '未知'
+    }
+
+    const plcStatusTagType = (status) => {
+      if (status === 'online') return 'success'
+      if (status === 'offline') return 'danger'
+      return 'info'
+    }
+
     const systemSwitchTagType = (display) => {
       if (display === '开') return 'success'
       if (display === '关') return 'danger'
       return 'info'
+    }
+
+    const formatDateTime = (isoStr) => {
+      if (!isoStr) return '—'
+      try {
+        const d = new Date(isoStr)
+        const pad = (n) => String(n).padStart(2, '0')
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+      } catch {
+        return isoStr
+      }
     }
 
     onMounted(() => {
@@ -240,6 +376,11 @@ export default {
       filterRoomNo,
       filterScreenStatus,
       filterSystemSwitch,
+      filterPlcStatus,
+      plcHistoryDialogVisible,
+      plcHistoryLoading,
+      plcHistoryList,
+      plcHistorySpecificPart,
       Search,
       RefreshLeft,
       fetchList,
@@ -248,9 +389,13 @@ export default {
       handlePageChange,
       handlePageSizeChange,
       handleGoToDevicePanel,
+      handleOpenPlcHistory,
       screenStatusLabel,
       screenStatusTagType,
+      plcStatusLabel,
+      plcStatusTagType,
       systemSwitchTagType,
+      formatDateTime,
     }
   },
 }
@@ -283,5 +428,16 @@ export default {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.plc-history-content {
+  min-height: 100px;
+}
+
+.no-data {
+  text-align: center;
+  color: #c0c4cc;
+  padding: 30px 0;
+  font-size: 14px;
 }
 </style>

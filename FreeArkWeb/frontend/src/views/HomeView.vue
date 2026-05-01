@@ -73,11 +73,36 @@
       <el-card class="stat-card" v-loading="loading.plcRate">
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ plcRate.rate }}%</div>
-            <div class="stat-label">系统运行率 ({{ plcRate.online_count }}/{{ plcRate.total_count }})</div>
+            <div class="stat-value" style="color: #67c23a">{{ plcRate.online_count }}</div>
+            <div class="stat-label">PLC 在线</div>
+            <div class="stat-sub">在线率 {{ plcRate.rate }}%</div>
           </div>
-          <div class="stat-icon system">
+          <div class="stat-icon plc-online">
             <el-icon><CircleCheck /></el-icon>
+          </div>
+        </div>
+      </el-card>
+
+      <el-card class="stat-card" v-loading="loading.plcRate">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value" style="color: #f56c6c">{{ plcRate.offline_count }}</div>
+            <div class="stat-label">PLC 离线</div>
+          </div>
+          <div class="stat-icon plc-offline">
+            <el-icon><CircleClose /></el-icon>
+          </div>
+        </div>
+      </el-card>
+
+      <el-card class="stat-card" v-loading="loading.plcRate">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value" style="color: #409eff">{{ plcRate.total_count }}</div>
+            <div class="stat-label">PLC 设备总数</div>
+          </div>
+          <div class="stat-icon plc-total">
+            <el-icon><Cpu /></el-icon>
           </div>
         </div>
       </el-card>
@@ -150,13 +175,15 @@
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import Chart from 'chart.js/auto'
-import { CircleCheck, Calendar, Document } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Cpu, Calendar, Document } from '@element-plus/icons-vue'
 import api from '../utils/api.js'
 
 export default {
   name: 'HomeView',
   components: {
     CircleCheck,
+    CircleClose,
+    Cpu,
     Calendar,
     Document
   },
@@ -517,6 +544,27 @@ export default {
 .stat-icon.system {
   background-color: rgba(102, 126, 234, 0.1);
   color: #667eea;
+}
+
+.stat-icon.plc-online {
+  background-color: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.stat-icon.plc-offline {
+  background-color: rgba(245, 108, 108, 0.1);
+  color: #f56c6c;
+}
+
+.stat-icon.plc-total {
+  background-color: rgba(64, 158, 255, 0.1);
+  color: #409eff;
+}
+
+.stat-sub {
+  font-size: 12px;
+  color: #c0c4cc;
+  margin-top: 2px;
 }
 
 /* 图表区域样式 */

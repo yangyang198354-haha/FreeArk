@@ -29,6 +29,7 @@ from rest_framework.test import APIClient
 from api.models import (
     CustomUser,
     OwnerInfo,
+    PLCConnectionStatus,
     PLCLatestData,
     ScreenConnectivityStatus,
 )
@@ -105,6 +106,25 @@ def _make_plc_latest(building, unit, room_number, param_name="system_switch", va
         unit=unit,
         room_number=room_number,
         collected_at=datetime.now(),
+    )
+
+
+def _make_plc_connection_status(specific_part, connection_status="online", last_online_time=None):
+    """创建 PLCConnectionStatus 记录。"""
+    from django.utils import timezone as _tz
+    parts = specific_part.split('-')
+    building = parts[0] if len(parts) > 0 else ''
+    unit = parts[1] if len(parts) > 1 else ''
+    room_number = parts[3] if len(parts) > 3 else ''
+    if last_online_time is None:
+        last_online_time = _tz.now() if connection_status == 'online' else None
+    return PLCConnectionStatus.objects.create(
+        specific_part=specific_part,
+        connection_status=connection_status,
+        last_online_time=last_online_time,
+        building=building,
+        unit=unit,
+        room_number=room_number,
     )
 
 
@@ -466,7 +486,7 @@ class TC_I_002_DeviceListAPIResponseSchema(TestCase):
             self.assertIn(key, data, f"缺少顶层字段: {key}")
 
     def test_result_item_fields(self):
-        """results 中每条记录含所有必需字段（新字段名 screen_last_seen_at）"""
+        """results 中每条记录含所有必需字段，且不含已移除的 screen_last_checked_at"""
         resp = self.client.get("/api/device-management/device-list/")
         data = resp.json()
         self.assertGreater(len(data["results"]), 0)
@@ -475,9 +495,12 @@ class TC_I_002_DeviceListAPIResponseSchema(TestCase):
             "specific_part", "building", "unit", "room_number",
             "screen_status", "screen_last_seen_at",
             "system_switch_value", "system_switch_display",
+            "plc_status", "plc_last_online_time",
         ]
         for f in required_fields:
             self.assertIn(f, item, f"result 条目缺少字段: {f}")
+        # screen_last_checked_at 已移除，不应出现在响应中
+        self.assertNotIn("screen_last_checked_at", item)
 
     def test_screen_status_is_online(self):
         """有近期 last_seen_at 的记录，screen_status 返回 online"""
@@ -985,3 +1008,173 @@ class TC_E2E_NFR_Performance(TestCase):
         self.assertEqual(data["count"], 5)
         for item in data["results"]:
             self.assertEqual(item["screen_status"], "online")
+
+
+# ===========================================================================
+# 新增：PLC 状态字段与过滤测试（2026-05-01）
+# ===========================================================================
+
+class TC_I_007_DeviceListAPIPlcStatusFields(TestCase):
+    """TC-I-007: 设备列表 API — plc_status / plc_last_online_time 字段测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_plc_field_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+
+        # 701: PLC online，有 last_online_time
+        _make_plc_connection_status("3-1-7-701", connection_status="online")
+        # 702: PLC offline，last_online_time=None
+        _make_plc_connection_status("3-1-7-702", connection_status="offline", last_online_time=None)
+        # 703: 无 PLCConnectionStatus 记录 → unknown
+
+    def test_plc_status_online(self):
+        """有 online PLCConnectionStatus 记录时，plc_status=online"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-701")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        item = data["results"][0]
+        self.assertEqual(item["plc_status"], "online")
+        self.assertIsNotNone(item["plc_last_online_time"])
+
+    def test_plc_status_offline(self):
+        """有 offline PLCConnectionStatus 记录时，plc_status=offline"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        item = data["results"][0]
+        self.assertEqual(item["plc_status"], "offline")
+        self.assertIsNone(item["plc_last_online_time"])
+
+    def test_plc_status_unknown_when_no_record(self):
+        """无 PLCConnectionStatus 记录时，plc_status=unknown，plc_last_online_time=null"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-703")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        item = data["results"][0]
+        self.assertEqual(item["plc_status"], "unknown")
+        self.assertIsNone(item["plc_last_online_time"])
+
+    def test_screen_last_checked_at_not_in_response(self):
+        """响应中不含已移除的 screen_last_checked_at 字段"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        for item in data["results"]:
+            self.assertNotIn("screen_last_checked_at", item)
+
+    def test_plc_fields_present_in_all_results(self):
+        """所有结果条目均含 plc_status 和 plc_last_online_time 字段"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        for item in data["results"]:
+            self.assertIn("plc_status", item)
+            self.assertIn("plc_last_online_time", item)
+
+
+class TC_I_008_DeviceListAPIPlcStatusFilter(TestCase):
+    """TC-I-008: 设备列表 API — plc_status 过滤参数测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_plc_filter_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+
+        _make_plc_connection_status("3-1-7-701", connection_status="online")
+        _make_plc_connection_status("3-1-7-702", connection_status="offline", last_online_time=None)
+        # 703: 无记录 → unknown，不被 online/offline 过滤命中
+
+    def test_filter_plc_status_online(self):
+        """plc_status=online 过滤：只返回 PLCConnectionStatus.connection_status=online 的记录"""
+        resp = self.client.get("/api/device-management/device-list/?plc_status=online")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "701")
+        self.assertEqual(data["results"][0]["plc_status"], "online")
+
+    def test_filter_plc_status_offline(self):
+        """plc_status=offline 过滤：只返回 PLCConnectionStatus.connection_status=offline 的记录"""
+        resp = self.client.get("/api/device-management/device-list/?plc_status=offline")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "702")
+        self.assertEqual(data["results"][0]["plc_status"], "offline")
+
+    def test_filter_plc_status_does_not_include_unknown(self):
+        """plc_status=online/offline 均不返回无 PLCConnectionStatus 记录（unknown）的户"""
+        resp_online = self.client.get("/api/device-management/device-list/?plc_status=online")
+        resp_offline = self.client.get("/api/device-management/device-list/?plc_status=offline")
+
+        online_rooms = {r["room_number"] for r in resp_online.json()["results"]}
+        offline_rooms = {r["room_number"] for r in resp_offline.json()["results"]}
+
+        self.assertNotIn("703", online_rooms)
+        self.assertNotIn("703", offline_rooms)
+
+    def test_no_plc_filter_returns_all(self):
+        """不传 plc_status 参数时，返回全部3条记录"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+
+    def test_combined_plc_status_and_room_no_filter(self):
+        """plc_status=online AND room_no=3-1 同时生效"""
+        resp = self.client.get("/api/device-management/device-list/?plc_status=online&room_no=3-1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "701")
+
+
+class TC_I_009_PlcStatusUnknownDegradation(TestCase):
+    """TC-I-009: PLCConnectionStatus 无记录时的 unknown 降级测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_plc_unknown_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+    def test_owner_with_no_plc_record_returns_unknown_status(self):
+        """OwnerInfo 存在但 PLCConnectionStatus 无记录，plc_status=unknown"""
+        _make_owner("5-2-3-301", building="5", unit="2", room_number="301")
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        item = data["results"][0]
+        self.assertEqual(item["plc_status"], "unknown")
+        self.assertIsNone(item["plc_last_online_time"])
+
+    def test_multiple_owners_mixed_plc_records(self):
+        """部分户有 PLCConnectionStatus，部分没有；unknown 降级不影响其他户的正常返回"""
+        _make_owner("5-2-3-301", building="5", unit="2", room_number="301")
+        _make_owner("5-2-3-302", building="5", unit="2", room_number="302")
+        _make_owner("5-2-3-303", building="5", unit="2", room_number="303")
+
+        _make_plc_connection_status("5-2-3-301", connection_status="online")
+        # 302, 303 无记录
+
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+
+        items_by_room = {item["room_number"]: item for item in data["results"]}
+        self.assertEqual(items_by_room["301"]["plc_status"], "online")
+        self.assertEqual(items_by_room["302"]["plc_status"], "unknown")
+        self.assertEqual(items_by_room["303"]["plc_status"], "unknown")
