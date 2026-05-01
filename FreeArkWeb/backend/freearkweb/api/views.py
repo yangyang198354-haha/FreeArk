@@ -8,6 +8,8 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login, logout
 from django.db.models import Min, Max, Count, Case, When, IntegerField, Sum, Subquery, OuterRef, Q
+from django.utils import timezone
+from datetime import timedelta
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory, ScreenConnectivityStatus
@@ -963,6 +965,7 @@ def dashboard_trend(request):
 MONITORED_SERVICES = [
     'freeark-backend',
     'freeark-mqtt-consumer',
+    'freeark-screen-heartbeat',
     'freeark-daily-usage',
     'freeark-monthly-usage',
     'freeark-plc-cleanup',
@@ -1613,6 +1616,11 @@ def get_device_param_history(request):
 # MOD-BE-01 — 设备管理：设备列表接口
 # REQ-FUNC-001~005, US-002~007, NFR-001~003
 # ---------------------------------------------------------------------------
+
+# 大屏在线判断阈值（分钟）：last_seen_at 距今超过此值则视为离线
+ONLINE_THRESHOLD_MINUTES = 15
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def device_management_device_list(request):
@@ -1620,6 +1628,9 @@ def device_management_device_list(request):
     GET /api/device-management/device-list/
 
     返回本小区所有专有部分的设备列表，支持三维过滤与分页。
+
+    大屏在线判断基于心跳：last_seen_at 距今 <= ONLINE_THRESHOLD_MINUTES 分钟 → online，
+    否则 offline；ScreenConnectivityStatus 中无记录 → unknown。
 
     Query 参数：
       room_no        (str, 可选)  — 三段格式，如 "3-1-702"，1~3 段均可
@@ -1639,7 +1650,7 @@ def device_management_device_list(request):
           "unit": <str>,
           "room_number": <str>,
           "screen_status": "online"|"offline"|"unknown",
-          "screen_last_checked_at": <str|null>,
+          "screen_last_seen_at": <str|null>,
           "system_switch_value": <int|null>,
           "system_switch_display": "开"|"关"|"未知"
         } ]
@@ -1684,16 +1695,11 @@ def device_management_device_list(request):
                 status=400,
             )
 
-    # ---- 4. Subquery annotate：大屏连通状态（ADR-001）----
-    screen_status_sq = Subquery(
+    # ---- 4. Subquery annotate：大屏 last_seen_at（ADR-001）----
+    screen_last_seen_sq = Subquery(
         ScreenConnectivityStatus.objects.filter(
             specific_part=OuterRef('specific_part')
-        ).values('status')[:1]
-    )
-    screen_checked_sq = Subquery(
-        ScreenConnectivityStatus.objects.filter(
-            specific_part=OuterRef('specific_part')
-        ).values('last_checked_at')[:1]
+        ).values('last_seen_at')[:1]
     )
 
     # ---- 5. Subquery annotate：系统开关值（ADR-001）----
@@ -1707,45 +1713,52 @@ def device_management_device_list(request):
     )
 
     qs = qs.annotate(
-        _screen_status=screen_status_sq,
-        _screen_checked_at=screen_checked_sq,
+        _screen_last_seen_at=screen_last_seen_sq,
         _system_switch_value=system_switch_sq,
     )
 
-    # ---- 6. 大屏状态过滤 ----
-    if screen_status_filter == 'online':
-        qs = qs.filter(_screen_status='online')
-    elif screen_status_filter == 'offline':
-        qs = qs.filter(_screen_status='offline')
-    elif screen_status_filter == 'unknown':
-        qs = qs.filter(_screen_status__isnull=True)
+    # ---- 6. 在线状态阈值计算（Python 层，避免复杂 SQL 表达式）----
+    # 对于 screen_status 过滤，需要先取出全量再过滤，代价可接受（业主总数有限）。
+    # 若将来需要 DB 层过滤可改为 annotate ExpressionWrapper。
+    online_cutoff = timezone.now() - timedelta(minutes=ONLINE_THRESHOLD_MINUTES)
 
-    # ---- 7. 系统开关过滤 ----
+    def _compute_screen_status(last_seen_at):
+        """根据 last_seen_at 计算大屏状态字符串。"""
+        if last_seen_at is None:
+            return 'unknown'
+        return 'online' if last_seen_at >= online_cutoff else 'offline'
+
+    # ---- 7. 系统开关过滤（DB 层）----
     if system_switch_filter == 'on':
         qs = qs.filter(_system_switch_value__isnull=False).exclude(_system_switch_value=0)
     elif system_switch_filter == 'off':
-        # value IS NULL OR value = 0
         qs = qs.filter(Q(_system_switch_value__isnull=True) | Q(_system_switch_value=0))
 
     # ---- 8. 分页 ----
-    total = qs.count()
-    start = (page - 1) * page_size
-    page_qs = qs[start:start + page_size]
+    total_before_screen_filter = qs.count()
+
+    # 若需要按大屏状态过滤，在 Python 层处理（从 DB 取全量后过滤）
+    if screen_status_filter in ('online', 'offline', 'unknown'):
+        all_rows = list(qs)
+        filtered = [
+            owner for owner in all_rows
+            if _compute_screen_status(owner._screen_last_seen_at) == screen_status_filter
+        ]
+        total = len(filtered)
+        start = (page - 1) * page_size
+        page_rows = filtered[start:start + page_size]
+    else:
+        total = total_before_screen_filter
+        start = (page - 1) * page_size
+        page_rows = list(qs[start:start + page_size])
 
     # ---- 9. 序列化结果 ----
     results = []
-    for owner in page_qs:
-        raw_status = owner._screen_status          # None / "online" / "offline"
-        checked_at = owner._screen_checked_at      # datetime | None
-        sw_value = owner._system_switch_value      # int | None
+    for owner in page_rows:
+        last_seen_at = owner._screen_last_seen_at   # datetime | None
+        sw_value = owner._system_switch_value        # int | None
 
-        # 映射大屏状态显示
-        if raw_status == 'online':
-            screen_display = 'online'
-        elif raw_status == 'offline':
-            screen_display = 'offline'
-        else:
-            screen_display = 'unknown'
+        screen_display = _compute_screen_status(last_seen_at)
 
         # 映射系统开关显示
         if sw_value is None:
@@ -1761,7 +1774,7 @@ def device_management_device_list(request):
             'unit': owner.unit,
             'room_number': owner.room_number,
             'screen_status': screen_display,
-            'screen_last_checked_at': checked_at.isoformat() if checked_at else None,
+            'screen_last_seen_at': last_seen_at.isoformat() if last_seen_at else None,
             'system_switch_value': sw_value,
             'system_switch_display': sw_display,
         })

@@ -414,19 +414,15 @@ class DeviceParamHistory(models.Model):
 
 class ScreenConnectivityStatus(models.Model):
     """大屏连通性状态表（MOD-BE-02）
-    每户一条记录（upsert），记录大屏 IP 探测结果。
+    每户一条记录（upsert），由心跳 MQTT consumer 写入。
+    大屏每次上报心跳 → upsert last_seen_at。
+    在线判断：last_seen_at 距今 ≤ 15 分钟。
     specific_part 格式为四段，如 "3-1-7-702"（与 OwnerInfo.specific_part 一致）。
     """
     # 四段专有部分标识，如 "3-1-7-702"；唯一约束确保 upsert 幂等
     specific_part = models.CharField(max_length=20, unique=True, db_index=True, verbose_name='专有部分')
-    # 探测结果：online / offline
-    STATUS_CHOICES = (
-        ('online', '在线'),
-        ('offline', '离线'),
-    )
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, verbose_name='连通状态')
-    # 最近一次探测时间（由 datacollection 写入）
-    last_checked_at = models.DateTimeField(verbose_name='最近检测时间')
+    # 大屏最近一次心跳时间（由 screen_heartbeat_consumer 写入）
+    last_seen_at = models.DateTimeField(verbose_name='最近心跳时间')
     # 记录更新时间，auto_now 由 ORM 维护
     updated_at = models.DateTimeField(auto_now=True, verbose_name='记录更新时间')
 
@@ -436,4 +432,4 @@ class ScreenConnectivityStatus(models.Model):
         verbose_name_plural = '大屏连通性状态'
 
     def __str__(self):
-        return f"{self.specific_part} - {self.status}"
+        return f"{self.specific_part} - last_seen_at={self.last_seen_at}"

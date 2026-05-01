@@ -74,12 +74,25 @@ def _make_owner(specific_part="3-1-7-702", building="3", unit="1", room_number="
 
 
 def _make_screen_status(specific_part, status="online", checked_at=None):
-    if checked_at is None:
-        checked_at = datetime.now()
+    """创建 ScreenConnectivityStatus 记录。
+
+    status="online"  → last_seen_at = now()（在阈值内，API 判定为 online）
+    status="offline" → last_seen_at = 1 小时前（超过阈值，API 判定为 offline）
+    """
+    from django.utils import timezone as _tz
+    from datetime import timedelta
+    from api.views import ONLINE_THRESHOLD_MINUTES
+
+    if status == "online":
+        last_seen = checked_at if checked_at is not None else _tz.now()
+    else:
+        # offline：超出阈值，确保比 cutoff 还早
+        last_seen = checked_at if checked_at is not None else (
+            _tz.now() - timedelta(minutes=ONLINE_THRESHOLD_MINUTES + 30)
+        )
     return ScreenConnectivityStatus.objects.create(
         specific_part=specific_part,
-        status=status,
-        last_checked_at=checked_at,
+        last_seen_at=last_seen,
     )
 
 
@@ -100,78 +113,85 @@ def _make_plc_latest(building, unit, room_number, param_name="system_switch", va
 # ===========================================================================
 
 class TC_U_001_ScreenConnectivityStatusModel(TestCase):
-    """TC-U-001: ScreenConnectivityStatus 模型基本 CRUD 与约束"""
+    """TC-U-001: ScreenConnectivityStatus 模型基本 CRUD 与约束（已适配心跳方案）"""
 
     def test_create_status_record(self):
         """创建一条记录，字段存储正确"""
-        now = datetime.now()
+        now = timezone.now()
         obj = ScreenConnectivityStatus.objects.create(
             specific_part="3-1-7-702",
-            status="online",
-            last_checked_at=now,
+            last_seen_at=now,
         )
         self.assertIsNotNone(obj.id)
         self.assertEqual(obj.specific_part, "3-1-7-702")
-        self.assertEqual(obj.status, "online")
+        self.assertEqual(obj.last_seen_at, now)
         self.assertIsNotNone(obj.updated_at)
 
     def test_unique_specific_part_constraint(self):
         """specific_part 唯一约束：重复插入应抛出异常"""
         ScreenConnectivityStatus.objects.create(
             specific_part="3-1-7-702",
-            status="online",
-            last_checked_at=datetime.now(),
+            last_seen_at=timezone.now(),
         )
-        from django.db import IntegrityError
         with self.assertRaises(Exception):
             ScreenConnectivityStatus.objects.create(
                 specific_part="3-1-7-702",
-                status="offline",
-                last_checked_at=datetime.now(),
+                last_seen_at=timezone.now(),
             )
 
     def test_str_representation(self):
-        """__str__ 返回 'specific_part - status'"""
+        """__str__ 包含 specific_part"""
+        now = timezone.now()
         obj = ScreenConnectivityStatus.objects.create(
             specific_part="3-1-7-702",
-            status="offline",
-            last_checked_at=datetime.now(),
+            last_seen_at=now,
         )
-        self.assertEqual(str(obj), "3-1-7-702 - offline")
+        self.assertIn("3-1-7-702", str(obj))
 
     def test_upsert_via_update_or_create(self):
-        """update_or_create 幂等：多次调用只产生一条记录，状态被更新"""
-        for status_val in ("online", "offline", "online"):
-            ScreenConnectivityStatus.objects.update_or_create(
-                specific_part="3-1-7-702",
-                defaults={"status": status_val, "last_checked_at": datetime.now()},
-            )
+        """update_or_create 幂等：多次调用只产生一条记录，last_seen_at 被更新"""
+        import time
+        t1 = timezone.now()
+        ScreenConnectivityStatus.objects.update_or_create(
+            specific_part="3-1-7-702",
+            defaults={"last_seen_at": t1},
+        )
+        time.sleep(0.05)
+        t2 = timezone.now()
+        ScreenConnectivityStatus.objects.update_or_create(
+            specific_part="3-1-7-702",
+            defaults={"last_seen_at": t2},
+        )
         count = ScreenConnectivityStatus.objects.filter(specific_part="3-1-7-702").count()
         self.assertEqual(count, 1)
         latest = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
-        self.assertEqual(latest.status, "online")
+        self.assertGreaterEqual(latest.last_seen_at, t1)
 
-    def test_status_choices_online_offline(self):
-        """status 字段接受 online 和 offline"""
-        for s in ("online", "offline"):
-            obj = ScreenConnectivityStatus.objects.create(
-                specific_part=f"sp-{s}",
-                status=s,
-                last_checked_at=datetime.now(),
-            )
-            self.assertEqual(obj.status, s)
+    def test_model_has_last_seen_at_not_status(self):
+        """模型字段：有 last_seen_at，没有 status 和 last_checked_at"""
+        field_names = [f.name for f in ScreenConnectivityStatus._meta.get_fields()]
+        self.assertIn('last_seen_at', field_names)
+        self.assertNotIn('status', field_names)
+        self.assertNotIn('last_checked_at', field_names)
 
 
 class TC_U_002_ScreenConnectivityHandler(TestCase):
-    """TC-U-002: ScreenConnectivityHandler 单元测试（MQTT 消息处理器）"""
+    """TC-U-002: ScreenConnectivityHandler 单元测试（已适配心跳方案）
+
+    新行为：
+    - online payload → upsert last_seen_at = now()
+    - offline payload → no-op（离线由阈值判断）
+    - 非法 payload → 丢弃
+    """
 
     def setUp(self):
         self.handler = ScreenConnectivityHandler()
 
     # --- 正常路径 ---
 
-    def test_handle_online_payload_creates_record(self):
-        """合法 online payload 写入 ScreenConnectivityStatus"""
+    def test_handle_online_payload_writes_last_seen_at(self):
+        """合法 online payload → upsert last_seen_at（视为刚刚心跳）"""
+        before = timezone.now()
         payload = {
             "specific_part": "3-1-7-702",
             "status": "online",
@@ -179,25 +199,26 @@ class TC_U_002_ScreenConnectivityHandler(TestCase):
         }
         self.handler.handle("/datacollection/screen/connectivity", payload)
         obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
-        self.assertEqual(obj.status, "online")
+        # last_seen_at 应为 now()，不是 checked_at（新行为）
+        self.assertIsNotNone(obj.last_seen_at)
+        self.assertGreaterEqual(obj.last_seen_at, before)
 
-    def test_handle_offline_payload_creates_record(self):
-        """合法 offline payload 写入 ScreenConnectivityStatus"""
+    def test_handle_offline_payload_noop(self):
+        """offline payload → 不写入任何记录（离线由阈值判断）"""
         payload = {
             "specific_part": "3-1-7-801",
             "status": "offline",
             "checked_at": "2026-04-27T10:01:00",
         }
         self.handler.handle("/datacollection/screen/connectivity", payload)
-        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-801")
-        self.assertEqual(obj.status, "offline")
+        # offline 不写入
+        self.assertEqual(ScreenConnectivityStatus.objects.count(), 0)
 
-    def test_handle_payload_updates_existing_record(self):
-        """对已存在记录的 payload 执行 update（upsert 幂等）"""
+    def test_handle_online_updates_existing_record(self):
+        """对已存在记录的 online payload 执行 upsert，只保留一条记录"""
         ScreenConnectivityStatus.objects.create(
             specific_part="3-1-7-702",
-            status="offline",
-            last_checked_at=datetime.now(),
+            last_seen_at=timezone.now(),
         )
         payload = {
             "specific_part": "3-1-7-702",
@@ -205,30 +226,7 @@ class TC_U_002_ScreenConnectivityHandler(TestCase):
             "checked_at": "2026-04-27T10:02:00",
         }
         self.handler.handle("/datacollection/screen/connectivity", payload)
-        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
-        self.assertEqual(obj.status, "online")
         self.assertEqual(ScreenConnectivityStatus.objects.count(), 1)
-
-    def test_handle_uses_current_time_when_checked_at_missing(self):
-        """checked_at 缺失时使用当前时间，记录仍写入"""
-        payload = {
-            "specific_part": "3-1-7-702",
-            "status": "online",
-        }
-        self.handler.handle("/datacollection/screen/connectivity", payload)
-        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
-        self.assertIsNotNone(obj.last_checked_at)
-
-    def test_handle_uses_current_time_when_checked_at_malformed(self):
-        """checked_at 格式非法时使用当前时间，记录仍写入"""
-        payload = {
-            "specific_part": "3-1-7-702",
-            "status": "offline",
-            "checked_at": "not-a-datetime",
-        }
-        self.handler.handle("/datacollection/screen/connectivity", payload)
-        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
-        self.assertIsNotNone(obj.last_checked_at)
 
     # --- 异常/边界路径 ---
 
@@ -259,18 +257,20 @@ class TC_U_003_ScreenConnectivityChecker(TestCase):
         self.checker = ScreenConnectivityChecker(max_workers=5, timeout=1)
 
     def test_probe_single_returns_true_on_success(self):
-        """probe_single: socket 连接成功时返回 True"""
-        with patch("socket.create_connection") as mock_conn:
-            mock_conn.return_value.__enter__ = MagicMock(return_value=MagicMock())
-            mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+        """probe_single: ping returncode=0（主机可达）返回 True"""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result):
             result = self.checker.probe_single("192.168.1.100")
         self.assertTrue(result)
 
-    def test_probe_single_returns_true_on_connection_refused(self):
-        """probe_single: ConnectionRefusedError（主机在线但端口关闭）返回 True"""
-        with patch("socket.create_connection", side_effect=ConnectionRefusedError()):
+    def test_probe_single_returns_false_on_nonzero_returncode(self):
+        """probe_single: ping returncode!=0（主机不可达）返回 False"""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        with patch("subprocess.run", return_value=mock_result):
             result = self.checker.probe_single("192.168.1.100")
-        self.assertTrue(result)
+        self.assertFalse(result)
 
     def test_probe_single_returns_false_on_timeout(self):
         """probe_single: socket.timeout（主机不可达）返回 False"""
@@ -466,26 +466,26 @@ class TC_I_002_DeviceListAPIResponseSchema(TestCase):
             self.assertIn(key, data, f"缺少顶层字段: {key}")
 
     def test_result_item_fields(self):
-        """results 中每条记录含所有必需字段"""
+        """results 中每条记录含所有必需字段（新字段名 screen_last_seen_at）"""
         resp = self.client.get("/api/device-management/device-list/")
         data = resp.json()
         self.assertGreater(len(data["results"]), 0)
         item = data["results"][0]
         required_fields = [
             "specific_part", "building", "unit", "room_number",
-            "screen_status", "screen_last_checked_at",
+            "screen_status", "screen_last_seen_at",
             "system_switch_value", "system_switch_display",
         ]
         for f in required_fields:
             self.assertIn(f, item, f"result 条目缺少字段: {f}")
 
     def test_screen_status_is_online(self):
-        """有 ScreenConnectivityStatus=online 的记录，screen_status 返回 online"""
+        """有近期 last_seen_at 的记录，screen_status 返回 online"""
         resp = self.client.get("/api/device-management/device-list/")
         data = resp.json()
         item = next(r for r in data["results"] if r["specific_part"] == "3-1-7-702")
         self.assertEqual(item["screen_status"], "online")
-        self.assertIsNotNone(item["screen_last_checked_at"])
+        self.assertIsNotNone(item["screen_last_seen_at"])
 
     def test_system_switch_display_on(self):
         """system_switch_value=1 时，system_switch_display 返回 '开'"""
@@ -532,7 +532,7 @@ class TC_I_003_DeviceListAPIScreenStatusValues(TestCase):
         data = resp.json()
         self.assertEqual(data["count"], 1)
         self.assertEqual(data["results"][0]["screen_status"], "unknown")
-        self.assertIsNone(data["results"][0]["screen_last_checked_at"])
+        self.assertIsNone(data["results"][0]["screen_last_seen_at"])
 
     def test_filter_by_screen_status_online(self):
         """screen_status=online 过滤：只返回在线记录"""
@@ -691,25 +691,23 @@ class TC_I_005_DeviceListAPIPagination(TestCase):
 
 
 class TC_I_006_MQTTHandlerIntegration(TestCase):
-    """TC-I-006: ScreenConnectivityHandler 与数据库集成测试（真实 ORM，SQLite）"""
+    """TC-I-006: ScreenConnectivityHandler 与数据库集成测试（已适配心跳方案）"""
 
     def setUp(self):
         self.handler = ScreenConnectivityHandler()
 
-    def test_multiple_messages_upsert_single_record(self):
-        """同一 specific_part 多条消息只保留最新一条 DB 记录"""
-        for i, status_val in enumerate(["online", "offline", "online"]):
+    def test_multiple_online_messages_upsert_single_record(self):
+        """同一 specific_part 多条 online 消息只保留最新一条 DB 记录"""
+        for i in range(3):
             payload = {
                 "specific_part": "3-1-7-702",
-                "status": status_val,
+                "status": "online",
                 "checked_at": f"2026-04-27T10:0{i}:00",
             }
             self.handler.handle("/datacollection/screen/connectivity", payload)
 
         count = ScreenConnectivityStatus.objects.filter(specific_part="3-1-7-702").count()
         self.assertEqual(count, 1)
-        obj = ScreenConnectivityStatus.objects.get(specific_part="3-1-7-702")
-        self.assertEqual(obj.status, "online")
 
     def test_different_specific_parts_create_separate_records(self):
         """不同 specific_part 各自独立建行"""
@@ -719,22 +717,19 @@ class TC_I_006_MQTTHandlerIntegration(TestCase):
 
         self.assertEqual(ScreenConnectivityStatus.objects.count(), 3)
 
-    def test_api_reflects_handler_written_status(self):
-        """Handler 写入 DB 后，API 响应正确反映该状态（端到端链路验证）"""
-        # 写入 OwnerInfo
+    def test_api_reflects_online_status(self):
+        """Handler 写入 online → API 响应返回 online（端到端链路验证）"""
         _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
-        # Handler 写入 connectivity status
-        payload = {"specific_part": "3-1-7-702", "status": "offline", "checked_at": "2026-04-27T10:00:00"}
+        payload = {"specific_part": "3-1-7-702", "status": "online", "checked_at": "2026-04-27T10:00:00"}
         self.handler.handle("/datacollection/screen/connectivity", payload)
 
-        # 通过 API 查询
         client = APIClient()
         _, token = _make_user("dm_e2e_user")
         client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         resp = client.get("/api/device-management/device-list/?room_no=3-1-702")
         data = resp.json()
         self.assertEqual(data["count"], 1)
-        self.assertEqual(data["results"][0]["screen_status"], "offline")
+        self.assertEqual(data["results"][0]["screen_status"], "online")
 
 
 # ===========================================================================
@@ -888,7 +883,7 @@ class TC_E2E_US005_SystemSwitchFilter(TestCase):
 
 
 class TC_E2E_US006_ScreenStatusPipelineIntegration(TestCase):
-    """TC-E2E-US006: US-006 — 大屏状态写入管道（checker→handler→DB→API）集成"""
+    """TC-E2E-US006: US-006 — 大屏状态写入管道（heartbeat→DB→API）集成（已适配心跳方案）"""
 
     def setUp(self):
         self.client = APIClient()
@@ -897,7 +892,7 @@ class TC_E2E_US006_ScreenStatusPipelineIntegration(TestCase):
         _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
 
     def test_handler_pipeline_online_status_visible_in_api(self):
-        """Handler 写入 online → API 返回 online"""
+        """Handler 写入 online → API 返回 online（last_seen_at = now，在阈值内）"""
         handler = ScreenConnectivityHandler()
         payload = {"specific_part": "3-1-7-702", "status": "online", "checked_at": "2026-04-27T12:00:00"}
         handler.handle("/datacollection/screen/connectivity", payload)
@@ -906,14 +901,14 @@ class TC_E2E_US006_ScreenStatusPipelineIntegration(TestCase):
         data = resp.json()
         self.assertEqual(data["results"][0]["screen_status"], "online")
 
-    def test_handler_status_update_reflects_in_api(self):
-        """Handler 先写 online 再写 offline → API 最终返回 offline"""
-        handler = ScreenConnectivityHandler()
-        handler.handle("/datacollection/screen/connectivity",
-                       {"specific_part": "3-1-7-702", "status": "online", "checked_at": "2026-04-27T12:00:00"})
-        handler.handle("/datacollection/screen/connectivity",
-                       {"specific_part": "3-1-7-702", "status": "offline", "checked_at": "2026-04-27T12:01:00"})
-
+    def test_old_heartbeat_becomes_offline(self):
+        """last_seen_at 超过阈值 → API 返回 offline"""
+        from api.views import ONLINE_THRESHOLD_MINUTES
+        from datetime import timedelta
+        ScreenConnectivityStatus.objects.create(
+            specific_part="3-1-7-702",
+            last_seen_at=timezone.now() - timedelta(minutes=ONLINE_THRESHOLD_MINUTES + 30),
+        )
         resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
         data = resp.json()
         self.assertEqual(data["results"][0]["screen_status"], "offline")
@@ -978,12 +973,11 @@ class TC_E2E_NFR_Performance(TestCase):
 
     def test_combined_filters_work_together(self):
         """多个过滤条件同时生效（room_no + screen_status）"""
-        # 给前5条设置 online 状态
+        # 给前5条设置 online 状态（last_seen_at = now，在阈值内）
         for i in range(1, 6):
             ScreenConnectivityStatus.objects.create(
                 specific_part=f"3-1-{i}-{700+i}",
-                status="online",
-                last_checked_at=datetime.now(),
+                last_seen_at=timezone.now(),
             )
 
         resp = self.client.get("/api/device-management/device-list/?room_no=3-1&screen_status=online")
