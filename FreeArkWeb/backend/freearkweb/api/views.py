@@ -1451,7 +1451,7 @@ def get_device_realtime_params(request):
       specific_part (str, required) — 住宅专有部分标识，如 9-1-31-3104
       group         (str, optional) — 过滤指定设备分组（如 hvac）
     """
-    from datetime import datetime as _dt
+    from datetime import datetime as _dt, timedelta as _td
 
     specific_part = request.GET.get('specific_part', '').strip()
     if not specific_part:
@@ -1473,6 +1473,10 @@ def get_device_realtime_params(request):
     configs_qs = DeviceConfig.objects.filter(is_active=True).order_by('id')
     if group_filter:
         configs_qs = configs_qs.filter(group=group_filter)
+
+    # 超过此阈值未更新的参数标记为 is_stale=True
+    _STALE_MINUTES = 10
+    _stale_cutoff = _dt.now() - _td(minutes=_STALE_MINUTES)
 
     # 构建嵌套响应结构：group -> sub_type -> params
     result = {}
@@ -1497,11 +1501,13 @@ def get_device_realtime_params(request):
             # 该参数在此专有部分暂无数据，跳过（只展示有数据的参数）
             continue
 
+        is_stale = bool(record.collected_at and record.collected_at < _stale_cutoff)
         result[group_key]['sub_types'][sub_key]['params'].append({
             'param_name': cfg.param_name,
             'display_name': cfg.display_name,
             'value': record.value,
             'collected_at': record.collected_at.strftime('%Y-%m-%d %H:%M:%S') if record.collected_at else None,
+            'is_stale': is_stale,
         })
 
     # 移除没有任何参数数据的 sub_type，保持响应整洁
