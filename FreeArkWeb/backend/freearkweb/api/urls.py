@@ -62,4 +62,9 @@ urlpatterns = [
 
     # 设备管理 — 设备列表接口 (MOD-BE-01, US-002~007)
     path('device-management/device-list/', views.device_management_device_list, name='device-management-device-list'),
+
+    # 服务管理接口
+    path('services/list/', views.service_management_list, name='service-management-list'),
+    path('services/<str:service_name>/detail/', views.service_management_detail, name='service-management-detail'),
+    path('services/<str:service_name>/action/', views.service_management_action, name='service-management-action'),
 ]

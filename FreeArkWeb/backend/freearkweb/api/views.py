@@ -958,7 +958,7 @@ def dashboard_trend(request):
     })
 
 
-# 受监控的 systemctl 服务列表
+# 受监控的 systemctl 服务列表（白名单，防止任意命令注入）
 # 服务名与 systemctl/ 目录下的 .service 文件名一一对应
 MONITORED_SERVICES = [
     'freeark-backend',
@@ -969,6 +969,12 @@ MONITORED_SERVICES = [
     'freeark-plc-connection-monitor',
     'freeark-task-scheduler',
 ]
+
+# 白名单 Set（O(1) 查询），用于服务管理接口安全校验
+_MONITORED_SERVICES_SET = set(MONITORED_SERVICES)
+
+# 服务管理接口允许的操作列表
+_ALLOWED_ACTIONS = {'start', 'stop', 'restart', 'status'}
 
 
 def _get_service_status(service_name):
@@ -983,6 +989,58 @@ def _get_service_status(service_name):
         return result.stdout.strip() or 'unknown'
     except Exception:
         return 'unknown'
+
+
+def _get_service_detail(service_name):
+    """
+    调用 systemctl status <service_name> 获取详细运行信息。
+    返回字典，包含 active_state, sub_state, pid, memory, raw_output 等字段。
+    失败时返回含 error 字段的字典。
+    """
+    try:
+        result = subprocess.run(
+            ['systemctl', 'status', '--no-pager', '-l', service_name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        raw = result.stdout + result.stderr
+        # 解析关键字段（简单文本解析，兼容 systemd 各版本输出格式）
+        active_state = 'unknown'
+        sub_state = 'unknown'
+        pid = None
+        memory = None
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('Active:'):
+                # 例: "Active: active (running) since ..."
+                parts = stripped.split(None, 2)
+                if len(parts) >= 2:
+                    active_state = parts[1]
+                if '(' in stripped:
+                    sub_state_part = stripped.split('(')[1].split(')')[0]
+                    sub_state = sub_state_part
+            elif 'Main PID:' in stripped:
+                try:
+                    pid = int(stripped.split(':')[1].strip().split()[0])
+                except (ValueError, IndexError):
+                    pass
+            elif 'Memory:' in stripped:
+                try:
+                    memory = stripped.split(':', 1)[1].strip()
+                except IndexError:
+                    pass
+        return {
+            'active_state': active_state,
+            'sub_state': sub_state,
+            'pid': pid,
+            'memory': memory,
+            'raw_output': raw[:4096],  # 限制原始输出长度
+        }
+    except subprocess.TimeoutExpired:
+        return {'error': 'systemctl status 超时'}
+    except Exception as exc:
+        return {'error': str(exc)}
 
 
 @api_view(['GET'])
@@ -1005,6 +1063,177 @@ def dashboard_services(request):
     return Response({
         'success': True,
         'data': services,
+    })
+
+
+# ===========================================================================
+# 服务管理 API（Service Management）
+# ===========================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def service_management_list(request):
+    """
+    服务管理 API 1：获取所有受监控服务的列表及状态。
+
+    GET /api/services/list/
+
+    响应：
+    {
+        "success": true,
+        "data": [
+            {
+                "name": "freeark-backend",
+                "active_state": "active",
+                "sub_state": "running",
+                "is_active": true,
+                "enabled": true|false|"unknown"
+            },
+            ...
+        ]
+    }
+    """
+    services = []
+    for name in MONITORED_SERVICES:
+        active_state = _get_service_status(name)
+
+        # 查询 is-enabled 状态（enabled/disabled/static/…）
+        try:
+            enabled_result = subprocess.run(
+                ['systemctl', 'is-enabled', name],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            enabled_str = enabled_result.stdout.strip()
+        except Exception:
+            enabled_str = 'unknown'
+
+        services.append({
+            'name': name,
+            'active_state': active_state,
+            'sub_state': '',          # 简略列表不展开 sub_state，详情接口再查
+            'is_active': active_state == 'active',
+            'enabled': enabled_str if enabled_str else 'unknown',
+        })
+
+    return Response({'success': True, 'data': services})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def service_management_detail(request, service_name):
+    """
+    服务管理 API 2：获取单个服务的详细运行信息（systemctl status 输出）。
+
+    GET /api/services/<service_name>/detail/
+
+    安全：service_name 必须在白名单内。
+    响应：
+    {
+        "success": true,
+        "name": "freeark-backend",
+        "detail": {
+            "active_state": "active",
+            "sub_state": "running",
+            "pid": 1234,
+            "memory": "12.0M",
+            "raw_output": "..."
+        }
+    }
+    """
+    if service_name not in _MONITORED_SERVICES_SET:
+        return Response(
+            {'success': False, 'error': f'服务 "{service_name}" 不在受管理的服务白名单中'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    detail = _get_service_detail(service_name)
+    return Response({'success': True, 'name': service_name, 'detail': detail})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def service_management_action(request, service_name):
+    """
+    服务管理 API 3：对指定服务执行 start / stop / restart 操作。
+
+    POST /api/services/<service_name>/action/
+    Body: { "action": "start" | "stop" | "restart" }
+
+    安全约束：
+    - service_name 必须在白名单 MONITORED_SERVICES 内（防止命令注入）
+    - action 必须为 start / stop / restart 之一
+    - 需要已登录用户（IsAuthenticated）
+    - 执行 sudo systemctl <action> <service_name>（需 sudoers 配置，见部署说明）
+
+    响应：
+    {
+        "success": true,
+        "message": "服务 freeark-backend start 执行成功",
+        "new_status": "active"
+    }
+    """
+    # --- 1. 白名单校验：服务名 ---
+    if service_name not in _MONITORED_SERVICES_SET:
+        logger.warning(
+            "service_management_action: 非法服务名 %s，用户 %s",
+            service_name, request.user.username,
+        )
+        return Response(
+            {'success': False, 'error': f'服务 "{service_name}" 不在受管理的服务白名单中'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --- 2. 白名单校验：操作 ---
+    action = request.data.get('action', '').strip().lower()
+    if action not in _ALLOWED_ACTIONS - {'status'}:
+        # status 不通过此接口，走 detail 接口
+        return Response(
+            {'success': False, 'error': f'不支持的操作 "{action}"，允许值：start, stop, restart'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --- 3. 执行 sudo systemctl <action> <service_name> ---
+    logger.info(
+        "service_management_action: 用户 %s 对服务 %s 执行 %s",
+        request.user.username, service_name, action,
+    )
+    try:
+        result = subprocess.run(
+            ['sudo', 'systemctl', action, service_name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            error_msg = (result.stderr or result.stdout or '未知错误').strip()
+            logger.error(
+                "service_management_action: 执行失败 service=%s action=%s error=%s",
+                service_name, action, error_msg,
+            )
+            return Response(
+                {'success': False, 'error': error_msg},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except subprocess.TimeoutExpired:
+        return Response(
+            {'success': False, 'error': 'systemctl 操作超时（30s），请稍后重试'},
+            status=status.HTTP_504_GATEWAY_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.error("service_management_action: 执行异常 %s", exc, exc_info=True)
+        return Response(
+            {'success': False, 'error': str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # --- 4. 查询操作后的最新状态 ---
+    new_status = _get_service_status(service_name)
+    return Response({
+        'success': True,
+        'message': f'服务 {service_name} {action} 执行成功',
+        'new_status': new_status,
     })
 
 

@@ -1,0 +1,51 @@
+# /etc/sudoers.d/freeark-service-mgmt
+#
+# 允许 yangyang 用户通过 sudo 对受管理的 FreeArk 服务执行
+# start / stop / restart / status 操作，且不需要输入密码。
+#
+# 安装方式（在生产服务器 192.168.31.51 上以 root 身份执行）：
+#   sudo cp /home/yangyang/Freeark/FreeArk/systemctl/sudoers_freeark_service_mgmt \
+#            /etc/sudoers.d/freeark-service-mgmt
+#   sudo chmod 440 /etc/sudoers.d/freeark-service-mgmt
+#   sudo visudo -c   # 校验语法
+#
+# 说明：
+#   - NOPASSWD: 允许 Web 进程（也以 yangyang 运行）以 sudo 执行指定命令，
+#     无需交互式密码输入。
+#   - 命令严格限定为 /bin/systemctl {start,stop,restart,status} <白名单服务>，
+#     不允许任何其他 systemctl 子命令或其他二进制文件。
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-backend
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-backend
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-backend
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-backend
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-mqtt-consumer
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-mqtt-consumer
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-mqtt-consumer
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-mqtt-consumer
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-daily-usage
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-daily-usage
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-daily-usage
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-daily-usage
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-monthly-usage
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-monthly-usage
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-monthly-usage
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-monthly-usage
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-plc-cleanup
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-plc-cleanup
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-plc-cleanup
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-plc-cleanup
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-plc-connection-monitor
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-plc-connection-monitor
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-plc-connection-monitor
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-plc-connection-monitor
+
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl start freeark-task-scheduler
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl stop freeark-task-scheduler
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl restart freeark-task-scheduler
+yangyang ALL=(ALL) NOPASSWD: /bin/systemctl status freeark-task-scheduler
