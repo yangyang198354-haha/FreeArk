@@ -907,6 +907,34 @@ def dashboard_plc_online_rate(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+def dashboard_screen_online_rate(request):
+    """
+    看板 API：大屏在线率
+    GET /api/dashboard/screen-online-rate/
+    返回 online_count, total_count, rate（百分比，0-100）
+    在线标准：last_seen_at 距今 <= ONLINE_THRESHOLD_MINUTES 分钟
+    """
+    online_cutoff = timezone.now() - timedelta(minutes=ONLINE_THRESHOLD_MINUTES)
+    stats = ScreenConnectivityStatus.objects.aggregate(
+        total_count=Count('id'),
+        online_count=Count(Case(When(last_seen_at__gte=online_cutoff, then=1), output_field=IntegerField())),
+    )
+    total = stats['total_count'] or 0
+    online = stats['online_count'] or 0
+    rate = round((online / total) * 100, 2) if total > 0 else 0.0
+
+    return Response({
+        'success': True,
+        'data': {
+            'online_count': online,
+            'total_count': total,
+            'rate': rate,
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def dashboard_trend(request):
     """
     看板 API 4：近 N 天用电量趋势

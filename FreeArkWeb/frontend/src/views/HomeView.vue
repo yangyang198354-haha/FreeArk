@@ -83,14 +83,15 @@
         </div>
       </el-card>
 
-      <el-card class="stat-card" v-loading="loading.plcRate">
+      <el-card class="stat-card" v-loading="loading.screenRate">
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: #f56c6c">{{ plcRate.offline_count }}</div>
-            <div class="stat-label">PLC 离线</div>
+            <div class="stat-value" style="color: #67c23a">{{ screenRate.online_count }}</div>
+            <div class="stat-label">大屏在线</div>
+            <div class="stat-sub">在线率 {{ screenRate.rate }}%</div>
           </div>
-          <div class="stat-icon plc-offline">
-            <el-icon><CircleClose /></el-icon>
+          <div class="stat-icon screen-online">
+            <el-icon><Monitor /></el-icon>
           </div>
         </div>
       </el-card>
@@ -99,7 +100,7 @@
         <div class="stat-content">
           <div class="stat-info">
             <div class="stat-value" style="color: #409eff">{{ plcRate.total_count }}</div>
-            <div class="stat-label">PLC 设备总数</div>
+            <div class="stat-label">总设备数</div>
           </div>
           <div class="stat-icon plc-total">
             <el-icon><Cpu /></el-icon>
@@ -175,7 +176,7 @@
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import Chart from 'chart.js/auto'
-import { CircleCheck, CircleClose, Cpu, Calendar, Document } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Cpu, Calendar, Document, Monitor } from '@element-plus/icons-vue'
 import api from '../utils/api.js'
 
 export default {
@@ -185,7 +186,8 @@ export default {
     CircleClose,
     Cpu,
     Calendar,
-    Document
+    Document,
+    Monitor
   },
   setup() {
     const usageChart = ref(null)
@@ -228,6 +230,7 @@ export default {
     const totalEnergy = reactive({ total_kwh: 0, cooling_kwh: 0, heating_kwh: 0 })
     const summary = reactive({ today_kwh: 0, month_kwh: 0 })
     const plcRate = reactive({ online_count: 0, offline_count: 0, total_count: 0, rate: 0 })
+    const screenRate = reactive({ online_count: 0, total_count: 0, rate: 0 })
     const services = ref([])
     const activities = ref([])
     const trendData = ref([])
@@ -236,6 +239,7 @@ export default {
       totalEnergy: false,
       summary: false,
       plcRate: false,
+      screenRate: false,
       trend: false,
       services: false,
       activities: false
@@ -292,6 +296,22 @@ export default {
         console.error('PLC运行率查询失败:', e.message)
       } finally {
         loading.plcRate = false
+      }
+    }
+
+    async function fetchScreenRate() {
+      loading.screenRate = true
+      try {
+        const res = await api.get('/api/dashboard/screen-online-rate/')
+        if (res.success) {
+          screenRate.online_count = res.data.online_count
+          screenRate.total_count = res.data.total_count
+          screenRate.rate = res.data.rate
+        }
+      } catch (e) {
+        console.error('大屏在线率查询失败:', e.message)
+      } finally {
+        loading.screenRate = false
       }
     }
 
@@ -402,6 +422,7 @@ export default {
       fetchTotalEnergy()
       fetchSummary()
       fetchPlcRate()
+      fetchScreenRate()
       fetchTrend()
       fetchServices()
       fetchActivities()
@@ -414,6 +435,7 @@ export default {
       totalEnergy,
       summary,
       plcRate,
+      screenRate,
       services,
       activities,
       trendData,
@@ -547,6 +569,11 @@ export default {
 }
 
 .stat-icon.plc-online {
+  background-color: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.stat-icon.screen-online {
   background-color: rgba(103, 194, 58, 0.1);
   color: #67c23a;
 }
