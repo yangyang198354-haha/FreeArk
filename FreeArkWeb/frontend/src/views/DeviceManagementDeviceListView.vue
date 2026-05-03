@@ -19,14 +19,17 @@
 
     <!-- 过滤栏 -->
     <div class="filter-bar">
-      <el-input
-        v-model="filterRoomNo"
-        placeholder="房号（如 3-1-702）"
-        clearable
-        style="width: 180px"
-        @keyup.enter="handleSearch"
-        @clear="handleSearch"
-      />
+      <div style="display: inline-block; vertical-align: middle; width: 180px;">
+        <CascadingSelector
+          building-input-id="dlBuilding"
+          building-input-name="dlBuilding"
+          unit-input-id="dlUnit"
+          unit-input-name="dlUnit"
+          room-input-id="dlRoom"
+          room-input-name="dlRoom"
+          ref="cascadingSelectorRef"
+        />
+      </div>
       <el-select
         v-model="filterScreenStatus"
         placeholder="大屏状态"
@@ -193,11 +196,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
+import CascadingSelector from '@/components/CascadingSelector.vue'
 
 export default {
   name: 'DeviceManagementDeviceListView',
 
-  components: { Search, RefreshLeft },
+  components: { Search, RefreshLeft, CascadingSelector },
 
   setup() {
     const router = useRouter()
@@ -208,7 +212,7 @@ export default {
     const currentPage = ref(1)
     const pageSize = ref(20)
     const loading = ref(false)
-    const filterRoomNo = ref('')
+    const cascadingSelectorRef = ref(null)
     const filterScreenStatus = ref('')
     const filterSystemSwitch = ref('')
     const filterPlcStatus = ref('')
@@ -227,8 +231,14 @@ export default {
           page: currentPage.value,
           page_size: pageSize.value,
         }
-        if (filterRoomNo.value.trim()) {
-          params.room_no = filterRoomNo.value.trim()
+        const dlBuilding = document.getElementById('dlBuilding')?.value || ''
+        const dlUnit = document.getElementById('dlUnit')?.value || ''
+        const dlRoom = document.getElementById('dlRoom')?.value || ''
+        if (dlBuilding) {
+          let roomNo = dlBuilding
+          if (dlUnit) roomNo += `-${dlUnit}`
+          if (dlRoom) roomNo += `-${dlRoom}`
+          params.room_no = roomNo
         }
         if (filterScreenStatus.value) {
           params.screen_status = filterScreenStatus.value
@@ -292,7 +302,9 @@ export default {
     }
 
     const handleReset = () => {
-      filterRoomNo.value = ''
+      if (cascadingSelectorRef.value) {
+        cascadingSelectorRef.value.clearSelection?.()
+      }
       filterScreenStatus.value = ''
       filterSystemSwitch.value = ''
       filterPlcStatus.value = ''
@@ -373,7 +385,7 @@ export default {
       currentPage,
       pageSize,
       loading,
-      filterRoomNo,
+      cascadingSelectorRef,
       filterScreenStatus,
       filterSystemSwitch,
       filterPlcStatus,

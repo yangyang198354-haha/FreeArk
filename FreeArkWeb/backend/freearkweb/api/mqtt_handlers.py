@@ -441,7 +441,14 @@ class PLCDataHandler(MessageHandler):
                     update_fields = ['value', 'building', 'unit', 'room_number', 'plc_ip', 'updated_at']
                     PLCData.objects.bulk_update(to_update, update_fields)
                     logger.info(f"PLCDataHandler: ✅ 批量更新完成，共{len(to_update)}条记录")
-            
+
+                # 刷新成功处理的设备的最后在线时间，使 general-only 设备也能保活
+                successful_parts = list({d['specific_part'] for d in parsed_data})
+                if successful_parts:
+                    PLCConnectionStatus.objects.filter(
+                        specific_part__in=successful_parts
+                    ).update(last_online_time=timezone.now())
+
             logger.info(f"PLCDataHandler: ✅ 批量保存PLC数据点完成，共处理{valid_data_count}个有效数据点")
             
         except Exception as e:
@@ -533,7 +540,7 @@ class ConnectionStatusHandler(MessageHandler):
             # 使用事务确保数据库操作的原子性
             with transaction.atomic():
                 # 查询或创建PLCConnectionStatus记录
-                plc_status, created = PLCConnectionStatus.objects.get_or_create(
+                plc_status, created = PLCConnectionStatus.objects.select_for_update().get_or_create(
                     specific_part=specific_part,
                     defaults={
                         'connection_status': status,
@@ -566,7 +573,8 @@ class ConnectionStatusHandler(MessageHandler):
                             status=status,
                             building=building,
                             unit=unit,
-                            room_number=room_number
+                            room_number=room_number,
+                            source='mqtt'
                         )
                         logger.info(f"ConnectionStatusHandler: ✅ 记录状态变化历史成功 - {specific_part}: {status}")
                     except Exception as e:

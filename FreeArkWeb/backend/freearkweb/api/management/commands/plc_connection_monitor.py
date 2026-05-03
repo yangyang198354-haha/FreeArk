@@ -2,6 +2,7 @@ import time
 import logging
 from datetime import timedelta
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 from api.models import PLCConnectionStatus, PLCStatusChangeHistory
 
@@ -86,51 +87,48 @@ class Command(BaseCommand):
     def _check_connection_status(self, timeout_threshold):
         """检查设备连接状态，标记超时设备为离线"""
         logger.info(f'🔍 开始检查PLC连接状态，超时阈值: {timeout_threshold}秒')
-        
-        # 计算超时时间
+
         timeout_time = timezone.now() - timedelta(seconds=timeout_threshold)
-        
-        # 查询所有在线但超过超时时间未更新的设备
-        offline_devices = PLCConnectionStatus.objects.filter(
-            connection_status='online',
-            last_online_time__lt=timeout_time
-        )
-        
-        offline_count = offline_devices.count()
-        logger.debug(f'⏱️  超时时间: {timeout_time}, 发现 {offline_count} 个超时设备')
-        
-        if offline_count > 0:
-            # 记录状态变化历史
-            status_change_count = 0
-            for device in offline_devices:
-                # 记录状态变化历史
-                try:
-                    PLCStatusChangeHistory.objects.create(
-                        specific_part=device.specific_part,
+        logger.debug(f'⏱️  超时时间: {timeout_time}')
+
+        with transaction.atomic():
+            # select_for_update 锁定匹配行，防止与 MQTT 实时更新并发冲突
+            offline_devices = list(PLCConnectionStatus.objects.select_for_update().filter(
+                connection_status='online',
+                last_online_time__lt=timeout_time
+            ).values('id', 'specific_part', 'building', 'unit', 'room_number'))
+
+            if not offline_devices:
+                logger.info('✅ 所有在线设备均在正常通信范围内')
+                self.stdout.write(self.style.SUCCESS('✅ 所有在线设备均在正常通信范围内'))
+            else:
+                ids = [d['id'] for d in offline_devices]
+
+                # 先更新状态，再写历史，确保两者在同一事务内原子完成
+                PLCConnectionStatus.objects.filter(id__in=ids).update(
+                    connection_status='offline',
+                    updated_at=timezone.now()
+                )
+
+                PLCStatusChangeHistory.objects.bulk_create([
+                    PLCStatusChangeHistory(
+                        specific_part=d['specific_part'],
                         status='offline',
-                        building=device.building,
-                        unit=device.unit,
-                        room_number=device.room_number
+                        building=d['building'],
+                        unit=d['unit'],
+                        room_number=d['room_number'],
+                        source='monitor'
                     )
-                    status_change_count += 1
-                except Exception as e:
-                    logger.error(f'❌ 记录设备状态变化历史失败 - {device.specific_part}: {e}')
-            
-            # 批量更新设备状态为离线
-            updated_count = offline_devices.update(
-                connection_status='offline',
-                updated_at=timezone.now()
-            )
-            
-            logger.info(f'🔄 已将 {updated_count} 个超时设备标记为离线，记录了 {status_change_count} 条状态变化历史')
-            self.stdout.write(self.style.SUCCESS(f'✅ 已将 {updated_count} 个超时设备标记为离线，记录了 {status_change_count} 条状态变化历史'))
-        else:
-            logger.info('✅ 所有在线设备均在正常通信范围内')
-            self.stdout.write(self.style.SUCCESS('✅ 所有在线设备均在正常通信范围内'))
-        
-        # 统计当前状态
+                    for d in offline_devices
+                ])
+
+                updated_count = len(offline_devices)
+                logger.info(f'🔄 已将 {updated_count} 个超时设备标记为离线，记录了 {updated_count} 条状态变化历史')
+                self.stdout.write(self.style.SUCCESS(f'✅ 已将 {updated_count} 个超时设备标记为离线，记录了 {updated_count} 条状态变化历史'))
+
+        # 统计当前状态（事务外，读取最新数据）
         online_count = PLCConnectionStatus.objects.filter(connection_status='online').count()
         total_count = PLCConnectionStatus.objects.count()
-        
+
         logger.info(f'📊 当前状态统计: 在线设备 {online_count}/{total_count} 台')
         self.stdout.write(f'📊 当前状态统计: 在线设备 {online_count}/{total_count} 台')

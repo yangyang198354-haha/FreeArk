@@ -242,6 +242,12 @@ class PLCStatusChangeHistory(models.Model):
         ('offline', '离线'),
     )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, verbose_name='状态变化类型')
+    # 来源：mqtt=MQTT实时推送，monitor=超时巡检判定
+    SOURCE_CHOICES = (
+        ('mqtt', 'MQTT实时'),
+        ('monitor', '超时巡检'),
+    )
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='mqtt', verbose_name='来源')
     # 变化时间戳
     change_time = models.DateTimeField(auto_now_add=True, verbose_name='状态变化时间', db_index=True)
     # 楼栋，格式为 "3"
