@@ -1178,3 +1178,208 @@ class TC_I_009_PlcStatusUnknownDegradation(TestCase):
         self.assertEqual(items_by_room["301"]["plc_status"], "online")
         self.assertEqual(items_by_room["302"]["plc_status"], "unknown")
         self.assertEqual(items_by_room["303"]["plc_status"], "unknown")
+
+
+# ===========================================================================
+# v2 新增：运行模式列测试（AC-103~105, US-101~104）
+# ===========================================================================
+
+class TC_I_010_OperationModeField(TestCase):
+    """TC-I-010: 运行模式字段 operation_mode_value / operation_mode_display — 集成测试（AC-103~105）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_opmode_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 四个户：覆盖四种枚举值 + 无记录
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        _make_owner("3-1-7-703", building="3", unit="1", room_number="703")
+        _make_owner("3-1-7-704", building="3", unit="1", room_number="704")
+        _make_owner("3-1-7-705", building="3", unit="1", room_number="705")
+
+        # 701: operation_mode=0 → 制冷
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-701", param_name="operation_mode", value=0,
+            building="3", unit="1", room_number="701", collected_at=datetime.now(),
+        )
+        # 702: operation_mode=1 → 制热
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-702", param_name="operation_mode", value=1,
+            building="3", unit="1", room_number="702", collected_at=datetime.now(),
+        )
+        # 703: operation_mode=2 → 通风
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-703", param_name="operation_mode", value=2,
+            building="3", unit="1", room_number="703", collected_at=datetime.now(),
+        )
+        # 704: operation_mode=3 → 除湿
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-704", param_name="operation_mode", value=3,
+            building="3", unit="1", room_number="704", collected_at=datetime.now(),
+        )
+        # 705: 无 operation_mode 记录 → 未知
+
+    def _get_item(self, room_number):
+        resp = self.client.get(f"/api/device-management/device-list/?room_no=3-1-{room_number}")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        return data["results"][0]
+
+    def test_operation_mode_0_cooling(self):
+        """AC-103: value=0 → operation_mode_display='制冷', value=0"""
+        item = self._get_item("701")
+        self.assertEqual(item["operation_mode_value"], 0)
+        self.assertEqual(item["operation_mode_display"], "制冷")
+
+    def test_operation_mode_1_heating(self):
+        """AC-103: value=1 → operation_mode_display='制热'"""
+        item = self._get_item("702")
+        self.assertEqual(item["operation_mode_value"], 1)
+        self.assertEqual(item["operation_mode_display"], "制热")
+
+    def test_operation_mode_2_ventilation(self):
+        """AC-105: value=2 → operation_mode_display='通风'"""
+        item = self._get_item("703")
+        self.assertEqual(item["operation_mode_value"], 2)
+        self.assertEqual(item["operation_mode_display"], "通风")
+
+    def test_operation_mode_3_dehumidification(self):
+        """AC-105: value=3 → operation_mode_display='除湿'"""
+        item = self._get_item("704")
+        self.assertEqual(item["operation_mode_value"], 3)
+        self.assertEqual(item["operation_mode_display"], "除湿")
+
+    def test_operation_mode_null_when_no_record(self):
+        """AC-104: 无 operation_mode 记录 → operation_mode_value=null, display='未知'"""
+        item = self._get_item("705")
+        self.assertIsNone(item["operation_mode_value"])
+        self.assertEqual(item["operation_mode_display"], "未知")
+
+    def test_operation_mode_fields_present_in_all_results(self):
+        """NFR-102: 所有结果条目均含 operation_mode_value 和 operation_mode_display 字段"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        for item in data["results"]:
+            self.assertIn("operation_mode_value", item, f"缺少 operation_mode_value: {item}")
+            self.assertIn("operation_mode_display", item, f"缺少 operation_mode_display: {item}")
+
+    def test_existing_fields_not_removed(self):
+        """NFR-102: 新增字段不删除原有字段（向后兼容）"""
+        resp = self.client.get("/api/device-management/device-list/")
+        data = resp.json()
+        item = data["results"][0]
+        for field in ("specific_part", "building", "unit", "room_number",
+                      "screen_status", "system_switch_value", "system_switch_display",
+                      "plc_status", "plc_last_online_time"):
+            self.assertIn(field, item, f"原有字段被移除: {field}")
+
+    def test_operation_mode_unknown_integer_displays_unknown(self):
+        """AC-105: 枚举范围外的整数（如 99）→ display='未知'"""
+        _make_owner("3-1-7-799", building="3", unit="1", room_number="799")
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-799", param_name="operation_mode", value=99,
+            building="3", unit="1", room_number="799", collected_at=datetime.now(),
+        )
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-799")
+        data = resp.json()
+        item = data["results"][0]
+        self.assertEqual(item["operation_mode_display"], "未知")
+
+
+class TC_E2E_US103_OperationModeColumn(TestCase):
+    """TC-E2E-US103: US-103/104 E2E验收 — 运行模式列在设备列表中展示"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_e2e_us103")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 多户：含有 operation_mode 和无记录的混合场景
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+
+        PLCLatestData.objects.create(
+            specific_part="3-1-7-701", param_name="operation_mode", value=1,
+            building="3", unit="1", room_number="701", collected_at=datetime.now(),
+        )
+        # 702: 无记录
+
+    def test_us103_mode_display_when_data_exists(self):
+        """US-103: PLC 有 operation_mode 数据 → 显示对应中文（制热）"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-701")
+        data = resp.json()
+        item = data["results"][0]
+        self.assertEqual(item["operation_mode_display"], "制热")
+        self.assertEqual(item["operation_mode_value"], 1)
+
+    def test_us104_mode_display_when_no_data(self):
+        """US-104: PLCLatestData 无 operation_mode 记录 → 显示'未知'"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1-702")
+        data = resp.json()
+        item = data["results"][0]
+        self.assertEqual(item["operation_mode_display"], "未知")
+        self.assertIsNone(item["operation_mode_value"])
+
+    def test_no_model_changes(self):
+        """NFR-103: 无 migration 变更，运行模式来自现有 PLCLatestData 表"""
+        # 直接查询 PLCLatestData 验证数据可访问
+        om_record = PLCLatestData.objects.get(
+            specific_part="3-1-7-701", param_name="operation_mode"
+        )
+        self.assertEqual(om_record.value, 1)
+
+
+class TC_I_011_RoomNoFilterBuildingUnit(TestCase):
+    """TC-I-011: room_no 仅传楼栋或楼栋+单元的过滤（US-101/102，REQ-FUNC-001）"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_roomno_bu_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 楼栋3，单元1：2户
+        _make_owner("3-1-7-701", building="3", unit="1", room_number="701")
+        _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
+        # 楼栋3，单元2：1户
+        _make_owner("3-2-7-301", building="3", unit="2", room_number="301")
+        # 楼栋4：1户
+        _make_owner("4-1-5-501", building="4", unit="1", room_number="501")
+
+    def test_room_no_building_only_returns_all_in_building(self):
+        """US-101: room_no=3 返回所有 building=3 的户（共3户）"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+        for item in data["results"]:
+            self.assertIn(item["building"], ("3", "3栋"))
+
+    def test_room_no_building_unit_returns_correct_unit(self):
+        """US-102: room_no=3-1 返回 building=3, unit=1 的户（共2户）"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 2)
+        for item in data["results"]:
+            self.assertIn(item["building"], ("3", "3栋"))
+            self.assertIn(item["unit"], ("1", "1单元"))
+
+    def test_room_no_building_unit_excludes_other_units(self):
+        """US-102: room_no=3-2 只返回单元2的户"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=3-2")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "301")
+
+    def test_room_no_building_excludes_other_buildings(self):
+        """US-101: room_no=4 只返回 building=4 的户"""
+        resp = self.client.get("/api/device-management/device-list/?room_no=4")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "501")

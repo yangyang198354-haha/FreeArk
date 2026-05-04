@@ -259,6 +259,7 @@ export default {
     },
     
     // 处理菜单项点击
+    // REQ-FUNC-001: 楼栋/单元节点在展开子菜单的同时也设为当前选中值
     handleMenuItemClick(item, level, parentValue = null, grandparentValue = null) {
       if (item.children && Array.isArray(item.children) && item.children.length > 0) {
         let itemKey = item.value
@@ -276,9 +277,49 @@ export default {
             [parentValue]: true
           })
         }
+        // 同时将该节点设为当前选中值（楼栋或单元级别选中，不关闭菜单）
+        this.selectMenuItemWithoutClose(item, level, parentValue, grandparentValue)
       } else {
-        // 选择房号
+        // 选择房号（叶子节点）— 关闭菜单
         this.selectMenuItem(item, level, parentValue, grandparentValue)
+      }
+    },
+
+    // 选择楼栋/单元级节点但保持菜单展开（供 handleMenuItemClick 调用）
+    selectMenuItemWithoutClose(item, level, parentValue = null, grandparentValue = null) {
+      const value = item.value
+      let buildingValue = ''
+      let unitValue = ''
+
+      if (level === 1) {
+        // 单元级别
+        if (parentValue) {
+          buildingValue = parentValue
+          unitValue = value
+        } else if (value.includes('-')) {
+          const parts = value.split('-')
+          buildingValue = parts[0]
+          unitValue = parts[1]
+        } else {
+          buildingValue = ''
+          unitValue = value
+        }
+      } else if (level === 0) {
+        // 楼栋级别
+        buildingValue = value
+        unitValue = ''
+      }
+
+      this.selectedBuilding = buildingValue
+      this.selectedUnit = unitValue
+      this.selectedRoom = ''
+      this.pureRoomNumber = ''
+
+      // 更新显示值
+      if (buildingValue && unitValue) {
+        this.displayValue = `${buildingValue}栋${unitValue}单元`
+      } else if (buildingValue) {
+        this.displayValue = `${buildingValue}栋`
       }
     },
     

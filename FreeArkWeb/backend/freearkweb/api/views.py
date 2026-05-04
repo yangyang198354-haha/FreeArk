@@ -1691,6 +1691,8 @@ def device_management_device_list(request):
           "screen_last_seen_at": <str|null>,
           "system_switch_value": <int|null>,
           "system_switch_display": "开"|"关"|"未知",
+          "operation_mode_value": <int|null>,
+          "operation_mode_display": "制冷"|"制热"|"通风"|"除湿"|"未知",
           "plc_status": "online"|"offline"|"unknown",
           "plc_last_online_time": <str|null>
         } ]
@@ -1755,6 +1757,14 @@ def device_management_device_list(request):
         ).values('value')[:1]
     )
 
+    # ---- 5c. Subquery annotate：运行模式值（REQ-FUNC-002）----
+    operation_mode_sq = Subquery(
+        PLCLatestData.objects.filter(
+            specific_part=OuterRef('specific_part'),
+            param_name='operation_mode',
+        ).values('value')[:1]
+    )
+
     # ---- 5b. Subquery annotate：PLC 连接状态与最后在线时间----
     plc_connection_status_sq = Subquery(
         PLCConnectionStatus.objects.filter(
@@ -1770,6 +1780,7 @@ def device_management_device_list(request):
     qs = qs.annotate(
         _screen_last_seen_at=screen_last_seen_sq,
         _system_switch_value=system_switch_sq,
+        _operation_mode_value=operation_mode_sq,
         _plc_connection_status=plc_connection_status_sq,
         _plc_last_online_time=plc_last_online_time_sq,
     )
@@ -1822,10 +1833,13 @@ def device_management_device_list(request):
         page_rows = list(qs[start:start + page_size])
 
     # ---- 9. 序列化结果 ----
+    _OPERATION_MODE_MAP = {0: '制冷', 1: '制热', 2: '通风', 3: '除湿'}
+
     results = []
     for owner in page_rows:
         last_seen_at = owner._screen_last_seen_at   # datetime | None
         sw_value = owner._system_switch_value        # int | None
+        om_value = owner._operation_mode_value       # int | None
         plc_conn_status = owner._plc_connection_status   # 'online' | 'offline' | None
         plc_last_online = owner._plc_last_online_time    # datetime | None
 
@@ -1840,6 +1854,12 @@ def device_management_device_list(request):
         else:
             sw_display = '开'
 
+        # 映射运行模式显示（REQ-FUNC-002，AC-103~105）
+        if om_value is None:
+            om_display = '未知'
+        else:
+            om_display = _OPERATION_MODE_MAP.get(int(om_value), '未知')
+
         results.append({
             'specific_part': owner.specific_part,
             'building': owner.building,
@@ -1849,6 +1869,8 @@ def device_management_device_list(request):
             'screen_last_seen_at': last_seen_at.isoformat() if last_seen_at else None,
             'system_switch_value': sw_value,
             'system_switch_display': sw_display,
+            'operation_mode_value': om_value,
+            'operation_mode_display': om_display,
             'plc_status': plc_status_display,
             'plc_last_online_time': plc_last_online.isoformat() if plc_last_online else None,
         })

@@ -111,6 +111,16 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="运行模式" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag
+            :type="operationModeTagType(row.operation_mode_display)"
+            size="small"
+          >
+            {{ row.operation_mode_display || '未知' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="180" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
@@ -364,6 +374,15 @@ export default {
       return 'info'
     }
 
+    // REQ-FUNC-003: 运行模式 tag 颜色（制冷=info/蓝, 制热=danger/红, 通风=success/绿, 除湿=warning/黄）
+    const operationModeTagType = (display) => {
+      if (display === '制冷') return 'primary'
+      if (display === '制热') return 'danger'
+      if (display === '通风') return 'success'
+      if (display === '除湿') return 'warning'
+      return 'info'
+    }
+
     const formatDateTime = (isoStr) => {
       if (!isoStr) return '—'
       try {
@@ -407,6 +426,7 @@ export default {
       plcStatusLabel,
       plcStatusTagType,
       systemSwitchTagType,
+      operationModeTagType,
       formatDateTime,
     }
   },
