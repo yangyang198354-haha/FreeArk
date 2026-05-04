@@ -1833,7 +1833,7 @@ def device_management_device_list(request):
         page_rows = list(qs[start:start + page_size])
 
     # ---- 9. 序列化结果 ----
-    _OPERATION_MODE_MAP = {0: '制冷', 1: '制热', 2: '通风', 3: '除湿'}
+    _OPERATION_MODE_MAP = {1: '制冷', 2: '制热', 3: '通风', 4: '除湿'}
 
     results = []
     for owner in page_rows:

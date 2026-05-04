@@ -1199,24 +1199,24 @@ class TC_I_010_OperationModeField(TestCase):
         _make_owner("3-1-7-704", building="3", unit="1", room_number="704")
         _make_owner("3-1-7-705", building="3", unit="1", room_number="705")
 
-        # 701: operation_mode=0 → 制冷
+        # 701: operation_mode=1 → 制冷
         PLCLatestData.objects.create(
-            specific_part="3-1-7-701", param_name="operation_mode", value=0,
+            specific_part="3-1-7-701", param_name="operation_mode", value=1,
             building="3", unit="1", room_number="701", collected_at=datetime.now(),
         )
-        # 702: operation_mode=1 → 制热
+        # 702: operation_mode=2 → 制热
         PLCLatestData.objects.create(
-            specific_part="3-1-7-702", param_name="operation_mode", value=1,
+            specific_part="3-1-7-702", param_name="operation_mode", value=2,
             building="3", unit="1", room_number="702", collected_at=datetime.now(),
         )
-        # 703: operation_mode=2 → 通风
+        # 703: operation_mode=3 → 通风
         PLCLatestData.objects.create(
-            specific_part="3-1-7-703", param_name="operation_mode", value=2,
+            specific_part="3-1-7-703", param_name="operation_mode", value=3,
             building="3", unit="1", room_number="703", collected_at=datetime.now(),
         )
-        # 704: operation_mode=3 → 除湿
+        # 704: operation_mode=4 → 除湿
         PLCLatestData.objects.create(
-            specific_part="3-1-7-704", param_name="operation_mode", value=3,
+            specific_part="3-1-7-704", param_name="operation_mode", value=4,
             building="3", unit="1", room_number="704", collected_at=datetime.now(),
         )
         # 705: 无 operation_mode 记录 → 未知
@@ -1228,28 +1228,28 @@ class TC_I_010_OperationModeField(TestCase):
         self.assertEqual(data["count"], 1)
         return data["results"][0]
 
-    def test_operation_mode_0_cooling(self):
-        """AC-103: value=0 → operation_mode_display='制冷', value=0"""
+    def test_operation_mode_1_cooling(self):
+        """AC-103: value=1 → operation_mode_display='制冷', value=1"""
         item = self._get_item("701")
-        self.assertEqual(item["operation_mode_value"], 0)
+        self.assertEqual(item["operation_mode_value"], 1)
         self.assertEqual(item["operation_mode_display"], "制冷")
 
-    def test_operation_mode_1_heating(self):
-        """AC-103: value=1 → operation_mode_display='制热'"""
+    def test_operation_mode_2_heating(self):
+        """AC-103: value=2 → operation_mode_display='制热'"""
         item = self._get_item("702")
-        self.assertEqual(item["operation_mode_value"], 1)
+        self.assertEqual(item["operation_mode_value"], 2)
         self.assertEqual(item["operation_mode_display"], "制热")
 
-    def test_operation_mode_2_ventilation(self):
-        """AC-105: value=2 → operation_mode_display='通风'"""
+    def test_operation_mode_3_ventilation(self):
+        """AC-105: value=3 → operation_mode_display='通风'"""
         item = self._get_item("703")
-        self.assertEqual(item["operation_mode_value"], 2)
+        self.assertEqual(item["operation_mode_value"], 3)
         self.assertEqual(item["operation_mode_display"], "通风")
 
-    def test_operation_mode_3_dehumidification(self):
-        """AC-105: value=3 → operation_mode_display='除湿'"""
+    def test_operation_mode_4_dehumidification(self):
+        """AC-105: value=4 → operation_mode_display='除湿'"""
         item = self._get_item("704")
-        self.assertEqual(item["operation_mode_value"], 3)
+        self.assertEqual(item["operation_mode_value"], 4)
         self.assertEqual(item["operation_mode_display"], "除湿")
 
     def test_operation_mode_null_when_no_record(self):
@@ -1303,7 +1303,7 @@ class TC_E2E_US103_OperationModeColumn(TestCase):
         _make_owner("3-1-7-702", building="3", unit="1", room_number="702")
 
         PLCLatestData.objects.create(
-            specific_part="3-1-7-701", param_name="operation_mode", value=1,
+            specific_part="3-1-7-701", param_name="operation_mode", value=2,
             building="3", unit="1", room_number="701", collected_at=datetime.now(),
         )
         # 702: 无记录
@@ -1314,7 +1314,7 @@ class TC_E2E_US103_OperationModeColumn(TestCase):
         data = resp.json()
         item = data["results"][0]
         self.assertEqual(item["operation_mode_display"], "制热")
-        self.assertEqual(item["operation_mode_value"], 1)
+        self.assertEqual(item["operation_mode_value"], 2)
 
     def test_us104_mode_display_when_no_data(self):
         """US-104: PLCLatestData 无 operation_mode 记录 → 显示'未知'"""
@@ -1330,7 +1330,7 @@ class TC_E2E_US103_OperationModeColumn(TestCase):
         om_record = PLCLatestData.objects.get(
             specific_part="3-1-7-701", param_name="operation_mode"
         )
-        self.assertEqual(om_record.value, 1)
+        self.assertEqual(om_record.value, 2)
 
 
 class TC_I_011_RoomNoFilterBuildingUnit(TestCase):

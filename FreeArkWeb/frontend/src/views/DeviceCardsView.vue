@@ -309,7 +309,7 @@ export default {
       }
 
       if (paramName === 'operation_mode') {
-        const modes = { 0: '制冷', 1: '制热', 2: '通风', 3: '除湿' }
+        const modes = { 1: '制冷', 2: '制热', 3: '通风', 4: '除湿' }
         return modes[v] !== undefined ? modes[v] : String(v)
       }
 
