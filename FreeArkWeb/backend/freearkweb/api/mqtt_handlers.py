@@ -442,13 +442,6 @@ class PLCDataHandler(MessageHandler):
                     PLCData.objects.bulk_update(to_update, update_fields)
                     logger.info(f"PLCDataHandler: ✅ 批量更新完成，共{len(to_update)}条记录")
 
-                # 刷新成功处理的设备的最后在线时间，使 general-only 设备也能保活
-                successful_parts = list({d['specific_part'] for d in parsed_data})
-                if successful_parts:
-                    PLCConnectionStatus.objects.filter(
-                        specific_part__in=successful_parts
-                    ).update(last_online_time=timezone.now())
-
             logger.info(f"PLCDataHandler: ✅ 批量保存PLC数据点完成，共处理{valid_data_count}个有效数据点")
             
         except Exception as e:
