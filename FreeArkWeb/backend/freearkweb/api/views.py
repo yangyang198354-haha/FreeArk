@@ -1725,9 +1725,11 @@ def device_management_device_list(request):
             )
         try:
             if len(parts) >= 1 and parts[0]:
-                qs = qs.filter(building=parts[0].strip())
+                b = parts[0].strip()
+                qs = qs.filter(building__in=[b, f'{b}栋'])
             if len(parts) >= 2 and parts[1]:
-                qs = qs.filter(unit=parts[1].strip())
+                u = parts[1].strip()
+                qs = qs.filter(unit__in=[u, f'{u}单元'])
             if len(parts) >= 3 and parts[2]:
                 qs = qs.filter(room_number=parts[2].strip())
         except Exception:
