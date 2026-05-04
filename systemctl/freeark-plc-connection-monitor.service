@@ -16,8 +16,8 @@ WorkingDirectory=/home/yangyang/Freeark/FreeArk/
 
 # 启动命令 - 使用虚拟环境中的Python
 # 检查间隔: 300秒(5分钟)
-# 超时阈值: 600秒(10分钟)
-ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py plc_connection_monitor --check-interval 300 --timeout-threshold 600
+# 超时阈值: 900秒(15分钟)
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py plc_connection_monitor --check-interval 300 --timeout-threshold 900
 
 # 停止命令
 ExecStop=/bin/kill -s SIGINT $MAINPID
