@@ -1703,6 +1703,7 @@ def device_management_device_list(request):
     screen_status_filter = request.GET.get('screen_status', '').strip().lower()
     system_switch_filter = request.GET.get('system_switch', '').strip().lower()
     plc_status_filter = request.GET.get('plc_status', '').strip().lower()
+    operation_mode_filter = request.GET.get('operation_mode', '').strip()
 
     try:
         page = max(1, int(request.GET.get('page', 1)))
@@ -1813,6 +1814,13 @@ def device_management_device_list(request):
         qs = qs.filter(_plc_connection_status='online')
     elif plc_status_filter == 'offline':
         qs = qs.filter(_plc_connection_status='offline')
+
+    # ---- 7c. 运行模式过滤（DB 层）----
+    if operation_mode_filter:
+        try:
+            qs = qs.filter(_operation_mode_value=int(operation_mode_filter))
+        except (ValueError, TypeError):
+            pass
 
     # ---- 8. 分页 ----
     total_before_screen_filter = qs.count()

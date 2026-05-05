@@ -42,6 +42,16 @@
         <el-option label="未知" value="unknown" />
       </el-select>
       <el-select
+        v-model="filterPlcStatus"
+        placeholder="PLC状态"
+        clearable
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="在线" value="online" />
+        <el-option label="离线" value="offline" />
+      </el-select>
+      <el-select
         v-model="filterSystemSwitch"
         placeholder="系统开关"
         clearable
@@ -52,14 +62,16 @@
         <el-option label="关" value="off" />
       </el-select>
       <el-select
-        v-model="filterPlcStatus"
-        placeholder="PLC状态"
+        v-model="filterOperationMode"
+        placeholder="运行模式"
         clearable
         style="width: 140px"
         @change="handleSearch"
       >
-        <el-option label="在线" value="online" />
-        <el-option label="离线" value="offline" />
+        <el-option label="制冷" :value="1" />
+        <el-option label="制热" :value="2" />
+        <el-option label="通风" :value="3" />
+        <el-option label="除湿" :value="4" />
       </el-select>
       <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
       <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
@@ -224,8 +236,9 @@ export default {
     const loading = ref(false)
     const cascadingSelectorRef = ref(null)
     const filterScreenStatus = ref('')
-    const filterSystemSwitch = ref('')
     const filterPlcStatus = ref('')
+    const filterSystemSwitch = ref('')
+    const filterOperationMode = ref(null)
 
     // PLC 历史弹窗状态
     const plcHistoryDialogVisible = ref(false)
@@ -258,6 +271,9 @@ export default {
         }
         if (filterPlcStatus.value) {
           params.plc_status = filterPlcStatus.value
+        }
+        if (filterOperationMode.value !== null && filterOperationMode.value !== '') {
+          params.operation_mode = filterOperationMode.value
         }
 
         const queryString = new URLSearchParams(params).toString()
@@ -316,8 +332,9 @@ export default {
         cascadingSelectorRef.value.clearSelection?.()
       }
       filterScreenStatus.value = ''
-      filterSystemSwitch.value = ''
       filterPlcStatus.value = ''
+      filterSystemSwitch.value = ''
+      filterOperationMode.value = null
       currentPage.value = 1
       fetchList()
     }
@@ -406,8 +423,9 @@ export default {
       loading,
       cascadingSelectorRef,
       filterScreenStatus,
-      filterSystemSwitch,
       filterPlcStatus,
+      filterSystemSwitch,
+      filterOperationMode,
       plcHistoryDialogVisible,
       plcHistoryLoading,
       plcHistoryList,

@@ -1383,3 +1383,95 @@ class TC_I_011_RoomNoFilterBuildingUnit(TestCase):
         data = resp.json()
         self.assertEqual(data["count"], 1)
         self.assertEqual(data["results"][0]["room_number"], "501")
+
+
+# ===========================================================================
+# 新增：运行模式过滤参数测试（2026-05-04）
+# ===========================================================================
+
+class TC_I_012_OperationModeFilter(TestCase):
+    """TC-I-012: 设备列表 API — operation_mode 过滤参数测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user("dm_opmode_filter_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token}")
+
+        # 701: operation_mode=1 制冷
+        # 702: operation_mode=2 制热
+        # 703: operation_mode=3 通风
+        # 704: operation_mode=4 除湿
+        # 705: 无 operation_mode 记录
+        for room, om_val in [("701", 1), ("702", 2), ("703", 3), ("704", 4)]:
+            _make_owner(f"3-1-7-{room}", building="3", unit="1", room_number=room)
+            PLCLatestData.objects.create(
+                specific_part=f"3-1-7-{room}", param_name="operation_mode",
+                value=om_val, building="3", unit="1", room_number=room,
+                collected_at=datetime.now(),
+            )
+        _make_owner("3-1-7-705", building="3", unit="1", room_number="705")
+
+    def test_filter_operation_mode_1_cooling(self):
+        """operation_mode=1 只返回制冷的户（701）"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "701")
+        self.assertEqual(data["results"][0]["operation_mode_display"], "制冷")
+
+    def test_filter_operation_mode_2_heating(self):
+        """operation_mode=2 只返回制热的户（702）"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=2")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "702")
+        self.assertEqual(data["results"][0]["operation_mode_display"], "制热")
+
+    def test_filter_operation_mode_3_ventilation(self):
+        """operation_mode=3 只返回通风的户（703）"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=3")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "703")
+        self.assertEqual(data["results"][0]["operation_mode_display"], "通风")
+
+    def test_filter_operation_mode_4_dehumidification(self):
+        """operation_mode=4 只返回除湿的户（704）"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=4")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "704")
+        self.assertEqual(data["results"][0]["operation_mode_display"], "除湿")
+
+    def test_filter_operation_mode_excludes_null_records(self):
+        """operation_mode=1 不返回无 operation_mode 记录的户（705）"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=1")
+        data = resp.json()
+        room_numbers = {r["room_number"] for r in data["results"]}
+        self.assertNotIn("705", room_numbers)
+
+    def test_no_operation_mode_filter_returns_all(self):
+        """不传 operation_mode 参数时，返回全部5条记录"""
+        resp = self.client.get("/api/device-management/device-list/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 5)
+
+    def test_invalid_operation_mode_returns_all(self):
+        """operation_mode=abc 非法值被忽略，返回全部5条记录"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=abc")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 5)
+
+    def test_combined_operation_mode_and_room_no_filter(self):
+        """operation_mode=2 AND room_no=3-1 同时生效，只返回702"""
+        resp = self.client.get("/api/device-management/device-list/?operation_mode=2&room_no=3-1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["room_number"], "702")
