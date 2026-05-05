@@ -162,30 +162,31 @@ class DailyUsageCalculator:
                             ))
                             created_count += 1
                         
-                        # 处理次日记录
-                        if key in next_day_records_map:
-                            # 更新现有记录
-                            next_record = next_day_records_map[key]
-                            if not next_record.initial_energy:
-                                next_record.initial_energy = final_energy
-                                next_record.final_energy = None
-                                next_record.usage_quantity = None
-                                next_day_records_to_update.append(next_record)
+                        # 处理次日记录（仅当 target_date 是过去的日期时才预写，避免"今天"运行时写入明天的记录）
+                        if target_date_value < date.today():
+                            if key in next_day_records_map:
+                                # 更新现有记录
+                                next_record = next_day_records_map[key]
+                                if not next_record.initial_energy:
+                                    next_record.initial_energy = final_energy
+                                    next_record.final_energy = None
+                                    next_record.usage_quantity = None
+                                    next_day_records_to_update.append(next_record)
+                                    next_day_count += 1
+                            else:
+                                # 创建次日新记录
+                                next_day_records_to_create.append(UsageQuantityDaily(
+                                    time_period=next_day,
+                                    specific_part=specific_part,
+                                    energy_mode=mode_display,
+                                    building=building,
+                                    unit=unit,
+                                    room_number=room_number,
+                                    initial_energy=final_energy,
+                                    final_energy=None,
+                                    usage_quantity=None
+                                ))
                                 next_day_count += 1
-                        else:
-                            # 创建次日新记录
-                            next_day_records_to_create.append(UsageQuantityDaily(
-                                time_period=next_day,
-                                specific_part=specific_part,
-                                energy_mode=mode_display,
-                                building=building,
-                                unit=unit,
-                                room_number=room_number,
-                                initial_energy=final_energy,
-                                final_energy=None,
-                                usage_quantity=None
-                            ))
-                            next_day_count += 1
                         
                         processed_count += 1
                     

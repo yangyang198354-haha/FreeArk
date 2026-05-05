@@ -23,13 +23,16 @@ class Command(BaseCommand):
                           help='只运行一次，不启动持续服务')
         parser.add_argument('--date', type=str,
                           help='手动执行时指定计算日期，格式为YYYY-MM-DD，默认为昨天')
+        parser.add_argument('--hourly', action='store_true',
+                          help='同时启用每小时一次的今日实时计算任务')
     
     def handle(self, *args, **options):
         # 使用统一的日志方法
         service_config = {
             'time': options['time'],
             'run_once': options['run_once'],
-            'date': options['date'] if options['date'] else '昨天(默认)'
+            'date': options['date'] if options['date'] else '昨天(默认)',
+            'hourly': options.get('hourly', False)
         }
         log_service_start(logger, '每日用量计算后台服务', service_config)
         
@@ -57,7 +60,11 @@ class Command(BaseCommand):
         
         # 每天定时运行
         schedule.every().day.at(run_time).do(self.daily_job)
-        
+
+        if options.get('hourly'):
+            schedule.every().hour.do(self.hourly_job)
+            logger.info('⏰ 已启用每小时今日实时计算任务')
+
         # 立即运行一次
         log_task_start(logger, '首次计算任务')
         self.daily_job()
@@ -76,6 +83,12 @@ class Command(BaseCommand):
         """每日定时任务，计算昨天的数据"""
         target_date = date.today() - timedelta(days=1)
         log_task_start(logger, f'计算{target_date}的用量数据')
+        self.calculate_daily_usage(target_date)
+
+    def hourly_job(self):
+        """每小时实时计算今日用量数据"""
+        target_date = date.today()
+        log_task_start(logger, f'实时计算今日({target_date})用量数据')
         self.calculate_daily_usage(target_date)
     
     def calculate_daily_usage(self, target_date):
