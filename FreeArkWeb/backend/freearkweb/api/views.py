@@ -1881,6 +1881,8 @@ def device_management_device_list(request):
             'operation_mode_display': om_display,
             'plc_status': plc_status_display,
             'plc_last_online_time': plc_last_online.isoformat() if plc_last_online else None,
+            # 同步设备信息按钮可用性：unique_id (screenMAC) 非空才能调远程接口
+            'has_screen_mac': bool((owner.unique_id or '').strip()),
         })
 
     return Response({
@@ -1889,3 +1891,103 @@ def device_management_device_list(request):
         'page_size': page_size,
         'results': results,
     })
+
+
+# ---------------------------------------------------------------------------
+# 设备树同步接口（单户 / 批量）
+# 远程调用：POST http://47.117.41.184:10013/.../floor-room-device/list
+# Header: screenMAC = OwnerInfo.unique_id
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def device_tree_sync_one(request):
+    """POST /api/device-management/screen-device-tree/sync/
+
+    Body 或 Query：
+      specific_part (str, 必填)  — 如 "3-1-7-702"
+      prune         (bool, 可选) — 默认 False；True 时清理远程未返回的旧节点
+
+    返回 200：{ specific_part, screen_mac, stats: {...} }
+    错误：400 未绑定 MAC / 404 户不存在 / 502 远程异常
+    """
+    from .device_tree_sync import (
+        MissingScreenMacError, OwnerNotFoundError, SyncError, sync_one_specific_part,
+    )
+
+    specific_part = (
+        request.data.get('specific_part')
+        if isinstance(request.data, dict) else None
+    ) or request.GET.get('specific_part', '')
+    specific_part = (specific_part or '').strip()
+    if not specific_part:
+        return Response({'error': 'specific_part 必填'}, status=400)
+
+    prune_raw = (
+        request.data.get('prune') if isinstance(request.data, dict) else None
+    )
+    if prune_raw is None:
+        prune_raw = request.GET.get('prune', '')
+    prune = str(prune_raw).lower() in ('1', 'true', 'yes')
+
+    try:
+        result = sync_one_specific_part(specific_part, prune=prune)
+    except (MissingScreenMacError, OwnerNotFoundError, SyncError) as e:
+        logger.warning('device_tree_sync_one failed sp=%s err=%s', specific_part, e.message)
+        return Response({'error': e.message}, status=e.http_status)
+    except Exception as e:  # noqa: BLE001
+        logger.exception('device_tree_sync_one unexpected error sp=%s', specific_part)
+        return Response({'error': f'未预期错误: {e}'}, status=500)
+
+    return Response({
+        'code': 200,
+        'message': 'ok',
+        **result,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def device_tree_sync_batch(request):
+    """POST /api/device-management/screen-device-tree/batch-sync/
+
+    Body：
+      specific_parts (list[str], 可选)
+        — 不传则同步所有 OwnerInfo 中 unique_id 非空的户
+
+      prune (bool, 可选) — 默认 False
+
+    返回 202：{ task_id, total }
+    """
+    from .device_tree_sync import start_batch_sync
+
+    payload = request.data if isinstance(request.data, dict) else {}
+    sp_input = payload.get('specific_parts')
+
+    if isinstance(sp_input, list) and sp_input:
+        specific_parts = [str(x).strip() for x in sp_input if str(x).strip()]
+    else:
+        specific_parts = list(
+            OwnerInfo.objects
+            .exclude(unique_id='')
+            .values_list('specific_part', flat=True)
+        )
+
+    prune = bool(payload.get('prune')) if isinstance(payload, dict) else False
+    task_id, total = start_batch_sync(specific_parts, prune=prune)
+    return Response({'task_id': task_id, 'total': total}, status=202)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def device_tree_sync_batch_status(request, task_id):
+    """GET /api/device-management/screen-device-tree/batch-sync/<task_id>/
+
+    返回任务进度；404 表示 task_id 不存在或已过期。
+    """
+    from .device_tree_sync import get_task_status
+
+    record = get_task_status(task_id)
+    if record is None:
+        return Response({'error': '任务不存在或已过期'}, status=404)
+    return Response(record)

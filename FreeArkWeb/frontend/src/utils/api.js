@@ -159,11 +159,20 @@ const api = {
       method: 'POST',
       body: JSON.stringify(data)
     });
-    
+
     if (!response.ok) {
-      throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      // 尝试解析后端 JSON 错误体（{error: "..."}）以便上层展示具体原因
+      let backendMsg = '';
+      try {
+        const body = await response.clone().json();
+        if (body && (body.error || body.message)) {
+          backendMsg = body.error || body.message;
+        }
+      } catch (_) { /* body 非 JSON 或为空 */ }
+      const suffix = backendMsg ? ` - ${backendMsg}` : '';
+      throw new Error(`API请求失败: ${response.status} ${response.statusText}${suffix}`);
     }
-    
+
     return response.json();
   },
   

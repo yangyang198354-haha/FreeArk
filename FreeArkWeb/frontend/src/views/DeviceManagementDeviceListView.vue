@@ -75,6 +75,14 @@
       </el-select>
       <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
       <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
+      <el-button
+        type="danger"
+        :icon="Refresh"
+        :loading="batchRunning"
+        @click="handleBatchSync"
+      >
+        批量同步
+      </el-button>
     </div>
 
     <!-- 数据表格 -->
@@ -133,7 +141,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="180" align="center" fixed="right">
+      <el-table-column label="操作" width="260" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
             type="primary"
@@ -151,6 +159,24 @@
           >
             PLC历史
           </el-button>
+          <el-tooltip
+            :disabled="row.has_screen_mac"
+            content="未绑定屏 MAC，无法同步"
+            placement="top"
+          >
+            <span>
+              <el-button
+                type="warning"
+                link
+                size="small"
+                :disabled="!row.has_screen_mac"
+                :loading="syncingMap[row.specific_part]"
+                @click="handleSyncOne(row)"
+              >
+                同步设备信息
+              </el-button>
+            </span>
+          </el-tooltip>
         </template>
       </el-table-column>
     </el-table>
@@ -209,21 +235,68 @@
         <el-button @click="plcHistoryDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量同步进度弹窗 -->
+    <el-dialog
+      v-model="batchDialogVisible"
+      title="批量同步设备信息"
+      width="640px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="!batchRunning"
+    >
+      <div class="batch-sync-content">
+        <div class="batch-summary">
+          <el-tag size="large" :type="batchRunning ? 'warning' : 'success'">
+            {{ batchStatusLabel }}
+          </el-tag>
+          <span class="batch-counter">
+            {{ batchProgress.processed }} / {{ batchProgress.total }}
+            （成功 {{ batchProgress.success }} · 失败 {{ batchProgress.failed }}）
+          </span>
+        </div>
+        <el-progress
+          :percentage="batchPercentage"
+          :status="batchRunning ? '' : (batchProgress.failed > 0 ? 'exception' : 'success')"
+          style="margin: 12px 0"
+        />
+        <div v-if="batchProgress.errors && batchProgress.errors.length > 0" class="batch-errors">
+          <div class="batch-errors-title">
+            失败记录 ({{ batchProgress.errors.length }})
+          </div>
+          <el-table
+            :data="batchProgress.errors"
+            size="small"
+            border
+            stripe
+            max-height="240"
+          >
+            <el-table-column prop="specific_part" label="专有部分" width="160" />
+            <el-table-column prop="message" label="错误信息" />
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button :disabled="batchRunning" @click="batchDialogVisible = false">
+          {{ batchRunning ? '同步中...' : '关闭' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Search, RefreshLeft } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
 
 export default {
   name: 'DeviceManagementDeviceListView',
 
-  components: { Search, RefreshLeft, CascadingSelector },
+  components: { Search, RefreshLeft, Refresh, CascadingSelector },
 
   setup() {
     const router = useRouter()
@@ -245,6 +318,33 @@ export default {
     const plcHistoryLoading = ref(false)
     const plcHistoryList = ref([])
     const plcHistorySpecificPart = ref('')
+
+    // 设备树同步状态
+    // syncingMap[specific_part] = true 表示该行正在同步
+    const syncingMap = reactive({})
+    const batchDialogVisible = ref(false)
+    const batchRunning = ref(false)
+    const batchTaskId = ref('')
+    let batchPollTimer = null
+    const batchProgress = reactive({
+      total: 0,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      status: 'pending',
+      errors: [],
+    })
+    const batchStatusLabel = computed(() => {
+      if (batchProgress.status === 'pending') return '排队中'
+      if (batchProgress.status === 'running') return '同步中'
+      if (batchProgress.status === 'finished') return '已完成'
+      if (batchProgress.status === 'failed') return '已失败'
+      return batchProgress.status
+    })
+    const batchPercentage = computed(() => {
+      if (!batchProgress.total) return 0
+      return Math.floor((batchProgress.processed / batchProgress.total) * 100)
+    })
 
     // --- API 调用 ---
     const fetchList = async () => {
@@ -360,6 +460,146 @@ export default {
       fetchPlcHistory(row.specific_part)
     }
 
+    // 单户同步
+    const handleSyncOne = async (row) => {
+      if (!row.has_screen_mac) return
+      try {
+        await ElMessageBox.confirm(
+          `同步 ${row.specific_part} 的设备树？耗时约 2~5 秒。`,
+          '同步设备信息',
+          { confirmButtonText: '同步', cancelButtonText: '取消', type: 'warning' },
+        )
+      } catch {
+        return  // 用户取消
+      }
+      syncingMap[row.specific_part] = true
+      try {
+        const resp = await api.post(
+          '/api/device-management/screen-device-tree/sync/',
+          { specific_part: row.specific_part },
+        )
+        const stats = (resp && resp.stats) || {}
+        ElMessage.success(
+          `已同步 ${stats.devices || 0} 台设备 / ${stats.rooms || 0} 个房间 / ${stats.attr_defs_total || 0} 条属性`,
+        )
+      } catch (err) {
+        ElMessage.error(`同步失败：${err?.message || err}`)
+      } finally {
+        delete syncingMap[row.specific_part]
+      }
+    }
+
+    // 批量同步 — 范围 = 当前过滤栏命中的户
+    const collectFilteredSpecificParts = async () => {
+      // 复用 device-list 接口取当前过滤命中的所有 specific_part
+      // 使用大 page_size 一次取完（OwnerInfo 总数有限）
+      const params = { page: 1, page_size: 1000 }
+      const dlBuilding = document.getElementById('dlBuilding')?.value || ''
+      const dlUnit = document.getElementById('dlUnit')?.value || ''
+      const dlRoom = document.getElementById('dlRoom')?.value || ''
+      if (dlBuilding) {
+        let roomNo = dlBuilding
+        if (dlUnit) roomNo += `-${dlUnit}`
+        if (dlRoom) roomNo += `-${dlRoom}`
+        params.room_no = roomNo
+      }
+      if (filterScreenStatus.value) params.screen_status = filterScreenStatus.value
+      if (filterSystemSwitch.value) params.system_switch = filterSystemSwitch.value
+      if (filterPlcStatus.value) params.plc_status = filterPlcStatus.value
+      if (filterOperationMode.value !== null && filterOperationMode.value !== '') {
+        params.operation_mode = filterOperationMode.value
+      }
+      const qs = new URLSearchParams(params).toString()
+      const resp = await api.get(`/api/device-management/device-list/?${qs}`)
+      const rows = (resp && resp.results) || []
+      return rows.filter(r => r.has_screen_mac).map(r => r.specific_part)
+    }
+
+    const stopBatchPolling = () => {
+      if (batchPollTimer) {
+        clearInterval(batchPollTimer)
+        batchPollTimer = null
+      }
+    }
+
+    const pollBatchStatus = async () => {
+      if (!batchTaskId.value) return
+      try {
+        const resp = await api.get(
+          `/api/device-management/screen-device-tree/batch-sync/${encodeURIComponent(batchTaskId.value)}/`,
+        )
+        batchProgress.total = resp.total ?? batchProgress.total
+        batchProgress.processed = resp.processed ?? 0
+        batchProgress.success = resp.success ?? 0
+        batchProgress.failed = resp.failed ?? 0
+        batchProgress.status = resp.status || 'running'
+        batchProgress.errors = Array.isArray(resp.errors) ? resp.errors : []
+        if (resp.status === 'finished' || resp.status === 'failed') {
+          batchRunning.value = false
+          stopBatchPolling()
+          ElMessage({
+            type: batchProgress.failed > 0 ? 'warning' : 'success',
+            message: `批量同步完成：成功 ${batchProgress.success} / 失败 ${batchProgress.failed}`,
+            duration: 4000,
+          })
+        }
+      } catch (err) {
+        // 偶发轮询失败不中断任务，仅打印
+        // 若连续失败可考虑加计数停止
+        console.warn('poll batch status failed', err)
+      }
+    }
+
+    const handleBatchSync = async () => {
+      // 1. 取当前过滤范围下可同步的户
+      let targets = []
+      try {
+        targets = await collectFilteredSpecificParts()
+      } catch (err) {
+        ElMessage.error('获取待同步户列表失败')
+        return
+      }
+      if (targets.length === 0) {
+        ElMessage.warning('当前筛选条件下没有可同步的户（需绑定屏 MAC）')
+        return
+      }
+      // 2. 二次确认
+      try {
+        const minutes = Math.max(1, Math.ceil(targets.length / 60))
+        await ElMessageBox.confirm(
+          `将同步当前筛选条件下的 ${targets.length} 户，预计耗时 ${minutes} 分钟，确认？`,
+          '批量同步',
+          { confirmButtonText: '开始同步', cancelButtonText: '取消', type: 'warning' },
+        )
+      } catch {
+        return
+      }
+      // 3. 启动任务
+      try {
+        batchRunning.value = true
+        batchProgress.total = targets.length
+        batchProgress.processed = 0
+        batchProgress.success = 0
+        batchProgress.failed = 0
+        batchProgress.status = 'pending'
+        batchProgress.errors = []
+        batchDialogVisible.value = true
+        const resp = await api.post(
+          '/api/device-management/screen-device-tree/batch-sync/',
+          { specific_parts: targets },
+        )
+        batchTaskId.value = resp.task_id
+        batchProgress.total = resp.total ?? targets.length
+        // 4. 轮询进度
+        stopBatchPolling()
+        batchPollTimer = setInterval(pollBatchStatus, 2000)
+        pollBatchStatus()  // 立即触发一次
+      } catch (err) {
+        batchRunning.value = false
+        ElMessage.error(`启动批量同步失败：${err?.message || err}`)
+      }
+    }
+
     // --- 辅助函数 ---
     const screenStatusLabel = (status) => {
       if (status === 'online') return '在线'
@@ -415,6 +655,10 @@ export default {
       fetchList()
     })
 
+    onBeforeUnmount(() => {
+      stopBatchPolling()
+    })
+
     return {
       tableData,
       total,
@@ -430,8 +674,15 @@ export default {
       plcHistoryLoading,
       plcHistoryList,
       plcHistorySpecificPart,
+      syncingMap,
+      batchDialogVisible,
+      batchRunning,
+      batchProgress,
+      batchStatusLabel,
+      batchPercentage,
       Search,
       RefreshLeft,
+      Refresh,
       fetchList,
       handleSearch,
       handleReset,
@@ -439,6 +690,8 @@ export default {
       handlePageSizeChange,
       handleGoToDevicePanel,
       handleOpenPlcHistory,
+      handleSyncOne,
+      handleBatchSync,
       screenStatusLabel,
       screenStatusTagType,
       plcStatusLabel,
@@ -489,5 +742,30 @@ export default {
   color: #c0c4cc;
   padding: 30px 0;
   font-size: 14px;
+}
+
+.batch-sync-content {
+  padding: 8px 0;
+}
+
+.batch-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.batch-counter {
+  color: #606266;
+  font-size: 14px;
+}
+
+.batch-errors {
+  margin-top: 12px;
+}
+
+.batch-errors-title {
+  font-size: 13px;
+  color: #f56c6c;
+  margin-bottom: 6px;
 }
 </style>

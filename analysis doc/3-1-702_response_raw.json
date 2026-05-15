@@ -1,0 +1,1497 @@
+﻿{
+    "data":  [
+                 {
+                     "floorName":  "1",
+                     "floor":  1,
+                     "rooms":  [
+                                   {
+                                       "roomName":  "全屋",
+                                       "oriRoomName":  "全屋",
+                                       "roomType":  1,
+                                       "devices":  [
+                                                       {
+                                                           "deviceSn":  22153,
+                                                           "deviceName":  "自由方舟",
+                                                           "systemFlag":  2,
+                                                           "relatedDeviceSn":  null,
+                                                           "productCode":  "10016",
+                                                           "categoryCode":  1,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  1,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humidification_enable",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  1,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  null
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "mode",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  1,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "制热",
+                                                                                                      "code":  "hot",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "通风",
+                                                                                                      "code":  "wind",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "制冷",
+                                                                                                      "code":  "cold",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "除湿",
+                                                                                                      "code":  "dehumidification",
+                                                                                                      "sortNo":  null
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "wind_speed",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  1,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "高速",
+                                                                                                      "code":  "high_speed",
+                                                                                                      "sortNo":  null
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "system_switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  1,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  null
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "energy_saving_sign",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  1,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  null
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  null
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  null,
+                                                                                  "addressCode":  null
+                                                                              }
+                                                       },
+                                                       {
+                                                           "deviceSn":  22154,
+                                                           "deviceName":  "水力模块",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "270001",
+                                                           "categoryCode":  27,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "mode",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "制热",
+                                                                                                      "code":  "hot",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "通风",
+                                                                                                      "code":  "wind",
+                                                                                                      "sortNo":  2
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "制冷",
+                                                                                                      "code":  "cold",
+                                                                                                      "sortNo":  3
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "除湿",
+                                                                                                      "code":  "dehumidification",
+                                                                                                      "sortNo":  4
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "system_switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "energy_saving_sign",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "energy_supply_mode",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "制冷",
+                                                                                                      "code":  "cold",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "制热",
+                                                                                                      "code":  "hot",
+                                                                                                      "sortNo":  2
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "无",
+                                                                                                      "code":  "no",
+                                                                                                      "sortNo":  3
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "2nd_outwater_temp_detect",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "40",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "2nd_inwater_temp_detect",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "40",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "primary_valve_opening",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       },
+                                                       {
+                                                           "deviceSn":  22155,
+                                                           "deviceName":  "新风",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "130004",
+                                                           "categoryCode":  13,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "humidification_enable",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "wind_speed",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "高速",
+                                                                                                      "code":  "high_speed",
+                                                                                                      "sortNo":  10
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "empty_screen_timing",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "监测中",
+                                                                                                      "code":  "timing",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "清空",
+                                                                                                      "code":  "empty",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "filter_working_time",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "9999",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "filter_max_life",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "9999",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humi_upper_limit",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humi_lower_limit",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "out_temp_set",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "50",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "one_water_valve_opening",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "fan_speed",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100000",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "pau_through_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-40",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "newwind_inlet_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-40",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "pau_out_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "50",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "pau_in_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "50",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "speed_level",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "高速",
+                                                                                                      "code":  "high_speed",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       },
+                                                       {
+                                                           "deviceSn":  22156,
+                                                           "deviceName":  "能耗表",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "250001",
+                                                           "categoryCode":  25,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "work_duration",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100000000",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "total_hot_quantity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "1000",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "total_cold_quantity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "1000",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "back_water_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  2,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.01"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "total_flow_rate",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100000000",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "in_water_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  2,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.01"
+                                                                                          }
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       },
+                                                       {
+                                                           "deviceSn":  22157,
+                                                           "deviceName":  "空气品质",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "100007",
+                                                           "categoryCode":  10,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "hcho",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  3,
+                                                                                              "max":  "65535",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.001"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "tvoc",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  3,
+                                                                                              "max":  "65535",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.001"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "pm25",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "65535",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "co2",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "65535",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       }
+                                                   ]
+                                   },
+                                   {
+                                       "roomName":  "客厅",
+                                       "oriRoomName":  "客厅",
+                                       "roomType":  2,
+                                       "devices":  [
+                                                       {
+                                                           "deviceSn":  22158,
+                                                           "deviceName":  "主温控",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "260001",
+                                                           "categoryCode":  26,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humidity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp_set",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "30",
+                                                                                              "min":  "16",
+                                                                                              "step":  "0.5"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "system_switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  2,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "condensation_alarm",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "NTC_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "dew_point_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       }
+                                                   ]
+                                   },
+                                   {
+                                       "roomName":  "书房",
+                                       "oriRoomName":  "书房",
+                                       "roomType":  6,
+                                       "devices":  [
+                                                       {
+                                                           "deviceSn":  22552,
+                                                           "deviceName":  "温控面板",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "120003",
+                                                           "categoryCode":  12,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp_set",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "30",
+                                                                                              "min":  "16",
+                                                                                              "step":  "0.5"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humidity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "condensation_alarm",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "NTC_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "dew_point_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       }
+                                                   ]
+                                   },
+                                   {
+                                       "roomName":  "次卧",
+                                       "oriRoomName":  "次卧",
+                                       "roomType":  5,
+                                       "devices":  [
+                                                       {
+                                                           "deviceSn":  22553,
+                                                           "deviceName":  "温控面板",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "120003",
+                                                           "categoryCode":  12,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp_set",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "30",
+                                                                                              "min":  "16",
+                                                                                              "step":  "0.5"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humidity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "condensation_alarm",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "NTC_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "dew_point_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       }
+                                                   ]
+                                   },
+                                   {
+                                       "roomName":  "主卧",
+                                       "oriRoomName":  "主卧",
+                                       "roomType":  4,
+                                       "devices":  [
+                                                       {
+                                                           "deviceSn":  22554,
+                                                           "deviceName":  "温控面板",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "120003",
+                                                           "categoryCode":  12,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp_set",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "30",
+                                                                                              "min":  "16",
+                                                                                              "step":  "0.5"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humidity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "condensation_alarm",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "NTC_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "dew_point_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       }
+                                                   ]
+                                   },
+                                   {
+                                       "roomName":  "儿童房",
+                                       "oriRoomName":  "儿童房",
+                                       "roomType":  5,
+                                       "devices":  [
+                                                       {
+                                                           "deviceSn":  22555,
+                                                           "deviceName":  "温控面板",
+                                                           "systemFlag":  1,
+                                                           "relatedDeviceSn":  22153,
+                                                           "productCode":  "120003",
+                                                           "categoryCode":  12,
+                                                           "attrs":  [
+                                                                         {
+                                                                             "attrTag":  "switch",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "关闭",
+                                                                                                      "code":  "off",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "开启",
+                                                                                                      "code":  "on",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "temp_set",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "30",
+                                                                                              "min":  "16",
+                                                                                              "step":  "0.5"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "humidity",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  0,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "condensation_alarm",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "100",
+                                                                                              "min":  "0",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "NTC_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "dew_point_temp",
+                                                                             "attrValueType":  2,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+
+                                                                                              ],
+                                                                             "numValue":  {
+                                                                                              "precision":  1,
+                                                                                              "max":  "50",
+                                                                                              "min":  "-20",
+                                                                                              "step":  "0.1"
+                                                                                          }
+                                                                         },
+                                                                         {
+                                                                             "attrTag":  "comm_fault_timeout",
+                                                                             "attrValueType":  1,
+                                                                             "attrConstraint":  0,
+                                                                             "selectValues":  [
+                                                                                                  {
+                                                                                                      "name":  "正常",
+                                                                                                      "code":  "normal",
+                                                                                                      "sortNo":  1
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "异常",
+                                                                                                      "code":  "abnormal",
+                                                                                                      "sortNo":  2
+                                                                                                  }
+                                                                                              ],
+                                                                             "numValue":  null
+                                                                         }
+                                                                     ],
+                                                           "deviceProtocol":  {
+                                                                                  "protocol":  "2",
+                                                                                  "addressCode":  "1"
+                                                                              }
+                                                       }
+                                                   ]
+                                   }
+                               ]
+                 }
+             ],
+    "code":  200,
+    "message":  "成功"
+}

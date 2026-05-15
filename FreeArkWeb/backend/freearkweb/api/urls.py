@@ -64,6 +64,11 @@ urlpatterns = [
     # 设备管理 — 设备列表接口 (MOD-BE-01, US-002~007)
     path('device-management/device-list/', views.device_management_device_list, name='device-management-device-list'),
 
+    # 设备管理 — 设备树同步接口（单户 / 批量 / 批量进度）
+    path('device-management/screen-device-tree/sync/', views.device_tree_sync_one, name='device-tree-sync-one'),
+    path('device-management/screen-device-tree/batch-sync/', views.device_tree_sync_batch, name='device-tree-sync-batch'),
+    path('device-management/screen-device-tree/batch-sync/<str:task_id>/', views.device_tree_sync_batch_status, name='device-tree-sync-batch-status'),
+
     # 服务管理接口
     path('services/list/', views.service_management_list, name='service-management-list'),
     path('services/<str:service_name>/detail/', views.service_management_detail, name='service-management-detail'),

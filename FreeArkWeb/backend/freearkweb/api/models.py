@@ -439,3 +439,152 @@ class ScreenConnectivityStatus(models.Model):
 
     def __str__(self):
         return f"{self.specific_part} - last_seen_at={self.last_seen_at}"
+
+
+# ---------------------------------------------------------------------------
+# 设备树同步 — 来自屏侧 floor-room-device/list 接口
+# 表关系：OwnerInfo 1:N DeviceFloor 1:N DeviceRoom 1:N DeviceNode
+#         DeviceNode N:M DeviceAttrDef  (经由 DeviceAttrBinding)
+# ---------------------------------------------------------------------------
+
+
+class DeviceFloor(models.Model):
+    """同步自屏接口的楼层节点，挂在 OwnerInfo 之下。"""
+    owner = models.ForeignKey(
+        OwnerInfo, on_delete=models.CASCADE, related_name='floors', verbose_name='所属业主'
+    )
+    floor_no = models.IntegerField(verbose_name='楼层号')
+    floor_name = models.CharField(max_length=20, verbose_name='楼层名')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='最后同步时间')
+
+    class Meta:
+        db_table = 'device_floor'
+        verbose_name = '设备楼层'
+        verbose_name_plural = '设备楼层'
+        constraints = [
+            models.UniqueConstraint(fields=['owner', 'floor_no'], name='uniq_floor_owner_no'),
+        ]
+        indexes = [
+            models.Index(fields=['owner']),
+        ]
+
+    def __str__(self):
+        return f"{self.owner.specific_part} / floor={self.floor_no}"
+
+
+class DeviceRoom(models.Model):
+    """同步自屏接口的房间节点，挂在 DeviceFloor 之下。"""
+    floor = models.ForeignKey(
+        DeviceFloor, on_delete=models.CASCADE, related_name='rooms', verbose_name='所属楼层'
+    )
+    room_name = models.CharField(max_length=50, verbose_name='房间名')
+    ori_room_name = models.CharField(max_length=50, verbose_name='原始房间名')
+    room_type = models.IntegerField(verbose_name='房间类型')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='最后同步时间')
+
+    class Meta:
+        db_table = 'device_room'
+        verbose_name = '设备房间'
+        verbose_name_plural = '设备房间'
+        constraints = [
+            models.UniqueConstraint(fields=['floor', 'ori_room_name'], name='uniq_room_floor_oriname'),
+        ]
+        indexes = [
+            models.Index(fields=['floor']),
+            models.Index(fields=['room_type']),
+        ]
+
+    def __str__(self):
+        return f"{self.floor} / {self.room_name}"
+
+
+class DeviceNode(models.Model):
+    """同步自屏接口的设备节点，挂在 DeviceRoom 之下。"""
+    room = models.ForeignKey(
+        DeviceRoom, on_delete=models.CASCADE, related_name='devices', verbose_name='所属房间'
+    )
+    device_sn = models.IntegerField(verbose_name='设备SN')
+    device_name = models.CharField(max_length=50, verbose_name='设备名')
+    system_flag = models.SmallIntegerField(verbose_name='系统标识')  # 1=子设备 2=主机
+    related_device_sn = models.IntegerField(null=True, blank=True, verbose_name='所属主机SN')
+    product_code = models.CharField(max_length=20, verbose_name='产品编码')
+    category_code = models.IntegerField(verbose_name='品类编码')
+    protocol = models.SmallIntegerField(null=True, blank=True, verbose_name='通信协议')
+    address_code = models.SmallIntegerField(null=True, blank=True, verbose_name='总线地址')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='最后同步时间')
+
+    attrs = models.ManyToManyField(
+        'DeviceAttrDef',
+        through='DeviceAttrBinding',
+        related_name='devices',
+        verbose_name='设备属性',
+    )
+
+    class Meta:
+        db_table = 'device_node'
+        verbose_name = '设备节点'
+        verbose_name_plural = '设备节点'
+        constraints = [
+            models.UniqueConstraint(fields=['room', 'device_sn'], name='uniq_node_room_sn'),
+        ]
+        indexes = [
+            models.Index(fields=['room']),
+            models.Index(fields=['device_sn']),
+            models.Index(fields=['product_code']),
+            models.Index(fields=['related_device_sn']),
+        ]
+
+    def __str__(self):
+        return f"{self.room} / sn={self.device_sn} {self.device_name}"
+
+
+class DeviceAttrDef(models.Model):
+    """全局设备属性定义池。按 (product_code, attr_tag) 唯一去重。"""
+    product_code = models.CharField(max_length=20, verbose_name='产品编码')
+    attr_tag = models.CharField(max_length=50, verbose_name='属性标签')
+    attr_value_type = models.SmallIntegerField(verbose_name='取值类型')  # 1=枚举 2=数值
+    attr_constraint = models.SmallIntegerField(verbose_name='约束')
+    # 原文 JSON 存为字符串，跨数据库（SQLite / MySQL）兼容
+    select_values_json = models.TextField(blank=True, default='', verbose_name='枚举值JSON')
+    num_value_json = models.TextField(blank=True, default='', verbose_name='数值范围JSON')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='最后同步时间')
+
+    class Meta:
+        db_table = 'device_attr_def'
+        verbose_name = '设备属性定义'
+        verbose_name_plural = '设备属性定义'
+        constraints = [
+            models.UniqueConstraint(fields=['product_code', 'attr_tag'], name='uniq_attr_def_prod_tag'),
+        ]
+        indexes = [
+            models.Index(fields=['product_code']),
+            models.Index(fields=['attr_tag']),
+        ]
+
+    def __str__(self):
+        return f"{self.product_code}.{self.attr_tag}"
+
+
+class DeviceAttrBinding(models.Model):
+    """设备 ↔ 属性定义 的 M:N 绑定表，用于完整还原屏接口的 attrs 列表。"""
+    device = models.ForeignKey(
+        DeviceNode, on_delete=models.CASCADE, related_name='attr_bindings', verbose_name='设备'
+    )
+    attr_def = models.ForeignKey(
+        DeviceAttrDef, on_delete=models.CASCADE, related_name='bindings', verbose_name='属性定义'
+    )
+
+    class Meta:
+        db_table = 'device_attr_binding'
+        verbose_name = '设备属性绑定'
+        verbose_name_plural = '设备属性绑定'
+        constraints = [
+            models.UniqueConstraint(fields=['device', 'attr_def'], name='uniq_binding_dev_def'),
+        ]
+        indexes = [
+            models.Index(fields=['device']),
+            models.Index(fields=['attr_def']),
+        ]
+
+    def __str__(self):
+        return f"{self.device_id} <-> {self.attr_def_id}"

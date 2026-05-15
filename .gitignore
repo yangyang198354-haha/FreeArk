@@ -135,6 +135,9 @@ docs/_build/
 # Claude Code 记忆目录
 .claude/
 
+# SDLC 过程产物（代码审查/测试/部署报告等，本地保留不进仓库）
+sdlc/
+
 # 临时诊断脚本
 debug_ssh.py
 diag.py
