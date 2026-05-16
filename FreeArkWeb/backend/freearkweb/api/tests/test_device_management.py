@@ -641,7 +641,11 @@ class TC_I_004_DeviceListAPISystemSwitch(TestCase):
 
 
 class TC_I_005_DeviceListAPIPagination(TestCase):
-    """TC-I-005: 分页功能集成测试（NFR-003: 每页默认20，最大50）"""
+    """TC-I-005: 分页功能集成测试（NFR-003: 每页默认20，最大2000）
+
+    BUG-FIX: 原 page_size 上限为50，导致批量同步只能取到第一页50条。
+    修复后上限为2000，分页 UI 行为不变（仍使用 10/20/50）。
+    """
 
     def setUp(self):
         self.client = APIClient()
@@ -686,12 +690,31 @@ class TC_I_005_DeviceListAPIPagination(TestCase):
         self.assertEqual(data["page_size"], 10)
         self.assertEqual(len(data["results"]), 10)
 
-    def test_page_size_capped_at_50(self):
-        """page_size=100：被 cap 到 50"""
-        resp = self.client.get("/api/device-management/device-list/?page_size=100")
+    def test_page_size_large_value_capped_at_2000(self):
+        """page_size=9999：被 cap 到 2000（BUG-FIX: 原上限为50，现为2000）
+
+        验证：不再错误地将大 page_size 截断为50，
+        批量同步场景传入 page_size=2000 可正常取到全量数据。
+        """
+        resp = self.client.get("/api/device-management/device-list/?page_size=9999")
         data = resp.json()
-        self.assertEqual(data["page_size"], 50)
-        self.assertLessEqual(len(data["results"]), 50)
+        self.assertEqual(data["page_size"], 2000)
+        # 25条数据，page_size=2000 可一次取完
+        self.assertEqual(len(data["results"]), 25)
+        self.assertEqual(data["count"], 25)
+
+    def test_page_size_2000_returns_all_records_in_one_page(self):
+        """page_size=2000（批量同步场景）：可一次取完全部25条记录
+
+        这是 BUG-FIX 的核心验证：前端传 page_size=2000，
+        后端应返回全量结果而非被截断为50条。
+        """
+        resp = self.client.get("/api/device-management/device-list/?page=1&page_size=2000")
+        data = resp.json()
+        self.assertEqual(data["page_size"], 2000)
+        self.assertEqual(data["count"], 25)
+        self.assertEqual(len(data["results"]), 25,
+            "批量同步场景：page_size=2000 时 results 应包含全部25条，不应被截断为50")
 
     def test_invalid_page_defaults_to_1(self):
         """page=abc 非法：回退到 page=1"""
@@ -711,6 +734,19 @@ class TC_I_005_DeviceListAPIPagination(TestCase):
         data = resp.json()
         room_numbers = [r["room_number"] for r in data["results"]]
         self.assertEqual(room_numbers, sorted(room_numbers))
+
+    def test_count_field_reflects_total_not_page_results(self):
+        """resp.count 反映全量总数，而非当页 results 的长度
+
+        BUG-FIX 验证：前端应使用 resp.count 获知总户数，
+        而非 resp.results.length（后者仅为当页条数）。
+        """
+        resp = self.client.get("/api/device-management/device-list/?page=1&page_size=10")
+        data = resp.json()
+        # 当页 results 只有10条，但 count 应反映全部25条
+        self.assertEqual(len(data["results"]), 10)
+        self.assertEqual(data["count"], 25,
+            "count 字段应为全量总数25，不应与 results.length(10) 相同")
 
 
 class TC_I_006_MQTTHandlerIntegration(TestCase):

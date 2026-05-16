@@ -114,14 +114,18 @@ class PLCConnectionStatusSerializer(serializers.ModelSerializer):
 
 class OwnerInfoSerializer(serializers.ModelSerializer):
     """业主信息序列化器"""
+    # US-02: 房间数量由 OwnerListCreateView.get_queryset() 的 annotate 注入，
+    # 详情/编辑接口不含此 annotate，default=0 避免 AttributeError。
+    room_count = serializers.IntegerField(read_only=True, default=0)
+
     class Meta:
         model = OwnerInfo
         fields = [
             'id', 'specific_part', 'location_name', 'building', 'unit',
             'floor', 'room_number', 'bind_status', 'ip_address',
-            'unique_id', 'plc_ip_address', 'created_at', 'updated_at'
+            'unique_id', 'plc_ip_address', 'room_count', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'room_count', 'created_at', 'updated_at']
 
 
 class PLCLatestDataParamSerializer(serializers.ModelSerializer):

@@ -145,3 +145,6 @@ diagnose_and_fix.py
 run_ssh_diag.py
 run_tests.py
 ssh_check.py
+
+# SDLC Agent Suite 项目工作区（本地过程产物，不进仓库）
+project_workspace/

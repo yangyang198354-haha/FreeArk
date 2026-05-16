@@ -1334,7 +1334,7 @@ class OwnerListCreateView(generics.ListCreateAPIView):
         return [IsAdminUser()]
 
     def get_queryset(self):
-        from django.db.models import Q
+        from django.db.models import Q, Count
         queryset = OwnerInfo.objects.all().order_by('building', 'unit', 'room_number')
         building = self.request.GET.get('building')
         unit = self.request.GET.get('unit')
@@ -1352,6 +1352,8 @@ class OwnerListCreateView(generics.ListCreateAPIView):
                 Q(location_name__icontains=search) |
                 Q(room_number__icontains=search)
             )
+        # US-02: 房间数量（跨 DeviceFloor→DeviceRoom，COUNT DISTINCT 避免重复）
+        queryset = queryset.annotate(room_count=Count('floors__rooms', distinct=True))
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -1412,6 +1414,59 @@ class OwnerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         instance.delete()
         return Response({'success': True, 'message': '删除成功'}, status=status.HTTP_204_NO_CONTENT)
+
+
+# ===========================================================================
+# US-03: 业主设备树查看 API
+# ===========================================================================
+
+class OwnerDeviceTreeView(generics.RetrieveAPIView):
+    """
+    GET /api/owners/<pk>/device-tree/
+    返回指定业主的完整设备树：楼层 → 房间 → 设备
+    权限：所有登录用户（IsAuthenticated）
+    """
+    queryset = OwnerInfo.objects.prefetch_related(
+        'floors__rooms__devices'
+    )
+    permission_classes = [permissions.IsAuthenticated]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        floors_data = []
+        for floor in instance.floors.all():
+            rooms_data = []
+            for room in floor.rooms.all():
+                devices_data = [
+                    {
+                        'device_sn': dev.device_sn,
+                        'device_name': dev.device_name,
+                        'system_flag': dev.system_flag,
+                        'product_code': dev.product_code,
+                        'category_code': dev.category_code,
+                    }
+                    for dev in room.devices.all()
+                ]
+                rooms_data.append({
+                    'room_name': room.room_name,
+                    'ori_room_name': room.ori_room_name,
+                    'room_type': room.room_type,
+                    'devices': devices_data,
+                })
+            floors_data.append({
+                'floor_no': floor.floor_no,
+                'floor_name': floor.floor_name,
+                'rooms': rooms_data,
+            })
+        return Response({
+            'success': True,
+            'data': {
+                'id': instance.id,
+                'specific_part': instance.specific_part,
+                'location_name': instance.location_name,
+                'floors': floors_data,
+            }
+        })
 
 
 # ===========================================================================
@@ -1675,7 +1730,7 @@ def device_management_device_list(request):
       system_switch  (str, 可选)  — "on" | "off"
       plc_status     (str, 可选)  — "online" | "offline"
       page           (int, 可选)  — 默认 1
-      page_size      (int, 可选)  — 可选 10/20/50，默认 20，最大 50
+      page_size      (int, 可选)  — 分页 UI 通常用 10/20/50，内部全量采集可用 ≤2000，默认 20
 
     响应 200：
       {
@@ -1710,6 +1765,7 @@ def device_management_device_list(request):
     except (ValueError, TypeError):
         page = 1
     try:
+        # 分页 UI 通常使用 10/20/50，上限 50 条
         page_size = max(1, min(50, int(request.GET.get('page_size', 20))))
     except (ValueError, TypeError):
         page_size = 20

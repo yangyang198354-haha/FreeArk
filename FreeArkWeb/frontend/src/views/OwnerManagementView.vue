@@ -70,8 +70,16 @@
     <!-- 操作栏 -->
     <div class="card">
       <div class="card-body">
-        <div style="margin-bottom: 12px;" v-if="isAdmin">
-          <el-button type="primary" @click="openCreateDialog">新增业主</el-button>
+        <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+          <el-button v-if="isAdmin" type="primary" @click="openCreateDialog">新增业主</el-button>
+          <!-- US-04: 批量同步全部设备信息 -->
+          <el-button
+            type="warning"
+            :loading="ownerBatchRunning"
+            @click="handleOwnerBatchSync"
+          >
+            同步全部设备信息（约{{ ownerTotalCount }}户）
+          </el-button>
         </div>
 
         <!-- 数据表格 -->
@@ -98,10 +106,18 @@
           <el-table-column prop="ip_address" label="IP地址" width="130" />
           <el-table-column prop="plc_ip_address" label="PLC IP" width="130" />
           <el-table-column prop="unique_id" label="唯一标识符" width="160" show-overflow-tooltip />
-          <el-table-column label="操作" width="150" fixed="right" v-if="isAdmin">
+          <!-- US-02: 房间数量列 -->
+          <el-table-column prop="room_count" label="房间数量" width="90" align="center">
             <template #default="{ row }">
-              <el-button size="small" type="primary" @click="openEditDialog(row)">编辑</el-button>
-              <el-button size="small" type="danger" @click="deleteOwner(row.id)" style="margin-left: 6px;">删除</el-button>
+              {{ row.room_count ?? 0 }}
+            </template>
+          </el-table-column>
+          <!-- US-03: 查看明细 + 编辑/删除 -->
+          <el-table-column label="操作" width="230" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" type="info" @click="openDetailDrawer(row)">查看明细</el-button>
+              <el-button v-if="isAdmin" size="small" type="primary" @click="openEditDialog(row)" style="margin-left: 4px;">编辑</el-button>
+              <el-button v-if="isAdmin" size="small" type="danger" @click="deleteOwner(row.id)" style="margin-left: 4px;">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -179,6 +195,123 @@
         <el-button type="primary" :loading="submitting" @click="submitForm">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- US-03: 查看明细抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="设备树明细"
+      direction="rtl"
+      size="700px"
+      :destroy-on-close="true"
+    >
+      <div v-if="detailLoading" style="text-align: center; padding: 40px;">
+        <el-text>加载中...</el-text>
+      </div>
+      <div v-else-if="!detailData" style="text-align: center; padding: 40px; color: #909399;">
+        暂无设备树数据（尚未同步）
+      </div>
+      <div v-else>
+        <div style="margin-bottom: 12px;">
+          <el-text type="info">专有部分：</el-text>
+          <el-text>{{ detailData.specific_part }}</el-text>
+          &nbsp;&nbsp;
+          <el-text type="info">坐落：</el-text>
+          <el-text>{{ detailData.location_name }}</el-text>
+        </div>
+        <div v-if="detailData.floors && detailData.floors.length === 0" style="color: #909399; padding: 20px 0;">
+          暂无楼层数据（尚未同步设备树）
+        </div>
+        <el-collapse v-else>
+          <el-collapse-item
+            v-for="floor in detailData.floors"
+            :key="floor.floor_no"
+            :title="`${floor.floor_name}（${floor.rooms ? floor.rooms.length : 0} 个房间）`"
+            :name="floor.floor_no"
+          >
+            <div v-if="!floor.rooms || floor.rooms.length === 0" style="color: #909399; padding: 8px 0;">
+              该楼层暂无房间
+            </div>
+            <div v-for="room in floor.rooms" :key="room.ori_room_name" style="margin-bottom: 16px;">
+              <div style="font-weight: 600; margin-bottom: 6px;">
+                {{ room.room_name }}
+                <el-tag size="small" style="margin-left: 6px;">{{ room.devices ? room.devices.length : 0 }} 台设备</el-tag>
+              </div>
+              <el-table
+                v-if="room.devices && room.devices.length > 0"
+                :data="room.devices"
+                size="small"
+                border
+                stripe
+              >
+                <el-table-column prop="device_name" label="设备名" />
+                <el-table-column prop="device_sn" label="SN" width="80" align="center" />
+                <el-table-column prop="product_code" label="产品编码" width="100" align="center" />
+                <el-table-column label="类型" width="70" align="center">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.system_flag === 2 ? 'primary' : 'info'">
+                      {{ row.system_flag === 2 ? '主机' : '子机' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-else style="color: #909399; font-size: 13px; padding: 4px 0;">
+                该房间暂无设备
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+      <template #footer>
+        <el-button @click="detailDrawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- US-04: 批量同步进度弹窗 -->
+    <el-dialog
+      v-model="ownerBatchDialogVisible"
+      title="批量同步设备信息"
+      width="640px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="!ownerBatchRunning"
+    >
+      <div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <el-tag size="large" :type="ownerBatchRunning ? 'warning' : 'success'">
+            {{ ownerBatchStatusLabel }}
+          </el-tag>
+          <span>
+            {{ ownerBatchProgress.processed }} / {{ ownerBatchProgress.total }}
+            （成功 {{ ownerBatchProgress.success }} · 失败 {{ ownerBatchProgress.failed }}）
+          </span>
+        </div>
+        <el-progress
+          :percentage="ownerBatchPercentage"
+          :status="ownerBatchRunning ? '' : (ownerBatchProgress.failed > 0 ? 'exception' : 'success')"
+          style="margin: 12px 0"
+        />
+        <div v-if="ownerBatchProgress.errors && ownerBatchProgress.errors.length > 0">
+          <div style="font-weight: 600; margin-bottom: 6px;">
+            失败记录 ({{ ownerBatchProgress.errors.length }})
+          </div>
+          <el-table
+            :data="ownerBatchProgress.errors"
+            size="small"
+            border
+            stripe
+            max-height="240"
+          >
+            <el-table-column prop="specific_part" label="专有部分" width="160" />
+            <el-table-column prop="message" label="错误信息" />
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button :disabled="ownerBatchRunning" @click="ownerBatchDialogVisible = false">
+          {{ ownerBatchRunning ? '同步中...' : '关闭' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -247,14 +380,47 @@ export default {
       },
 
       // 当前用户角色
-      userRole: 'user'
+      userRole: 'user',
+
+      // US-03: 查看明细抽屉
+      detailDrawerVisible: false,
+      detailLoading: false,
+      detailData: null,
+
+      // US-04: 批量同步状态
+      ownerTotalCount: 0,
+      ownerBatchTaskId: '',
+      ownerBatchDialogVisible: false,
+      ownerBatchRunning: false,
+      ownerBatchPollTimer: null,
+      ownerBatchProgress: {
+        total: 0,
+        processed: 0,
+        success: 0,
+        failed: 0,
+        status: 'pending',
+        errors: [],
+      },
     }
   },
 
   computed: {
     isAdmin() {
       return this.userRole === 'admin'
-    }
+    },
+    // US-04
+    ownerBatchStatusLabel() {
+      const s = this.ownerBatchProgress.status
+      if (s === 'pending') return '排队中'
+      if (s === 'running') return '同步中'
+      if (s === 'finished') return '已完成'
+      if (s === 'failed') return '已失败'
+      return s
+    },
+    ownerBatchPercentage() {
+      if (!this.ownerBatchProgress.total) return 0
+      return Math.floor((this.ownerBatchProgress.processed / this.ownerBatchProgress.total) * 100)
+    },
   },
 
   mounted() {
@@ -267,6 +433,11 @@ export default {
     }
     this.loadOwners()
     this.loadFilterOptions()
+    this.loadOwnerTotalCount()  // US-04: 获取总户数用于按钮文案
+  },
+
+  beforeUnmount() {
+    this.stopOwnerBatchPolling()
   },
 
   methods: {
@@ -461,7 +632,124 @@ export default {
       if (this.$refs.ownerFormRef) {
         this.$refs.ownerFormRef.clearValidate()
       }
-    }
+    },
+
+    // -----------------------------------------------------------------------
+    // US-03: 查看明细抽屉
+    // -----------------------------------------------------------------------
+    async openDetailDrawer(row) {
+      this.detailDrawerVisible = true
+      this.detailLoading = true
+      this.detailData = null
+      try {
+        const resp = await api.get(`/api/owners/${row.id}/device-tree/`)
+        if (resp && resp.success) {
+          this.detailData = resp.data
+        } else {
+          this.detailData = null
+        }
+      } catch (e) {
+        ElMessage.error('获取设备树明细失败，请稍后重试')
+        this.detailData = null
+      } finally {
+        this.detailLoading = false
+      }
+    },
+
+    // -----------------------------------------------------------------------
+    // US-04: 批量同步全部设备信息
+    // -----------------------------------------------------------------------
+
+    // 获取总户数（用于按钮文案显示，不传 specific_parts → 后端全量回退）
+    async loadOwnerTotalCount() {
+      try {
+        const resp = await api.get('/api/owners/?page=1&page_size=1')
+        if (resp && typeof resp.total === 'number') {
+          this.ownerTotalCount = resp.total
+        }
+      } catch (e) {
+        // 静默失败，按钮文案保持默认
+      }
+    },
+
+    stopOwnerBatchPolling() {
+      if (this.ownerBatchPollTimer) {
+        clearInterval(this.ownerBatchPollTimer)
+        this.ownerBatchPollTimer = null
+      }
+    },
+
+    async pollOwnerBatchStatus() {
+      if (!this.ownerBatchTaskId) return
+      try {
+        const resp = await api.get(
+          `/api/device-management/screen-device-tree/batch-sync/${encodeURIComponent(this.ownerBatchTaskId)}/`
+        )
+        this.ownerBatchProgress.total = resp.total ?? this.ownerBatchProgress.total
+        this.ownerBatchProgress.processed = resp.processed ?? 0
+        this.ownerBatchProgress.success = resp.success ?? 0
+        this.ownerBatchProgress.failed = resp.failed ?? 0
+        this.ownerBatchProgress.status = resp.status || 'running'
+        this.ownerBatchProgress.errors = Array.isArray(resp.errors) ? resp.errors : []
+        if (resp.status === 'finished' || resp.status === 'failed') {
+          this.ownerBatchRunning = false
+          this.stopOwnerBatchPolling()
+          ElMessage({
+            type: this.ownerBatchProgress.failed > 0 ? 'warning' : 'success',
+            message: `批量同步完成：成功 ${this.ownerBatchProgress.success} / 失败 ${this.ownerBatchProgress.failed}`,
+            duration: 4000,
+          })
+          // Q-04-4: 自动刷新列表
+          this.loadOwners()
+        }
+      } catch (err) {
+        console.warn('poll owner batch status failed', err)
+      }
+    },
+
+    async handleOwnerBatchSync() {
+      // Q-04-3: 任务进行中再次点击 → 恢复进度弹窗，不重复发起
+      if (this.ownerBatchRunning && this.ownerBatchTaskId) {
+        this.ownerBatchDialogVisible = true
+        return
+      }
+
+      // Q-04-2: 二次确认弹窗
+      const minutes = Math.max(1, Math.ceil(this.ownerTotalCount / 60))
+      try {
+        await ElMessageBox.confirm(
+          `将同步全部约 ${this.ownerTotalCount} 户的设备信息，预计耗时 ${minutes} 分钟，确认？`,
+          '批量同步',
+          { confirmButtonText: '开始同步', cancelButtonText: '取消', type: 'warning' }
+        )
+      } catch {
+        return
+      }
+
+      // 发起批量同步（不传 specific_parts，后端自动全量回退）
+      try {
+        this.ownerBatchRunning = true
+        this.ownerBatchProgress.total = this.ownerTotalCount
+        this.ownerBatchProgress.processed = 0
+        this.ownerBatchProgress.success = 0
+        this.ownerBatchProgress.failed = 0
+        this.ownerBatchProgress.status = 'pending'
+        this.ownerBatchProgress.errors = []
+        this.ownerBatchDialogVisible = true
+
+        const resp = await api.post('/api/device-management/screen-device-tree/batch-sync/', {})
+        this.ownerBatchTaskId = resp.task_id
+        this.ownerBatchProgress.total = resp.total ?? this.ownerTotalCount
+
+        // 轮询进度（每 2 秒）
+        this.stopOwnerBatchPolling()
+        this.ownerBatchPollTimer = setInterval(() => this.pollOwnerBatchStatus(), 2000)
+        this.pollOwnerBatchStatus()
+      } catch (err) {
+        this.ownerBatchRunning = false
+        ElMessage.error(`启动批量同步失败：${err?.message || err}`)
+      }
+    },
   }
 }
 </script>
