@@ -62,10 +62,10 @@ class PLCReadWriter:
                     logger.info(f"✅ 成功连接PLC：{self.plc_ip}, Rack: {self.rack}, Slot: {self.slot}, 连接耗时: {connect_duration:.3f}秒")
                     return True
                 else:
-                    logger.info(f"❌ PLC连接失败：{self.plc_ip}（未建立连接）, Rack: {self.rack}, Slot: {self.slot}")
+                    logger.error(f"❌ PLC连接失败：{self.plc_ip}（未建立连接）, Rack: {self.rack}, Slot: {self.slot}")
                     return False
             except Exception as e:
-                logger.info(f"❌ PLC连接异常：{self.plc_ip}, Rack: {self.rack}, Slot: {self.slot} - {str(e)}")
+                logger.error(f"❌ PLC连接异常：{self.plc_ip}, Rack: {self.rack}, Slot: {self.slot} - {str(e)}")
                 return False
 
     def disconnect(self) -> None:
@@ -112,7 +112,7 @@ class PLCReadWriter:
                 retries += 1
                 if retries > max_retries:
                     return False, f"读取异常（已重试{max_retries}次）：{str(e)}", None
-                logger.info(f"⚠️  读取异常，第{retries}次重试：{str(e)}")
+                logger.warning(f"⚠️  读取异常，第{retries}次重试：{str(e)}")
                 time.sleep(0.1 * retries)  # 指数退避策略
 
     def _parse_data(self, raw_data: bytes, data_type: str) -> Optional[any]:
@@ -151,10 +151,10 @@ class PLCReadWriter:
                     return None
                 return round(struct.unpack('>d', raw_data)[0], 6)  # 大端模式64位浮点数
             else:
-                logger.info(f"❌ 不支持的数据类型：{data_type}")
+                logger.error(f"❌ 不支持的数据类型：{data_type}")
                 return None
         except Exception as e:
-            logger.info(f"❌ 数据解析异常：{str(e)}")
+            logger.error(f"❌ 数据解析异常：{str(e)}")
             return None
             
     def _pack_data(self, value: any, data_type: str) -> Optional[bytes]:

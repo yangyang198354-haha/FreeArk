@@ -73,7 +73,7 @@ class MQTTClient:
             logger.info(f"✅ 成功连接到MQTT服务器: {self.host}:{self.port}")
         else:
             self.connected = False
-            logger.info(f"❌ 连接MQTT服务器失败，返回代码: {rc}")
+            logger.error(f"❌ 连接MQTT服务器失败，返回代码: {rc}")
     
     def _on_disconnect(self, client, userdata, rc):
         """断开连接回调函数"""
@@ -101,7 +101,7 @@ class MQTTClient:
     
     def _on_publish(self, client, userdata, mid):
         """发布消息回调函数"""
-        logger.info(f"📤 消息发布成功，消息ID: {mid}")
+        logger.debug(f"📤 消息发布成功，消息ID: {mid}")
     
     def connect(self) -> bool:
         """连接到MQTT服务器"""
@@ -118,7 +118,7 @@ class MQTTClient:
             
             return self.connected
         except Exception as e:
-            logger.info(f"❌ 连接MQTT服务器异常: {str(e)}")
+            logger.error(f"❌ 连接MQTT服务器异常: {str(e)}")
             return False
     
     def disconnect(self):
@@ -129,7 +129,7 @@ class MQTTClient:
             self.connected = False
             logger.info("✅ MQTT客户端已停止")
         except Exception as e:
-            logger.info(f"❌ 断开MQTT连接异常: {str(e)}")
+            logger.error(f"❌ 断开MQTT连接异常: {str(e)}")
     
     def publish(self, topic: str, payload: Any, qos: int = 0, retain: bool = False) -> bool:
         """
@@ -145,7 +145,7 @@ class MQTTClient:
         - 是否发布成功
         """
         if not self.connected:
-            logger.info(f"❌ 发布消息失败: 未连接到MQTT服务器")
+            logger.error(f"❌ 发布消息失败: 未连接到MQTT服务器")
             return False
         
         try:
@@ -160,13 +160,13 @@ class MQTTClient:
             
             # 检查是否发布成功
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"📤 正在发布消息 - 主题: {topic}, QoS: {qos}")
+                logger.debug(f"📤 正在发布消息 - 主题: {topic}, QoS: {qos}")
                 return True
             else:
-                logger.info(f"❌ 发布消息失败，返回代码: {result.rc}")
+                logger.error(f"❌ 发布消息失败，返回代码: {result.rc}")
                 return False
         except Exception as e:
-            logger.info(f"❌ 发布消息异常: {str(e)}")
+            logger.error(f"❌ 发布消息异常: {str(e)}")
             return False
     
     def subscribe(self, topic: str, qos: int = 0, callback: Optional[Callable[[str, Dict], None]] = None) -> bool:

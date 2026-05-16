@@ -494,7 +494,7 @@ class ConnectionStatusHandler(MessageHandler):
                 # 这里可以添加更多的处理逻辑
                 pass
         
-        logger.info(f"ConnectionStatusHandler: ✅ 处理连接状态消息完成")
+        logger.debug(f"ConnectionStatusHandler: ✅ 处理连接状态消息完成")
     
     def _parse_building_info(self, specific_part):
         """从specific_part解析楼栋、单元和房号信息"""
@@ -569,7 +569,7 @@ class ConnectionStatusHandler(MessageHandler):
                             room_number=room_number,
                             source='mqtt'
                         )
-                        logger.info(f"ConnectionStatusHandler: ✅ 记录状态变化历史成功 - {specific_part}: {status}")
+                        logger.debug(f"ConnectionStatusHandler: ✅ 记录状态变化历史成功 - {specific_part}: {status}")
                     except Exception as e:
                         logger.error(f"ConnectionStatusHandler: ❌ 记录状态变化历史失败 - {specific_part}: {e}")
                 
@@ -587,7 +587,7 @@ class ConnectionStatusHandler(MessageHandler):
                 # 保存记录
                 plc_status.save()
                 
-                logger.info(f"ConnectionStatusHandler: ✅ 更新连接状态成功 - {specific_part}: {status}")
+                logger.debug(f"ConnectionStatusHandler: ✅ 更新连接状态成功 - {specific_part}: {status}")
                 
         except Exception as e:
             logger.error(f"ConnectionStatusHandler: 更新连接状态失败 - {specific_part}: {e}", exc_info=True)
