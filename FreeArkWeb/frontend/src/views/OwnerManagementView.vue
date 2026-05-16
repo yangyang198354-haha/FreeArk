@@ -78,7 +78,7 @@
             :loading="ownerBatchRunning"
             @click="handleOwnerBatchSync"
           >
-            同步全部设备信息（约{{ ownerTotalCount }}户）
+            同步全部设备信息
           </el-button>
         </div>
 
@@ -419,7 +419,6 @@ export default {
       syncRetryVisible: false,
 
       // US-04: 批量同步状态
-      ownerTotalCount: 0,
       ownerBatchTaskId: '',
       ownerBatchDialogVisible: false,
       ownerBatchRunning: false,
@@ -464,7 +463,6 @@ export default {
     }
     this.loadOwners()
     this.loadFilterOptions()
-    this.loadOwnerTotalCount()  // US-04: 获取总户数用于按钮文案
   },
 
   beforeUnmount() {
@@ -693,18 +691,6 @@ export default {
     // US-04: 批量同步全部设备信息
     // -----------------------------------------------------------------------
 
-    // 获取总户数（用于按钮文案显示，不传 specific_parts → 后端全量回退）
-    async loadOwnerTotalCount() {
-      try {
-        const resp = await api.get('/api/owners/?page=1&page_size=1')
-        if (resp && typeof resp.total === 'number') {
-          this.ownerTotalCount = resp.total
-        }
-      } catch (e) {
-        // 静默失败，按钮文案保持默认
-      }
-    },
-
     stopOwnerBatchPolling() {
       if (this.ownerBatchPollTimer) {
         clearInterval(this.ownerBatchPollTimer)
@@ -748,10 +734,9 @@ export default {
       }
 
       // Q-04-2: 二次确认弹窗
-      const minutes = Math.max(1, Math.ceil(this.ownerTotalCount / 60))
       try {
         await ElMessageBox.confirm(
-          `将同步全部约 ${this.ownerTotalCount} 户的设备信息，预计耗时 ${minutes} 分钟，确认？`,
+          '将同步全部设备信息，请耐心等待，确认？',
           '批量同步',
           { confirmButtonText: '开始同步', cancelButtonText: '取消', type: 'warning' }
         )
@@ -762,7 +747,7 @@ export default {
       // 发起批量同步（不传 specific_parts，后端自动全量回退）
       try {
         this.ownerBatchRunning = true
-        this.ownerBatchProgress.total = this.ownerTotalCount
+        this.ownerBatchProgress.total = 0
         this.ownerBatchProgress.processed = 0
         this.ownerBatchProgress.success = 0
         this.ownerBatchProgress.failed = 0
@@ -772,7 +757,7 @@ export default {
 
         const resp = await api.post('/api/device-management/screen-device-tree/batch-sync/', {})
         this.ownerBatchTaskId = resp.task_id
-        this.ownerBatchProgress.total = resp.total ?? this.ownerTotalCount
+        this.ownerBatchProgress.total = resp.total ?? 0
 
         // 轮询进度（每 2 秒）
         this.stopOwnerBatchPolling()
