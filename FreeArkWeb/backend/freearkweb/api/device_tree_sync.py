@@ -148,6 +148,35 @@ def _attr_def_payload(attr: dict) -> Tuple[str, dict]:
     }
 
 
+def _ensure_attr_defs(data_payload: List[dict]) -> None:
+    """Pre-pass：在主事务之外，用独立小事务预创建所有 DeviceAttrDef 行。
+
+    使用 get_or_create 确保行已存在，主事务只需 get()，不再持写锁。
+    同一 (product_code, attr_tag) 对只处理一次（seen 去重）。
+    """
+    seen: set = set()
+    for floor in data_payload or []:
+        for room in floor.get('rooms') or []:
+            for device in room.get('devices') or []:
+                product_code = str(device.get('productCode') or '')
+                if not product_code:
+                    continue
+                for attr in device.get('attrs') or []:
+                    attr_tag, defaults = _attr_def_payload(attr)
+                    if not attr_tag:
+                        continue
+                    key = (product_code, attr_tag)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    # 每对 key 使用独立原子操作，不在调用方的主事务内
+                    DeviceAttrDef.objects.get_or_create(
+                        product_code=product_code,
+                        attr_tag=attr_tag,
+                        defaults=defaults,
+                    )
+
+
 @transaction.atomic
 def upsert_tree(owner: OwnerInfo, data_payload: List[dict], prune: bool = False) -> Dict[str, int]:
     """把远程返回的 data 数组落库。返回统计 dict。
@@ -156,6 +185,12 @@ def upsert_tree(owner: OwnerInfo, data_payload: List[dict], prune: bool = False)
         owner: 已存在的业主记录
         data_payload: 远程响应的 ``data`` 数组（楼层列表）
         prune: True 时把远程未出现的子节点删除；默认 False（保留旧记录）
+
+    改动说明（fix: 1205 lock wait timeout）：
+        主事务进入前，先由 _ensure_attr_defs() 在独立小事务中预创建
+        DeviceAttrDef 行，使主事务内对 DeviceAttrDef 的操作从
+        update_or_create（写锁）改为 get()（读，不持写锁），
+        从而消除多并发户同步时对同一 product_code 行的写锁竞争。
     """
     stats = {
         'floors': 0,
@@ -219,19 +254,34 @@ def upsert_tree(owner: OwnerInfo, data_payload: List[dict], prune: bool = False)
                 stats['devices'] += 1
 
                 # ---- Attr 定义 + 绑定 ----
+                # pre-pass 已确保所有 DeviceAttrDef 行存在，此处只读取，不写锁
                 product_code = node_defaults['product_code']
                 attr_def_ids_for_device: List[int] = []
                 for attr in device.get('attrs') or []:
-                    attr_tag, defaults = _attr_def_payload(attr)
+                    attr_tag, _ = _attr_def_payload(attr)
                     if not attr_tag:
                         continue
-                    attr_def_obj, created = DeviceAttrDef.objects.update_or_create(
-                        product_code=product_code,
-                        attr_tag=attr_tag,
-                        defaults=defaults,
-                    )
-                    if created:
-                        stats['attr_defs_new'] += 1
+                    # 主事务内只做 get()，不持写锁
+                    try:
+                        attr_def_obj = DeviceAttrDef.objects.get(
+                            product_code=product_code,
+                            attr_tag=attr_tag,
+                        )
+                    except DeviceAttrDef.DoesNotExist:
+                        # 极罕见竞态（pre-pass 成功但行被外部删除）：兜底 get_or_create
+                        logger.warning(
+                            'upsert_tree: DeviceAttrDef not found after pre-pass '
+                            'product_code=%s attr_tag=%s, falling back to get_or_create',
+                            product_code, attr_tag,
+                        )
+                        _, defaults = _attr_def_payload(attr)
+                        attr_def_obj, created = DeviceAttrDef.objects.get_or_create(
+                            product_code=product_code,
+                            attr_tag=attr_tag,
+                            defaults=defaults,
+                        )
+                        if created:
+                            stats['attr_defs_new'] += 1
                     attr_def_ids_for_device.append(attr_def_obj.id)
                 stats['attr_defs_total'] += len(attr_def_ids_for_device)
 
@@ -275,6 +325,8 @@ def sync_one_specific_part(specific_part: str, prune: bool = False) -> Dict[str,
     if not isinstance(data_list, list):
         raise SyncError('远程返回 data 字段不是数组', http_status=502)
 
+    # pre-pass：在主事务外预创建 DeviceAttrDef 行，消除主事务写锁竞争
+    _ensure_attr_defs(data_list)
     stats = upsert_tree(owner, data_list, prune=prune)
     return {
         'specific_part': specific_part,
