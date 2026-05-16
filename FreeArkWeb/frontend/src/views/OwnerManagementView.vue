@@ -262,6 +262,32 @@
         </el-collapse>
       </div>
       <template #footer>
+        <!-- US-05: 单户同步按钮，仅 admin 可见 -->
+        <el-tooltip
+          v-if="isAdmin"
+          :content="detailRow && detailRow.unique_id ? '' : '未绑定 screenMAC，无法同步'"
+          :disabled="!!(detailRow && detailRow.unique_id)"
+          placement="top"
+        >
+          <span>
+            <el-button
+              type="primary"
+              :loading="syncLoading"
+              :disabled="!(detailRow && detailRow.unique_id)"
+              @click="handleSingleSync"
+            >
+              同步本户设备
+            </el-button>
+          </span>
+        </el-tooltip>
+        <!-- US-05: 502/网络异常时显示重试按钮 -->
+        <el-button
+          v-if="syncRetryVisible"
+          type="warning"
+          @click="handleSingleSync"
+        >
+          重试
+        </el-button>
         <el-button @click="detailDrawerVisible = false">关闭</el-button>
       </template>
     </el-drawer>
@@ -386,6 +412,11 @@ export default {
       detailDrawerVisible: false,
       detailLoading: false,
       detailData: null,
+      detailRow: null,        // US-05: 保存当前打开抽屉的 row，供同步按钮使用
+
+      // US-05: 单户同步状态
+      syncLoading: false,
+      syncRetryVisible: false,
 
       // US-04: 批量同步状态
       ownerTotalCount: 0,
@@ -641,6 +672,8 @@ export default {
       this.detailDrawerVisible = true
       this.detailLoading = true
       this.detailData = null
+      this.detailRow = row          // US-05: 记录当前行，供同步使用
+      this.syncRetryVisible = false // US-05: 重置重试按钮
       try {
         const resp = await api.get(`/api/owners/${row.id}/device-tree/`)
         if (resp && resp.success) {
@@ -748,6 +781,42 @@ export default {
       } catch (err) {
         this.ownerBatchRunning = false
         ElMessage.error(`启动批量同步失败：${err?.message || err}`)
+      }
+    },
+
+    // -----------------------------------------------------------------------
+    // US-05: 单户设备同步
+    // -----------------------------------------------------------------------
+    async handleSingleSync() {
+      if (!this.detailRow || !this.detailRow.unique_id) return
+      this.syncLoading = true
+      this.syncRetryVisible = false
+      try {
+        const resp = await api.post(
+          '/api/device-management/screen-device-tree/sync/',
+          { specific_part: this.detailRow.specific_part, prune: false }
+        )
+        // 后端响应结构: { code, message, specific_part, screen_mac, stats: {floors, rooms, devices} }
+        const stats = resp?.stats || {}
+        ElMessage.success(
+          `同步成功：${stats.floors ?? 0} 个楼层 / ${stats.rooms ?? 0} 个房间 / ${stats.devices ?? 0} 台设备`
+        )
+        await this.openDetailDrawer(this.detailRow)
+      } catch (err) {
+        // api.post 抛出的 Error.message 格式: "API请求失败: <status> <statusText> - <backendMsg>"
+        // 网络层错误（fetch 抛出）无此前缀
+        const msg = err?.message || '未知错误'
+        const statusMatch = msg.match(/API请求失败:\s*(\d{3})/)
+        const status = statusMatch ? parseInt(statusMatch[1], 10) : null
+        if (status === 502 || status === null) {
+          ElMessage.error(`同步失败（${status || '网络异常'}），请稍后重试`)
+          this.syncRetryVisible = true
+        } else {
+          ElMessage.error(`同步失败：${msg}`)
+          this.syncRetryVisible = false
+        }
+      } finally {
+        this.syncLoading = false
       }
     },
   }
