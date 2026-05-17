@@ -58,39 +58,55 @@ class LogConfigManager:
             except Exception as e:
                 # 如果配置文件加载失败，使用默认配置
                 print(f"警告：无法加载日志配置文件 {self._config_path}，使用默认配置。错误: {str(e)}")
+                # fallback 默认：生产 ERROR，PLC 相关豁免到 WARNING（与 resource/log_config.json v2.0 对齐）
                 self._config = {
                     'log_levels': {
-                        'global': {'level': 'INFO'},
-                        'improved_data_collection': {'level': 'INFO'},
-                        'plc_reader': {'level': 'INFO'},
-                        'mqtt_client': {'level': 'INFO'},
-                        'quantity_statistics': {'level': 'INFO'},
-                        'plc_data_viewer': {'level': 'INFO'},
-                        'plc_write_manager': {'level': 'INFO'}
+                        'global': {'level': 'ERROR'},
+                        'improved_data_collection': {'level': 'ERROR'},
+                        'plc_reader': {'level': 'WARNING'},
+                        'multi_thread_plc_handler': {'level': 'WARNING'},
+                        'mqtt_client': {'level': 'ERROR'},
+                        'quantity_statistics': {'level': 'ERROR'},
+                        'plc_data_viewer': {'level': 'ERROR'},
+                        'plc_write_manager': {'level': 'ERROR'}
                     }
                 }
 
     def get_log_level(self, logger_name):
-        """获取指定logger的日志级别"""
-        # 确保配置已加载
+        """获取指定 logger 的日志级别。
+
+        优先级（高 -> 低）：
+          1. 环境变量 APP_LOG_LEVEL（运维排障 escape hatch，覆盖所有 logger）
+          2. JSON 文件中该 logger 的 per-logger level（豁免名单）
+          3. JSON 文件中的 global level
+          4. 兜底 INFO
+        """
+        # 1. 环境变量优先：设置后所有 logger 一律采用该级别（便于运维排障）
+        env_level = os.environ.get('APP_LOG_LEVEL', '').upper()
+        if env_level in LOG_LEVELS:
+            return LOG_LEVELS[env_level]
+
+        # 2/3/4. 走 JSON 配置链路
         self._load_config()
-        
-        # 优先获取指定logger的级别，如果不存在则使用全局默认级别
         log_levels = self._config.get('log_levels', {})
-        return LOG_LEVELS.get(
-            log_levels.get(logger_name, {}).get('level', 'INFO'),
-            LOG_LEVELS.get(log_levels.get('global', {}).get('level', 'INFO'), logging.INFO)
-        )
+        per_logger = log_levels.get(logger_name, {}).get('level', '').upper()
+        if per_logger in LOG_LEVELS:
+            return LOG_LEVELS[per_logger]
+        global_default = log_levels.get('global', {}).get('level', 'INFO').upper()
+        return LOG_LEVELS.get(global_default, logging.INFO)
 
     def get_logger(self, name):
         """获取配置好的logger实例"""
         # 获取logger
         logger = logging.getLogger(name)
-        
+
+        # 关闭向根 logger 冒泡（避免被其他进程的 root handler 重复抓走，US-B Q7）
+        logger.propagate = False
+
         # 如果logger已经配置过处理器，则直接返回
         if logger.handlers:
             return logger
-        
+
         # 设置日志级别
         log_level = self.get_log_level(name)
         logger.setLevel(log_level)

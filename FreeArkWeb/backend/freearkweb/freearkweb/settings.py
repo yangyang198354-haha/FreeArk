@@ -394,16 +394,16 @@ LOGGING = {
             'delay': True,
         },
     },
-    # root logger：INFO+ 写文件，DEBUG 模式下同时输出控制台
+    # root logger：生产默认 ERROR，设置 APP_LOG_LEVEL 环境变量可临时拉回 INFO 排障
     'root': {
         'handlers': ['file', 'console'],
-        'level': 'INFO',
+        'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
     },
     'loggers': {
-        # Django 框架日志
+        # Django 框架日志（保留 WARNING 以便看到框架级警告）
         'django': {
             'handlers': ['file', 'console'],
-            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
             'propagate': False,
         },
         'django.request': {
@@ -411,59 +411,72 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
-        # 应用整体（api.*）：INFO+ 写主文件，DEBUG 模式下控制台可见
+        # 应用整体（api.*）：生产默认 ERROR，APP_LOG_LEVEL 可 override
         'api': {
             'handlers': ['file', 'console'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
-        # api.mqtt_consumer 专属日志文件（级别固定 INFO，防止 DEBUG 日志淹没 journald）
+        # api.mqtt_consumer：默认 ERROR（US-A 已把高频成功日志降到 DEBUG）
         'api.mqtt_consumer': {
             'handlers': ['console', 'mqtt_consumer_log'],
-            'level': 'INFO',
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
-        # api.mqtt_handlers 级别固定 INFO（general 消息每条产生 200+ 行 DEBUG，严重拖慢性能）
+        # api.mqtt_handlers：默认 ERROR（US-A 已把高频成功日志降到 DEBUG）
         'api.mqtt_handlers': {
             'handlers': ['console', 'mqtt_consumer_log'],
-            'level': 'INFO',
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
-        # 后台服务日志器（各自写专属文件，同时在 DEBUG 模式下输出控制台）
+        # api.device_tree_sync 豁免（保留 WARNING，设备树同步频率低且失败重要）
+        'api.device_tree_sync': {
+            'handlers': ['file', 'console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        # 屏侧心跳消费豁免（保留 WARNING，连通性状态变化值得保留）
+        'api.management.commands.screen_heartbeat_consumer': {
+            'handlers': ['file', 'console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        # daily/monthly 用量任务豁免（每日/月一次，失败即异常）
         'daily_usage_service': {
             'handlers': ['console', 'daily_usage_service_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': 'WARNING',
             'propagate': False,
         },
         'monthly_usage_service': {
             'handlers': ['console', 'monthly_usage_service_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': 'WARNING',
             'propagate': False,
         },
+        # MQTT consumer / PLC cleanup 后台服务：ERROR 即可
         'mqtt_consumer_service': {
             'handlers': ['console', 'mqtt_consumer_service_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
         'plc_cleanup_service': {
             'handlers': ['console', 'plc_cleanup_service_log'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
-        # 其他管理命令服务（使用 root 文件 + 控制台，不单独开文件）
+        # PLC 连接监控豁免（设备上下线状态变化值得保留）
         'plc_connection_monitor': {
             'handlers': ['file', 'console'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': 'WARNING',
             'propagate': False,
         },
         'fix_daily_usage': {
             'handlers': ['file', 'console'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
         'fix_plc_data': {
             'handlers': ['file', 'console'],
-            'level': os.getenv('APP_LOG_LEVEL', 'INFO'),
+            'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
     },
