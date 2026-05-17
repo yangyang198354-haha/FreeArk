@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import logging.handlers
 import time
 import threading
 import sys
@@ -55,6 +56,7 @@ class LogConfigManager:
                 with open(self._config_path, 'r', encoding='utf-8') as f:
                     self._config = json.load(f)
                 self._last_load_time = current_time
+                print(f"[LogConfigManager] 配置已加载: {self._config_path}", flush=True)
             except Exception as e:
                 # 如果配置文件加载失败，使用默认配置
                 print(f"警告：无法加载日志配置文件 {self._config_path}，使用默认配置。错误: {str(e)}")
@@ -134,10 +136,16 @@ class LogConfigManager:
                 logger.addHandler(console_handler)
                 return logger
         
-        # 为日志文件添加日期
-        log_filename = f"{name}_{time.strftime('%Y%m%d')}.log"
-        log_path = os.path.join(log_dir, log_filename)
-        file_handler = logging.FileHandler(log_path, encoding='utf-8')
+        # US-C：改为 TimedRotatingFileHandler，按日切割，保留 7 天历史文件，防止单文件无限增长
+        # baseFilename = {name}.log，rotate 后旧文件后缀为 .YYYY-MM-DD（如 multi_thread_plc_handler.log.2026-05-16）
+        log_path = os.path.join(log_dir, f"{name}.log")
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path,
+            when='midnight',
+            interval=1,
+            backupCount=7,
+            encoding='utf-8',
+        )
         file_handler.setLevel(log_level)
         
         # 确保控制台输出的中文正常显示
