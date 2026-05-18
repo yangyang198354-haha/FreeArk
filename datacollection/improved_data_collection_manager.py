@@ -90,6 +90,19 @@ class ImprovedDataCollectionManager:
         """启动数据收集管理器"""
         self.plc_manager.start()
         logger.info(f"✅ 改进版数据收集管理器已启动，线程池大小：{self.max_workers}")
+        self._start_plc_write_subscriber()
+
+    def _start_plc_write_subscriber(self):
+        try:
+            from datacollection.plc_write_subscriber import PLCWriteSubscriber
+            self._plc_write_subscriber = PLCWriteSubscriber(
+                mqtt_broker='192.168.31.98',
+                mqtt_port=32788,
+            )
+            self._plc_write_subscriber.start()
+            logger.info('✅ PLCWriteSubscriber 已启动')
+        except Exception as e:
+            logger.error('PLCWriteSubscriber 启动失败: %s', e, exc_info=True)
 
     def stop(self):
         """停止数据收集管理器"""

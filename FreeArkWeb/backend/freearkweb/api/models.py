@@ -588,3 +588,34 @@ class DeviceAttrBinding(models.Model):
 
     def __str__(self):
         return f"{self.device_id} <-> {self.attr_def_id}"
+
+
+class PLCWriteRecord(models.Model):
+    STATUS_CHOICES = (
+        ('pending', '待回执'),
+        ('success', '写入成功'),
+        ('failed', '写入失败'),
+        ('timeout', '超时未回执'),
+    )
+    request_id = models.CharField(max_length=64, unique=True)
+    specific_part = models.CharField(max_length=20, db_index=True)
+    param_name = models.CharField(max_length=100)
+    old_value = models.CharField(max_length=50, default='')
+    new_value = models.CharField(max_length=50)
+    operator = models.CharField(max_length=150)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    acked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'plc_write_record'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['specific_part', 'created_at'], name='plcwr_sp_cat_idx'),
+            models.Index(fields=['status', 'created_at'], name='plcwr_status_cat_idx'),
+            models.Index(fields=['operator'], name='plcwr_operator_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.request_id} {self.specific_part}/{self.param_name} {self.status}"

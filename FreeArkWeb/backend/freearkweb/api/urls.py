@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import views_device_settings
 
 urlpatterns = [
     # CSRF token获取
@@ -75,4 +76,9 @@ urlpatterns = [
     path('services/list/', views.service_management_list, name='service-management-list'),
     path('services/<str:service_name>/detail/', views.service_management_detail, name='service-management-detail'),
     path('services/<str:service_name>/action/', views.service_management_action, name='service-management-action'),
+
+    # 设备参数设置接口（FR1~FR6）
+    path('device-settings/params/<str:specific_part>/', views_device_settings.device_settings_params, name='device-settings-params'),
+    path('device-settings/write/', views_device_settings.device_settings_write, name='device-settings-write'),
+    path('device-settings/records/', views_device_settings.device_settings_records, name='device-settings-records'),
 ]

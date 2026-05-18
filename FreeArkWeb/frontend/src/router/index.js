@@ -107,6 +107,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 设置记录（审计日志只读页面，FR6，US-9）
+    path: '/plc-write-records',
+    name: 'PlcWriteRecords',
+    component: () => import('../views/PlcWriteRecordView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

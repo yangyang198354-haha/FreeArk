@@ -133,7 +133,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" align="center" fixed="right">
+      <el-table-column label="操作" width="220" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
             type="primary"
@@ -150,6 +150,14 @@
             @click="handleOpenPlcHistory(row)"
           >
             PLC历史
+          </el-button>
+          <el-button
+            type="warning"
+            link
+            size="small"
+            @click="handleOpenSettings(row)"
+          >
+            设置
           </el-button>
         </template>
       </el-table-column>
@@ -210,6 +218,19 @@
       </template>
     </el-dialog>
 
+    <!-- 设备设置面板弹窗（FR1/FR2/FR3/FR5）-->
+    <el-dialog
+      v-model="settingsDialogVisible"
+      :title="`参数设置 — ${settingsSpecificPart}`"
+      width="720px"
+      destroy-on-close
+    >
+      <DeviceSettingsPanelView
+        v-if="settingsDialogVisible"
+        :specific-part="settingsSpecificPart"
+      />
+    </el-dialog>
+
   </div>
 </template>
 
@@ -220,11 +241,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, RefreshLeft } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
+import DeviceSettingsPanelView from '@/views/DeviceSettingsPanelView.vue'
 
 export default {
   name: 'DeviceManagementDeviceListView',
 
-  components: { Search, RefreshLeft, CascadingSelector },
+  components: { Search, RefreshLeft, CascadingSelector, DeviceSettingsPanelView },
 
   setup() {
     const router = useRouter()
@@ -246,6 +268,10 @@ export default {
     const plcHistoryLoading = ref(false)
     const plcHistoryList = ref([])
     const plcHistorySpecificPart = ref('')
+
+    // 设置面板弹窗状态（FR1）
+    const settingsDialogVisible = ref(false)
+    const settingsSpecificPart = ref('')
 
     // --- API 调用 ---
     const fetchList = async () => {
@@ -361,6 +387,11 @@ export default {
       fetchPlcHistory(row.specific_part)
     }
 
+    const handleOpenSettings = (row) => {
+      settingsSpecificPart.value = row.specific_part
+      settingsDialogVisible.value = true
+    }
+
     // --- 辅助函数 ---
     const screenStatusLabel = (status) => {
       if (status === 'online') return '在线'
@@ -442,8 +473,11 @@ export default {
       handleReset,
       handlePageChange,
       handlePageSizeChange,
+      settingsDialogVisible,
+      settingsSpecificPart,
       handleGoToDevicePanel,
       handleOpenPlcHistory,
+      handleOpenSettings,
       screenStatusLabel,
       screenStatusTagType,
       plcStatusLabel,

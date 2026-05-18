@@ -13,7 +13,7 @@ from django.db import connection as django_connection
 from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError as DjangoOperationalError
 from django.utils import timezone
-from .models import PLCData
+from .models import PLCData, PLCWriteRecord
 from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler, ScreenConnectivityHandler
 
 # 获取logger
@@ -112,6 +112,8 @@ class MQTTConsumer:
 
     # MQTT topic for screen connectivity (MOD-MQTT-01)
     SCREEN_CONNECTIVITY_TOPIC = '/datacollection/screen/connectivity'
+    # MQTT topic prefix for PLC write ack (FR4/FR5)
+    WRITE_ACK_TOPIC_PREFIX = '/datacollection/plc/write/ack/'
 
     def on_connect(self, client, userdata, flags, rc):
         """连接到MQTT代理后的回调函数"""
@@ -123,6 +125,9 @@ class MQTTConsumer:
             # 订阅大屏连通性 topic（MOD-MQTT-01）
             client.subscribe(self.SCREEN_CONNECTIVITY_TOPIC, qos=self.qos)
             logger.info(f"已订阅主题: {self.SCREEN_CONNECTIVITY_TOPIC} (QoS: {self.qos})")
+            # 订阅 PLC 写入回执 topic（FR4/FR5）
+            client.subscribe('/datacollection/plc/write/ack/#', qos=self.qos)
+            logger.info("已订阅主题: /datacollection/plc/write/ack/# (QoS: %s)", self.qos)
         else:
             logger.error(f"连接到MQTT代理失败，返回代码: {rc}")
 
@@ -242,7 +247,9 @@ class MQTTConsumer:
         """
         payload_size = len(msg.payload)
         if msg.topic == self.SCREEN_CONNECTIVITY_TOPIC:
-            is_general = True  # screen 消息走 general 队列，避免 energy 队列满时被丢弃
+            is_general = True
+        elif msg.topic.startswith(self.WRITE_ACK_TOPIC_PREFIX):
+            is_general = True
         else:
             is_general = payload_size >= _ENERGY_PAYLOAD_MAX_SIZE
         target_queue = self._general_queue if is_general else self._energy_queue
@@ -359,6 +366,35 @@ class MQTTConsumer:
 
         logger.info(f"[{thread_name}] Worker 线程退出")
 
+    def _handle_write_ack(self, payload):
+        """处理 PLC 写入回执消息，更新 plc_write_record 状态（FR4-5）"""
+        try:
+            if isinstance(payload, (bytes, bytearray)):
+                payload = payload.decode('utf-8')
+            if isinstance(payload, str):
+                data = json.loads(payload)
+            else:
+                data = payload
+            request_id = data.get('request_id')
+            if not request_id:
+                logger.warning('write ack 消息缺少 request_id，跳过')
+                return
+            success = data.get('success', False)
+            new_status = 'success' if success else 'failed'
+            updated = PLCWriteRecord.objects.filter(
+                request_id=request_id, status='pending'
+            ).update(
+                status=new_status,
+                acked_at=timezone.now(),
+                error_message=data.get('error_message', '') if not success else None,
+            )
+            if updated:
+                logger.info('write ack 已更新: request_id=%s status=%s', request_id, new_status)
+            else:
+                logger.debug('write ack 幂等忽略: request_id=%s', request_id)
+        except Exception as e:
+            logger.error('_handle_write_ack 异常: %s', e, exc_info=True)
+
     def on_disconnect(self, client, userdata, rc):
         """与MQTT代理断开连接后的回调函数"""
         if rc != 0:
@@ -381,6 +417,11 @@ class MQTTConsumer:
     def process_message(self, topic, payload, is_general: bool = False):
         """处理接收到的消息并保存到数据库"""
         logger.debug(f"开始处理消息: 主题={topic}, 消息大小={len(str(payload))}字节")
+
+        # FR4/FR5: PLC 写入回执 topic，更新 plc_write_record 状态
+        if topic.startswith(self.WRITE_ACK_TOPIC_PREFIX):
+            self._handle_write_ack(payload)
+            return
 
         # MOD-MQTT-01: 大屏连通性 topic 独立路由，由 ScreenConnectivityHandler 处理
         if topic == self.SCREEN_CONNECTIVITY_TOPIC:
