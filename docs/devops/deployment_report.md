@@ -31,7 +31,7 @@
 | 2 | `git pull origin main` | 远端树莓派 | 等待用户 CONFIRM |
 | 3 | `python manage.py migrate api --plan`（干跑） | 远端树莓派 | 等待用户 CONFIRM |
 | 4 | `python manage.py migrate api --no-input`（正式） | 远端树莓派 | 等待用户 CONFIRM |
-| 5 | `systemctl restart freeark-gunicorn` | 远端树莓派 | 等待用户 CONFIRM |
+| 5 | `systemctl restart freeark-backend` | 远端树莓派 | 等待用户 CONFIRM |
 | 6 | 远端 `npm install && npm run build`（在树莓派上执行） | 远端树莓派 | 等待用户 CONFIRM |
 | 7 | 远端 `cp -r dist/ /usr/share/nginx/html/` + `systemctl reload nginx` | 远端树莓派 | 等待用户 CONFIRM |
 | 8 | `systemctl restart freeark-task-scheduler` | 远端树莓派 | 等待用户 CONFIRM |
@@ -57,7 +57,7 @@
 
 | 服务 | Unit 名 | 作用 |
 |------|---------|------|
-| Django (Gunicorn) | `freeark-gunicorn` | 提供 REST API，端口 8000 |
+| Django (waitress) | `freeark-backend` | 提供 REST API，端口 8000（入口 `start_waitress_server.py`，非 gunicorn）|
 | MQTT Consumer | `freeark-mqtt-consumer` | 订阅 PLC 数据写入 MySQL |
 | 数据采集调度 | `freeark-task-scheduler` | 含 PLCWriteSubscriber 订阅写命令线程 |
 | Web Server | `nginx` | 反向代理 + 静态前端，端口 80 |

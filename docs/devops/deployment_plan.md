@@ -113,16 +113,16 @@ git push origin main
 
 ---
 
-### STEP 6 — 重启 freeark-gunicorn（⚠ 需用户 CONFIRM）
+### STEP 6 — 重启 freeark-backend（⚠ 需用户 CONFIRM）
 
 ```powershell
-& $PLINK $PL_OPTS $REMOTE "sudo systemctl restart freeark-gunicorn && sleep 3 && sudo systemctl is-active freeark-gunicorn && echo GUNICORN_OK"
+& $PLINK $PL_OPTS $REMOTE "sudo systemctl restart freeark-backend && sleep 3 && sudo systemctl is-active freeark-backend && echo BACKEND_OK"
 ```
 
 若失败，查看日志：
 
 ```powershell
-& $PLINK $PL_OPTS $REMOTE "sudo journalctl -u freeark-gunicorn -n 30 --no-pager"
+& $PLINK $PL_OPTS $REMOTE "sudo journalctl -u freeark-backend -n 30 --no-pager"
 ```
 
 ---
@@ -204,7 +204,7 @@ git push origin main
 | 1 | API 冒烟 | `plink ... "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/device-settings/records/?page=1"` | `200` 或 `401`（401 表示接口存在但需认证，正常） |
 | 2 | 设备列表 → 设置面板 | 浏览器打开设备列表页，点"设置"按钮 | DeviceSettingsPanelView 面板渲染，无 console error |
 | 3 | WebSocket 连接 | 浏览器 DevTools Console：检查 `ws://192.168.31.98:32797/mqtt` | 连接状态 OPEN，无 ERR_CONNECTION_REFUSED |
-| 4 | Django 日志 | `plink ... "sudo journalctl -u freeark-gunicorn -n 50 --no-pager \| grep -i error"` | 无新增 ERROR |
+| 4 | Django 日志 | `plink ... "sudo journalctl -u freeark-backend -n 50 --no-pager \| grep -i error"` | 无新增 ERROR |
 | 5 | datacollection 启动日志 | `plink ... "sudo journalctl -u freeark-task-scheduler -n 30 --no-pager \| grep -E 'PLCWriteSubscriber\|启动'"` | 含 `PLCWriteSubscriber 线程已启动` |
 
 ---

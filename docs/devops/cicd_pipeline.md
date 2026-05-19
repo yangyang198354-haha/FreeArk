@@ -30,7 +30,7 @@
      │ ──── SSH via plink ────────────▶
                                         3. git pull
                                         4. python manage.py migrate api
-                                        5. systemctl restart freeark-gunicorn
+                                        5. systemctl restart freeark-backend
                                         6. systemctl restart freeark-mqtt-consumer
                                         7. systemctl restart freeark-task-scheduler
                                         8. npm install（远端）
@@ -110,10 +110,10 @@ git push origin main
 & $PLINK $PLINK_OPTS.Split() $REMOTE "cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py migrate api --no-input 2>&1"
 ```
 
-### 2.3 重启 freeark-gunicorn（⚠ 需用户 CONFIRM）
+### 2.3 重启 freeark-backend（⚠ 需用户 CONFIRM）
 
 ```powershell
-& $PLINK $PLINK_OPTS.Split() $REMOTE "sudo systemctl restart freeark-gunicorn && sleep 3 && sudo systemctl is-active freeark-gunicorn && echo GUNICORN_OK"
+& $PLINK $PLINK_OPTS.Split() $REMOTE "sudo systemctl restart freeark-backend && sleep 3 && sudo systemctl is-active freeark-backend && echo BACKEND_OK"
 ```
 
 ### 2.4 重启 freeark-mqtt-consumer（⚠ 需用户 CONFIRM）
@@ -162,7 +162,7 @@ $RNGINX = "/usr/share/nginx/html"
 & $PLINK $PLINK_OPTS.Split() $REMOTE "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/device-settings/records/?page=1"
 
 # 服务状态
-& $PLINK $PLINK_OPTS.Split() $REMOTE "sudo systemctl is-active freeark-gunicorn freeark-mqtt-consumer freeark-task-scheduler nginx"
+& $PLINK $PLINK_OPTS.Split() $REMOTE "sudo systemctl is-active freeark-backend freeark-mqtt-consumer freeark-task-scheduler nginx"
 
 # PLCWriteSubscriber 启动日志
 & $PLINK $PLINK_OPTS.Split() $REMOTE "sudo journalctl -u freeark-task-scheduler -n 30 --no-pager | grep -E 'PLCWriteSubscriber|启动|ERROR'"
