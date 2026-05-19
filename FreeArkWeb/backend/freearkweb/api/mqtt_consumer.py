@@ -13,7 +13,7 @@ from django.db import connection as django_connection
 from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError as DjangoOperationalError
 from django.utils import timezone
-from .models import PLCData, PLCWriteRecord
+from .models import PLCData, PLCWriteRecord, PLCLatestData
 from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler, ScreenConnectivityHandler
 
 # 获取logger
@@ -407,6 +407,15 @@ class MQTTConsumer:
                     item_success = item.get('success', False)
                     item_status = 'success' if item_success else 'failed'
                     item_err = item.get('error_message', '') if not item_success else None
+
+                    # v0.4.7: 写成功时同步 plc_latest_data，让 UI 立即看到新值（不依赖 PLC 采集周期）
+                    # 先 SELECT 拿 new_value + specific_part，再 update plc_write_record
+                    pending_recs = list(PLCWriteRecord.objects.filter(
+                        batch_request_id=batch_request_id,
+                        param_name=param_name,
+                        status='pending',
+                    ).values('new_value', 'specific_part'))
+
                     updated = PLCWriteRecord.objects.filter(
                         batch_request_id=batch_request_id,
                         param_name=param_name,
@@ -420,6 +429,22 @@ class MQTTConsumer:
                         'write ack item 更新: batch=%s param=%s status=%s updated=%d',
                         batch_request_id, param_name, item_status, updated,
                     )
+
+                    if item_success and pending_recs:
+                        rec = pending_recs[0]
+                        try:
+                            int_val = int(float(rec['new_value']))
+                        except (ValueError, TypeError):
+                            int_val = None
+                        if int_val is not None:
+                            n = PLCLatestData.objects.filter(
+                                specific_part=rec['specific_part'],
+                                param_name=param_name,
+                            ).update(value=int_val, collected_at=now)
+                            logger.info(
+                                'plc_latest_data 同步: sp=%s param=%s value=%s n=%d',
+                                rec['specific_part'], param_name, int_val, n,
+                            )
             else:
                 # 兼容旧版单字段回执（v0.3.0 legacy，不应再出现，保留防御）
                 success = data.get('success', False)
