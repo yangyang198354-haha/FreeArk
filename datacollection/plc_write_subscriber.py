@@ -72,11 +72,21 @@ class PLCWriteSubscriber:
             request_id = cmd.get('request_id', '')
             specific_part = cmd.get('specific_part', '')
             plc_ip = cmd.get('plc_ip', '')
-            param_name = cmd.get('param_name', '')
-            new_value = cmd.get('new_value')
+            items = cmd.get('items')
 
-            if not all([request_id, specific_part, plc_ip, param_name, new_value is not None]):
-                logger.warning('write command 字段不完整，跳过: %s', cmd)
+            # P2 诊断：实锤消息到达
+            item_count = len(items) if isinstance(items, list) else 0
+            logger.info(
+                '收到写命令: request_id=%s specific_part=%s plc_ip=%s items=%d topic=%s',
+                request_id, specific_part, plc_ip, item_count, topic,
+            )
+
+            if not all([request_id, specific_part, plc_ip]):
+                logger.warning('write command 字段不完整（缺 request_id/specific_part/plc_ip），跳过: %s', cmd)
+                return
+
+            if not isinstance(items, list) or len(items) == 0:
+                logger.warning('write command 缺少 items 或 items 为空，跳过: %s', cmd)
                 return
 
             with self._lock:
@@ -84,20 +94,42 @@ class PLCWriteSubscriber:
                     logger.info('幂等跳过已处理 request_id: %s', request_id)
                     return
 
-            if param_name not in self._plc_config:
-                logger.warning('param_name %s 不在 plc_config，发布失败回执', param_name)
-                self._publish_ack(specific_part, request_id, success=False,
-                                  error_message=f'param_name {param_name} 未在 plc_config.json 中定义')
-                return
+            results = []
+            for item in items:
+                param_name = item.get('param_name', '')
+                new_value = item.get('new_value')
 
-            cfg = self._plc_config[param_name]
-            db_num = cfg['db_num']
-            offset = cfg['offset']
-            data_type = cfg['data_type']
+                if not param_name or new_value is None:
+                    logger.warning('items 中某项字段不完整，跳过: %s', item)
+                    results.append({
+                        'param_name': param_name,
+                        'success': False,
+                        'error_message': 'item 字段不完整',
+                    })
+                    continue
 
-            ok, err_msg = self._write_plc(plc_ip, db_num, offset, new_value, data_type)
-            self._publish_ack(specific_part, request_id, success=ok,
-                              value=new_value, error_message=err_msg)
+                if param_name not in self._plc_config:
+                    logger.warning('param_name %s 不在 plc_config，发布失败结果', param_name)
+                    results.append({
+                        'param_name': param_name,
+                        'success': False,
+                        'error_message': f'param_name {param_name} 未在 plc_config.json 中定义',
+                    })
+                    continue
+
+                cfg = self._plc_config[param_name]
+                db_num = cfg['db_num']
+                offset = cfg['offset']
+                data_type = cfg['data_type']
+
+                ok, err_msg = self._write_plc(plc_ip, db_num, offset, new_value, data_type)
+                result_entry = {'param_name': param_name, 'success': ok}
+                if not ok and err_msg:
+                    result_entry['error_message'] = err_msg
+                results.append(result_entry)
+
+            overall_success = all(r['success'] for r in results)
+            self._publish_ack(specific_part, request_id, overall_success, results)
 
             with self._lock:
                 self._processed.add(request_id)
@@ -107,6 +139,10 @@ class PLCWriteSubscriber:
 
     def _write_plc(self, plc_ip: str, db_num: int, offset: int, value, data_type: str):
         try:
+            logger.info(
+                '_write_plc: ip=%s db=%s offset=%s val=%s type=%s',
+                plc_ip, db_num, offset, value, data_type,
+            )
             reader = PLCReadWriter(plc_ip)
             if not reader.connect():
                 return False, f'snap7 连接 {plc_ip} 失败'
@@ -118,19 +154,19 @@ class PLCWriteSubscriber:
         except Exception as e:
             return False, str(e)
 
-    def _publish_ack(self, specific_part: str, request_id: str, success: bool,
-                     value=None, error_message: str = None):
+    def _publish_ack(self, specific_part: str, request_id: str, overall_success: bool,
+                     item_results: list):
         topic = ACK_TOPIC_TEMPLATE.format(specific_part=specific_part)
         body = {
             'request_id': request_id,
             'specific_part': specific_part,
-            'success': success,
+            'success': overall_success,
             'written_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'items': item_results,
         }
-        if success and value is not None:
-            body['value'] = value
-        if not success and error_message:
-            body['error_message'] = error_message
         if self._client:
             self._client.publish(topic, body, qos=1)
-            logger.info('发布写入回执: topic=%s success=%s', topic, success)
+            logger.info(
+                '发布写入回执: topic=%s overall_success=%s item_count=%d',
+                topic, overall_success, len(item_results),
+            )

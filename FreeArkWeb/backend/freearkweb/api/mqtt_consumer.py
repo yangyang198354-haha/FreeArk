@@ -367,7 +367,20 @@ class MQTTConsumer:
         logger.info(f"[{thread_name}] Worker 线程退出")
 
     def _handle_write_ack(self, payload):
-        """处理 PLC 写入回执消息，更新 plc_write_record 状态（FR4-5）"""
+        """处理 PLC 写入回执消息，更新 plc_write_record 状态（FR4-5，P4 批量适配）
+
+        v0.4.0 批量回执格式：
+        {
+            "request_id": "<batch_request_id>",
+            "specific_part": "...",
+            "success": false,
+            "items": [
+                {"param_name": "x", "success": true},
+                {"param_name": "y", "success": false, "error_message": "..."}
+            ]
+        }
+        按 batch_request_id + param_name 定位各行，逐项更新状态。
+        """
         try:
             if isinstance(payload, (bytes, bytearray)):
                 payload = payload.decode('utf-8')
@@ -375,23 +388,53 @@ class MQTTConsumer:
                 data = json.loads(payload)
             else:
                 data = payload
-            request_id = data.get('request_id')
-            if not request_id:
+
+            batch_request_id = data.get('request_id')
+            if not batch_request_id:
                 logger.warning('write ack 消息缺少 request_id，跳过')
                 return
-            success = data.get('success', False)
-            new_status = 'success' if success else 'failed'
-            updated = PLCWriteRecord.objects.filter(
-                request_id=request_id, status='pending'
-            ).update(
-                status=new_status,
-                acked_at=timezone.now(),
-                error_message=data.get('error_message', '') if not success else None,
-            )
-            if updated:
-                logger.info('write ack 已更新: request_id=%s status=%s', request_id, new_status)
+
+            now = timezone.now()
+            items = data.get('items')
+
+            if items and isinstance(items, list):
+                # P4 批量回执：按 param_name 逐项更新
+                for item in items:
+                    param_name = item.get('param_name')
+                    if not param_name:
+                        continue
+                    item_success = item.get('success', False)
+                    item_status = 'success' if item_success else 'failed'
+                    item_err = item.get('error_message', '') if not item_success else None
+                    updated = PLCWriteRecord.objects.filter(
+                        batch_request_id=batch_request_id,
+                        param_name=param_name,
+                        status='pending',
+                    ).update(
+                        status=item_status,
+                        acked_at=now,
+                        error_message=item_err,
+                    )
+                    logger.info(
+                        'write ack item 更新: batch=%s param=%s status=%s updated=%d',
+                        batch_request_id, param_name, item_status, updated,
+                    )
             else:
-                logger.debug('write ack 幂等忽略: request_id=%s', request_id)
+                # 兼容旧版单字段回执（v0.3.0 legacy，不应再出现，保留防御）
+                success = data.get('success', False)
+                new_status = 'success' if success else 'failed'
+                updated = PLCWriteRecord.objects.filter(
+                    request_id=batch_request_id, status='pending'
+                ).update(
+                    status=new_status,
+                    acked_at=now,
+                    error_message=data.get('error_message', '') if not success else None,
+                )
+                logger.info(
+                    'write ack legacy 更新: request_id=%s status=%s updated=%d',
+                    batch_request_id, new_status, updated,
+                )
+
         except Exception as e:
             logger.error('_handle_write_ack 异常: %s', e, exc_info=True)
 

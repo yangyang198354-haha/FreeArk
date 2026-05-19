@@ -598,6 +598,7 @@ class PLCWriteRecord(models.Model):
         ('timeout', '超时未回执'),
     )
     request_id = models.CharField(max_length=64, unique=True)
+    batch_request_id = models.CharField(max_length=64, null=True, blank=True, db_index=True, verbose_name='批量请求ID')
     specific_part = models.CharField(max_length=20, db_index=True)
     param_name = models.CharField(max_length=100)
     old_value = models.CharField(max_length=50, default='')

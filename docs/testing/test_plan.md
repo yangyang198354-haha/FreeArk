@@ -209,3 +209,69 @@ python manage.py test api.tests.test_device_settings api.tests.test_device_setti
 cd C:\Users\yanggyan\MyProject\FreeArk
 python -m pytest datacollection/tests/test_plc_write_subscriber.py -v
 ```
+
+---
+
+## v0.4.0 测试覆盖矩阵追加（2026-05-19）
+
+**版本**: 0.4.0
+**变更范围**: 批量写入协议（P4 batch）、normalize select values（P1）、P2/P3/P5 加固
+
+### 变更对比（v0.3.0 → v0.4.0）
+
+| 维度 | v0.3.0 | v0.4.0 |
+|------|--------|--------|
+| 写入协议 | 单条 `DeviceSettingWriteSerializer` | 批量 `DeviceSettingsBatchWriteSerializer`（items 数组） |
+| PLCWriteRecord | 无 batch_request_id | 新增 `batch_request_id` 字段（migration 0024） |
+| ack 格式 | 单字段 `request_id` 匹配 | `batch_request_id` + `items[].param_name` 逐项匹配 |
+| `_on_command` | 单条 write | 批量 items 循环写 PLC |
+| `_normalize_select_values` | 无 | 新增（P1：object→array 规范化） |
+| `device_settings_params` GET | 无 P5 过滤 | P5：后端过滤只读参数；P3：display_value/value_options |
+| `device_settings_write` POST | 单条 | 批量，返回 batch_request_id + item_count |
+
+### 新增 / 修改测试用例与 P1~P5/D1~D3 映射
+
+| 测试文件 | 用例 ID | 覆盖功能点 | 映射需求 |
+|---------|---------|---------|--------|
+| test_device_settings.py | UT-S-01 | `batch_request_id` 在序列化字段中 | P4 批量 |
+| test_device_settings.py | UT-S-02 | `DeviceSettingsBatchWriteSerializer` 批量格式验证 | P4 批量 |
+| test_device_settings.py | UT-S-03 | 拒绝空 specific_part（批量格式） | P4 |
+| test_device_settings.py | UT-S-04 | 拒绝空 items 数组 | P4 |
+| test_device_settings.py | UT-S-05 | 拒绝 new_value 超长（批量 item） | P4 |
+| test_device_settings.py | UT-NORM-01~04 | `_normalize_select_values` 四种输入格式 | P1 |
+| test_device_settings.py | UT-ACK-01 | batch items 全成功更新 | P4 batch ack |
+| test_device_settings.py | UT-ACK-02 | batch 部分失败逐项更新 | P4 batch ack |
+| test_device_settings.py | UT-ACK-03~05 | missing request_id / 幂等 / bytes | P4 |
+| test_device_settings_integration.py | IT-PARAMS-03 | P5 只读参数后端过滤 | P5 |
+| test_device_settings_integration.py | IT-PARAMS-06 | attr_def 字段含 value_options/display_value | P3 |
+| test_device_settings_integration.py | IT-PARAMS-07 | switch value_options 数组 | P3 |
+| test_device_settings_integration.py | IT-PARAMS-08 | select_values_json object 规范化为 array | P1 |
+| test_device_settings_integration.py | IT-WRITE-01 | 批量 POST 202，batch_request_id，item_count | P4 |
+| test_device_settings_integration.py | IT-WRITE-04b | 空 items 返回 400 | P4 |
+| test_device_settings_integration.py | GetRecordsTests | batch_request_id 字段在记录中 | P4 |
+| test_device_settings_e2e.py | E2E-01~04 | 批量 ack 协议完整链路 | P4 |
+| test_plc_write_subscriber.py | UT-SUB-01 | batch items 循环 write_plc | D1 datacollection |
+| test_plc_write_subscriber.py | UT-SUB-03 | unknown param → items 中失败结果 | D1 |
+| test_plc_write_subscriber.py | UT-SUB-05~06 | 全成功/部分失败 overall_success | D1 |
+| test_plc_write_subscriber.py | UT-SUB-07 | ack topic 格式 | D2 |
+| test_plc_write_subscriber.py | UT-SUB-09 | ack body 含 items 数组 | D2 |
+| test_plc_write_subscriber.py | TestPublishAckBody | _publish_ack body 结构验证 | D2/D3 |
+
+### v0.4.0 用例数量对比
+
+| 测试层 | v0.3.0 | v0.4.0 | 变化 |
+|-------|--------|--------|------|
+| 后端单元（test_device_settings.py） | 23 | 27 | +4（NORM 系列 + ACK 重构为 batch） |
+| 后端集成（integration） | 19 | 22 | +3（PARAMS-07/08 + WRITE-04b） |
+| 后端 E2E | 4 | 4 | 不变（协议更新，用例维持） |
+| datacollection（plc_write_subscriber） | 10 | 11 | +1（UT-SUB-09） |
+| **合计** | **56** | **64** | **+8** |
+
+### 通过率门控（v0.4.0，维持不变）
+
+| 层级 | 目标通过率 | v0.4.0 要求 |
+|------|----------|------------|
+| 单元测试 | ≥ 95% | 硬性要求 |
+| 集成测试 | ≥ 90% | 硬性要求 |
+| E2E 测试 | 100% | 全部通过 |
+| 前端测试 | — | SKIPPED（环境缺失，不阻塞门控） |

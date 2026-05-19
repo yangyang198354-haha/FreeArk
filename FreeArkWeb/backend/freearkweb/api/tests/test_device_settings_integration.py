@@ -99,15 +99,15 @@ class GetParamsTests(TestCase):
         param = next(p for p in params if p['param_name'] == 'living_room_temp_setting')
         self.assertIsNone(param['current_value'])
 
-    def test_it_params_03_is_writable_correct(self):
+    def test_it_params_03_readonly_excluded_p5(self):
         _make_device_config('living_room_temp_setting')
         _make_device_config('living_room_temperature')
         resp = self.client.get('/api/device-settings/params/3-1-7-702/')
         self.assertEqual(resp.status_code, 200)
-        params = resp.json()['groups'][0]['params']
-        param_map = {p['param_name']: p for p in params}
-        self.assertTrue(param_map['living_room_temp_setting']['is_writable'])
-        self.assertFalse(param_map['living_room_temperature']['is_writable'])
+        all_param_names = [p['param_name'] for g in resp.json()['groups'] for p in g['params']]
+        self.assertIn('living_room_temp_setting', all_param_names)
+        # P5: 只读参数不返回
+        self.assertNotIn('living_room_temperature', all_param_names)
 
     def test_it_params_04_unauthenticated_returns_401(self):
         anon = APIClient()
@@ -116,7 +116,7 @@ class GetParamsTests(TestCase):
 
     def test_it_params_05_inactive_configs_excluded(self):
         _make_device_config('living_room_temp_setting', is_active=True)
-        _make_device_config('hidden_param', is_active=False)
+        _make_device_config('hidden_switch', is_active=False)
         resp = self.client.get('/api/device-settings/params/3-1-7-702/')
         self.assertEqual(resp.status_code, 200)
         all_param_names = [
@@ -124,7 +124,7 @@ class GetParamsTests(TestCase):
             for g in resp.json()['groups']
             for p in g['params']
         ]
-        self.assertNotIn('hidden_param', all_param_names)
+        self.assertNotIn('hidden_switch', all_param_names)
 
     def test_it_params_06_attr_def_fields_present(self):
         _make_device_config('living_room_temp_setting')
@@ -136,7 +136,35 @@ class GetParamsTests(TestCase):
         self.assertIn('attr_value_type', param)
         self.assertIn('num_value_json', param)
         self.assertIn('select_values_json', param)
+        self.assertIn('value_options', param)
+        self.assertIn('display_value', param)
         self.assertEqual(param['attr_value_type'], 2)
+
+    def test_it_params_07_switch_value_options_returned(self):
+        _make_device_config('living_room_switch')
+        resp = self.client.get('/api/device-settings/params/3-1-7-702/')
+        self.assertEqual(resp.status_code, 200)
+        params = resp.json()['groups'][0]['params']
+        param = next(p for p in params if p['param_name'] == 'living_room_switch')
+        self.assertIsInstance(param['value_options'], list)
+        self.assertGreater(len(param['value_options']), 0)
+
+    def test_it_params_08_select_values_object_normalized_to_array(self):
+        _make_device_config('living_room_temp_setting')
+        import json as _json
+        DeviceAttrDef.objects.create(
+            product_code='test_001',
+            attr_tag='living_room_temp_setting',
+            attr_value_type=1,
+            attr_constraint=0,
+            select_values_json=_json.dumps({"0": "关", "1": "开"}),
+        )
+        resp = self.client.get('/api/device-settings/params/3-1-7-702/')
+        self.assertEqual(resp.status_code, 200)
+        params = resp.json()['groups'][0]['params']
+        param = next(p for p in params if p['param_name'] == 'living_room_temp_setting')
+        parsed = _json.loads(param['select_values_json'])
+        self.assertIsInstance(parsed, list)
 
 
 class PostWriteTests(TestCase):
@@ -147,70 +175,75 @@ class PostWriteTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token}')
         _make_owner()
 
+    def _batch_payload(self, items=None):
+        return {
+            'specific_part': '3-1-7-702',
+            'items': items or [
+                {'param_name': 'living_room_temp_setting', 'new_value': '24'},
+                {'param_name': 'living_room_switch', 'new_value': '1'},
+            ],
+        }
+
     @patch('api.views_device_settings._get_mqtt_client')
-    def test_it_write_01_valid_write_returns_202_and_creates_record(self, mock_get_client):
+    def test_it_write_01_valid_batch_returns_202_and_creates_records(self, mock_get_client):
         mock_result = MagicMock()
         mock_result.rc = 0
         mock_client = MagicMock()
+        mock_client.is_connected.return_value = True
         mock_client.publish.return_value = mock_result
         mock_get_client.return_value = mock_client
 
-        resp = self.client.post('/api/device-settings/write/', {
-            'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
-        }, format='json')
+        resp = self.client.post('/api/device-settings/write/', self._batch_payload(), format='json')
         self.assertEqual(resp.status_code, 202)
         data = resp.json()
-        self.assertIn('request_id', data)
+        self.assertIn('batch_request_id', data)
+        self.assertEqual(data['item_count'], 2)
         self.assertEqual(data['status'], 'pending')
-        self.assertTrue(PLCWriteRecord.objects.filter(request_id=data['request_id']).exists())
+        batch_id = data['batch_request_id']
+        self.assertEqual(PLCWriteRecord.objects.filter(batch_request_id=batch_id).count(), 2)
 
     def test_it_write_02_readonly_param_returns_400(self):
         resp = self.client.post('/api/device-settings/write/', {
             'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temperature',
-            'new_value': '25',
+            'items': [{'param_name': 'living_room_temperature', 'new_value': '25'}],
         }, format='json')
         self.assertEqual(resp.status_code, 400)
 
     def test_it_write_03_unknown_specific_part_returns_404(self):
         resp = self.client.post('/api/device-settings/write/', {
             'specific_part': '9-9-9-999',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
+            'items': [{'param_name': 'living_room_temp_setting', 'new_value': '24'}],
         }, format='json')
         self.assertEqual(resp.status_code, 404)
 
-    def test_it_write_04_missing_field_returns_400(self):
+    def test_it_write_04_missing_items_returns_400(self):
         resp = self.client.post('/api/device-settings/write/', {
             'specific_part': '3-1-7-702',
         }, format='json')
         self.assertEqual(resp.status_code, 400)
 
+    def test_it_write_04b_empty_items_returns_400(self):
+        resp = self.client.post('/api/device-settings/write/', {
+            'specific_part': '3-1-7-702',
+            'items': [],
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
     @patch('api.views_device_settings._get_mqtt_client')
-    def test_it_write_05_mqtt_failure_returns_503_and_record_failed(self, mock_get_client):
+    def test_it_write_05_mqtt_failure_returns_503_and_records_failed(self, mock_get_client):
         mock_client = MagicMock()
+        mock_client.is_connected.return_value = True
         mock_client.publish.side_effect = RuntimeError('broker down')
         mock_get_client.return_value = mock_client
 
-        resp = self.client.post('/api/device-settings/write/', {
-            'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
-        }, format='json')
+        resp = self.client.post('/api/device-settings/write/', self._batch_payload(), format='json')
         self.assertEqual(resp.status_code, 503)
-        rec = PLCWriteRecord.objects.order_by('-created_at').first()
-        self.assertIsNotNone(rec)
-        self.assertEqual(rec.status, 'failed')
+        failed_count = PLCWriteRecord.objects.filter(status='failed').count()
+        self.assertGreater(failed_count, 0)
 
     def test_it_write_06_unauthenticated_returns_401(self):
         anon = APIClient()
-        resp = anon.post('/api/device-settings/write/', {
-            'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
-        }, format='json')
+        resp = anon.post('/api/device-settings/write/', self._batch_payload(), format='json')
         self.assertEqual(resp.status_code, 401)
 
 
@@ -224,6 +257,7 @@ class GetRecordsTests(TestCase):
     def _make_record(self, specific_part='3-1-7-702', operator='admin', status='pending'):
         return PLCWriteRecord.objects.create(
             request_id=str(uuid.uuid4()),
+            batch_request_id=str(uuid.uuid4()),
             specific_part=specific_part,
             param_name='living_room_temp_setting',
             old_value='22',

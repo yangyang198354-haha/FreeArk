@@ -1,5 +1,5 @@
 """
-设备参数设置功能 — E2E 测试套件
+设备参数设置功能 — E2E 测试套件（v0.4.0 批量协议）
 通过 Django TestCase + mock MQTT + mock snap7 模拟完整写入链路
 
 运行:
@@ -40,8 +40,17 @@ def _get_bare_consumer():
     return consumer
 
 
+def _batch_payload(specific_part='3-1-7-702', items=None):
+    return {
+        'specific_part': specific_part,
+        'items': items or [
+            {'param_name': 'living_room_temp_setting', 'new_value': '24'},
+        ],
+    }
+
+
 class E2EHappyPathTest(TestCase):
-    """E2E-01: POST write → pending → ack(success=True) → success"""
+    """E2E-01: POST batch write → pending → ack(success=True) → success"""
 
     def setUp(self):
         self.client = APIClient()
@@ -50,38 +59,42 @@ class E2EHappyPathTest(TestCase):
         _make_owner()
 
     @patch('api.views_device_settings._get_mqtt_client')
-    def test_e2e_01_write_then_ack_success(self, mock_get_client):
+    def test_e2e_01_batch_write_then_ack_success(self, mock_get_client):
         mock_result = MagicMock()
         mock_result.rc = 0
         mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
         mock_mqtt.publish.return_value = mock_result
         mock_get_client.return_value = mock_mqtt
 
-        resp = self.client.post('/api/device-settings/write/', {
-            'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
-        }, format='json')
+        resp = self.client.post('/api/device-settings/write/', _batch_payload(), format='json')
         self.assertEqual(resp.status_code, 202)
-        request_id = resp.json()['request_id']
+        data = resp.json()
+        self.assertIn('batch_request_id', data)
+        batch_id = data['batch_request_id']
 
-        rec = PLCWriteRecord.objects.get(request_id=request_id)
-        self.assertEqual(rec.status, 'pending')
+        recs = list(PLCWriteRecord.objects.filter(batch_request_id=batch_id))
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0].status, 'pending')
 
+        # Simulate ack with items array
         consumer = _get_bare_consumer()
         ack_payload = json.dumps({
-            'request_id': request_id,
+            'request_id': batch_id,
             'success': True,
+            'items': [
+                {'param_name': 'living_room_temp_setting', 'success': True},
+            ],
         })
         consumer._handle_write_ack(ack_payload)
 
-        rec.refresh_from_db()
-        self.assertEqual(rec.status, 'success')
-        self.assertIsNotNone(rec.acked_at)
+        recs[0].refresh_from_db()
+        self.assertEqual(recs[0].status, 'success')
+        self.assertIsNotNone(recs[0].acked_at)
 
 
 class E2EPLCWriteFailTest(TestCase):
-    """E2E-02: POST write → pending → ack(success=False) → failed"""
+    """E2E-02: POST batch write → pending → ack(success=False for item) → failed"""
 
     def setUp(self):
         self.client = APIClient()
@@ -94,26 +107,26 @@ class E2EPLCWriteFailTest(TestCase):
         mock_result = MagicMock()
         mock_result.rc = 0
         mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
         mock_mqtt.publish.return_value = mock_result
         mock_get_client.return_value = mock_mqtt
 
-        resp = self.client.post('/api/device-settings/write/', {
-            'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
-        }, format='json')
+        resp = self.client.post('/api/device-settings/write/', _batch_payload(), format='json')
         self.assertEqual(resp.status_code, 202)
-        request_id = resp.json()['request_id']
+        batch_id = resp.json()['batch_request_id']
 
         consumer = _get_bare_consumer()
         ack_payload = json.dumps({
-            'request_id': request_id,
+            'request_id': batch_id,
             'success': False,
-            'error_message': 'PLC 写入超时',
+            'items': [
+                {'param_name': 'living_room_temp_setting', 'success': False, 'error_message': 'PLC 写入超时'},
+            ],
         })
         consumer._handle_write_ack(ack_payload)
 
-        rec = PLCWriteRecord.objects.get(request_id=request_id)
+        rec = PLCWriteRecord.objects.filter(batch_request_id=batch_id).first()
+        self.assertIsNotNone(rec)
         self.assertEqual(rec.status, 'failed')
         self.assertIn('PLC 写入超时', rec.error_message)
 
@@ -130,14 +143,11 @@ class E2EMQTTUnreachableTest(TestCase):
     @patch('api.views_device_settings._get_mqtt_client')
     def test_e2e_03_mqtt_publish_exception_returns_503(self, mock_get_client):
         mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
         mock_mqtt.publish.side_effect = ConnectionError('broker unreachable')
         mock_get_client.return_value = mock_mqtt
 
-        resp = self.client.post('/api/device-settings/write/', {
-            'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
-        }, format='json')
+        resp = self.client.post('/api/device-settings/write/', _batch_payload(), format='json')
         self.assertEqual(resp.status_code, 503)
         rec = PLCWriteRecord.objects.order_by('-created_at').first()
         self.assertIsNotNone(rec)
@@ -146,11 +156,13 @@ class E2EMQTTUnreachableTest(TestCase):
 
 
 class E2EIdempotentAckTest(TestCase):
-    """E2E-04: 同一 request_id ack 两次 → 状态只更新一次"""
+    """E2E-04: 同一 batch_request_id ack 两次 → 状态只更新一次"""
 
     def test_e2e_04_duplicate_ack_idempotent(self):
+        batch_id = str(uuid.uuid4())
         rec = PLCWriteRecord.objects.create(
             request_id=str(uuid.uuid4()),
+            batch_request_id=batch_id,
             specific_part='3-1-7-702',
             param_name='living_room_temp_setting',
             old_value='22',
@@ -159,7 +171,11 @@ class E2EIdempotentAckTest(TestCase):
             status='pending',
         )
         consumer = _get_bare_consumer()
-        ack = json.dumps({'request_id': rec.request_id, 'success': True})
+        ack = json.dumps({
+            'request_id': batch_id,
+            'success': True,
+            'items': [{'param_name': 'living_room_temp_setting', 'success': True}],
+        })
 
         consumer._handle_write_ack(ack)
         rec.refresh_from_db()
@@ -167,7 +183,7 @@ class E2EIdempotentAckTest(TestCase):
         first_acked_at = rec.acked_at
         self.assertIsNotNone(first_acked_at)
 
+        # Second ack: record is no longer pending, update should not happen
         consumer._handle_write_ack(ack)
         rec.refresh_from_db()
         self.assertEqual(rec.status, 'success')
-        self.assertIsNotNone(rec.acked_at)

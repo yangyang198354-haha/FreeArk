@@ -5,34 +5,34 @@
       <el-button style="margin-top:8px" @click="loadParams">刷新</el-button>
     </div>
 
-    <el-collapse v-if="!loading && !loadError" v-model="openGroups">
-      <el-collapse-item
-        v-for="group in groups"
-        :key="group.sub_type"
-        :name="group.sub_type"
-        :title="group.sub_type_display"
-      >
-        <el-table :data="group.params" size="small" border>
-          <el-table-column label="参数" prop="display_name" width="160" />
-          <el-table-column label="当前值" width="110">
-            <template #default="{ row }">
-              <span>{{ currentValues[row.param_name] ?? row.current_value ?? '—' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="设置值" width="160">
-            <template #default="{ row }">
-              <template v-if="row.is_writable">
+    <template v-if="!loading && !loadError">
+      <el-collapse v-model="openGroups">
+        <el-collapse-item
+          v-for="group in groups"
+          :key="group.sub_type"
+          :name="group.sub_type"
+          :title="group.sub_type_display"
+        >
+          <el-table :data="group.params" size="small" border>
+            <el-table-column label="参数" prop="display_name" width="160" />
+            <el-table-column label="当前值" width="140">
+              <template #default="{ row }">
+                <span>{{ row.display_value ?? row.current_value ?? '—' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="设置值" width="180">
+              <template #default="{ row }">
                 <el-select
-                  v-if="row.attr_value_type === 1"
+                  v-if="row.value_options && row.value_options.length > 0"
                   v-model="inputValues[row.param_name]"
                   size="small"
-                  style="width:130px"
+                  style="width:150px"
                 >
                   <el-option
-                    v-for="opt in parseSelectOptions(row.select_values_json)"
-                    :key="opt.value"
+                    v-for="opt in row.value_options"
+                    :key="opt.raw"
                     :label="opt.label"
-                    :value="opt.value"
+                    :value="opt.raw"
                   />
                 </el-select>
                 <el-input-number
@@ -42,51 +42,39 @@
                   :min="parseNumJson(row.num_value_json).min"
                   :max="parseNumJson(row.num_value_json).max"
                   :step="parseNumJson(row.num_value_json).step || 1"
-                  style="width:130px"
+                  style="width:150px"
                 />
               </template>
-              <span v-else class="readonly-hint">只读</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" align="center">
-            <template #default="{ row }">
-              <template v-if="row.is_writable">
-                <el-button
-                  v-if="writeStatus[row.param_name] !== 'loading'"
-                  type="primary"
-                  size="small"
-                  @click="handleSubmit(row)"
-                >
-                  下发
-                </el-button>
-                <el-button v-else type="primary" size="small" loading disabled>
-                  等待中
-                </el-button>
-              </template>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="160">
-            <template #default="{ row }">
-              <el-tag v-if="writeStatus[row.param_name] === 'success'" type="success" size="small">成功</el-tag>
-              <el-tag v-else-if="writeStatus[row.param_name] === 'failed'" type="danger" size="small">
-                失败: {{ writeErrors[row.param_name] }}
-              </el-tag>
-              <el-tag v-else-if="writeStatus[row.param_name] === 'timeout'" type="warning" size="small">等待超时</el-tag>
-              <span v-else class="status-idle">—</span>
-              <el-button
-                v-if="writeStatus[row.param_name] === 'failed' || writeStatus[row.param_name] === 'timeout'"
-                link
-                size="small"
-                style="margin-left:4px"
-                @click="handleSubmit(row)"
-              >
-                重试
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-collapse-item>
-    </el-collapse>
+            </el-table-column>
+          </el-table>
+        </el-collapse-item>
+      </el-collapse>
+
+      <!-- 批量提交操作区 -->
+      <div class="batch-actions">
+        <el-button type="primary" :disabled="submitLoading" @click="handleBatchSubmit">
+          {{ submitLoading ? '提交中...' : '提交' }}
+        </el-button>
+        <el-button :disabled="submitLoading" @click="handleCancel">取消</el-button>
+        <span v-if="batchStatus === 'success'" class="batch-status success">全部写入成功</span>
+        <span v-else-if="batchStatus === 'partial'" class="batch-status warning">部分写入失败，请查看详情</span>
+        <span v-else-if="batchStatus === 'failed'" class="batch-status danger">写入失败: {{ batchError }}</span>
+        <span v-else-if="batchStatus === 'timeout'" class="batch-status timeout">
+          PLC 写入模块未响应（30s 超时），请检查 freeark-task-scheduler 服务
+        </span>
+      </div>
+
+      <!-- 逐项状态展示（有结果时显示） -->
+      <div v-if="itemStatuses.length > 0" class="item-status-list">
+        <div v-for="s in itemStatuses" :key="s.param_name" class="item-status-row">
+          <span class="item-param">{{ s.display_name }}</span>
+          <el-tag :type="s.success ? 'success' : 'danger'" size="small">
+            {{ s.success ? '成功' : '失败' }}
+          </el-tag>
+          <span v-if="!s.success" class="item-err">{{ s.error_message }}</span>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -113,11 +101,15 @@ export default {
     const openGroups = ref([])
 
     const inputValues = ref({})
-    const currentValues = ref({})
-    const writeStatus = ref({})
-    const writeErrors = ref({})
-    const requestMap = ref({})
-    const timers = ref({})
+    const submitLoading = ref(false)
+    const batchStatus = ref('')
+    const batchError = ref('')
+    const itemStatuses = ref([])
+    const pendingBatchId = ref(null)
+    const timeoutTimer = ref(null)
+
+    // 参数名 -> display_name 映射，用于逐项状态展示
+    const paramDisplayMap = ref({})
 
     const loadParams = async () => {
       loading.value = true
@@ -128,9 +120,16 @@ export default {
         openGroups.value = groups.value.map(g => g.sub_type)
         groups.value.forEach(g => {
           g.params.forEach(p => {
-            currentValues.value[p.param_name] = p.current_value
+            paramDisplayMap.value[p.param_name] = p.display_name
             if (inputValues.value[p.param_name] === undefined) {
-              inputValues.value[p.param_name] = p.current_value
+              // 初始值：枚举型用 raw 字符串，数值型用当前值（number）
+              if (p.value_options && p.value_options.length > 0) {
+                inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined
+                  ? String(p.current_value)
+                  : p.value_options[0]?.raw ?? ''
+              } else {
+                inputValues.value[p.param_name] = p.current_value
+              }
             }
           })
         })
@@ -141,56 +140,106 @@ export default {
       }
     }
 
-    const handleSubmit = async (row) => {
-      const param_name = row.param_name
-      const new_value = inputValues.value[param_name]
-      if (new_value === undefined || new_value === null) {
-        ElMessage.warning('请先填写设置值')
+    const handleBatchSubmit = async () => {
+      const allParams = []
+      groups.value.forEach(g => {
+        g.params.forEach(p => {
+          allParams.push(p)
+        })
+      })
+
+      const changedItems = allParams
+        .filter(p => {
+          const v = inputValues.value[p.param_name]
+          return v !== undefined && v !== null
+        })
+        .map(p => ({
+          param_name: p.param_name,
+          new_value: String(inputValues.value[p.param_name]),
+        }))
+
+      if (changedItems.length === 0) {
+        ElMessage.warning('没有可提交的参数')
         return
       }
-      writeStatus.value[param_name] = 'loading'
-      writeErrors.value[param_name] = ''
 
-      if (timers.value[param_name]) {
-        clearTimeout(timers.value[param_name])
+      submitLoading.value = true
+      batchStatus.value = ''
+      batchError.value = ''
+      itemStatuses.value = []
+      pendingBatchId.value = null
+
+      if (timeoutTimer.value) {
+        clearTimeout(timeoutTimer.value)
       }
 
       try {
         const res = await api.post('/api/device-settings/write/', {
           specific_part: props.specificPart,
-          param_name,
-          new_value: String(new_value),
+          items: changedItems,
         })
-        requestMap.value[param_name] = res.request_id
-        timers.value[param_name] = setTimeout(() => {
-          if (writeStatus.value[param_name] === 'loading') {
-            writeStatus.value[param_name] = 'timeout'
+        pendingBatchId.value = res.batch_request_id
+
+        // D3：30s 超时计时器
+        timeoutTimer.value = setTimeout(() => {
+          if (submitLoading.value) {
+            submitLoading.value = false
+            batchStatus.value = 'timeout'
           }
         }, 30000)
       } catch (e) {
-        writeStatus.value[param_name] = 'failed'
-        writeErrors.value[param_name] = e?.response?.data?.error || '下发通道异常'
+        submitLoading.value = false
+        batchStatus.value = 'failed'
+        batchError.value = e?.response?.data?.error || '下发通道异常'
       }
+    }
+
+    const handleCancel = () => {
+      // 重置 inputValues 为当前服务端值
+      groups.value.forEach(g => {
+        g.params.forEach(p => {
+          if (p.value_options && p.value_options.length > 0) {
+            inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined
+              ? String(p.current_value)
+              : p.value_options[0]?.raw ?? ''
+          } else {
+            inputValues.value[p.param_name] = p.current_value
+          }
+        })
+      })
+      batchStatus.value = ''
+      batchError.value = ''
+      itemStatuses.value = []
     }
 
     const handleAck = ({ payload }) => {
       try {
         const data = JSON.parse(payload)
-        const param_name = Object.keys(requestMap.value).find(
-          k => requestMap.value[k] === data.request_id
-        )
-        if (!param_name) return
-        if (timers.value[param_name]) {
-          clearTimeout(timers.value[param_name])
+        if (!pendingBatchId.value || data.request_id !== pendingBatchId.value) return
+
+        if (timeoutTimer.value) {
+          clearTimeout(timeoutTimer.value)
         }
-        if (data.success) {
-          writeStatus.value[param_name] = 'success'
-          if (data.value !== undefined) {
-            currentValues.value[param_name] = data.value
-          }
+        submitLoading.value = false
+
+        const items = data.items || []
+        itemStatuses.value = items.map(item => ({
+          param_name: item.param_name,
+          display_name: paramDisplayMap.value[item.param_name] || item.param_name,
+          success: item.success,
+          error_message: item.error_message || '',
+        }))
+
+        const allSuccess = items.length > 0 && items.every(i => i.success)
+        const anyFail = items.some(i => !i.success)
+
+        if (allSuccess) {
+          batchStatus.value = 'success'
+        } else if (anyFail && items.some(i => i.success)) {
+          batchStatus.value = 'partial'
         } else {
-          writeStatus.value[param_name] = 'failed'
-          writeErrors.value[param_name] = data.error_message || '写入失败'
+          batchStatus.value = 'failed'
+          batchError.value = items.find(i => !i.success)?.error_message || '写入失败'
         }
       } catch {
         // JSON 解析失败，忽略
@@ -207,23 +256,8 @@ export default {
 
     onUnmounted(() => {
       disconnect()
-      Object.values(timers.value).forEach(t => clearTimeout(t))
+      if (timeoutTimer.value) clearTimeout(timeoutTimer.value)
     })
-
-    const parseSelectOptions = (json) => {
-      if (!json) return []
-      try {
-        const parsed = JSON.parse(json)
-        if (Array.isArray(parsed)) {
-          return parsed.map(item =>
-            typeof item === 'object' ? item : { label: String(item), value: item }
-          )
-        }
-        return []
-      } catch {
-        return []
-      }
-    }
 
     const parseNumJson = (json) => {
       if (!json) return { min: undefined, max: undefined, step: 1 }
@@ -240,12 +274,13 @@ export default {
       groups,
       openGroups,
       inputValues,
-      currentValues,
-      writeStatus,
-      writeErrors,
+      submitLoading,
+      batchStatus,
+      batchError,
+      itemStatuses,
       loadParams,
-      handleSubmit,
-      parseSelectOptions,
+      handleBatchSubmit,
+      handleCancel,
       parseNumJson,
     }
   },
@@ -259,11 +294,46 @@ export default {
 .load-error {
   padding: 16px;
 }
-.readonly-hint {
-  color: #909399;
-  font-size: 12px;
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid #ebeef5;
 }
-.status-idle {
-  color: #c0c4cc;
+.batch-status {
+  font-size: 13px;
+}
+.batch-status.success {
+  color: #67c23a;
+}
+.batch-status.warning {
+  color: #e6a23c;
+}
+.batch-status.danger {
+  color: #f56c6c;
+}
+.batch-status.timeout {
+  color: #e6a23c;
+}
+.item-status-list {
+  margin-top: 8px;
+  padding: 8px 0;
+}
+.item-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.item-param {
+  min-width: 160px;
+  color: #606266;
+}
+.item-err {
+  color: #f56c6c;
+  font-size: 12px;
 }
 </style>

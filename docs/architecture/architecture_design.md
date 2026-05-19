@@ -2,13 +2,13 @@
 
 **文档编号**: ARCH-DESIGN-DEVICE-SETTINGS-001  
 **项目名称**: FreeArk 设备参数设置功能  
-**版本**: 0.3.0-APPROVED  
-**状态**: APPROVED（v0.3.0：2026-05-19 broker WebSocket 端口确认为 32797；移除本期回滚接口设计）  
+**版本**: 0.4.0-APPROVED  
+**状态**: APPROVED（v0.4.0：2026-05-19 P1~P5 诊断方向 + Q10~Q12 落地方案；PM 门控通过）  
 **创建日期**: 2026-05-19  
 **最后更新**: 2026-05-19  
 **作者**: system-architect (via pm-orchestrator)  
-**审核**: pm-orchestrator（v0.3.0 端口与回滚范围调整审核通过）  
-**输入文档**: REQ-SPEC-DEVICE-SETTINGS-001 v0.3.0-APPROVED, REQ-US-DEVICE-SETTINGS-001 v0.3.0-APPROVED
+**审核**: pm-orchestrator（v0.4.0 增量 ADR 门控通过）  
+**输入文档**: REQ-SPEC-DEVICE-SETTINGS-001 v0.4.0-APPROVED, REQ-US-DEVICE-SETTINGS-001 v0.4.0-APPROVED
 
 ---
 
@@ -283,6 +283,289 @@ ws://192.168.31.98:32797/mqtt
 ### CHECK-02: plc_config.json 可写参数白名单验证
 
 确认所有 `*_temp_setting`、`*_switch` 类型的 `param_name` 均在 `plc_config.json` 中有对应条目，避免下发时报"param_name 未定义"错误。
+
+---
+
+---
+
+## v0.4.0 增量调整（基于用户决策 Q10~Q12 + 生产实测问题 P1~P5）
+
+**本节为增量 ADR，不修改 v0.3.0 已有架构。仅描述 P1~P5 的诊断方向与落地方案。**
+
+---
+
+### P1 — 枚举下拉菜单空值：诊断方向
+
+**现象**：生产环境"系统开关"等枚举类下拉菜单无选项。
+
+**代码调研**（已 Read `views_device_settings.py` + `models.py`）：
+
+后端 `device_settings_params` 视图（第 47~49 行）匹配逻辑：
+```python
+attr_tags = [c.param_name for c in configs]
+attr_defs = {
+    d.attr_tag: d
+    for d in DeviceAttrDef.objects.filter(attr_tag__in=attr_tags)
+}
+```
+
+前端 `parseSelectOptions`（`DeviceSettingsPanelView.vue` 第 213~226 行）解析逻辑：
+```javascript
+const parsed = JSON.parse(json)
+if (Array.isArray(parsed)) {
+    return parsed.map(item =>
+        typeof item === 'object' ? item : { label: String(item), value: item }
+    )
+}
+return []  // 非数组格式返回空
+```
+
+**3 个最可能的根因假设（按可能性排序）**：
+
+1. **假设 H1（最可能）：`DeviceAttrDef.select_values_json` 数据为空或格式不匹配**
+   - 生产数据库中，`*_switch` 类参数对应的 `DeviceAttrDef` 行的 `select_values_json` 字段为空字符串或 `null`，或格式为非数组 JSON（如 `{"0":"关","1":"开"}` 而非 `[{"label":"关","value":0}]`）
+   - 前端 `parseSelectOptions` 仅处理数组格式，若 DB 中存的是对象格式则返回 `[]`
+   - **建议自查路径**：`SELECT attr_tag, select_values_json FROM device_attr_def WHERE attr_tag LIKE '%_switch%';`
+
+2. **假设 H2（次可能）：`attr_tag` ≠ `DeviceConfig.param_name`，导致 JOIN 失败**
+   - `views_device_settings.py` 用 `DeviceConfig.param_name` 当作 `attr_tag` 查 `DeviceAttrDef`，但生产 DB 中两表命名体系存在不一致（如 `living_room_switch` vs `hvac_switch`）
+   - 结果 `attr_defs.get(cfg.param_name)` 返回 `None`，前端收到 `select_values_json: ''`，下拉为空
+   - **建议自查路径**：对比 `SELECT DISTINCT param_name FROM device_config WHERE param_name LIKE '%_switch%'` 与 `SELECT DISTINCT attr_tag FROM device_attr_def WHERE attr_tag LIKE '%_switch%'`，检查是否有命名差异
+
+3. **假设 H3（较低）：`DeviceAttrBinding` 限制了 `product_code` 过滤，导致漏查**
+   - 当前视图未使用 `DeviceAttrBinding` 过滤 `product_code`，直接按 `attr_tag` 全局匹配。若未来引入 `product_code` 过滤，可能遗漏匹配。当前代码不存在此问题，但若 `DeviceAttrDef` 中同一 `attr_tag` 有多个 `product_code` 行，查询可能返回错误行（`dict` 后者覆盖前者）
+   - **建议自查路径**：`SELECT attr_tag, count(*) FROM device_attr_def GROUP BY attr_tag HAVING count(*) > 1;`
+
+**开发自查优先顺序**：H1 → H2 → H3。P1 不需要架构重设计，只需数据修复或命名规范对齐。
+
+---
+
+### P2 — 下发通道异常：诊断方向（端到端链路检查）
+
+**现象**：v0.3.0 生产环境下发命令后无回执，链路不通。
+
+**代码调研结论**：
+- `mqtt_consumer.py` 已正确订阅 `/datacollection/plc/write/ack/#`（第 129~130 行），`process_message` 正确路由至 `_handle_write_ack`（第 422~423 行）
+- `datacollection/plc_write_subscriber.py` 已存在且正确订阅 `COMMAND_TOPIC`（第 59 行），`_on_command` 已实现（第 63 行）
+- `views_device_settings.py` publish 逻辑存在：通过 `mqtt_consumer.client.publish()` 发布（第 128~130 行），但使用的是 `mqtt_consumer` 模块的单例客户端
+
+**端到端链路节点 + 建议诊断日志位置**：
+
+| 节点 | 文件 | 建议在此处加 DEBUG 日志的位置 | 诊断问题 |
+|------|------|-------------------------------|---------|
+| 1. API 接收请求 | `views_device_settings.py` L82 | `logger.info('收到下发请求: sp=%s param=%s val=%s', specific_part, param_name, new_value)` | 请求是否到达后端 |
+| 2. MQTT publish 调用 | `views_device_settings.py` L127~131 | `logger.info('mqtt publish 结果: rc=%s mid=%s', result.rc, result.mid)` | publish 是否成功（rc=0 才算成功） |
+| 3. 验证 `mqtt_consumer.client` 是否已连接 | `views_device_settings.py` `_get_mqtt_client()` | `logger.info('mqtt client state: %s', client._state)` | 共享 client 是否处于 connected 状态 |
+| 4. Broker 路由至 PLCWriteSubscriber | `datacollection/plc_write_subscriber.py` L63 | `logger.info('_on_command 触发: topic=%s', topic)` 已有 L106 error 日志，需补充 L63 入口日志 | 命令是否到达 subscriber |
+| 5. PLCWriteSubscriber PLC 写入 | `datacollection/plc_write_subscriber.py` L108 | `logger.info('_write_plc: ip=%s db=%s offset=%s val=%s type=%s', plc_ip, db_num, offset, value, data_type)` | snap7 参数是否正确 |
+| 6. 回执发布 | `datacollection/plc_write_subscriber.py` L121 | `logger.info('_publish_ack: topic=%s success=%s', topic, success)` 已有（第 136 行） | 回执是否发出 |
+| 7. 后端收到回执 | `mqtt_consumer.py` `_handle_write_ack` L369 | `logger.info('_handle_write_ack: request_id=%s success=%s', request_id, success)` 已有（第 392 行） | 回执是否到达后端 |
+
+**最可能的 P2 根因**（不修改架构，先加日志定位）：
+
+- **高优先级怀疑**：`_get_mqtt_client()` 返回的 `mqtt_consumer.client` 在生产环境中可能尚未连接（Django 进程启动后 MQTT 连接是异步建立的），导致 `publish` 调用时 client 处于未连接状态，`result.rc != 0`，但当前错误日志（`'下发通道异常'`）不区分 rc 值。建议：在 `device_settings_write` 的 except 块中打印 `result.rc` 具体值（而非仅判断 `!= 0`），并在 `_get_mqtt_client()` 中检查 `client.is_connected()`。
+
+- **次要怀疑**：PLCWriteSubscriber 进程（`freeark-task-scheduler` systemd 服务）订阅的 MQTT broker 地址/端口与后端不一致。`mqtt_consumer.py` 默认 broker 为 `192.168.31.97:32795`（fallback），而 `plc_write_subscriber.py` 从 `freeark-task-scheduler` 启动参数传入。若两者连接不同 broker instance，命令到不了 subscriber。
+
+---
+
+### P3 — 人类可读映射：后端常量文件落地方案（ADR-06）
+
+**决策**（Q11 已确认）：后端 Python 常量文件，无 DB migration。
+
+**新建文件**：`FreeArkWeb/backend/freearkweb/api/param_value_label.py`
+
+**建议结构**（基于 Read `plc_config.json` + `DeviceConfig.param_name` 命名约定）：
+
+```python
+# param_value_label.py
+# 维护 param_name 枚举型字段的 PLC 原始值 ↔ 人类可读标签映射
+# 格式：{ param_name_suffix_pattern: { raw_value_str: human_label } }
+# 匹配规则：param_name 以 key 结尾时应用对应映射
+
+SWITCH_LABELS = {"0": "关", "1": "开"}
+
+PARAM_VALUE_LABELS = {
+    "_switch": SWITCH_LABELS,                    # 所有 *_switch 参数
+    "_mode": {"0": "制冷", "1": "制热", "2": "通风", "3": "除湿"},  # 如有模式字段
+}
+
+PARAM_UNITS = {
+    "_temp_setting": "℃",
+    "_temperature": "℃",
+    "_humidity": "%RH",
+}
+
+def get_value_options(param_name: str) -> list[dict]:
+    """返回 [{raw: '0', label: '关'}, {raw: '1', label: '开'}] 或 []"""
+    for suffix, mapping in PARAM_VALUE_LABELS.items():
+        if param_name.endswith(suffix):
+            return [{"raw": k, "label": v} for k, v in mapping.items()]
+    return []
+
+def get_display_value(param_name: str, raw_value) -> str:
+    """将 PLC 原始值转换为人类可读字符串"""
+    if raw_value is None:
+        return "—"
+    raw_str = str(raw_value)
+    for suffix, mapping in PARAM_VALUE_LABELS.items():
+        if param_name.endswith(suffix):
+            return mapping.get(raw_str, raw_str)
+    unit = ""
+    for suffix, u in PARAM_UNITS.items():
+        if param_name.endswith(suffix):
+            unit = f" {u}"
+            break
+    return f"{raw_str}{unit}"
+```
+
+**API 响应变更**（`GET /api/device-settings/params/{specific_part}/`）：
+
+每个参数增加两个字段（P5 过滤后仅返回 `is_writable=true` 的参数，但 `display_value` 和 `value_options` 对所有返回字段均有效）：
+
+```json
+{
+  "param_name": "living_room_switch",
+  "display_name": "客厅系统开关",
+  "current_value": "1",
+  "display_value": "开",
+  "is_writable": true,
+  "attr_value_type": 1,
+  "value_options": [{"raw": "0", "label": "关"}, {"raw": "1", "label": "开"}],
+  "select_values_json": "[{\"value\":0,\"label\":\"关\"},{\"value\":1,\"label\":\"开\"}]"
+}
+```
+
+**影响范围**：仅 `views_device_settings.py`（追加两字段组装逻辑），无 DB migration，无 model 变化。
+
+---
+
+### P4 — 批量下发协议：ADR-07
+
+**决策**（Q10 已确认）：一条 MQTT 命令多 item，单个 `request_id`。
+
+#### MQTT Command Payload Schema（v0.4.0）
+
+```json
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "specific_part": "3-1-7-702",
+  "plc_ip": "192.168.31.50",
+  "operator": "admin",
+  "submitted_at": "2026-05-19T10:30:00Z",
+  "items": [
+    { "param_name": "living_room_switch", "new_value": "1", "data_type": "int16" },
+    { "param_name": "living_room_temp_setting", "new_value": "24", "data_type": "int16" }
+  ]
+}
+```
+
+#### MQTT Ack Payload Schema — 推荐方案：按 request_id 整体回执，含 items[].success
+
+架构师评估两方案：
+
+| 方案 | 说明 | 优点 | 缺点 |
+|------|------|------|------|
+| **A（推荐）** 整体回执含 items | `{ request_id, success: bool, items: [{param_name, success, error_message}] }` | 一条回执即可知道每个 item 结果，前端处理简单 | item 数量多时 payload 略大（可接受） |
+| B 每个 item 单独回执 | 每个 `param_name` 单独发一条 ack，`request_id` 相同 | 与 v0.3.0 兼容，PLCWriteSubscriber 改动最小 | 前端需等待 N 条消息聚合，增加状态管理复杂度 |
+
+**选定方案 A**（整体回执）：
+
+```json
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "specific_part": "3-1-7-702",
+  "success": false,
+  "written_at": "2026-05-19T10:30:02Z",
+  "items": [
+    { "param_name": "living_room_switch", "success": true },
+    { "param_name": "living_room_temp_setting", "success": false, "error_message": "PLC_WRITE_FAILED: snap7 timeout" }
+  ]
+}
+```
+
+#### plc_write_record DB 方案：1 request_id 对应 N 行
+
+**决策**：保持每个 `param_name` 独立一行 `plc_write_record`，共用同一 `request_id`，不新增 `batch_id` 字段。
+
+**理由**：
+- 现有 `plc_write_record` 表已有 `request_id` 字段（`UNIQUE` 约束），需放宽为 `UNIQUE` 仅对单 `(request_id, param_name)` 组合生效，或改为非唯一索引（批量时同一 request_id 对应多行）
+- `request_id` 本身即可作为"批次 ID"使用，无需新增 `batch_id`，零额外 migration 字段
+- 审计页按 `request_id` 分组即可查看一次批量操作的所有记录
+- **Migration 需求**：需将 `plc_write_record.request_id` 的 `UNIQUE` 约束改为普通索引（允许同一 `request_id` 对应多行）；或新增 `batch_request_id` 非唯一字段并保留 `request_id` 不变（后者零 schema 风险，推荐）
+
+**推荐做法（零风险）**：新增 `batch_request_id VARCHAR(64) NULL` 字段，单字段下发时 `batch_request_id=NULL`，批量下发时所有 item 共用同一 `batch_request_id`，每行 `request_id` 仍保持 UUID 唯一。这样无需修改 `UNIQUE` 约束，migration 仅追加新字段。
+
+#### 后端 API 接口变更
+
+`POST /api/device-settings/write/` 请求体改为：
+
+```json
+{
+  "specific_part": "3-1-7-702",
+  "items": [
+    { "param_name": "living_room_switch", "new_value": "1" },
+    { "param_name": "living_room_temp_setting", "new_value": "24" }
+  ]
+}
+```
+
+响应 202：
+
+```json
+{
+  "batch_request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "item_count": 2,
+  "status": "pending"
+}
+```
+
+#### PLCWriteSubscriber 改造
+
+`_on_command` 需迭代 `cmd['items']`，对每个 item 调用 `_write_plc`，汇总结果后发布整体 ack。
+
+---
+
+### P5 — 只显示可写参数：过滤位置建议（ADR-08）
+
+**决策**：**后端过滤**（不返回 `is_writable=false` 的参数），前端不渲染只读参数。
+
+**理由**：
+- 防止前端通过绕过 UI 直接调用 `POST /write/` 接口写只读字段（纵深防御）
+- 后端 `device_settings_params` 视图已有 `_is_writable()` 函数，只需在组装 `params` 列表时过滤 `is_writable=False` 的行，约 1 行改动
+- 前端组件 `DeviceSettingsPanelView.vue` 中现有 `v-if="row.is_writable"` 判断可简化（后端已过滤，但前端 guard 保留以防万一）
+
+**实现位置**：`views_device_settings.py` `device_settings_params` 函数内，在 `groups[key]['params'].append(...)` 之前加条件判断：
+```python
+if not _is_writable(cfg.param_name):
+    continue  # P5：设置面板不返回只读参数
+```
+
+---
+
+### v0.4.0 增量变更对生产已运行模块的影响范围
+
+| 文件 / 模块 | 影响类型 | 变更描述 | 风险 |
+|------------|---------|---------|------|
+| `api/param_value_label.py` | **新增** | P3 映射常量文件，零副作用 | 低 |
+| `api/views_device_settings.py` | **修改** | 1) P5：添加 `is_writable` 过滤（1行）；2) P3：追加 `display_value` + `value_options` 字段；3) P4：接口改接收 `items` 数组；4) P2：`_get_mqtt_client()` 加连接状态检查 | 中（接口协议变化，前端需同步更新） |
+| `api/serializers_device_settings.py` | **修改** | `DeviceSettingWriteSerializer` 改为接受 `items` 数组而非单 `param_name/new_value` | 中 |
+| `datacollection/plc_write_subscriber.py` | **修改** | P4：`_on_command` 改为迭代 `items`，`_publish_ack` 改为发整体 ack；P2：入口增加 DEBUG 日志 | 中（已在线，需重启 `freeark-task-scheduler`） |
+| `api/mqtt_consumer.py` | **不变** | `_handle_write_ack` 已存在且正确；P2 诊断日志在上层视图加，此处无需改 | 无 |
+| `FreeArkWeb/frontend/src/views/DeviceSettingsPanelView.vue` | **修改** | P3：`parseSelectOptions` 改用 `value_options`；P4：合并提交逻辑；P5：移除前端侧 `is_writable` filter（后端已过滤）；P2：错误分类展示 | 中 |
+| `api/migrations/` | **新增（可选）** | 若采用 `batch_request_id` 方案需新增 migration 追加字段（Q12 无 migration，Q11 无 migration） | 低 |
+| `api/models.py` | **可选修改** | 若新增 `batch_request_id` 字段则需修改 `PLCWriteRecord` model | 低 |
+| v0.3.0 已部署文件（`views_device_settings.py`, `plc_write_subscriber.py`, `useMqttWebSocket.js`, `DeviceSettingsPanelView.vue`）| 均需升级 | v0.4.0 为增量修改，不推翻 v0.3.0 实现，仅在现有基础上扩展 | 中（需全量测试回归） |
+
+---
+
+---
+
+## 用户最终决策（2026-05-19，PM 补录）
+
+D1：本期上线 batch_request_id migration 0024（可空字段，migration 追加）。
+D2：不做 API 兼容，同步部署前后端（破坏性变更，旧单字段接口废弃）。
+D3：SUBSCRIBER_NOT_CONSUMING 仅前端 30s 超时推断，后端不实现服务端定时扫描；前端 timeout 文案改为"PLC 写入模块未响应（30s 超时），请检查 freeark-task-scheduler 服务"。
 
 ---
 

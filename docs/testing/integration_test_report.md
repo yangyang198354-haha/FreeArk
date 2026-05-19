@@ -2,10 +2,62 @@
 
 **文档编号**: TEST-INTG-DEVICE-SETTINGS-001
 **项目名称**: FreeArk 设备参数设置功能
-**版本**: 0.3.0
+**版本**: 0.3.0 → 0.4.0
 **状态**: REVIEWED — 待实际执行确认
 **创建日期**: 2026-05-19
 **作者**: test-engineer (via pm-orchestrator)
+
+---
+
+## v0.4.0 集成测试追加段（2026-05-19）
+
+**执行方式**: 深度静态分析（目标机实际执行命令见下方）
+
+**执行命令（须在目标机手动执行）**:
+```powershell
+cd C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb
+python manage.py test api.tests.test_device_settings_integration --settings=freearkweb.test_settings --verbosity=2
+```
+
+### v0.4.0 集成测试执行摘要（静态分析）
+
+| 指标 | 值 |
+|------|---|
+| 测试文件 | `api/tests/test_device_settings_integration.py` |
+| 总用例数（v0.4.0） | 22 |
+| 静态分析：预测通过 | 22 |
+| 静态分析：预测失败 | 0 |
+| 与 v0.3.0 基线对比 | +3 用例（IT-PARAMS-07/08 新增；IT-WRITE-04b 新增）；IT-WRITE-01 重构为批量协议；GetRecordsTests batch_request_id 使用 |
+
+### v0.4.0 新增/修改用例详情
+
+#### GET /api/device-settings/params/{specific_part}/（新增 2 用例）
+
+| 用例 ID | 测试方法 | 预测结果 | 分析依据 |
+|---------|---------|---------|---------|
+| IT-PARAMS-07（新增） | test_it_params_07_switch_value_options_returned | PASS | `living_room_switch` 是 writable，get_value_options 返回开关选项列表（len>0） |
+| IT-PARAMS-08（新增） | test_it_params_08_select_values_object_normalized_to_array | PASS | DeviceAttrDef.select_values_json=`{"0":"关","1":"开"}` → _normalize_select_values → list |
+
+#### POST /api/device-settings/write/（修改+新增）
+
+| 用例 ID | 测试方法 | 预测结果 | 分析依据 |
+|---------|---------|---------|---------|
+| IT-WRITE-01（重构） | test_it_write_01_valid_batch_returns_202_and_creates_records | PASS | batch payload，mock publish rc=0，返回 202，batch_request_id，item_count=2，DB 2条记录 |
+| IT-WRITE-04b（新增） | test_it_write_04b_empty_items_returns_400 | PASS | items=[] → DeviceSettingsBatchWriteSerializer min_length=1 → 400 |
+
+#### GET /api/device-settings/records/（records 使用 batch_request_id）
+
+| 用例 | 测试方法 | 预测结果 | 分析依据 |
+|------|---------|---------|---------|
+| IT-RECORDS-01~07 | 各过滤场景 | PASS | _make_record 方法已添加 batch_request_id=str(uuid.uuid4())；字段存在，ORM 正常 |
+
+### 通过率（v0.4.0 静态预测）
+
+| 总用例 | 预测通过 | 预测通过率 | 门控要求 | 达标 |
+|--------|---------|---------|--------|------|
+| 22 | 22 | 100% | ≥90% | 是（预测） |
+
+**风险说明**: 本报告为静态分析预测，未在目标机实际执行。需在目标机运行上述命令后以实际输出更新本报告。
 
 ---
 

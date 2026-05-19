@@ -5,7 +5,25 @@
 **Date**: 2026-05-19  
 **Target**: 树莓派 192.168.31.51 (yangyang)  
 **DB**: MySQL 192.168.31.98:3306  
-**Migration**: 0023_plcwriterecord（新增 `plc_write_record` 表）
+**Migration**: 0023_plcwriterecord（新增 `plc_write_record` 表）；**v0.4.0 追加** 0024_plcwriterecord_batch_request_id（新增可空字段）
+
+---
+
+## v0.4.0 部署补充说明（2026-05-19）
+
+本期变更覆盖 P1~P5 + 批量协议（破坏性变更）。与 v0.3.0 部署的差异：
+
+- **STEP 5 migrate** 会同时应用 `0023` 和 `0024`（0023 在 v0.3.0 已应用，0024 是本期新增可空字段，零风险）
+- **必须重启 3 个服务**（顺序无强制要求，但本文档按 STEP 6 → 8 → 9 走）：
+  - `freeark-backend`（views/serializers/mqtt_consumer 改动）
+  - `freeark-task-scheduler`（plc_write_subscriber 改动）
+  - `freeark-mqtt-consumer`（_handle_write_ack 改动）
+- **API 协议破坏性变更**（单字段 → items 数组）：前后端必须**同步部署**完成，不可只更后端或只更前端。STEP 6 + STEP 7 之间产生的短暂不一致窗口可接受（旧前端缓存命中新后端会报 400，强刷即恢复）。
+- **新增健康检查项**（STEP 9 之后）：
+  - `GET /api/device-settings/params/<任一 specific_part>/`（带 token）应返回每个字段含 `value_options` + `display_value`
+  - `freeark-task-scheduler` 日志含 `收到写命令: request_id=... items=...` 字样（确认 P2 诊断日志生效）
+  - 浏览器开设备列表 → 点设置 → 面板**只显示可写字段**（P5 验证）
+  - 面板**顶部有单一"提交"+"取消"按钮**（P4 验证），下拉菜单"系统开关"有选项（P1 验证）
 
 ---
 

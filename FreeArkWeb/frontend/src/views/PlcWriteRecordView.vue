@@ -52,8 +52,12 @@
       <el-table-column label="请求ID" prop="request_id" width="200" show-overflow-tooltip />
       <el-table-column label="专有部分" prop="specific_part" width="120" />
       <el-table-column label="参数" prop="param_name" width="180" show-overflow-tooltip />
-      <el-table-column label="写前值" prop="old_value" width="80" align="center" />
-      <el-table-column label="目标值" prop="new_value" width="80" align="center" />
+      <el-table-column label="写前值" width="120" align="center">
+        <template #default="{ row }">{{ formatValue(row.param_name, row.old_value) }}</template>
+      </el-table-column>
+      <el-table-column label="目标值" width="120" align="center">
+        <template #default="{ row }">{{ formatValue(row.param_name, row.new_value) }}</template>
+      </el-table-column>
       <el-table-column label="操作人" prop="operator" width="100" />
       <el-table-column label="状态" width="90" align="center">
         <template #default="{ row }">
@@ -104,6 +108,52 @@ export default {
     const filterStatus = ref('')
     const filterTimeRange = ref(null)
 
+    // Q12 决策：param_name -> value_options 映射缓存，用于 raw_value (label) 格式展示
+    const paramLabelCache = ref({})
+
+    const fetchParamOptions = async (specificPart) => {
+      if (!specificPart || paramLabelCache.value[specificPart] !== undefined) return
+      try {
+        const data = await api.get(`/api/device-settings/params/${encodeURIComponent(specificPart)}/`)
+        const map = {}
+        for (const group of data.groups || []) {
+          for (const p of group.params || []) {
+            if (p.value_options && p.value_options.length > 0) {
+              map[p.param_name] = p.value_options
+            }
+          }
+        }
+        paramLabelCache.value[specificPart] = map
+      } catch {
+        paramLabelCache.value[specificPart] = {}
+      }
+    }
+
+    const getLabel = (specificPart, paramName, rawValue) => {
+      const spMap = paramLabelCache.value[specificPart]
+      if (!spMap) return null
+      const opts = spMap[paramName]
+      if (!opts) return null
+      const found = opts.find(o => String(o.raw) === String(rawValue))
+      return found ? found.label : null
+    }
+
+    const formatValue = (paramName, rawValue) => {
+      if (rawValue === null || rawValue === undefined || rawValue === '') return '—'
+      // 在当前 tableData 的 specific_part 中查标签
+      const label = (() => {
+        for (const row of tableData.value) {
+          if (row.param_name === paramName) {
+            const l = getLabel(row.specific_part, paramName, rawValue)
+            if (l !== null) return l
+          }
+        }
+        return null
+      })()
+      if (label !== null) return `${rawValue} (${label})`
+      return rawValue
+    }
+
     const fetchList = async () => {
       loading.value = true
       try {
@@ -119,6 +169,11 @@ export default {
         const res = await api.get(`/api/device-settings/records/?${qs}`)
         tableData.value = res.results || []
         total.value = res.count || 0
+        // 拉取各 specific_part 的参数选项，以便展示标签
+        const parts = [...new Set(tableData.value.map(r => r.specific_part).filter(Boolean))]
+        for (const sp of parts) {
+          await fetchParamOptions(sp)
+        }
       } catch {
         ElMessage.error('获取设置记录失败')
         tableData.value = []
@@ -182,7 +237,7 @@ export default {
       loading, tableData, total, currentPage, pageSize,
       filterSpecificPart, filterOperator, filterStatus, filterTimeRange,
       handleSearch, handleReset, handlePageChange, handlePageSizeChange,
-      statusLabel, statusTagType, formatDateTime,
+      statusLabel, statusTagType, formatDateTime, formatValue,
     }
   },
 }

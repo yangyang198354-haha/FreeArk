@@ -16,9 +16,9 @@ from rest_framework.authtoken.models import Token
 from api.models import PLCWriteRecord
 from api.serializers_device_settings import (
     PLCWriteRecordSerializer,
-    DeviceSettingWriteSerializer,
+    DeviceSettingsBatchWriteSerializer,
 )
-from api.views_device_settings import _is_writable
+from api.views_device_settings import _is_writable, _normalize_select_values
 
 
 def _make_record(**kwargs):
@@ -114,46 +114,72 @@ class PLCWriteRecordSerializerTests(TestCase):
         rec = _make_record()
         data = PLCWriteRecordSerializer(rec).data
         expected_fields = {
-            'id', 'request_id', 'specific_part', 'param_name',
+            'id', 'request_id', 'batch_request_id', 'specific_part', 'param_name',
             'old_value', 'new_value', 'operator', 'status',
             'error_message', 'created_at', 'acked_at',
         }
         self.assertEqual(set(data.keys()), expected_fields)
 
-    def test_ut_s_02_write_serializer_valid(self):
-        ser = DeviceSettingWriteSerializer(data={
+    def test_ut_s_02_batch_write_serializer_valid(self):
+        ser = DeviceSettingsBatchWriteSerializer(data={
             'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
+            'items': [
+                {'param_name': 'living_room_temp_setting', 'new_value': '24'},
+                {'param_name': 'living_room_switch', 'new_value': '1'},
+            ],
         })
         self.assertTrue(ser.is_valid(), ser.errors)
 
     def test_ut_s_03_rejects_empty_specific_part(self):
-        ser = DeviceSettingWriteSerializer(data={
+        ser = DeviceSettingsBatchWriteSerializer(data={
             'specific_part': '',
-            'param_name': 'living_room_temp_setting',
-            'new_value': '24',
+            'items': [{'param_name': 'living_room_temp_setting', 'new_value': '24'}],
         })
         self.assertFalse(ser.is_valid())
         self.assertIn('specific_part', ser.errors)
 
-    def test_ut_s_04_rejects_empty_param_name(self):
-        ser = DeviceSettingWriteSerializer(data={
+    def test_ut_s_04_rejects_empty_items(self):
+        ser = DeviceSettingsBatchWriteSerializer(data={
             'specific_part': '3-1-7-702',
-            'param_name': '',
-            'new_value': '24',
+            'items': [],
         })
         self.assertFalse(ser.is_valid())
-        self.assertIn('param_name', ser.errors)
+        self.assertIn('items', ser.errors)
 
     def test_ut_s_05_rejects_too_long_new_value(self):
-        ser = DeviceSettingWriteSerializer(data={
+        ser = DeviceSettingsBatchWriteSerializer(data={
             'specific_part': '3-1-7-702',
-            'param_name': 'living_room_temp_setting',
-            'new_value': 'x' * 51,
+            'items': [{'param_name': 'living_room_temp_setting', 'new_value': 'x' * 51}],
         })
         self.assertFalse(ser.is_valid())
-        self.assertIn('new_value', ser.errors)
+
+
+class NormalizeSelectValuesTests(TestCase):
+
+    def test_ut_norm_01_array_passthrough(self):
+        raw = '[{"value": 0, "label": "关"}, {"value": 1, "label": "开"}]'
+        result = _normalize_select_values(raw)
+        import json
+        parsed = json.loads(result)
+        self.assertIsInstance(parsed, list)
+        self.assertEqual(len(parsed), 2)
+
+    def test_ut_norm_02_object_converted_to_array(self):
+        raw = '{"0": "关", "1": "开"}'
+        result = _normalize_select_values(raw)
+        import json
+        parsed = json.loads(result)
+        self.assertIsInstance(parsed, list)
+        self.assertEqual(len(parsed), 2)
+        keys = {str(item['value']) for item in parsed}
+        self.assertIn('0', keys)
+        self.assertIn('1', keys)
+
+    def test_ut_norm_03_empty_string_returns_empty_array(self):
+        self.assertEqual(_normalize_select_values(''), '[]')
+
+    def test_ut_norm_04_invalid_json_returns_empty_array(self):
+        self.assertEqual(_normalize_select_values('not json'), '[]')
 
 
 class IsWritableTests(TestCase):
@@ -190,61 +216,92 @@ class HandleWriteAckTests(TestCase):
         consumer = MQTTConsumer.__new__(MQTTConsumer)
         return consumer
 
-    def test_ut_ack_01_success_true_updates_status(self):
-        rec = _make_record(status='pending')
-        consumer = self._get_consumer()
-        import json
-        payload = json.dumps({
-            'request_id': rec.request_id,
-            'success': True,
-        })
-        consumer._handle_write_ack(payload)
-        rec.refresh_from_db()
-        self.assertEqual(rec.status, 'success')
-        self.assertIsNotNone(rec.acked_at)
+    def _make_batch_record(self, batch_request_id, param_name='living_room_temp_setting', status='pending'):
+        return PLCWriteRecord.objects.create(
+            request_id=str(uuid.uuid4()),
+            batch_request_id=batch_request_id,
+            specific_part='3-1-7-702',
+            param_name=param_name,
+            old_value='22',
+            new_value='24',
+            operator='admin',
+            status=status,
+        )
 
-    def test_ut_ack_02_success_false_updates_failed(self):
-        rec = _make_record(status='pending')
+    def test_ut_ack_01_batch_items_success_updates_status(self):
+        batch_id = str(uuid.uuid4())
+        rec1 = self._make_batch_record(batch_id, 'living_room_temp_setting')
+        rec2 = self._make_batch_record(batch_id, 'living_room_switch')
         consumer = self._get_consumer()
         import json
         payload = json.dumps({
-            'request_id': rec.request_id,
-            'success': False,
-            'error_message': 'snap7 连接失败',
+            'request_id': batch_id,
+            'success': True,
+            'items': [
+                {'param_name': 'living_room_temp_setting', 'success': True},
+                {'param_name': 'living_room_switch', 'success': True},
+            ],
         })
         consumer._handle_write_ack(payload)
-        rec.refresh_from_db()
-        self.assertEqual(rec.status, 'failed')
-        self.assertEqual(rec.error_message, 'snap7 连接失败')
+        rec1.refresh_from_db()
+        rec2.refresh_from_db()
+        self.assertEqual(rec1.status, 'success')
+        self.assertEqual(rec2.status, 'success')
+        self.assertIsNotNone(rec1.acked_at)
+
+    def test_ut_ack_02_batch_partial_failure_updates_correctly(self):
+        batch_id = str(uuid.uuid4())
+        rec1 = self._make_batch_record(batch_id, 'living_room_temp_setting')
+        rec2 = self._make_batch_record(batch_id, 'living_room_switch')
+        consumer = self._get_consumer()
+        import json
+        payload = json.dumps({
+            'request_id': batch_id,
+            'success': False,
+            'items': [
+                {'param_name': 'living_room_temp_setting', 'success': True},
+                {'param_name': 'living_room_switch', 'success': False, 'error_message': 'snap7 失败'},
+            ],
+        })
+        consumer._handle_write_ack(payload)
+        rec1.refresh_from_db()
+        rec2.refresh_from_db()
+        self.assertEqual(rec1.status, 'success')
+        self.assertEqual(rec2.status, 'failed')
+        self.assertEqual(rec2.error_message, 'snap7 失败')
 
     def test_ut_ack_03_missing_request_id_silently_skipped(self):
         rec = _make_record(status='pending')
         consumer = self._get_consumer()
         import json
-        payload = json.dumps({'success': True})
+        payload = json.dumps({'success': True, 'items': []})
         consumer._handle_write_ack(payload)
         rec.refresh_from_db()
         self.assertEqual(rec.status, 'pending')
 
     def test_ut_ack_04_idempotent_non_pending_not_updated(self):
-        rec = _make_record(status='success')
+        batch_id = str(uuid.uuid4())
+        rec = self._make_batch_record(batch_id, status='success')
         consumer = self._get_consumer()
         import json
         payload = json.dumps({
-            'request_id': rec.request_id,
+            'request_id': batch_id,
             'success': False,
+            'items': [{'param_name': 'living_room_temp_setting', 'success': False}],
         })
         consumer._handle_write_ack(payload)
         rec.refresh_from_db()
         self.assertEqual(rec.status, 'success')
 
     def test_ut_ack_05_bytes_payload_decoded(self):
-        rec = _make_record(status='pending')
+        batch_id = str(uuid.uuid4())
+        rec = self._make_batch_record(batch_id, 'living_room_temp_setting')
         consumer = self._get_consumer()
         import json
         payload = json.dumps({
-            'request_id': rec.request_id,
+            'request_id': batch_id,
             'success': True,
+            'items': [{'param_name': 'living_room_temp_setting', 'success': True}],
         }).encode('utf-8')
         consumer._handle_write_ack(payload)
         rec.refresh_from_db()

@@ -2,12 +2,12 @@
 
 **文档编号**: ARCH-MODULE-DEVICE-SETTINGS-001  
 **项目名称**: FreeArk 设备参数设置功能  
-**版本**: 0.3.0-APPROVED  
-**状态**: APPROVED（v0.3.0：2026-05-19 broker WebSocket 端口确认为 32797；移除本期回滚模块设计）  
+**版本**: 0.4.0-APPROVED  
+**状态**: APPROVED（v0.4.0：2026-05-19 P1~P5 模块 diff + Q10~Q12 落地；PM 门控通过）  
 **创建日期**: 2026-05-19  
 **最后更新**: 2026-05-19  
 **作者**: system-architect (via pm-orchestrator)  
-**审核**: pm-orchestrator（v0.3.0 端口与回滚范围调整审核通过）
+**审核**: pm-orchestrator（v0.4.0 增量模块设计门控通过）
 
 ---
 
@@ -632,3 +632,122 @@ def _handle_write_ack(self, payload):
 **方案 B**：PLCWriteSubscriber 通过内部 API 调用 Django 接口（HTTP POST）更新状态。适合独立进程部署场景。
 
 **推荐方案 A**，因为 Django MQTT 消费者已经在后台运行且已连接同一 broker，零额外进程开销。
+
+---
+
+## v0.4.0 增量模块 Diff（基于 Q10~Q12 决策 + P1~P5）
+
+---
+
+### MOD-DIFF-01：新增 `api/param_value_label.py`（P3/Q11）
+
+**状态**：新增文件，不影响任何现有模块。
+
+**结构**：见 `architecture_design.md` 章节 "P3 — 人类可读映射"。
+
+**与现有模块的接口**：
+- 由 `views_device_settings.py` 的 `device_settings_params` 函数 import 并调用 `get_value_options(param_name)` 和 `get_display_value(param_name, raw_value)`
+- 不需要 Django model、ORM、DB 访问
+- 不影响 `mqtt_consumer.py`、`plc_write_subscriber.py`、任何前端文件
+
+---
+
+### MOD-DIFF-02：`api/views_device_settings.py` 改动清单（P2/P3/P4/P5）
+
+| 函数 | 变更类型 | 变更说明 |
+|------|---------|---------|
+| `device_settings_params` | 修改 | P5：在 `groups[key]['params'].append(...)` 前加 `if not _is_writable(cfg.param_name): continue`；P3：追加 `display_value` + `value_options` 字段（调用 `param_value_label` 函数） |
+| `device_settings_write` | 修改 | P4：请求体改为接受 `items: [{param_name, new_value}]` 数组；循环为每个 item 创建 `PLCWriteRecord` 行（共享 `batch_request_id`，各自唯一 `request_id`）；MQTT publish payload 改为 v0.4.0 批量 schema |
+| `_get_mqtt_client` | 修改 | P2：加 `client.is_connected()` 检查，未连接时返回明确错误（`"MQTT_UNREACHABLE"`）而非静默返回不可用 client |
+
+**对 v0.3.0 已部署行为的影响**：
+- `device_settings_params`：过滤只读参数（P5），响应字段增加（P3），接口 URL 不变，前端需更新渲染逻辑
+- `device_settings_write`：接口协议变化（单字段 → items 数组），**前端必须同步更新**，否则原有单字段下发调用将返回 400
+
+---
+
+### MOD-DIFF-03：`api/serializers_device_settings.py` 改动（P4）
+
+`DeviceSettingWriteSerializer` 修改：
+
+```python
+# v0.4.0
+class BatchWriteItemSerializer(serializers.Serializer):
+    param_name = serializers.CharField(max_length=100)
+    new_value = serializers.CharField(max_length=50)
+
+class DeviceSettingWriteSerializer(serializers.Serializer):
+    specific_part = serializers.CharField(max_length=20)
+    items = BatchWriteItemSerializer(many=True, min_length=1, max_length=20)
+```
+
+---
+
+### MOD-DIFF-04：`datacollection/plc_write_subscriber.py` 改动（P2/P4）
+
+| 方法 | 变更类型 | 变更说明 |
+|------|---------|---------|
+| `_on_command` | 修改 | P4：解析 `cmd.get('items', [])` 替代单 `param_name/new_value`；循环每个 item 调用 `_write_plc`；汇总 item 结果列表；P2：增加入口 `logger.info` 日志（`topic` + `request_id`） |
+| `_publish_ack` | 修改 | P4：payload 改为含 `items: [{param_name, success, error_message}]` 的整体 ack（方案 A） |
+| `_write_plc` | 不变 | 单次写入逻辑复用 |
+
+**对 `freeark-task-scheduler` 服务的影响**：需重启服务使改动生效；协议变化后旧格式 command 将无法被正确处理（需前后端同步上线）。
+
+---
+
+### MOD-DIFF-05：`DeviceSettingsPanelView.vue` 改动（P2/P3/P4/P5）
+
+| 功能 | 变更类型 | 变更说明 |
+|------|---------|---------|
+| 参数渲染 | 修改 | P3：枚举类下拉 `options` 改用 `row.value_options`（`[{raw, label}]`），`v-model` 绑定 `raw` 值；当前值展示改用 `row.display_value` |
+| 只读参数过滤 | 简化 | P5：后端已过滤，前端 `v-if="row.is_writable"` 保留为防御性 guard，无业务逻辑变化 |
+| 提交逻辑 `handleSubmit` | 修改 | P4：不再逐行调用，改为汇总所有 `inputValues` 变化生成 `items` 数组，单次 POST；P4：取消按钮还原 `inputValues` 为 `loadParams` 时的快照值 |
+| 错误展示 | 修改 | P2：ack 回执中 `items[].error_message` 分类展示（`MQTT_UNREACHABLE` / `SUBSCRIBER_NOT_CONSUMING` / `PLC_WRITE_FAILED`） |
+| MQTT ack 处理 `handleAck` | 修改 | P4：从 `ack.items[]` 遍历更新每个 param_name 的 `writeStatus` 和 `currentValues` |
+
+---
+
+### MOD-DIFF-06：`PLCWriteRecord` model 可选变更（P4/Q12）
+
+**Q12**：`new_value` 字段语义不变（存 PLC 原始值），无 model 变化。
+
+**P4 `batch_request_id` 方案**（推荐，零风险 migration）：
+
+```python
+# 在 PLCWriteRecord model 新增字段
+batch_request_id = models.CharField(max_length=64, null=True, blank=True, db_index=True,
+                                     help_text='批量下发时的批次ID，对应 MQTT command 的 request_id')
+```
+
+- 单字段下发时：`batch_request_id=None`，`request_id=UUID`（唯一）
+- 批量下发时：`batch_request_id=<command_request_id>`，`request_id=UUID`（各自唯一，N 行共享同一 `batch_request_id`）
+- `request_id` 的 `UNIQUE` 约束不变，审计页按 `batch_request_id` 分组即可查看批次
+
+**Migration**：新增 `0024_plcwriterecord_batch_request_id.py`（追加可空字段，无数据风险）。
+
+---
+
+### MOD-DIFF-07：`mqtt_consumer._handle_write_ack` 适配（P4）
+
+现有 `_handle_write_ack` 按单 `request_id` 更新单行，P4 ack 为整体含 `items[]`。需改为：
+
+```python
+def _handle_write_ack(self, payload):
+    # ...（解析 data）
+    batch_request_id = data.get('request_id')
+    items = data.get('items', [])
+    written_at = timezone.now()
+    for item in items:
+        param_name = item.get('param_name')
+        success = item.get('success', False)
+        # 按 batch_request_id + param_name 定位行
+        PLCWriteRecord.objects.filter(
+            batch_request_id=batch_request_id, param_name=param_name, status='pending'
+        ).update(
+            status='success' if success else 'failed',
+            acked_at=written_at,
+            error_message=item.get('error_message', '') if not success else None,
+        )
+```
+
+**对 `mqtt_consumer.py` 的影响**：该文件为已在线 `freeark-mqtt-consumer` 服务，改动后需重启服务。
