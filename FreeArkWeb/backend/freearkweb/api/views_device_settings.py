@@ -62,18 +62,25 @@ def _get_mqtt_client():
     from .mqtt_consumer import mqtt_consumer
     client = mqtt_consumer.client
 
-    # v0.4.2 Bug C: backend (waitress) 进程 import 单例时不会自动 connect，
-    # 只有 freeark-mqtt-consumer 进程才通过 start_mqtt_consumer 触发 loop_forever。
-    # 首次调用 lazy 触发 connect_async + loop_start（异步、幂等）。
-    if not _LAZY_CONNECT_TRIGGERED and not client.is_connected():
+    # v0.4.5 Bug F: 每次都检查 is_connected，断开则重连（不再依赖一次性 flag）。
+    # paho client 在长时间运行后可能因 keepalive 失败 / 网络抖动断开，loop_start 不会
+    # 自动 reconnect_async；此时 publish 仍返回 rc=0 但消息进入队列不被发出（"假 success"），
+    # 导致 backend 视图认为成功但 broker 永远收不到，subscriber 不响应，DB NEVER acked。
+    if not client.is_connected():
         try:
-            client.connect_async(mqtt_consumer.mqtt_broker, mqtt_consumer.mqtt_port, keepalive=60)
-            client.loop_start()
-            _LAZY_CONNECT_TRIGGERED = True
-            logger.warning('MQTT client lazy connect 触发: %s:%s',
-                           mqtt_consumer.mqtt_broker, mqtt_consumer.mqtt_port)
+            if not _LAZY_CONNECT_TRIGGERED:
+                # 首次：connect_async + loop_start
+                client.connect_async(mqtt_consumer.mqtt_broker, mqtt_consumer.mqtt_port, keepalive=60)
+                client.loop_start()
+                _LAZY_CONNECT_TRIGGERED = True
+                logger.warning('MQTT client 首次 lazy connect: %s:%s',
+                               mqtt_consumer.mqtt_broker, mqtt_consumer.mqtt_port)
+            else:
+                # 已 lazy 触发过但又断了：reconnect_async（loop 仍在跑）
+                client.reconnect_async()
+                logger.warning('MQTT client 已断开，触发 reconnect_async')
         except Exception as e:
-            logger.warning('MQTT client lazy connect 失败: %s', e, exc_info=True)
+            logger.warning('MQTT client (re)connect 失败: %s', e, exc_info=True)
 
     # P2 加固：等待 MQTT client 连接就绪，最多 3s
     deadline = time.monotonic() + 3.0
@@ -257,6 +264,10 @@ def device_settings_write(request):
         result = client.publish(topic, payload, qos=1)
         if result.rc != 0:
             raise RuntimeError(f'paho rc={result.rc}')
+        # v0.4.5 Bug F: 等 PUBACK 确认包真发出，避免 rc=0 入队但 loop thread 未发送的"假 success"
+        result.wait_for_publish(timeout=3)
+        if not result.is_published():
+            raise RuntimeError('publish PUBACK 超时（3s），broker 未确认')
     except Exception as e:
         logger.error('MQTT publish 失败: %s', e)
         PLCWriteRecord.objects.filter(batch_request_id=batch_request_id).update(
