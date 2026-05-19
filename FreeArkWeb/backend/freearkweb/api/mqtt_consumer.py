@@ -59,8 +59,9 @@ class MQTTConsumer:
         mqtt_config = load_mqtt_config()
 
         # MQTT配置 - 从配置文件读取，环境变量作为备份
-        self.mqtt_broker = os.environ.get('MQTT_BROKER', mqtt_config.get('host', '192.168.31.97'))
-        self.mqtt_port = int(os.environ.get('MQTT_PORT', mqtt_config.get('port', 32795)))
+        # fallback 与生产 broker 保持一致（192.168.31.98:32788，同 PLCWriteSubscriber）
+        self.mqtt_broker = os.environ.get('MQTT_BROKER', mqtt_config.get('host', '192.168.31.98'))
+        self.mqtt_port = int(os.environ.get('MQTT_PORT', mqtt_config.get('port', 32788)))
         self.mqtt_username = os.environ.get('MQTT_USERNAME', mqtt_config.get('username', ''))
         self.mqtt_password = os.environ.get('MQTT_PASSWORD', mqtt_config.get('password', ''))
         self.mqtt_topic = os.environ.get('MQTT_TOPIC', mqtt_config.get('topic', '/datacollection/plc/to/collector/#'))

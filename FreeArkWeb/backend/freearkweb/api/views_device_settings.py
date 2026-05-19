@@ -90,8 +90,8 @@ def _check_broker_config_consistency():
         logger.info('P2 broker 一致性检查 — 后端 mqtt_consumer broker: %s', backend_broker)
         if '32795' in backend_broker or '31.97' in backend_broker:
             logger.warning(
-                'P2 broker 配置警告：后端 mqtt_consumer 使用 fallback broker (%s)，'
-                '可能与 PLCWriteSubscriber 不在同一 broker 实例，导致命令无法路由',
+                'P2 broker 配置警告：后端 mqtt_consumer 使用旧 fallback broker (%s)，'
+                '应为 192.168.31.98:32788（与 PLCWriteSubscriber 一致），命令将无法路由',
                 backend_broker,
             )
     except Exception as e:

@@ -190,7 +190,12 @@ export default {
       } catch (e) {
         submitLoading.value = false
         batchStatus.value = 'failed'
-        batchError.value = e?.response?.data?.error || '下发通道异常'
+        // api.js 使用原生 fetch，抛出普通 Error 对象（无 .response.data 结构）
+        // Error.message 格式: "API请求失败: <status> <statusText> - <backend error>"
+        // 提取 " - " 之后的后端错误描述；若无则降级到通用提示
+        const rawMsg = e?.message || ''
+        const sepIdx = rawMsg.indexOf(' - ')
+        batchError.value = sepIdx !== -1 ? rawMsg.slice(sepIdx + 3) : '未知失败原因，请查看后端日志'
       }
     }
 
