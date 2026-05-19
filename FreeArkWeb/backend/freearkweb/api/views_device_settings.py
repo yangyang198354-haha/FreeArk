@@ -20,6 +20,7 @@ WRITABLE_SUFFIXES = ('_temp_setting', '_switch')
 READONLY_SUFFIXES = ('_temperature', '_humidity', '_dew_point_setting', '_error', '_alert', '_fault')
 
 _BROKER_CONFIG_WARNED = False
+_LAZY_CONNECT_TRIGGERED = False
 
 
 def _is_writable(param_name: str) -> bool:
@@ -57,8 +58,22 @@ def _normalize_select_values(raw_json: str) -> str:
 
 
 def _get_mqtt_client():
+    global _LAZY_CONNECT_TRIGGERED
     from .mqtt_consumer import mqtt_consumer
     client = mqtt_consumer.client
+
+    # v0.4.2 Bug C: backend (waitress) 进程 import 单例时不会自动 connect，
+    # 只有 freeark-mqtt-consumer 进程才通过 start_mqtt_consumer 触发 loop_forever。
+    # 首次调用 lazy 触发 connect_async + loop_start（异步、幂等）。
+    if not _LAZY_CONNECT_TRIGGERED and not client.is_connected():
+        try:
+            client.connect_async(mqtt_consumer.mqtt_broker, mqtt_consumer.mqtt_port, keepalive=60)
+            client.loop_start()
+            _LAZY_CONNECT_TRIGGERED = True
+            logger.warning('MQTT client lazy connect 触发: %s:%s',
+                           mqtt_consumer.mqtt_broker, mqtt_consumer.mqtt_port)
+        except Exception as e:
+            logger.warning('MQTT client lazy connect 失败: %s', e, exc_info=True)
 
     # P2 加固：等待 MQTT client 连接就绪，最多 3s
     deadline = time.monotonic() + 3.0
