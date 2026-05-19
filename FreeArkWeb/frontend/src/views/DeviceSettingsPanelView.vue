@@ -27,6 +27,7 @@
                   v-model="inputValues[row.param_name]"
                   size="small"
                   style="width:150px"
+                  @change="() => markDirty(row.param_name)"
                 >
                   <el-option
                     v-for="opt in row.value_options"
@@ -43,6 +44,7 @@
                   :max="parseNumJson(row.num_value_json).max"
                   :step="parseNumJson(row.num_value_json).step || 1"
                   style="width:150px"
+                  @change="() => markDirty(row.param_name)"
                 />
               </template>
             </el-table-column>
@@ -101,6 +103,7 @@ export default {
     const openGroups = ref([])
 
     const inputValues = ref({})
+    const dirtyFields = ref(new Set())  // v0.5.0: 脏值追踪 Set（REQ-FUNC-004, ADR-10）
     const submitLoading = ref(false)
     const batchStatus = ref('')
     const batchError = ref('')
@@ -110,6 +113,19 @@ export default {
 
     // 参数名 -> display_name 映射，用于逐项状态展示
     const paramDisplayMap = ref({})
+
+    // v0.5.0: 标记参数为脏（用户已修改，REQ-FUNC-004, ADR-10）
+    // FR-001 fix: el-input-number 清空后 value=undefined，不应标记为有效修改；
+    //   undefined/null → 从 dirtyFields 移除（清空等同于撤销修改）
+    //   有效值 → 正常 add
+    const markDirty = (paramName) => {
+      const val = inputValues.value[paramName]
+      if (val === undefined || val === null) {
+        dirtyFields.value.delete(paramName)
+      } else {
+        dirtyFields.value.add(paramName)
+      }
+    }
 
     const loadParams = async () => {
       loading.value = true
@@ -121,8 +137,13 @@ export default {
         groups.value.forEach(g => {
           g.params.forEach(p => {
             paramDisplayMap.value[p.param_name] = p.display_name
-            if (inputValues.value[p.param_name] === undefined) {
-              // 初始值：枚举型用 raw 字符串，数值型用当前值（number）
+            // v0.5.0 GROUP_B Minor finding 修正：
+            //   原逻辑 `if (inputValues[p.param_name] === undefined)` 仅初始化一次，
+            //   重新 loadParams 时不会刷新已有值，与 dirtyFields 语义冲突。
+            //   修正：仅在该参数无脏修改时才用服务端最新值刷新（有 dirty 说明用户正在编辑，保留）。
+            //   loadParams 完成后统一清空 dirtyFields，恢复干净状态。
+            if (!dirtyFields.value.has(p.param_name)) {
+              // 枚举型用 raw 字符串，数值型用当前值（number）
               if (p.value_options && p.value_options.length > 0) {
                 inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined
                   ? String(p.current_value)
@@ -133,6 +154,7 @@ export default {
             }
           })
         })
+        dirtyFields.value = new Set()  // 重新加载完成后清空脏状态（REQ-FUNC-004）
       } catch (e) {
         loadError.value = '加载参数失败，请刷新重试'
       } finally {
@@ -148,18 +170,19 @@ export default {
         })
       })
 
+      // v0.5.0: 仅提交用户实际修改过的字段（REQ-FUNC-004, ADR-10）
+      // FR-001 fix: 防御性过滤 undefined/null（markDirty 已在上游处理，此处为双重保护）
       const changedItems = allParams
-        .filter(p => {
-          const v = inputValues.value[p.param_name]
-          return v !== undefined && v !== null
-        })
+        .filter(p => dirtyFields.value.has(p.param_name))
+        .filter(p => inputValues.value[p.param_name] !== undefined
+                  && inputValues.value[p.param_name] !== null)
         .map(p => ({
           param_name: p.param_name,
           new_value: String(inputValues.value[p.param_name]),
         }))
 
       if (changedItems.length === 0) {
-        ElMessage.warning('没有可提交的参数')
+        ElMessage.warning('没有已修改的参数')
         return
       }
 
@@ -215,6 +238,7 @@ export default {
       batchStatus.value = ''
       batchError.value = ''
       itemStatuses.value = []
+      dirtyFields.value = new Set()  // v0.5.0: 取消时清空脏状态（REQ-FUNC-004）
     }
 
     const handleAck = ({ payload }) => {
@@ -287,6 +311,7 @@ export default {
       handleBatchSubmit,
       handleCancel,
       parseNumJson,
+      markDirty,  // v0.5.0: 暴露给模板的脏值标记函数（REQ-FUNC-004）
     }
   },
 }

@@ -16,7 +16,8 @@ from .serializers_device_settings import PLCWriteRecordSerializer, DeviceSetting
 
 logger = logging.getLogger(__name__)
 
-WRITABLE_SUFFIXES = ('_temp_setting', '_switch')
+WRITABLE_SUFFIXES = ('_temp_setting', '_switch', '_mode')  # v0.5.0: 追加 '_mode'（REQ-FUNC-002, ADR-09）
+WRITABLE_PARAM_NAMES = frozenset({'away_energy_saving'})  # v0.5.0: 精确名白名单（REQ-FUNC-003, ADR-09）
 READONLY_SUFFIXES = ('_temperature', '_humidity', '_dew_point_setting', '_error', '_alert', '_fault')
 
 _BROKER_CONFIG_WARNED = False
@@ -24,9 +25,12 @@ _LAZY_CONNECT_TRIGGERED = False
 
 
 def _is_writable(param_name: str) -> bool:
+    # 只读规则优先（安全第一，REQ-NFUNC-001）
     if any(param_name.endswith(s) for s in READONLY_SUFFIXES):
         return False
-    return any(param_name.endswith(s) for s in WRITABLE_SUFFIXES)
+    # v0.5.0: 精确名白名单 OR 后缀匹配，任一命中即可写（ADR-09）
+    return (param_name in WRITABLE_PARAM_NAMES or
+            any(param_name.endswith(s) for s in WRITABLE_SUFFIXES))
 
 
 def _normalize_select_values(raw_json: str) -> str:

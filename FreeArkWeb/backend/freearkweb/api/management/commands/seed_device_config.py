@@ -70,6 +70,7 @@ HVAC_PARAM_CONFIGS = [
         'sub_type': 'main_thermostat',
         'group_display': '暖通',
         'sub_type_display': '主温控',
+        'is_active': False,  # CHG-01: 主温控下的系统开关不再展示，水力模块保留（REQ-FUNC-001, ADR §3 方案B）
     },
     {
         'param_name': 'living_room_temperature',
@@ -765,25 +766,46 @@ class Command(BaseCommand):
         skipped_count = 0
 
         for cfg in HVAC_PARAM_CONFIGS:
-            obj, created = DeviceConfig.objects.get_or_create(
-                param_name=cfg['param_name'],
-                sub_type=cfg['sub_type'],
-                defaults={
-                    'display_name': cfg['display_name'],
-                    'group': cfg['group'],
-                    'group_display': cfg['group_display'],
-                    'sub_type_display': cfg['sub_type_display'],
-                    'is_active': True,
-                },
-            )
-            if created:
-                created_count += 1
-                self.stdout.write(
-                    f'  [created] {cfg["param_name"]} -> {cfg["sub_type"]} ({cfg["display_name"]})'
+            # v0.5.0 CHG-01: 明确标记 is_active=False 的条目用 update_or_create 强制更新（REQ-FUNC-001, REQ-NFUNC-004）
+            if cfg.get('is_active') is False:
+                obj, created = DeviceConfig.objects.update_or_create(
+                    param_name=cfg['param_name'],
+                    sub_type=cfg['sub_type'],
+                    defaults={
+                        'display_name': cfg['display_name'],
+                        'group': cfg['group'],
+                        'group_display': cfg['group_display'],
+                        'sub_type_display': cfg['sub_type_display'],
+                        'is_active': False,
+                    },
                 )
+                action = 'deactivated(created)' if created else 'deactivated(updated)'
+                self.stdout.write(
+                    f'  [{action}] {cfg["param_name"]} -> {cfg["sub_type"]} (is_active=False)'
+                )
+                if created:
+                    created_count += 1
             else:
-                skipped_count += 1
-                self.stdout.write(f'  [skipped] {cfg["param_name"]} already exists')
+                # 默认行为：get_or_create，已存在则跳过（幂等语义）
+                obj, created = DeviceConfig.objects.get_or_create(
+                    param_name=cfg['param_name'],
+                    sub_type=cfg['sub_type'],
+                    defaults={
+                        'display_name': cfg['display_name'],
+                        'group': cfg['group'],
+                        'group_display': cfg['group_display'],
+                        'sub_type_display': cfg['sub_type_display'],
+                        'is_active': True,
+                    },
+                )
+                if created:
+                    created_count += 1
+                    self.stdout.write(
+                        f'  [created] {cfg["param_name"]} -> {cfg["sub_type"]} ({cfg["display_name"]})'
+                    )
+                else:
+                    skipped_count += 1
+                    self.stdout.write(f'  [skipped] {cfg["param_name"]} already exists')
 
         self.stdout.write(self.style.SUCCESS(
             f'\nDone: created {created_count}, skipped {skipped_count}'
