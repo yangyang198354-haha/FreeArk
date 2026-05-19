@@ -58,7 +58,10 @@ class PLCWriteSubscriber:
             return
         self._client.subscribe(COMMAND_TOPIC, qos=1, callback=self._on_command)
         logger.info('PLCWriteSubscriber 已订阅 %s', COMMAND_TOPIC)
-        self._client.client.loop_forever()
+        # v0.4.3 Bug D: MQTTClient.connect() 内部已经 loop_start() 启动后台 paho 线程。
+        # 再调用 loop_forever() 会触发"双 loop"冲突（paho _thread is not None 时立即返回/raise），
+        # 导致 _on_message 回调无法触发，订阅消息全部丢失。
+        # 删除多余的 loop_forever，依赖 loop_start 的 daemon thread 持续处理消息。
 
     def _on_command(self, topic: str, payload):
         try:
