@@ -160,7 +160,15 @@ class PLCReadWriter:
     def _pack_data(self, value: any, data_type: str) -> Optional[bytes]:
         """根据数据类型打包原始数据"""
         try:
-            if data_type == "int8":
+            # v0.4.4 Bug E: API/MQTT 传来的 value 是字符串，struct.pack 需要数值类型
+            if data_type in ("byte", "int8", "uint16", "int16", "uint32", "int32"):
+                value = int(value)
+            elif data_type in ("float32", "float64"):
+                value = float(value)
+
+            if data_type == "byte":
+                return struct.pack('>B', value)  # 大端模式8位无符号整数（与 _parse_data 对称）
+            elif data_type == "int8":
                 return struct.pack('>b', value)  # 大端模式8位有符号整数
             elif data_type == "uint16":
                 return struct.pack('>H', value)  # 大端模式16位无符号整数
