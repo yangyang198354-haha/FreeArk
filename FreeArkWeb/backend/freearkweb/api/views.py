@@ -997,6 +997,7 @@ MONITORED_SERVICES = [
     'freeark-daily-usage',
     'freeark-monthly-usage',
     'freeark-plc-cleanup',
+    'freeark-dph-cleanup',
     'freeark-plc-connection-monitor',
     'freeark-task-scheduler',
 ]

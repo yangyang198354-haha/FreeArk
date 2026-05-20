@@ -1925,8 +1925,8 @@ class DashboardServicesAPITest(TestCase):
         body = response.json()
         self.assertTrue(body["success"])
         services = body["data"]
-        # 有 7 个受监控服务
-        self.assertEqual(len(services), 7)
+        # 有 9 个受监控服务（含 v0.5.2 新增的 freeark-dph-cleanup）
+        self.assertEqual(len(services), 9)
         for svc in services:
             self.assertTrue(svc["is_active"])
             self.assertEqual(svc["status"], "active")
@@ -1966,9 +1966,11 @@ class DashboardServicesAPITest(TestCase):
         for expected_name in [
             "freeark-backend",
             "freeark-mqtt-consumer",
+            "freeark-screen-heartbeat",
             "freeark-daily-usage",
             "freeark-monthly-usage",
             "freeark-plc-cleanup",
+            "freeark-dph-cleanup",
             "freeark-plc-connection-monitor",
             "freeark-task-scheduler",
         ]:
@@ -1982,7 +1984,7 @@ class DashboardServicesAPITest(TestCase):
         mock_run.return_value = mock_result
 
         self.client.get(reverse("dashboard-services"))
-        self.assertEqual(mock_run.call_count, 7)
+        self.assertEqual(mock_run.call_count, 9)
 
     def test_unauthenticated_returns_401(self):
         client = APIClient()
@@ -3534,3 +3536,253 @@ class IntegrationTestManagementCommands(TestCase):
                 time_period=self.yesterday,
             ).exists()
         )
+
+
+# ===========================================================================
+# v0.5.2 — freeark-dph-cleanup 服务管理白名单测试
+# ===========================================================================
+
+class DphCleanupServiceWhitelistTest(TestCase):
+    """
+    v0.5.2 验收测试：验证 freeark-dph-cleanup 已正确加入 MONITORED_SERVICES
+    白名单，并通过服务管理 API 可访问（Mock subprocess，不依赖生产 systemd）。
+
+    对应用户故事：US-DPH-01, US-DPH-02, US-DPH-03, US-DPH-04, US-DPH-05, US-DPH-06
+    """
+
+    TARGET_SERVICE = 'freeark-dph-cleanup'
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user, self.token = make_user(username="dph_test_user")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    # ------------------------------------------------------------------
+    # 白名单基础验证
+    # ------------------------------------------------------------------
+
+    def test_dph_cleanup_in_monitored_services_list(self):
+        """freeark-dph-cleanup 已加入 MONITORED_SERVICES 列表（FR2-1）"""
+        from api.views import MONITORED_SERVICES
+        self.assertIn(self.TARGET_SERVICE, MONITORED_SERVICES)
+
+    def test_dph_cleanup_in_monitored_services_set(self):
+        """freeark-dph-cleanup 已同步至 _MONITORED_SERVICES_SET（NFR1-2）"""
+        from api.views import _MONITORED_SERVICES_SET
+        self.assertIn(self.TARGET_SERVICE, _MONITORED_SERVICES_SET)
+
+    def test_monitored_services_count_is_nine(self):
+        """白名单共 9 个服务（v0.5.2 追加 freeark-dph-cleanup 后）"""
+        from api.views import MONITORED_SERVICES
+        self.assertEqual(len(MONITORED_SERVICES), 9)
+
+    # ------------------------------------------------------------------
+    # 服务列表接口（US-DPH-01 / FR3-1）
+    # ------------------------------------------------------------------
+
+    @patch("api.views.subprocess.run")
+    def test_service_list_contains_dph_cleanup(self, mock_run):
+        """GET /api/services/list/ 响应中包含 freeark-dph-cleanup（US-DPH-01）"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("service-management-list"))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        names = [svc["name"] for svc in body["data"]]
+        self.assertIn(self.TARGET_SERVICE, names)
+
+    @patch("api.views.subprocess.run")
+    def test_service_list_dph_cleanup_active_state(self, mock_run):
+        """freeark-dph-cleanup 在服务列表中 active_state 字段结构正确（US-DPH-01）"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("service-management-list"))
+        services = response.json()["data"]
+        dph = next((s for s in services if s["name"] == self.TARGET_SERVICE), None)
+        self.assertIsNotNone(dph, "freeark-dph-cleanup 应出现在服务列表中")
+        self.assertEqual(dph["active_state"], "active")
+        self.assertTrue(dph["is_active"])
+        self.assertIn("enabled", dph)
+
+    @patch("api.views.subprocess.run")
+    def test_service_list_dph_cleanup_inactive(self, mock_run):
+        """freeark-dph-cleanup 服务 inactive 时 is_active=False（US-DPH-01）"""
+        mock_result = MagicMock()
+        mock_result.stdout = "inactive\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("service-management-list"))
+        services = response.json()["data"]
+        dph = next((s for s in services if s["name"] == self.TARGET_SERVICE), None)
+        self.assertIsNotNone(dph)
+        self.assertEqual(dph["active_state"], "inactive")
+        self.assertFalse(dph["is_active"])
+
+    def test_service_list_unauthenticated_returns_401(self):
+        """未登录访问服务列表返回 401（NFR1-1）"""
+        unauthenticated_client = APIClient()
+        response = unauthenticated_client.get(reverse("service-management-list"))
+        self.assertEqual(response.status_code, 401)
+
+    # ------------------------------------------------------------------
+    # 服务详情接口（US-DPH-05 / FR3-5）
+    # ------------------------------------------------------------------
+
+    @patch("api.views.subprocess.run")
+    def test_service_detail_dph_cleanup_accessible(self, mock_run):
+        """GET /api/services/freeark-dph-cleanup/detail/ 返回 200（US-DPH-05）"""
+        mock_result = MagicMock()
+        mock_result.stdout = (
+            "● freeark-dph-cleanup.service\n"
+            "   Active: active (running) since ...\n"
+            "   Main PID: 12345 (python)\n"
+            "   Memory: 20.0M\n"
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        response = self.client.get(
+            reverse("service-management-detail", kwargs={"service_name": self.TARGET_SERVICE})
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["name"], self.TARGET_SERVICE)
+        detail = body["detail"]
+        self.assertIn("active_state", detail)
+        self.assertIn("sub_state", detail)
+        self.assertIn("raw_output", detail)
+
+    def test_service_detail_unknown_service_rejected(self):
+        """非白名单服务名访问详情接口返回 400（NFR1-2 安全校验）"""
+        response = self.client.get(
+            reverse("service-management-detail", kwargs={"service_name": "freeark-unknown-svc"})
+        )
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertFalse(body["success"])
+
+    # ------------------------------------------------------------------
+    # 服务操作接口（US-DPH-02/03/04 / FR3-2/3/4）
+    # ------------------------------------------------------------------
+
+    @patch("api.views.subprocess.run")
+    def test_action_start_dph_cleanup_accepted(self, mock_run):
+        """POST action=start 对 freeark-dph-cleanup 返回成功（US-DPH-02）"""
+        # 第一次调用（sudo systemctl start）和第二次调用（is-active 查询）
+        active_result = MagicMock()
+        active_result.stdout = "active\n"
+        active_result.returncode = 0
+        mock_run.return_value = active_result
+
+        response = self.client.post(
+            reverse("service-management-action", kwargs={"service_name": self.TARGET_SERVICE}),
+            data={"action": "start"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+
+    @patch("api.views.subprocess.run")
+    def test_action_stop_dph_cleanup_accepted(self, mock_run):
+        """POST action=stop 对 freeark-dph-cleanup 返回成功（US-DPH-03）"""
+        inactive_result = MagicMock()
+        inactive_result.stdout = "inactive\n"
+        inactive_result.returncode = 0
+        mock_run.return_value = inactive_result
+
+        response = self.client.post(
+            reverse("service-management-action", kwargs={"service_name": self.TARGET_SERVICE}),
+            data={"action": "stop"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+
+    @patch("api.views.subprocess.run")
+    def test_action_restart_dph_cleanup_accepted(self, mock_run):
+        """POST action=restart 对 freeark-dph-cleanup 返回成功（US-DPH-04）"""
+        active_result = MagicMock()
+        active_result.stdout = "active\n"
+        active_result.returncode = 0
+        mock_run.return_value = active_result
+
+        response = self.client.post(
+            reverse("service-management-action", kwargs={"service_name": self.TARGET_SERVICE}),
+            data={"action": "restart"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+
+    def test_action_unknown_service_rejected(self):
+        """对非白名单服务名发 action 请求返回 400（NFR1-2 命令注入防御）"""
+        response = self.client.post(
+            reverse("service-management-action", kwargs={"service_name": "freeark-unknown-svc"}),
+            data={"action": "start"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+
+    def test_action_unauthenticated_returns_401(self):
+        """未登录用户发 action 请求返回 401（NFR1-1）"""
+        unauthenticated_client = APIClient()
+        response = unauthenticated_client.post(
+            reverse("service-management-action", kwargs={"service_name": self.TARGET_SERVICE}),
+            data={"action": "start"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+
+    # ------------------------------------------------------------------
+    # 看板服务状态接口（US-DPH-06 / FR2-2）
+    # ------------------------------------------------------------------
+
+    @patch("api.views.subprocess.run")
+    def test_dashboard_services_contains_dph_cleanup(self, mock_run):
+        """GET /api/dashboard/services/ 响应中包含 freeark-dph-cleanup（US-DPH-06）"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("dashboard-services"))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        names = [svc["name"] for svc in body["data"]]
+        self.assertIn(self.TARGET_SERVICE, names)
+
+    @patch("api.views.subprocess.run")
+    def test_dashboard_services_dph_cleanup_is_active_true(self, mock_run):
+        """看板接口中 freeark-dph-cleanup active 时 is_active=True（US-DPH-06）"""
+        mock_result = MagicMock()
+        mock_result.stdout = "active\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("dashboard-services"))
+        services = response.json()["data"]
+        dph = next((s for s in services if s["name"] == self.TARGET_SERVICE), None)
+        self.assertIsNotNone(dph)
+        self.assertTrue(dph["is_active"])
+        self.assertEqual(dph["status"], "active")
+
+    @patch("api.views.subprocess.run")
+    def test_dashboard_services_dph_cleanup_inactive_is_active_false(self, mock_run):
+        """看板接口中 freeark-dph-cleanup inactive 时 is_active=False（US-DPH-06）"""
+        mock_result = MagicMock()
+        mock_result.stdout = "inactive\n"
+        mock_run.return_value = mock_result
+
+        response = self.client.get(reverse("dashboard-services"))
+        services = response.json()["data"]
+        dph = next((s for s in services if s["name"] == self.TARGET_SERVICE), None)
+        self.assertIsNotNone(dph)
+        self.assertFalse(dph["is_active"])
+        self.assertEqual(dph["status"], "inactive")
