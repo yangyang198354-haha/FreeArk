@@ -46,42 +46,46 @@
         </el-card>
       </div>
 
-      <!-- 系统开机状况（新增，v0.5.3） -->
+      <!-- 系统开机状况（新增，v0.5.3；重设计 v0.5.3-r1） -->
       <div class="power-status-wrapper">
         <el-card class="power-status-card">
           <template #header>
             <div class="card-header">
-              <span>系统开机状况</span>
+              <span>开机情况</span>
             </div>
           </template>
           <div class="power-status-content" v-loading="loading.powerStatus">
-            <!-- 开机情况区域 -->
-            <div class="ps-on-section">
-              <div class="stat-value" style="color: #67c23a">{{ powerStatus.powered_on_count }} 台开机</div>
-              <div class="stat-sub">{{ powerStatus.power_on_rate.toFixed(2) }}%</div>
-              <div class="stat-sub">共 {{ powerStatus.total_count }} 台</div>
+            <!-- 主信息行：图标圆圈 + 开机率大数字 + 标签 -->
+            <div class="ps-main-row">
+              <div class="ps-icon-circle">
+                <el-icon style="font-size: 24px; color: #67c23a;"><Cpu /></el-icon>
+              </div>
+              <div class="ps-rate-info">
+                <div class="ps-rate-value">{{ powerStatus.power_on_rate.toFixed(1) }}%</div>
+                <div class="ps-rate-label">开机率</div>
+              </div>
             </div>
-            <!-- 运行模式分布区域 -->
-            <div class="ps-mode-section">
-              <div class="ps-mode-item">
-                <span class="ps-mode-label">制冷</span>
-                <span class="ps-mode-value">{{ powerStatus.mode_distribution.cooling }} 台</span>
+            <!-- 模式合计行：4 个 chip 水平排布 -->
+            <div class="ps-mode-chips">
+              <div class="ps-chip">
+                <div class="ps-chip-num" style="color: #409eff;">{{ powerStatus.mode_distribution.cooling }}</div>
+                <div class="ps-chip-name">制冷</div>
               </div>
-              <div class="ps-mode-item">
-                <span class="ps-mode-label">制热</span>
-                <span class="ps-mode-value">{{ powerStatus.mode_distribution.heating }} 台</span>
+              <div class="ps-chip">
+                <div class="ps-chip-num" style="color: #f56c6c;">{{ powerStatus.mode_distribution.heating }}</div>
+                <div class="ps-chip-name">制热</div>
               </div>
-              <div class="ps-mode-item">
-                <span class="ps-mode-label">通风</span>
-                <span class="ps-mode-value">{{ powerStatus.mode_distribution.ventilation }} 台</span>
+              <div class="ps-chip">
+                <div class="ps-chip-num" style="color: #e6a23c;">{{ powerStatus.mode_distribution.ventilation }}</div>
+                <div class="ps-chip-name">通风</div>
               </div>
-              <div class="ps-mode-item">
-                <span class="ps-mode-label">除湿</span>
-                <span class="ps-mode-value">{{ powerStatus.mode_distribution.dehumidification }} 台</span>
+              <div class="ps-chip">
+                <div class="ps-chip-num" style="color: #13c2c2;">{{ powerStatus.mode_distribution.dehumidification }}</div>
+                <div class="ps-chip-name">除湿</div>
               </div>
-              <div class="ps-mode-item" v-if="powerStatus.mode_distribution.unknown > 0">
-                <span class="ps-mode-label" style="color: #e6a23c">未知</span>
-                <span class="ps-mode-value">{{ powerStatus.mode_distribution.unknown }} 台</span>
+              <div class="ps-chip" v-if="powerStatus.mode_distribution.unknown > 0">
+                <div class="ps-chip-num" style="color: #909399;">{{ powerStatus.mode_distribution.unknown }}</div>
+                <div class="ps-chip-name">未知</div>
               </div>
             </div>
           </div>
@@ -558,42 +562,101 @@ export default {
 
 .total-energy-wrapper {
   flex: 2;
+  display: flex;
+  flex-direction: column;
 }
 
 .power-status-wrapper {
   flex: 1;
   min-width: 280px;
-}
-
-/* 系统开机状况卡片内容 */
-.power-status-content {
-  min-height: 120px;
-}
-
-.ps-on-section {
-  margin-bottom: 16px;
-}
-
-.ps-mode-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
-.ps-mode-item {
+/* flex 高度传递链：两个 wrapper 内的 el-card 撑满 wrapper 高度 */
+.total-energy-wrapper :deep(.el-card),
+.power-status-wrapper :deep(.el-card) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.total-energy-wrapper :deep(.el-card__body),
+.power-status-wrapper :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 系统开机状况卡片内容（v0.5.3-r1 重设计） */
+.power-status-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  min-height: 100px;
+}
+
+/* 主信息行：图标圆圈 + 开机率 */
+.ps-main-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ps-icon-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: rgba(103, 194, 58, 0.1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ps-rate-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.ps-rate-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.ps-rate-label {
+  font-size: 14px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+/* 模式合计行：4 chip 水平排布 */
+.ps-mode-chips {
   display: flex;
   justify-content: space-between;
+  margin-top: 20px;
+}
+
+.ps-chip {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  font-size: 13px;
+  flex: 1;
 }
 
-.ps-mode-label {
-  color: #606266;
+.ps-chip-num {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
-.ps-mode-value {
-  color: #303133;
-  font-weight: 500;
+.ps-chip-name {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 
 .total-energy-values {
