@@ -48,6 +48,7 @@ urlpatterns = [
     path('dashboard/trend/', views.dashboard_trend, name='dashboard-trend'),
     path('dashboard/services/', views.dashboard_services, name='dashboard-services'),
     path('dashboard/activities/', views.dashboard_activities, name='dashboard-activities'),
+    path('dashboard/power-status/', views.dashboard_power_status, name='dashboard-power-status'),
 
     # 业主信息管理接口
     path('owners/', views.OwnerListCreateView.as_view(), name='owner-list-create'),

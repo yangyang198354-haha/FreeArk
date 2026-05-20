@@ -6,42 +6,87 @@
       <p class="page-subtitle">实时监控系统运行状态和能耗数据</p>
     </div>
 
-    <!-- 总电量时间选择器 -->
-    <div class="total-energy-section">
-      <el-card>
-        <template #header>
-          <div class="card-header">
-            <span>总电量查询</span>
-            <div class="date-picker-group">
-              <el-date-picker
-                v-model="totalEnergyDateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
-                :shortcuts="dateShortcuts"
-                @change="fetchTotalEnergy"
-              />
+    <!-- 顶部卡片行：总电量查询 + 系统开机状况（并排，OQ-004） -->
+    <div class="top-cards-row">
+      <!-- 总电量查询（原有） -->
+      <div class="total-energy-wrapper">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>总电量查询</span>
+              <div class="date-picker-group">
+                <el-date-picker
+                  v-model="totalEnergyDateRange"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  :shortcuts="dateShortcuts"
+                  @change="fetchTotalEnergy"
+                />
+              </div>
+            </div>
+          </template>
+          <div class="total-energy-values" v-loading="loading.totalEnergy">
+            <div class="energy-item">
+              <div class="energy-value">{{ totalEnergy.total_kwh.toLocaleString() }}</div>
+              <div class="energy-label">总电量 (kWh)</div>
+            </div>
+            <div class="energy-item cooling">
+              <div class="energy-value">{{ totalEnergy.cooling_kwh.toLocaleString() }}</div>
+              <div class="energy-label">制冷 (kWh)</div>
+            </div>
+            <div class="energy-item heating">
+              <div class="energy-value">{{ totalEnergy.heating_kwh.toLocaleString() }}</div>
+              <div class="energy-label">制热 (kWh)</div>
             </div>
           </div>
-        </template>
-        <div class="total-energy-values" v-loading="loading.totalEnergy">
-          <div class="energy-item">
-            <div class="energy-value">{{ totalEnergy.total_kwh.toLocaleString() }}</div>
-            <div class="energy-label">总电量 (kWh)</div>
+        </el-card>
+      </div>
+
+      <!-- 系统开机状况（新增，v0.5.3） -->
+      <div class="power-status-wrapper">
+        <el-card class="power-status-card">
+          <template #header>
+            <div class="card-header">
+              <span>系统开机状况</span>
+            </div>
+          </template>
+          <div class="power-status-content" v-loading="loading.powerStatus">
+            <!-- 开机情况区域 -->
+            <div class="ps-on-section">
+              <div class="stat-value" style="color: #67c23a">{{ powerStatus.powered_on_count }} 台开机</div>
+              <div class="stat-sub">{{ powerStatus.power_on_rate.toFixed(2) }}%</div>
+              <div class="stat-sub">共 {{ powerStatus.total_count }} 台</div>
+            </div>
+            <!-- 运行模式分布区域 -->
+            <div class="ps-mode-section">
+              <div class="ps-mode-item">
+                <span class="ps-mode-label">制冷</span>
+                <span class="ps-mode-value">{{ powerStatus.mode_distribution.cooling }} 台</span>
+              </div>
+              <div class="ps-mode-item">
+                <span class="ps-mode-label">制热</span>
+                <span class="ps-mode-value">{{ powerStatus.mode_distribution.heating }} 台</span>
+              </div>
+              <div class="ps-mode-item">
+                <span class="ps-mode-label">通风</span>
+                <span class="ps-mode-value">{{ powerStatus.mode_distribution.ventilation }} 台</span>
+              </div>
+              <div class="ps-mode-item">
+                <span class="ps-mode-label">除湿</span>
+                <span class="ps-mode-value">{{ powerStatus.mode_distribution.dehumidification }} 台</span>
+              </div>
+              <div class="ps-mode-item" v-if="powerStatus.mode_distribution.unknown > 0">
+                <span class="ps-mode-label" style="color: #e6a23c">未知</span>
+                <span class="ps-mode-value">{{ powerStatus.mode_distribution.unknown }} 台</span>
+              </div>
+            </div>
           </div>
-          <div class="energy-item cooling">
-            <div class="energy-value">{{ totalEnergy.cooling_kwh.toLocaleString() }}</div>
-            <div class="energy-label">制冷 (kWh)</div>
-          </div>
-          <div class="energy-item heating">
-            <div class="energy-value">{{ totalEnergy.heating_kwh.toLocaleString() }}</div>
-            <div class="energy-label">制热 (kWh)</div>
-          </div>
-        </div>
-      </el-card>
+        </el-card>
+      </div>
     </div>
 
     <!-- 统计卡片区域 -->
@@ -234,6 +279,19 @@ export default {
     const services = ref([])
     const activities = ref([])
     const trendData = ref([])
+    // v0.5.3：系统开机状况
+    const powerStatus = reactive({
+      powered_on_count: 0,
+      total_count: 0,
+      power_on_rate: 0.0,
+      mode_distribution: {
+        cooling: 0,
+        heating: 0,
+        ventilation: 0,
+        dehumidification: 0,
+        unknown: 0
+      }
+    })
 
     const loading = reactive({
       totalEnergy: false,
@@ -242,7 +300,8 @@ export default {
       screenRate: false,
       trend: false,
       services: false,
-      activities: false
+      activities: false,
+      powerStatus: false
     })
 
     // API 调用
@@ -418,6 +477,24 @@ export default {
       })
     }
 
+    // v0.5.3：系统开机状况 API 调用
+    async function fetchPowerStatus() {
+      loading.powerStatus = true
+      try {
+        const res = await api.get('/api/dashboard/power-status/')
+        if (res.success) {
+          powerStatus.powered_on_count = res.data.powered_on_count
+          powerStatus.total_count = res.data.total_count
+          powerStatus.power_on_rate = res.data.power_on_rate
+          Object.assign(powerStatus.mode_distribution, res.data.mode_distribution)
+        }
+      } catch (e) {
+        console.error('开机状况查询失败:', e.message)
+      } finally {
+        loading.powerStatus = false
+      }
+    }
+
     onMounted(() => {
       fetchTotalEnergy()
       fetchSummary()
@@ -426,6 +503,7 @@ export default {
       fetchTrend()
       fetchServices()
       fetchActivities()
+      fetchPowerStatus()
     })
 
     return {
@@ -441,7 +519,8 @@ export default {
       trendData,
       loading,
       fetchTotalEnergy,
-      fetchServices
+      fetchServices,
+      powerStatus
     }
   }
 }
@@ -469,9 +548,52 @@ export default {
   font-size: 14px;
 }
 
-/* 总电量查询区域 */
-.total-energy-section {
+/* 顶部卡片并排行（v0.5.3：总电量查询 + 系统开机状况） */
+.top-cards-row {
+  display: flex;
+  gap: 20px;
   margin-bottom: 20px;
+  align-items: stretch;
+}
+
+.total-energy-wrapper {
+  flex: 2;
+}
+
+.power-status-wrapper {
+  flex: 1;
+  min-width: 280px;
+}
+
+/* 系统开机状况卡片内容 */
+.power-status-content {
+  min-height: 120px;
+}
+
+.ps-on-section {
+  margin-bottom: 16px;
+}
+
+.ps-mode-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ps-mode-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.ps-mode-label {
+  color: #606266;
+}
+
+.ps-mode-value {
+  color: #303133;
+  font-weight: 500;
 }
 
 .total-energy-values {

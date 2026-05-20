@@ -907,6 +907,74 @@ def dashboard_plc_online_rate(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+def dashboard_power_status(request):
+    """
+    看板 API：系统开机状况统计
+    GET /api/dashboard/power-status/
+    返回 powered_on_count, total_count, power_on_rate, mode_distribution
+    开机判定：PLCConnectionStatus.connection_status='online'
+              AND PLCLatestData(param_name='system_switch').value IS NOT NULL AND != 0
+    运行模式：PLCLatestData(param_name='operation_mode').value，1=制冷/2=制热/3=通风/4=除湿
+    未知模式：powered_on_count - sum(mode 1-4)，包含无记录/value=0/null/超范围（OQ-002）
+    """
+    # Query 1：总台数（与 dashboard_plc_online_rate 口径一致，OQ-001）
+    total_count = PLCConnectionStatus.objects.count()
+
+    # Query 2a：在线设备的 specific_part 集合（走 connection_status 单列索引）
+    online_parts_qs = PLCConnectionStatus.objects.filter(
+        connection_status='online'
+    ).values_list('specific_part', flat=True)
+
+    # Query 2b：开机设备（在线 + system_switch 非零非空）的 specific_part 集合
+    # 走 PLCLatestData.(specific_part, param_name) UNIQUE 索引
+    switched_on_parts_qs = PLCLatestData.objects.filter(
+        specific_part__in=online_parts_qs,
+        param_name='system_switch',
+        value__isnull=False,
+    ).exclude(value=0).values_list('specific_part', flat=True)
+
+    powered_on_count = switched_on_parts_qs.count()
+
+    # 除零安全（OQ-001，AC-104）
+    power_on_rate = round((powered_on_count / total_count) * 100, 2) if total_count > 0 else 0.0
+
+    # Query 2c：开机设备的运行模式分布聚合（Case/When，走 UNIQUE 索引）
+    mode_agg = PLCLatestData.objects.filter(
+        specific_part__in=switched_on_parts_qs,
+        param_name='operation_mode',
+    ).aggregate(
+        cooling=Count(Case(When(value=1, then=1), output_field=IntegerField())),
+        heating=Count(Case(When(value=2, then=1), output_field=IntegerField())),
+        ventilation=Count(Case(When(value=3, then=1), output_field=IntegerField())),
+        dehumidification=Count(Case(When(value=4, then=1), output_field=IntegerField())),
+    )
+
+    cooling = mode_agg['cooling'] or 0
+    heating = mode_agg['heating'] or 0
+    ventilation = mode_agg['ventilation'] or 0
+    dehumidification = mode_agg['dehumidification'] or 0
+    # 未知模式 = 开机台数 - 四类有效模式之和（OQ-002，可对账：四类+未知==开机台数）
+    unknown = powered_on_count - (cooling + heating + ventilation + dehumidification)
+
+    return Response({
+        'success': True,
+        'data': {
+            'powered_on_count': powered_on_count,
+            'total_count': total_count,
+            'power_on_rate': power_on_rate,
+            'mode_distribution': {
+                'cooling': cooling,
+                'heating': heating,
+                'ventilation': ventilation,
+                'dehumidification': dehumidification,
+                'unknown': unknown,
+            }
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def dashboard_screen_online_rate(request):
     """
     看板 API：大屏在线率
