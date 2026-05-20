@@ -140,11 +140,17 @@ class Command(BaseCommand):
         )
 
         with connection.cursor() as cur:
-            # Step 1: 找出需要删除的最大 id
-            # 使用 collected_at（有单列索引）而非 created_at（无独立索引）
-            # 目的：避免 36M 行全表扫描拖垮生产 DB
+            # Step 1: 找出待删除的边界 id
+            # 用 collected_at 索引做 backward index scan + LIMIT 1，只读 1 行即返回，
+            # 避免 MAX(id) 聚合扫描整个 collected_at 索引区间（1700 万+ 行，
+            # 会在仅 128MB 缓冲池的生产库上跑数十秒并触发 "Lost connection"）。
+            # collected_at 与自增 id 单调相关，取「collected_at < cutoff 中
+            # collected_at 最大的那行」的 id 作为删除上界已足够；
+            # Step 3 的 DELETE 仍带 collected_at < cutoff 兜底，绝不会误删保留期数据。
             cur.execute(
-                'SELECT MAX(id) FROM device_param_history WHERE collected_at < %s',
+                'SELECT id FROM device_param_history '
+                'WHERE collected_at < %s '
+                'ORDER BY collected_at DESC LIMIT 1',
                 [cutoff_str],
             )
             row = cur.fetchone()
@@ -166,18 +172,17 @@ class Command(BaseCommand):
             )
 
             if dry_run:
-                # 演练：仅统计，使用主键范围（不触发全表扫描）
-                cur.execute(
-                    'SELECT COUNT(*) FROM device_param_history WHERE id <= %s',
-                    [max_delete_id],
-                )
-                count_row = cur.fetchone()
-                estimated = count_row[0] if count_row else 0
+                # 演练：用 id 跨度估算待删行数，不做 COUNT(*) 扫描。
+                # COUNT(*) WHERE id<=max_delete_id 要扫 2000 万+ 聚簇索引行，
+                # 在 128MB 缓冲池的库上同样会超时断连；
+                # id 为自增主键、近似连续，(max_delete_id - min_id + 1) 是删除量的良好估计。
+                estimated = max_delete_id - min_id + 1
                 estimated_batches = (estimated + batch_size - 1) // batch_size if estimated > 0 else 0
                 self.stdout.write(
-                    f'[dph_cleanup][DRY-RUN] 预计删除 {estimated} 行'
-                    f'（id <= {max_delete_id}，collected_at < {cutoff_str}），'
-                    f'预计批次数 {estimated_batches}（batch_size={batch_size}）'
+                    f'[dph_cleanup][DRY-RUN] 预计删除约 {estimated} 行'
+                    f'（id 区间 [{min_id}, {max_delete_id}]，collected_at < {cutoff_str}；'
+                    f'按 id 跨度估算，未做 COUNT 扫描），'
+                    f'预计批次数 约 {estimated_batches}（batch_size={batch_size}）'
                 )
                 log_task_completion(logger, 'dph_cleanup dry-run', {
                     'estimated_rows': estimated,
