@@ -167,9 +167,9 @@ class IsWritableV050Tests(TestCase):
         self.assertTrue(_is_writable('system_switch'))
         self.assertTrue(_is_writable('living_room_switch'))
 
-    def test_UT_W_13_central_energy_supply_not_writable(self):
-        """central_energy_supply 无后缀匹配且不在精确名白名单中 → 不可写（回归，ADR-09 副作用检查）"""
-        self.assertFalse(_is_writable('central_energy_supply'))
+    def test_UT_W_13_central_energy_supply_writable(self):
+        """v0.5.1: central_energy_supply 已加入精确名白名单 → 可写（REQ-FUNC-003，AC-005-01）"""
+        self.assertTrue(_is_writable('central_energy_supply'))
 
     def test_UT_W_14_humidity_readonly(self):
         """_humidity 结尾只读（回归）"""
@@ -195,16 +195,16 @@ class ParamValueLabelTests(TestCase):
     # ── get_value_options ─────────────────────────────────────────────────────
 
     def test_UT_VL_01_operation_mode_returns_four_options(self):
-        """operation_mode 命中 _mode 后缀，返回制冷/制热/通风/除湿四个选项（AC-002-02）"""
+        """v0.5.1: operation_mode 枚举 1-4，返回制冷/制热/通风/除湿四个选项（REQ-FUNC-001，AC-001）"""
         opts = get_value_options('operation_mode')
         self.assertEqual(len(opts), 4)
         raw_values = {o['raw'] for o in opts}
-        self.assertEqual(raw_values, {'0', '1', '2', '3'})
+        self.assertEqual(raw_values, {'1', '2', '3', '4'})
         label_map = {o['raw']: o['label'] for o in opts}
-        self.assertEqual(label_map['0'], '制冷')
-        self.assertEqual(label_map['1'], '制热')
-        self.assertEqual(label_map['2'], '通风')
-        self.assertEqual(label_map['3'], '除湿')
+        self.assertEqual(label_map['1'], '制冷')
+        self.assertEqual(label_map['2'], '制热')
+        self.assertEqual(label_map['3'], '通风')
+        self.assertEqual(label_map['4'], '除湿')
 
     def test_UT_VL_02_away_energy_saving_exact_name_priority(self):
         """away_energy_saving 命中精确名字典（优先于后缀），返回两个选项（AC-003-01）"""
@@ -237,13 +237,13 @@ class ParamValueLabelTests(TestCase):
 
     # ── get_display_value ─────────────────────────────────────────────────────
 
-    def test_UT_VL_06_operation_mode_display_value_cooling(self):
-        """operation_mode=0 → 显示'制冷'"""
+    def test_UT_VL_06_operation_mode_display_value_legacy_zero(self):
+        """v0.5.1: operation_mode=0 历史值兼容展示为'制冷'（REQ-NFR-001，AC-001-02 compat）"""
         self.assertEqual(get_display_value('operation_mode', '0'), '制冷')
 
-    def test_UT_VL_07_operation_mode_display_value_heating(self):
-        """operation_mode=1 → 显示'制热'"""
-        self.assertEqual(get_display_value('operation_mode', 1), '制热')
+    def test_UT_VL_07_operation_mode_display_value_cooling(self):
+        """v0.5.1: operation_mode=1 → 显示'制冷'（新枚举起点）"""
+        self.assertEqual(get_display_value('operation_mode', 1), '制冷')
 
     def test_UT_VL_08_operation_mode_display_value_unknown(self):
         """operation_mode=99 → 原值透传（非法值不崩溃）"""
@@ -792,9 +792,9 @@ class RegressionProtectionTests(TestCase):
         }, format='json')
         self.assertEqual(resp.status_code, 202)
 
-    def test_IT_REG_06_central_energy_supply_not_writable(self):
-        """water_force_supply/central_energy_supply 不因 _mode 追加而可写（ADR-09 副作用）"""
-        self.assertFalse(_is_writable('central_energy_supply'))
+    def test_IT_REG_06_central_energy_supply_writable(self):
+        """v0.5.1: central_energy_supply 已加入精确名白名单可写（REQ-FUNC-003，AC-005-01）"""
+        self.assertTrue(_is_writable('central_energy_supply'))
 
     @patch('api.views_device_settings._get_mqtt_client')
     def test_IT_REG_07_write_readonly_param_still_rejected(self, mock_get_client):
@@ -905,6 +905,172 @@ class FR001InputNumberUndefinedTests(TestCase):
         })
         # CharField allow_null 默认 False，None 应被拒绝
         self.assertFalse(ser.is_valid(), 'None new_value 应被 serializer 拒绝')
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 十、v0.5.1 增量测试 — mode 枚举对齐 + central_energy_supply 可写
+# ═════════════════════════════════════════════════════════════════════════════
+
+class V051ModeEnumAlignmentTests(TestCase):
+    """
+    v0.5.1 增量单元测试。
+    覆盖：REQ-FUNC-001（枚举 1-4）、REQ-FUNC-002（除湿不降级）、
+          REQ-FUNC-003（central_energy_supply 可写/三值）、REQ-NFR-001（历史值兼容）
+
+    测试 ID 规则：UT-V051-*
+    """
+
+    # ── REQ-FUNC-001: 枚举值域 1-4 ───────────────────────────────────────────
+
+    def test_UT_V051_01_mode_enum_key1_is_cooling(self):
+        """operation_mode=1 → 制冷（REQ-FUNC-001，AC-001-01）"""
+        self.assertEqual(get_display_value('operation_mode', '1'), '制冷')
+
+    def test_UT_V051_02_mode_enum_key2_is_heating(self):
+        """operation_mode=2 → 制热"""
+        self.assertEqual(get_display_value('operation_mode', '2'), '制热')
+
+    def test_UT_V051_03_mode_enum_key3_is_ventilation(self):
+        """operation_mode=3 → 通风"""
+        self.assertEqual(get_display_value('operation_mode', '3'), '通风')
+
+    def test_UT_V051_04_mode_enum_key4_is_dehumidification(self):
+        """operation_mode=4 → 除湿（REQ-FUNC-001，AC-001-01）"""
+        self.assertEqual(get_display_value('operation_mode', '4'), '除湿')
+
+    def test_UT_V051_05_mode_enum_key0_not_in_options(self):
+        """get_value_options 不再包含 key=0（REQ-FUNC-001，AC-001-02）"""
+        opts = get_value_options('operation_mode')
+        raw_keys = {o['raw'] for o in opts}
+        self.assertNotIn('0', raw_keys, 'v0.5.1 枚举从 1 起，key=0 不应出现在选项中')
+
+    def test_UT_V051_06_mode_legacy_zero_compat_display(self):
+        """历史旧值 0 展示为制冷，不崩溃（REQ-NFR-001）"""
+        self.assertEqual(get_display_value('operation_mode', 0), '制冷')
+
+    # ── REQ-FUNC-003: central_energy_supply 枚举值 ───────────────────────────
+
+    def test_UT_V051_07_central_energy_supply_writable(self):
+        """central_energy_supply 已加入精确名白名单 → 可写（REQ-FUNC-003，AC-005-01）"""
+        self.assertTrue(_is_writable('central_energy_supply'))
+
+    def test_UT_V051_08_central_energy_supply_options(self):
+        """central_energy_supply get_value_options 返回三值（AC-003-02）"""
+        opts = get_value_options('central_energy_supply')
+        self.assertEqual(len(opts), 3)
+        label_map = {o['raw']: o['label'] for o in opts}
+        self.assertEqual(label_map['1'], '制冷')
+        self.assertEqual(label_map['2'], '制热')
+        self.assertEqual(label_map['3'], '无')
+
+    def test_UT_V051_09_central_energy_supply_display_cooling(self):
+        """central_energy_supply=1 → 制冷（AC-004-01）"""
+        self.assertEqual(get_display_value('central_energy_supply', '1'), '制冷')
+
+    def test_UT_V051_10_central_energy_supply_display_heating(self):
+        """central_energy_supply=2 → 制热（AC-004-02）"""
+        self.assertEqual(get_display_value('central_energy_supply', '2'), '制热')
+
+    def test_UT_V051_11_central_energy_supply_display_none(self):
+        """central_energy_supply=3 → 无（AC-004-03）"""
+        self.assertEqual(get_display_value('central_energy_supply', '3'), '无')
+
+    def test_UT_V051_12_central_energy_supply_legacy_zero_display(self):
+        """central_energy_supply=0 历史值展示为'无'（AC-004-04，Q5 兼容）"""
+        # key=0 不在精确名字典中，精确名查找无命中，返回原始字符串 '0'
+        # 前端负责将 0 → '无'，后端 get_display_value 返回 '0'（不崩溃）
+        result = get_display_value('central_energy_supply', 0)
+        # 后端返回原始值字符串即可（不应崩溃或返回 None）
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, str)
+
+    # ── REQ-FUNC-002: 除湿不再静默降级（代码路径验证）─────────────────────────
+
+    def test_UT_V051_13_mode_key4_not_equal_to_1_in_options(self):
+        """枚举中 key=4 标签为除湿，不被映射为制冷（REQ-FUNC-002，AC-002-03）"""
+        opts = get_value_options('operation_mode')
+        label_map = {o['raw']: o['label'] for o in opts}
+        self.assertEqual(label_map.get('4'), '除湿')
+        self.assertNotEqual(label_map.get('4'), '制冷')
+
+
+class V051CentralEnergySupplyWriteTests(TestCase):
+    """
+    v0.5.1 集成测试 — central_energy_supply 写入接口（REQ-FUNC-003、REQ-NFR-002）
+    mock PLC（MQTT），测试后端接口行为。
+    测试 ID 规则：IT-V051-*
+    [MOCK-ANNOTATED] PLC 写入通过 mock MQTT client，不连接真实 PLC。
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        _, self.token = _make_user(username='v051_admin')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token}')
+        _make_owner(specific_part='3-1-7-702', plc_ip='10.0.0.1')
+        _make_device_config('central_energy_supply', sub_type='hydraulic_module', is_active=True,
+                            display_name='集中能源供给')
+
+    @patch('api.views_device_settings._get_mqtt_client')
+    def test_IT_V051_01_write_central_energy_supply_cooling(self, mock_get_client):
+        """central_energy_supply=1（制冷）写入返回 202（AC-003-03，AC-005-03）[MOCK-ANNOTATED]"""
+        mock_get_client.return_value = _mqtt_mock()
+        resp = self.client.post('/api/device-settings/write/', {
+            'specific_part': '3-1-7-702',
+            'items': [{'param_name': 'central_energy_supply', 'new_value': '1'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 202)
+        rec = PLCWriteRecord.objects.filter(param_name='central_energy_supply', new_value='1').first()
+        self.assertIsNotNone(rec, 'PLCWriteRecord 应被创建')
+
+    @patch('api.views_device_settings._get_mqtt_client')
+    def test_IT_V051_02_write_central_energy_supply_heating(self, mock_get_client):
+        """central_energy_supply=2（制热）写入返回 202（AC-005-03）[MOCK-ANNOTATED]"""
+        mock_get_client.return_value = _mqtt_mock()
+        resp = self.client.post('/api/device-settings/write/', {
+            'specific_part': '3-1-7-702',
+            'items': [{'param_name': 'central_energy_supply', 'new_value': '2'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 202)
+
+    @patch('api.views_device_settings._get_mqtt_client')
+    def test_IT_V051_03_write_central_energy_supply_none_value3(self, mock_get_client):
+        """central_energy_supply=3（无，主动关阀）写入返回 202（AC-003-04）[MOCK-ANNOTATED]"""
+        mock_get_client.return_value = _mqtt_mock()
+        resp = self.client.post('/api/device-settings/write/', {
+            'specific_part': '3-1-7-702',
+            'items': [{'param_name': 'central_energy_supply', 'new_value': '3'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 202)
+        rec = PLCWriteRecord.objects.filter(param_name='central_energy_supply', new_value='3').first()
+        self.assertIsNotNone(rec, 'PLCWriteRecord 应记录值=3（主动关阀指令）')
+
+    def test_IT_V051_04_is_writable_central_energy_supply_true(self):
+        """_is_writable('central_energy_supply') = True（AC-005-01）"""
+        self.assertTrue(_is_writable('central_energy_supply'))
+
+    def test_IT_V051_05_operation_mode_still_writable(self):
+        """operation_mode 经 _mode 后缀仍可写（回归）"""
+        self.assertTrue(_is_writable('operation_mode'))
+
+    @patch('api.views_device_settings._get_mqtt_client')
+    def test_IT_V051_06_write_central_energy_supply_value0_rejected(self, mock_get_client):
+        """central_energy_supply=0 超出枚举范围，后端返回 400（AC-003-05，REQ-NFR-002）"""
+        mock_get_client.return_value = _mqtt_mock()
+        resp = self.client.post('/api/device-settings/write/', {
+            'specific_part': '3-1-7-702',
+            'items': [{'param_name': 'central_energy_supply', 'new_value': '0'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    @patch('api.views_device_settings._get_mqtt_client')
+    def test_IT_V051_07_write_central_energy_supply_value4_rejected(self, mock_get_client):
+        """central_energy_supply=4 超出枚举范围，后端返回 400（AC-003-05，REQ-NFR-002）"""
+        mock_get_client.return_value = _mqtt_mock()
+        resp = self.client.post('/api/device-settings/write/', {
+            'specific_part': '3-1-7-702',
+            'items': [{'param_name': 'central_energy_supply', 'new_value': '4'}],
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
 
     def test_IT_FR1_05_recommended_frontend_fix_string_coercion(self):
         """

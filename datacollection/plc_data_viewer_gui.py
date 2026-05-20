@@ -472,14 +472,8 @@ class PLCDataViewerGUI:
             # PLCWriteManager中没有除湿模式(4)，这里保留映射但可能需要额外处理
             "除湿": 4
         }
+        # v0.5.1: 除湿（4）已在 PLCWriteManager 中正式支持，直接写入，不再降级（REQ-FUNC-002）
         mode_value = mode_mapping.get(mode_str, 1)
-        
-        # 如果是除湿模式，需要特别处理
-        if mode_value == 4:
-            logger.warning("⚠️  除湿模式在PLCWriteManager中未定义，将使用制冷模式替代")
-            # 弹出提示
-            messagebox.showinfo("提示", "除湿模式在当前版本中未实现，将使用制冷模式替代")
-            mode_value = 1  # 暂时使用制冷模式替代
         
         logger.info(f"🚀 开始下发模式: {mode_str} (值: {mode_value}) 到文件: {os.path.basename(self.selected_mode_file)}")
         

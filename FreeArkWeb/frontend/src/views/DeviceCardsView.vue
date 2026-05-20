@@ -309,12 +309,15 @@ export default {
       }
 
       if (paramName === 'operation_mode') {
-        const modes = { 1: '制冷', 2: '制热', 3: '通风', 4: '除湿' }
+        // v0.5.1: 枚举 1-4；旧值 0 兼容展示为制冷（REQ-NFR-001）
+        const modes = { 0: '制冷', 1: '制冷', 2: '制热', 3: '通风', 4: '除湿' }
         return modes[v] !== undefined ? modes[v] : String(v)
       }
 
       if (paramName === 'central_energy_supply') {
-        return v === 0 ? '无' : '有'
+        // v0.5.1: 三值枚举展示；旧值 0 兼容展示为「无」（REQ-FUNC-003, Q5）
+        const supplyModes = { 1: '制冷', 2: '制热', 3: '无' }
+        return supplyModes[v] !== undefined ? supplyModes[v] : '无'
       }
 
       if (paramName === 'away_energy_saving') {

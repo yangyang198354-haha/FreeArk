@@ -43,10 +43,11 @@ if not SNAP7_AVAILABLE:
 from datacollection.multi_thread_plc_handler import PLCReadWriter, PLCManager
 
 class PLCWriteManager:
-    # 运行模式常量定义
-    MODE_COOLING = 1      # 制冷模式
-    MODE_HEATING = 2      # 制热模式
-    MODE_VENTILATION = 3  # 通风模式
+    # 运行模式常量定义（v0.5.1: 新增 MODE_DEHUMIDIFICATION，REQ-FUNC-001）
+    MODE_COOLING = 1        # 制冷模式
+    MODE_HEATING = 2        # 制热模式
+    MODE_VENTILATION = 3    # 通风模式
+    MODE_DEHUMIDIFICATION = 4  # 除湿模式（v0.5.1）
     
     def _get_resource_dir(self):
         """获取资源目录，支持多种运行环境"""
@@ -133,18 +134,21 @@ class PLCWriteManager:
         return {}
     
     def write_mode_for_building(self, building_file: str, mode: int) -> Dict[str, Dict[str, Any]]:
-        """为指定楼栋的所有PLC写入运行模式
-        
+        """为指定楼栋的所有PLC写入运行模式（仅写 operation_mode，DB14 offset=89）
+
+        v0.5.1: operation_mode 与 central_energy_supply 写入已解耦（REQ-FUNC-004）。
+        本方法仅写 operation_mode，不再联动写 central_energy_supply。
+
         Args:
             building_file: 楼栋JSON文件名
-            mode: 运行模式，1=制冷，2=制热，3=通风
-            
+            mode: 运行模式，1=制冷，2=制热，3=通风，4=除湿（v0.5.1 新增）
+
         Returns:
             写入结果字典
         """
-        # 验证模式值
-        if mode not in [self.MODE_COOLING, self.MODE_HEATING, self.MODE_VENTILATION]:
-            logger.error(f"❌ 无效的模式值：{mode}，必须是1(制冷)、2(制热)或3(通风)")
+        # v0.5.1: 有效值扩展为 [1,2,3,4]（REQ-FUNC-001）
+        if mode not in [self.MODE_COOLING, self.MODE_HEATING, self.MODE_VENTILATION, self.MODE_DEHUMIDIFICATION]:
+            logger.error(f"❌ 无效的模式值：{mode}，必须是1(制冷)、2(制热)、3(通风)或4(除湿)")
             return {}
         
         # 加载楼栋数据和PLC模式配置
@@ -173,11 +177,13 @@ class PLCWriteManager:
                         continue
                     logger.info(f"⚠️  设备 {device_id} 没有PLC IP，使用设备IP: {plc_ip}")
                 
-                # 为每个参数创建写入配置
+                # v0.5.1: 仅写 operation_mode，跳过 central_energy_supply（REQ-FUNC-004 写入解耦）
                 for param_name, param_config in plc_mode_config.items():
-                    # 将同一个mode值写入所有配置的参数（mode和central energy supply）
+                    if param_name == 'central_energy_supply':
+                        # central_energy_supply 独立写入，不随 operation_mode 联动
+                        continue
                     value = mode
-                    
+
                     config = {
                         'ip': plc_ip,
                         'db_num': param_config.get('db_num'),
@@ -194,11 +200,12 @@ class PLCWriteManager:
                     ip_to_device_map[plc_ip] = []
                 ip_to_device_map[plc_ip].append(device_id)
         
-        # 获取模式名称
+        # 获取模式名称（v0.5.1: 含除湿）
         mode_names = {
             self.MODE_COOLING: "制冷",
             self.MODE_HEATING: "制热",
-            self.MODE_VENTILATION: "通风"
+            self.MODE_VENTILATION: "通风",
+            self.MODE_DEHUMIDIFICATION: "除湿",
         }
         mode_name = mode_names.get(mode, "未知模式")
         
@@ -347,11 +354,12 @@ class PLCWriteManager:
         return organized
     
     def get_mode_name(self, mode_value: int) -> str:
-        """获取模式的中文名称"""
+        """获取模式的中文名称（v0.5.1: 含除湿）"""
         mode_names = {
             self.MODE_COOLING: "制冷",
             self.MODE_HEATING: "制热",
-            self.MODE_VENTILATION: "通风"
+            self.MODE_VENTILATION: "通风",
+            self.MODE_DEHUMIDIFICATION: "除湿",
         }
         return mode_names.get(mode_value, f"未知模式({mode_value})")
     

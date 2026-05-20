@@ -17,8 +17,13 @@ from .serializers_device_settings import PLCWriteRecordSerializer, DeviceSetting
 logger = logging.getLogger(__name__)
 
 WRITABLE_SUFFIXES = ('_temp_setting', '_switch', '_mode')  # v0.5.0: 追加 '_mode'（REQ-FUNC-002, ADR-09）
-WRITABLE_PARAM_NAMES = frozenset({'away_energy_saving'})  # v0.5.0: 精确名白名单（REQ-FUNC-003, ADR-09）
+WRITABLE_PARAM_NAMES = frozenset({'away_energy_saving', 'central_energy_supply'})  # v0.5.0/v0.5.1: 精确名白名单（REQ-FUNC-003, ADR-09）
 READONLY_SUFFIXES = ('_temperature', '_humidity', '_dew_point_setting', '_error', '_alert', '_fault')
+
+# v0.5.1: 精确名参数的合法枚举值域（REQ-FUNC-003，AC-003-05，REQ-NFR-002）
+PARAM_ENUM_VALID_VALUES = {
+    'central_energy_supply': frozenset({'1', '2', '3'}),
+}
 
 _BROKER_CONFIG_WARNED = False
 _LAZY_CONNECT_TRIGGERED = False
@@ -213,6 +218,15 @@ def device_settings_write(request):
                 {'error': f"参数 {item['param_name']} 不在可写白名单中"},
                 status=400,
             )
+        # v0.5.1: 精确枚举值域校验（REQ-NFR-002，AC-003-05）
+        param_name = item['param_name']
+        if param_name in PARAM_ENUM_VALID_VALUES:
+            valid_vals = PARAM_ENUM_VALID_VALUES[param_name]
+            if str(item['new_value']) not in valid_vals:
+                return Response(
+                    {'error': f"参数 {param_name} 值 {item['new_value']} 超出合法枚举范围 {sorted(valid_vals)}"},
+                    status=400,
+                )
 
     try:
         owner = OwnerInfo.objects.get(specific_part=specific_part)
