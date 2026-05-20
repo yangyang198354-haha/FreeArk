@@ -78,8 +78,23 @@ try:
     sys.path.append(script_dir)
     from freearkweb.wsgi import application
     
+    # 从环境变量读取 waitress 运行时参数（支持运维不改代码调整）
+    # 优先级：systemd Environment= > .env 文件 > 代码默认值
+    _threads = int(os.environ.get('WAITRESS_THREADS', '16'))
+    _channel_timeout = int(os.environ.get('WAITRESS_CHANNEL_TIMEOUT', '120'))
+    _connection_limit = int(os.environ.get('WAITRESS_CONNECTION_LIMIT', '100'))
+
+    print(f"Waitress 启动参数: threads={_threads}, channel_timeout={_channel_timeout}s, connection_limit={_connection_limit}")
+
     # 确保使用0.0.0.0以允许从任何网络接口访问
-    serve(application, host='0.0.0.0', port=8000)
+    serve(
+        application,
+        host='0.0.0.0',
+        port=8000,
+        threads=_threads,
+        channel_timeout=_channel_timeout,
+        connection_limit=_connection_limit,
+    )
 except ImportError as e:
     print(f"导入错误: {e}")
     sys.exit(1)
