@@ -499,8 +499,8 @@ export default {
   margin-bottom: 16px;
 }
 
+/* MOD-UI-003: 删除局部 font-size: 18px 覆盖（global.css h2 已统一为 20px，局部 18px 会覆盖全局值造成不一致） */
 .page-header h2 {
-  font-size: 18px;
   font-weight: 600;
   color: #303133;
   margin: 0;

@@ -1,13 +1,12 @@
 <template>
-  <div class="page-container">
+  <div class="owner-management-view">
     <div class="page-header">
       <h2>业主管理</h2>
     </div>
 
-    <!-- 搜索过滤栏 -->
-    <div class="card" style="margin-bottom: 16px;">
-      <div class="card-body">
-        <el-form :inline="true" :model="searchForm" class="search-form">
+    <!-- 搜索过滤栏：MOD-UI-001-B .card 替换为 el-card -->
+    <el-card style="margin-bottom: 16px;">
+      <el-form :inline="true" :model="searchForm" class="search-form">
           <el-form-item label="楼栋">
             <el-select
               v-model="searchForm.building"
@@ -64,12 +63,10 @@
             <el-button @click="handleReset">重置</el-button>
           </el-form-item>
         </el-form>
-      </div>
-    </div>
+    </el-card>
 
-    <!-- 操作栏 -->
-    <div class="card">
-      <div class="card-body">
+    <!-- 操作栏与数据表格：MOD-UI-001-B .card 替换为 el-card -->
+    <el-card>
         <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
           <el-button v-if="isAdmin" type="primary" @click="openCreateDialog">新增业主</el-button>
           <!-- US-04: 批量同步全部设备信息 -->
@@ -134,8 +131,7 @@
             @current-change="handlePageChange"
           />
         </div>
-      </div>
-    </div>
+    </el-card>
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog
@@ -809,6 +805,11 @@ export default {
 </script>
 
 <style scoped>
+/* MOD-UI-001-B: 根容器改为 .owner-management-view，无 background/shadow/padding */
+.owner-management-view {
+  padding: 0;
+}
+
 .search-form {
   display: flex;
   flex-wrap: wrap;

@@ -47,6 +47,12 @@
   --spacing-lg: 20px;
   --spacing-xl: 32px;
   
+  /* 字体大小层级变量（FreeArk UI 规范 v1.0，h2 值已由 PM 确认为 20px） */
+  --font-size-h2: 20px;
+  --font-size-body: 14px;
+  --font-size-small: 13px;
+  --font-size-xs: 12px;
+
   /* Element Plus 主题变量 */
   --el-color-primary: var(--primary-color);
   --el-color-primary-light-3: #79bbff;
@@ -103,7 +109,7 @@ h1 {
 }
 
 h2 {
-  font-size: 1.5rem;
+  font-size: var(--font-size-h2); /* 20px — PM 确认统一值，覆盖原 1.5rem */
 }
 
 h3 {
@@ -320,7 +326,7 @@ label {
 
 .page-header h2 {
   color: var(--text-primary);
-  font-size: 1.5rem;
+  /* font-size 由 h2 全局规则统一提供（20px via --font-size-h2），此处不重复设置 */
   font-weight: 600;
   margin: 0;
 }

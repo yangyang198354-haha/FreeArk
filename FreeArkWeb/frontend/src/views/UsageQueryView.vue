@@ -1,5 +1,5 @@
 <template>
-  <div class="usage-query-container">
+  <div class="usage-query-view">
     <div class="page-header">
       <h2>用量查询</h2>
       <p class="page-subtitle">查询和统计能耗数据</p>
@@ -492,12 +492,9 @@ export default {
 </script>
 
 <style scoped>
-.usage-query-container {
+/* MOD-UI-001-C: 根容器改为 .usage-query-view，删除 background/padding/min-height（由 Layout .content-wrapper 提供） */
+.usage-query-view {
   width: 100%;
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
-  box-sizing: border-box;
 }
 
 .page-header {
@@ -506,12 +503,11 @@ export default {
   border-bottom: 1px solid #e4e7ed;
 }
 
+/* MOD-UI-003: 删除局部 font-size: 22px 和 letter-spacing 覆盖，统一由 global.css h2 提供（20px） */
 .page-header h2 {
   margin: 0;
   color: #303133;
-  font-size: 22px;
   font-weight: 600;
-  letter-spacing: 0.5px;
 }
 
 .page-subtitle {
@@ -572,131 +568,103 @@ export default {
   font-weight: 500;
 }
 
-/* 统一所有表单控件样式 */
-.query-form-card .el-input__wrapper,
-.query-form-card .el-select__wrapper,
-.query-form-card .el-picker__wrapper {
-  height: 36px !important;
-  box-sizing: border-box !important;
+/* MOD-UI-003: 统一所有表单控件高度（用 :deep() 精确穿透，无需 !important） */
+.query-form-card :deep(.el-input__wrapper),
+.query-form-card :deep(.el-select__wrapper),
+.query-form-card :deep(.el-picker__wrapper) {
+  height: 36px;
+  box-sizing: border-box;
 }
 
-/* 统一所有输入框样式 */
+/* 统一所有输入框内部样式 */
 .query-form-card :deep(.el-input__inner),
 .query-form-card :deep(.el-select__input),
 .query-form-card :deep(.el-picker__input) {
-  height: 36px !important;
-  line-height: 34px !important;
-  font-size: 14px !important;
-  padding: 0 12px !important;
-  font-family: inherit !important;
-  color: #606266 !important;
-  box-sizing: border-box !important;
+  height: 36px;
+  line-height: 34px;
+  font-size: 14px;
+  padding: 0 12px;
+  /* font-family: inherit 为默认行为，不需要显式设置 */
+  color: #606266;
+  box-sizing: border-box;
 }
 
 /* 统一选择器下拉容器样式 */
 .query-form-card :deep(.el-select__wrapper) {
-  height: 36px !important;
-  min-height: 36px !important;
-  box-sizing: border-box !important;
+  height: 36px;
+  min-height: 36px;
+  box-sizing: border-box;
 }
 
 /* 统一日期选择器容器样式 */
 .query-form-card :deep(.el-picker__wrapper) {
-  height: 36px !important;
-  box-sizing: border-box !important;
+  height: 36px;
+  box-sizing: border-box;
 }
 
 /* 级联选择器样式统一 */
 .query-form-card :deep(.cascading-selector-input) {
-  height: 36px !important;
-  line-height: 36px !important;
-  font-size: 14px !important;
-  padding: 0 12px !important;
-  font-family: inherit !important;
-  color: #606266 !important;
-  box-sizing: border-box !important;
-  border: 1px solid #dcdfe6 !important;
-  border-radius: 4px !important;
-  transition: border-color 0.2s, box-shadow 0.2s !important;
+  height: 36px;
+  line-height: 36px;
+  font-size: 14px;
+  padding: 0 12px;
+  color: #606266;
+  box-sizing: border-box;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 /* Element Plus Select 组件内部样式优化 */
-.query-form-card :deep(.el-select__wrapper) {
-  min-height: 36px !important;
-  height: 36px !important;
-}
-
-/* Element Plus Select 组件样式优化 */
-.query-form-card :deep(.el-select__wrapper) {
-  height: 36px !important;
-  min-height: 36px !important;
+.query-form-card :deep(.el-select .el-input__wrapper) {
+  height: 36px;
 }
 
 .query-form-card :deep(.el-select .el-input__inner) {
-  height: 36px !important;
-  line-height: 36px !important;
+  height: 36px;
+  line-height: 36px;
 }
 
 /* Element Plus Date Picker 组件样式优化 */
 .query-form-card :deep(.el-date-editor) {
-  height: 36px !important;
+  height: 36px;
 }
 
 .query-form-card :deep(.el-date-editor .el-input__wrapper) {
-  height: 36px !important;
-  min-height: 36px !important;
+  height: 36px;
+  min-height: 36px;
 }
 
 .query-form-card :deep(.el-date-editor .el-range-input) {
-  height: 36px !important;
-  line-height: 36px !important;
+  height: 36px;
+  line-height: 36px;
 }
 
 .query-form-card :deep(.el-date-editor .el-range-separator) {
-  height: 36px !important;
-  line-height: 36px !important;
+  height: 36px;
+  line-height: 36px;
 }
 
 .query-form-card :deep(.el-date-editor .el-input__inner) {
-  height: 36px !important;
-  line-height: 36px !important;
+  height: 36px;
+  line-height: 36px;
 }
 
 /* 确保所有内部元素高度一致 */
 .query-form-card :deep(.el-input-group),
 .query-form-card :deep(.el-input-group__append),
 .query-form-card :deep(.el-input-group__prepend) {
-  height: 36px !important;
+  height: 36px;
 }
 
-/* 确保供能模式选择器高度一致 */
-.query-form-card :deep(.el-select .el-input__wrapper) {
-  height: 36px !important;
+/* 确保选择器选项行高一致 */
+.query-form-card :deep(.el-select-dropdown__item) {
+  line-height: 30px;
 }
 
-.query-form-card :deep(.el-select .el-input__inner) {
-  height: 36px !important;
-  line-height: 36px !important;
-}
-
-/* 确保日期选择器高度一致 */
-.query-form-card :deep(.el-date-editor .el-input__wrapper) {
-  height: 36px !important;
-}
-
-.query-form-card :deep(.el-date-editor .el-input__inner) {
-  height: 36px !important;
-  line-height: 36px !important;
-}
-
-/* 确保选择器选项高度一致 */
-.query-form-card .el-select-dropdown__item {
-  line-height: 30px !important;
-}
-
-/* 确保日期选择器面板高度一致 */
-.query-form-card .el-picker-panel {
-  line-height: 30px !important;
+/* 确保日期选择器面板行高一致 */
+.query-form-card :deep(.el-picker-panel) {
+  line-height: 30px;
 }
 
 .query-buttons {

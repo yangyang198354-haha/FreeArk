@@ -1,51 +1,46 @@
 <template>
-  <div class="page-container">
+  <!-- MOD-UI-001-E: 根容器改为 .user-list-view，无 background/shadow（由 Layout .content-wrapper 提供） -->
+  <div class="user-list-view">
     <div class="page-header">
       <h2>用户列表</h2>
     </div>
-    
-    <!-- 用户列表 -->
-    <div class="card">
-      <div class="card-body">
-        <div id="userListMessage" class="mb-3"></div>
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>用户名</th>
-                <th>电子邮箱</th>
-                <th>姓名</th>
-                <th>角色</th>
-                <th>部门</th>
-                <th>职位</th>
-                <th>创建时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="userListBody">
-              <tr v-for="user in users" :key="user.id">
-                <td>{{ user.username }}</td>
-                <td>{{ user.email }}</td>
-                <td>{{ formatFullName(user.first_name, user.last_name) }}</td>
-                <td>{{ user.role }}</td>
-                <td>{{ user.department }}</td>
-                <td>{{ user.position }}</td>
-                <td>{{ formatDateTime(user.created_at) }}</td>
-                <td>
-                  <button class="btn btn-sm btn-primary" @click="editUser(user.id)">编辑</button>
-                  <button class="btn btn-sm btn-danger" @click="deleteUser(user.id)" style="margin-left: 5px;">删除</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="userListMessageBottom" class="mt-3"></div>
-      </div>
-    </div>
+
+    <!-- MOD-UI-001-E: .card > .card-body 替换为 el-card；原生 <table> 替换为 el-table；操作按钮替换为 el-button -->
+    <el-card v-loading="loading">
+      <el-table
+        :data="users"
+        stripe
+        style="width: 100%;"
+        empty-text="暂无用户数据"
+      >
+        <el-table-column prop="username" label="用户名" min-width="120" />
+        <el-table-column prop="email" label="电子邮箱" min-width="180" show-overflow-tooltip />
+        <el-table-column label="姓名" min-width="120">
+          <template #default="{ row }">
+            {{ formatFullName(row.first_name, row.last_name) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="role" label="角色" width="100" />
+        <el-table-column prop="department" label="部门" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="position" label="职位" min-width="120" show-overflow-tooltip />
+        <el-table-column label="创建时间" min-width="160">
+          <template #default="{ row }">
+            {{ formatDateTime(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" @click="editUser(row.id)">编辑</el-button>
+            <el-button size="small" type="danger" @click="deleteUser(row.id)" style="margin-left: 4px;">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <script>
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api.js'
 
 export default {
@@ -53,8 +48,7 @@ export default {
   data() {
     return {
       users: [],
-      loading: false,
-      message: ''
+      loading: false
     }
   },
   mounted() {
@@ -70,58 +64,49 @@ export default {
         }
       } catch (error) {
         console.error('加载用户列表失败:', error)
-        this.showMessage('加载用户列表失败', 'error')
+        ElMessage.error('加载用户列表失败')
       } finally {
         this.loading = false
       }
     },
-    
+
     editUser(userId) {
-      // 跳转到编辑用户页面
+      // 跳转到编辑用户页面（路由与原版保持一致）
       this.$router.push(`/edit-user/${userId}`)
     },
-    
+
     async deleteUser(userId) {
-      if (confirm('确定要删除这个用户吗？')) {
-        try {
-          await api.delete(`/api/users/${userId}/`)
-          this.showMessage('用户删除成功', 'success')
-          this.loadUsers()
-        } catch (error) {
-          console.error('删除用户失败:', error)
-          this.showMessage('删除用户失败', 'error')
-        }
+      try {
+        // 使用 el-message-box 替代原生 confirm（更符合 Element Plus 风格）
+        await ElMessageBox.confirm('确定要删除这个用户吗？', '提示', {
+          type: 'warning',
+          confirmButtonText: '确定',
+          cancelButtonText: '取消'
+        })
+        await api.delete(`/api/users/${userId}/`)
+        ElMessage.success('用户删除成功')
+        this.loadUsers()
+      } catch (error) {
+        if (error === 'cancel') return // 用户取消，不报错
+        console.error('删除用户失败:', error)
+        ElMessage.error('删除用户失败')
       }
     },
-    
-    showMessage(message, type) {
-      const messageElement = document.getElementById('userListMessage')
-      messageElement.textContent = message
-      messageElement.className = `mb-3 alert alert-${type}`
-      
-      // 3秒后自动隐藏消息
-      setTimeout(() => {
-        messageElement.textContent = ''
-        messageElement.className = 'mb-3'
-      }, 3000)
-    },
-    
-    // 判断字符串是否包含中文字符
+
+    // 判断字符串是否包含中文字符（与原版保持一致）
     containsChinese(str) {
-      return /[\u4e00-\u9fa5]/.test(str)
+      return /[一-龥]/.test(str)
     },
-    
-    // 根据语言规则格式化姓名
+
+    // 根据语言规则格式化姓名（与原版保持一致）
     formatFullName(firstName, lastName) {
-      // 如果任一字段包含中文，则视为中文名（姓在前，名在后，无空格）
       if (this.containsChinese(firstName) || this.containsChinese(lastName)) {
         return (lastName || '') + (firstName || '')
       }
-      // 否则视为英文名（名在前，姓在后，有空格）
       return `${firstName || ''} ${lastName || ''}`.trim()
     },
-    
-    // 格式化日期时间
+
+    // 格式化日期时间（与原版保持一致）
     formatDateTime(dateTimeString) {
       return new Date(dateTimeString).toLocaleString('zh-CN', {
         year: 'numeric',
@@ -138,5 +123,8 @@ export default {
 </script>
 
 <style scoped>
-/* 所有样式已移至home.css */
+/* MOD-UI-001-E: 根容器无 background/shadow/padding，由 Layout .content-wrapper 提供 */
+.user-list-view {
+  padding: 0;
+}
 </style>

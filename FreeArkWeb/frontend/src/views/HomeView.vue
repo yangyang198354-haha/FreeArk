@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="home-view">
     <!-- 页面标题 -->
     <div class="page-header">
       <h2>系统看板</h2>
@@ -438,26 +438,29 @@ export default {
           labels,
           datasets: [
             {
+              // MOD-UI-002: 总用电量色值对齐总电量查询区块 #303133（深灰，PM 确认）
               label: '总用电量 (kWh)',
               data: totalValues,
-              borderColor: '#667eea',
-              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              borderColor: '#303133',
+              backgroundColor: 'rgba(48, 49, 51, 0.08)',
               tension: 0.4,
               fill: true
             },
             {
+              // MOD-UI-002: 制冷色值对齐总电量查询区块 #409eff（蓝色）
               label: '制冷 (kWh)',
               data: coolingValues,
-              borderColor: '#f56c6c',
-              backgroundColor: 'rgba(245, 108, 108, 0.05)',
+              borderColor: '#409eff',
+              backgroundColor: 'rgba(64, 158, 255, 0.1)',
               tension: 0.4,
               fill: false
             },
             {
+              // MOD-UI-002: 制热色值对齐总电量查询区块 #f56c6c（红色）
               label: '制热 (kWh)',
               data: heatingValues,
-              borderColor: '#e6a23c',
-              backgroundColor: 'rgba(230, 162, 60, 0.05)',
+              borderColor: '#f56c6c',
+              backgroundColor: 'rgba(245, 108, 108, 0.05)',
               tension: 0.4,
               fill: false
             }
@@ -531,7 +534,8 @@ export default {
 </script>
 
 <style scoped>
-.page-container {
+/* MOD-UI-001-A: 根容器改为 .home-view，无 background/shadow/padding（由 Layout .content-wrapper 提供） */
+.home-view {
   width: 100%;
 }
 
@@ -539,10 +543,10 @@ export default {
   margin-bottom: 20px;
 }
 
+/* MOD-UI-003: 删除局部 font-size 覆盖，统一由 global.css h2 提供（20px） */
 .page-header h2 {
   margin: 0;
   color: #303133;
-  font-size: 20px;
   font-weight: 600;
 }
 
@@ -827,10 +831,10 @@ export default {
   text-align: center;
 }
 
+/* MOD-UI-003: 删除 font-family: monospace，通过继承获得全局字体族 */
 .status-label {
   font-size: 13px;
   color: #303133;
-  font-family: monospace;
 }
 
 /* 最近活动样式 */
