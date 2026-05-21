@@ -598,13 +598,19 @@ class ConnectionStatusHandler(MessageHandler):
 #     由 PLCLatestDataHandler 写 PLCLatestData，两个路径并行互不干扰。
 _EXCLUDED_PARAMS = frozenset()
 
-# Energy 参数由独立采集任务每 5 分钟推送，历史数据全量保留。
-# General 参数每 10 分钟一轮，历史只保留每小时第一条，降低存储量约 6 倍。
+# Energy 参数由独立采集任务每约 6 分钟推送；自 v0.5.4(P1-1) 起，其历史
+# （device_param_history）也只保留每小时第一条，与 general 一致。
+# General 参数每 10 分钟一轮，历史只保留每小时第一条。
 _ENERGY_PARAM_NAMES = frozenset(['total_hot_quantity', 'total_cold_quantity'])
 
-# 内存去重缓存：(specific_part, param_name) -> 'YYYY-MM-DD-HH'
+# General 历史去重缓存：(specific_part, param_name) -> 'YYYY-MM-DD-HH'
 # Python GIL 保证单次 dict get/set 的原子性；极端情况同一小时最多多写一条，可接受。
 _general_hist_last_hour: dict = {}
+
+# Energy 历史去重缓存（v0.5.4 P1-1）：与 _general_hist_last_hour 同策略、同结构，
+# energy 参数每小时也只保留第一条 device_param_history 样本。
+# (specific_part, param_name) -> 'YYYY-MM-DD-HH'；线程安全模型同上（依赖 GIL）。
+_energy_hist_last_hour: dict = {}
 
 # 支持的时间戳格式
 _TIMESTAMP_FORMATS = (
@@ -751,23 +757,29 @@ class PLCLatestDataHandler(MessageHandler):
     def _write_history(self, records):
         """追加写入 DeviceParamHistory（时序历史，append-only）。
 
-        - Energy 参数（total_hot/cold_quantity）：每次全量写入（5分钟采集周期）
-        - General 参数：每小时写入第一条，通过模块级内存缓存去重（10分钟采集，保留1条/小时）
+        Energy 与 General 参数均按「每小时保留第一条」去重（v0.5.4 P1-1 起一致）：
+        - Energy 参数（total_hot/cold_quantity）：经 _energy_hist_last_hour 去重
+          （约 6 分钟采集 → 每小时 1 条，写入量降约 10 倍）。
+        - General 参数：经 _general_hist_last_hour 去重（10 分钟采集 → 每小时 1 条）。
+        两者去重算法相同，仅使用各自的缓存。
         """
         hist_objs = []
         for r in records:
             param_name = r['param_name']
             collected_at = r['collected_at']  # datetime or None
 
-            if param_name not in _ENERGY_PARAM_NAMES:
-                # General 参数：无时间戳则跳过；否则按小时去重
-                if collected_at is None:
-                    continue
-                hour_key = collected_at.strftime('%Y-%m-%d-%H')
-                cache_key = (r['specific_part'], param_name)
-                if _general_hist_last_hour.get(cache_key) == hour_key:
-                    continue  # 本小时已有样本，跳过
-                _general_hist_last_hour[cache_key] = hour_key
+            # 按参数类型选择对应的小时去重缓存（energy / general 算法一致）
+            hist_cache = (_energy_hist_last_hour
+                          if param_name in _ENERGY_PARAM_NAMES
+                          else _general_hist_last_hour)
+            # 无时间戳无法定位小时窗口，跳过
+            if collected_at is None:
+                continue
+            hour_key = collected_at.strftime('%Y-%m-%d-%H')
+            cache_key = (r['specific_part'], param_name)
+            if hist_cache.get(cache_key) == hour_key:
+                continue  # 本小时已有样本，跳过
+            hist_cache[cache_key] = hour_key
 
             hist_objs.append(DeviceParamHistory(
                 specific_part=r['specific_part'],

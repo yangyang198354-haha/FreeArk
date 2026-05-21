@@ -216,11 +216,12 @@ TS_H11  = '2026-04-18 11:05:00'  # 11点（新小时）
 
 
 class TestHistoryHourlyDedup(TestCase):
-    """验证 _write_history 对 general 参数的每小时去重逻辑"""
+    """验证 _write_history 对 general 与 energy 参数的每小时去重逻辑（energy 自 v0.5.4 P1-1 起）"""
 
     def setUp(self):
         # 每个测试前清空去重缓存，避免用例间干扰
         _handlers_module._general_hist_last_hour.clear()
+        _handlers_module._energy_hist_last_hour.clear()
         self.handler = PLCLatestDataHandler()
 
     # GWT-16: general 参数同小时第二次调用不写入历史
@@ -255,12 +256,12 @@ class TestHistoryHourlyDedup(TestCase):
         ).count()
         self.assertEqual(count, 2)
 
-    # GWT-18: energy 参数每次都写入历史，不受小时限制
-    def test_energy_param_always_written(self):
+    # GWT-18: [v0.5.4 P1-1] energy 参数同小时第二次调用不写入历史
+    def test_energy_param_same_hour_deduped(self):
         """
         Given: total_hot_quantity 在 10:05 写入历史
         When:  同一小时 10:15 再次触发 handle()
-        Then:  DeviceParamHistory 有 2 条（energy 参数不去重）
+        Then:  DeviceParamHistory 仍只有 1 条（P1-1 后 energy 参数按小时去重）
         """
         payload1 = _make_payload(DEVICE, {'total_hot_quantity': (1000, True, TS_H10A)})
         payload2 = _make_payload(DEVICE, {'total_hot_quantity': (1001, True, TS_H10B)})
@@ -269,7 +270,45 @@ class TestHistoryHourlyDedup(TestCase):
         count = DeviceParamHistory.objects.filter(
             specific_part=DEVICE, param_name='total_hot_quantity'
         ).count()
+        self.assertEqual(count, 1)
+
+    # GWT-19: [v0.5.4 P1-1] energy 参数跨小时时写入新样本
+    def test_energy_param_new_hour_writes(self):
+        """
+        Given: total_hot_quantity 在 10:05 写入历史
+        When:  11:05（新小时）再次触发 handle()
+        Then:  DeviceParamHistory 有 2 条记录
+        """
+        payload1 = _make_payload(DEVICE, {'total_hot_quantity': (1000, True, TS_H10A)})
+        payload2 = _make_payload(DEVICE, {'total_hot_quantity': (1002, True, TS_H11)})
+        self.handler.handle('/topic/' + DEVICE, payload1)
+        self.handler.handle('/topic/' + DEVICE, payload2)
+        count = DeviceParamHistory.objects.filter(
+            specific_part=DEVICE, param_name='total_hot_quantity'
+        ).count()
         self.assertEqual(count, 2)
+
+    # GWT-20: [v0.5.4 P1-1] energy 与 general 去重缓存互不干扰
+    def test_energy_and_general_dedup_independent(self):
+        """
+        Given: 同一设备同一小时，total_hot_quantity 与 living_room_temperature 各到达两次
+        When:  同小时各触发两次 handle()
+        Then:  两个参数在 DeviceParamHistory 中各只有 1 条，互不影响
+        """
+        p1 = _make_payload(DEVICE, {
+            'total_hot_quantity': (1000, True, TS_H10A),
+            'living_room_temperature': (245, True, TS_H10A),
+        })
+        p2 = _make_payload(DEVICE, {
+            'total_hot_quantity': (1001, True, TS_H10B),
+            'living_room_temperature': (246, True, TS_H10B),
+        })
+        self.handler.handle('/topic/' + DEVICE, p1)
+        self.handler.handle('/topic/' + DEVICE, p2)
+        self.assertEqual(DeviceParamHistory.objects.filter(
+            specific_part=DEVICE, param_name='total_hot_quantity').count(), 1)
+        self.assertEqual(DeviceParamHistory.objects.filter(
+            specific_part=DEVICE, param_name='living_room_temperature').count(), 1)
 
 
 # ---------------------------------------------------------------------------
