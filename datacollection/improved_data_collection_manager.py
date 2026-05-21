@@ -91,6 +91,7 @@ class ImprovedDataCollectionManager:
         self.plc_manager.start()
         logger.info(f"✅ 改进版数据收集管理器已启动，线程池大小：{self.max_workers}")
         self._start_plc_write_subscriber()
+        self._start_ondemand_collect_subscriber()  # v0.5.6: 按需采集订阅器
 
     def _start_plc_write_subscriber(self):
         try:
@@ -103,6 +104,22 @@ class ImprovedDataCollectionManager:
             logger.info('✅ PLCWriteSubscriber 已启动')
         except Exception as e:
             logger.error('PLCWriteSubscriber 启动失败: %s', e, exc_info=True)
+
+    def _start_ondemand_collect_subscriber(self):
+        """启动按需采集订阅器（v0.5.6，MOD-DC-02）。
+
+        失败不影响主采集链路（try/except 隔离）。
+        """
+        try:
+            from datacollection.ondemand_collect_subscriber import OndemandCollectSubscriber
+            self._ondemand_subscriber = OndemandCollectSubscriber(
+                mqtt_broker='192.168.31.98',
+                mqtt_port=32788,
+            )
+            self._ondemand_subscriber.start()
+            logger.info('✅ OndemandCollectSubscriber 已启动')
+        except Exception as e:
+            logger.error('OndemandCollectSubscriber 启动失败: %s', e, exc_info=True)
 
     def stop(self):
         """停止数据收集管理器"""

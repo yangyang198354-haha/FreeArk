@@ -14,7 +14,7 @@ from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError as DjangoOperationalError
 from django.utils import timezone
 from .models import PLCData, PLCWriteRecord, PLCLatestData
-from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler, ScreenConnectivityHandler
+from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler, PLCLatestDataHandler, ScreenConnectivityHandler, OndemandPLCLatestDataHandler
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -47,6 +47,10 @@ def load_mqtt_config(config_path=MQTT_CONFIG_PATH):
 _ENERGY_PAYLOAD_MAX_SIZE = 2000
 NUM_ENERGY_WORKERS = 3
 NUM_GENERAL_WORKERS = 6
+# v0.5.6：按需采集独立队列 + 1 个专属 worker（OQ-002 决议：1 个线程串行入库）
+NUM_ONDEMAND_WORKERS = 1
+ONDEMAND_RESULT_TOPIC_PREFIX = '/datacollection/plc/ondemand/result/'
+ONDEMAND_DONE_TOPIC_PREFIX = '/datacollection/plc/ondemand/done/'
 # 每个 worker 每处理 N 条消息才调用一次 close_old_connections，避免频繁 MySQL 握手
 _CLOSE_CONN_EVERY_N = 50
 
@@ -107,6 +111,12 @@ class MQTTConsumer:
         self._general_queue = queue.Queue(maxsize=queue_maxsize)
         self._num_energy_workers = num_energy_workers
         self._num_general_workers = num_general_workers
+        # v0.5.6: 按需采集独立队列（MOD-BE-04），1 个 worker，完全与 energy/general 解耦
+        self._ondemand_queue = queue.Queue(maxsize=100)
+        self._num_ondemand_workers = NUM_ONDEMAND_WORKERS
+        self.ondemand_handlers = [
+            OndemandPLCLatestDataHandler(),
+        ]
         self._worker_threads = []
         # 停止信号：set() 后 worker 在队列清空时退出
         self.stop_event = threading.Event()
@@ -115,6 +125,9 @@ class MQTTConsumer:
     SCREEN_CONNECTIVITY_TOPIC = '/datacollection/screen/connectivity'
     # MQTT topic prefix for PLC write ack (FR4/FR5)
     WRITE_ACK_TOPIC_PREFIX = '/datacollection/plc/write/ack/'
+    # v0.5.6: 按需采集 topic 前缀（MOD-BE-04）
+    ONDEMAND_RESULT_TOPIC_PREFIX = ONDEMAND_RESULT_TOPIC_PREFIX
+    ONDEMAND_DONE_TOPIC_PREFIX = ONDEMAND_DONE_TOPIC_PREFIX
 
     def on_connect(self, client, userdata, flags, rc):
         """连接到MQTT代理后的回调函数"""
@@ -129,6 +142,9 @@ class MQTTConsumer:
             # 订阅 PLC 写入回执 topic（FR4/FR5）
             client.subscribe('/datacollection/plc/write/ack/#', qos=self.qos)
             logger.info("已订阅主题: /datacollection/plc/write/ack/# (QoS: %s)", self.qos)
+            # v0.5.6: 订阅按需采集结果 topic（MOD-BE-04）
+            client.subscribe('/datacollection/plc/ondemand/result/#', qos=self.qos)
+            logger.info("已订阅主题: /datacollection/plc/ondemand/result/# (ondemand 按需采集结果)")
         else:
             logger.error(f"连接到MQTT代理失败，返回代码: {rc}")
 
@@ -247,14 +263,20 @@ class MQTTConsumer:
         其余 payload < 2000B → energy_queue，否则 → general_queue。
         """
         payload_size = len(msg.payload)
-        if msg.topic == self.SCREEN_CONNECTIVITY_TOPIC:
-            is_general = True
+        # v0.5.6: 按需采集结果消息优先路由到独立 ondemand 队列，确保零等待（MOD-BE-04）
+        if msg.topic.startswith(self.ONDEMAND_RESULT_TOPIC_PREFIX):
+            target_queue = self._ondemand_queue
+            queue_name = 'ondemand'
+        elif msg.topic == self.SCREEN_CONNECTIVITY_TOPIC:
+            target_queue = self._general_queue
+            queue_name = 'general'
         elif msg.topic.startswith(self.WRITE_ACK_TOPIC_PREFIX):
-            is_general = True
+            target_queue = self._general_queue
+            queue_name = 'general'
         else:
             is_general = payload_size >= _ENERGY_PAYLOAD_MAX_SIZE
-        target_queue = self._general_queue if is_general else self._energy_queue
-        queue_name = 'general' if is_general else 'energy'
+            target_queue = self._general_queue if is_general else self._energy_queue
+            queue_name = 'general' if is_general else 'energy'
         try:
             target_queue.put_nowait((msg.topic, msg.payload, msg.qos))
             logger.debug("消息入队: topic=%s, size=%d bytes, queue=%s", msg.topic, payload_size, queue_name)
@@ -762,6 +784,110 @@ class MQTTConsumer:
             logger.error(f"连接到MQTT代理失败: {e}")
             return False
 
+    # ------------------------------------------------------------------
+    # v0.5.6 新增：ondemand worker 循环及辅助方法（MOD-BE-04）
+    # ------------------------------------------------------------------
+
+    def _ondemand_worker_loop(self):
+        """Ondemand worker 主循环（串行，1 个线程，OQ-002）。
+
+        - 从 _ondemand_queue 取消息
+        - 调用 OndemandPLCLatestDataHandler.handle()（只写 plc_latest_data，不写历史）
+        - 完成后发布 done 通知至 /datacollection/plc/ondemand/done/<specific_part>
+        """
+        close_old_connections()
+        django_connection.ensure_connection()
+        thread_name = threading.current_thread().name
+        logger.info(f"[{thread_name}] Ondemand worker 启动")
+
+        msg_counter = 0
+        while not self.stop_event.is_set() or not self._ondemand_queue.empty():
+            try:
+                topic, payload_bytes, qos = self._ondemand_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+
+            t_start = time.monotonic()
+            try:
+                msg_counter += 1
+                if msg_counter % _CLOSE_CONN_EVERY_N == 0:
+                    close_old_connections()
+                django_connection.ensure_connection()
+
+                self._dispatch_ondemand(topic, payload_bytes)
+            except Exception as e:
+                logger.error(f"[{thread_name}] ondemand 消息处理异常: {e}", exc_info=True)
+            finally:
+                self._ondemand_queue.task_done()
+                elapsed_ms = (time.monotonic() - t_start) * 1000
+                logger.info(f"[{thread_name}] ondemand 消息处理完成: topic={topic}, 耗时={elapsed_ms:.1f}ms")
+
+        logger.info(f"[{thread_name}] Ondemand worker 退出")
+
+    def _dispatch_ondemand(self, topic: str, payload_bytes: bytes):
+        """解码 payload，调用 ondemand handler，完成后发布 done 通知。"""
+        try:
+            payload_str = payload_bytes.decode('utf-8')
+            payload = self._safe_json_parse(payload_str)
+        except Exception as e:
+            logger.error(f"[ondemand] 消息解码/解析失败: topic={topic}, error={e}")
+            return
+
+        # 调用 OndemandPLCLatestDataHandler（只写 plc_latest_data，不写 device_param_history）
+        for handler in self.ondemand_handlers:
+            try:
+                handler.handle(topic, payload)
+            except Exception as e:
+                logger.error(f"[ondemand] handler 处理失败: {e}", exc_info=True)
+
+        # 提取 specific_part 并发布 done 通知（QoS=0，OQ-004 决议）
+        specific_part = self._extract_specific_part_from_topic(topic, self.ONDEMAND_RESULT_TOPIC_PREFIX)
+        if specific_part:
+            self._publish_ondemand_done(specific_part, payload)
+
+    def _extract_specific_part_from_topic(self, topic: str, prefix: str) -> str:
+        """从 topic 中提取 specific_part（prefix 之后的部分）。"""
+        if topic.startswith(prefix):
+            return topic[len(prefix):]
+        return ''
+
+    def _publish_ondemand_done(self, specific_part: str, payload: dict):
+        """发布 done 通知至 /datacollection/plc/ondemand/done/<specific_part>（QoS=0）。"""
+        collected_at = self._extract_max_collected_at(payload)
+        done_topic = f"{self.ONDEMAND_DONE_TOPIC_PREFIX}{specific_part}"
+        done_payload = json.dumps({
+            'specific_part': specific_part,
+            'collected_at': collected_at or datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        })
+        try:
+            # QoS=0（最多一次），前端 30 秒轮询兜底（OQ-004 决议）
+            self.client.publish(done_topic, done_payload, qos=0)
+            logger.info(f"[ondemand] done 通知已发布: topic={done_topic}")
+        except Exception as e:
+            logger.error(f"[ondemand] done 通知发布失败: topic={done_topic}, error={e}")
+
+    def _extract_max_collected_at(self, payload: dict) -> str:
+        """从 payload 中提取所有参数 timestamp 的最大值。
+
+        Payload 结构：{device_id: {data: {param: {timestamp: "...", ...}, ...}, ...}}
+        """
+        max_ts = None
+        if not isinstance(payload, dict):
+            return max_ts
+        for device_info in payload.values():
+            if not isinstance(device_info, dict):
+                continue
+            data = device_info.get('data', {})
+            if not isinstance(data, dict):
+                continue
+            for param_data in data.values():
+                if not isinstance(param_data, dict):
+                    continue
+                ts = param_data.get('timestamp')
+                if ts and (max_ts is None or ts > max_ts):
+                    max_ts = ts
+        return max_ts
+
     def start(self):
         """启动MQTT客户端循环"""
         try:
@@ -791,9 +917,19 @@ class MQTTConsumer:
                 )
                 t.start()
                 self._worker_threads.append(t)
+            # v0.5.6: 启动 ondemand worker（1 个，串行）
+            for i in range(self._num_ondemand_workers):
+                t = threading.Thread(
+                    target=self._ondemand_worker_loop,
+                    name=f"mqtt-ondemand-worker-{i}",
+                    daemon=True,
+                )
+                t.start()
+                self._worker_threads.append(t)
             logger.info(
                 f"已启动 {self._num_energy_workers} 个 energy worker + "
-                f"{self._num_general_workers} 个 general worker"
+                f"{self._num_general_workers} 个 general worker + "
+                f"{self._num_ondemand_workers} 个 ondemand worker"
             )
 
             logger.info("启动MQTT客户端循环")
@@ -837,18 +973,21 @@ class MQTTConsumer:
             self.client.disconnect()
             logger.info("paho 已停止")
 
-            # 3. 等待两个队列均清空（最长 30s）
+            # 3. 等待三个队列均清空（最长 30s）
             energy_size = self._energy_queue.qsize()
             general_size = self._general_queue.qsize()
-            if energy_size + general_size > 0:
+            ondemand_size = self._ondemand_queue.qsize()
+            if energy_size + general_size + ondemand_size > 0:
                 logger.info(
-                    f"等待队列消息处理完毕（energy={energy_size}, general={general_size}，最长 30s）..."
+                    f"等待队列消息处理完毕（energy={energy_size}, general={general_size}, "
+                    f"ondemand={ondemand_size}，最长 30s）..."
                 )
             deadline = time.monotonic() + 30
-            while (not self._energy_queue.empty() or not self._general_queue.empty()) \
-                    and time.monotonic() < deadline:
+            while (not self._energy_queue.empty() or not self._general_queue.empty()
+                   or not self._ondemand_queue.empty()) and time.monotonic() < deadline:
                 time.sleep(0.2)
-            remaining = self._energy_queue.qsize() + self._general_queue.qsize()
+            remaining = (self._energy_queue.qsize() + self._general_queue.qsize()
+                         + self._ondemand_queue.qsize())
             if remaining > 0:
                 logger.warning(f"优雅关闭超时(30s)，仍有 {remaining} 条消息未处理，强制退出")
             else:

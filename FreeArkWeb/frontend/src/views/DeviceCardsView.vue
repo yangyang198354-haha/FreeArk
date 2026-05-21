@@ -11,7 +11,7 @@
     />
 
     <template v-else>
-      <!-- 顶部导航栏：每个子系统一个标签 + 历史数据链接 -->
+      <!-- 顶部导航栏：每个子系统一个标签 + 历史数据链接 + 按需采集加载指示 -->
       <div class="panel-nav-bar">
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
           <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
@@ -45,16 +45,13 @@
           </template>
         </template>
 
-        <el-button
-          type="primary"
-          :loading="loading"
-          size="small"
-          @click="fetchData"
-          class="nav-refresh-btn"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <!-- v0.5.6: 按需采集进行中显示小圆形加载指示，替代原刷新按钮 -->
+        <div v-if="ondemandInFlight" class="nav-loading-indicator">
+          <el-icon class="is-loading" style="font-size: 16px; color: #409eff;">
+            <Loading />
+          </el-icon>
+          <span class="nav-loading-text">采集中…</span>
+        </div>
       </div>
 
       <!-- 骨架屏 -->
@@ -73,7 +70,7 @@
           >
             <div class="col-header">
               <span class="col-title">{{ subTypeData.display }}</span>
-              <span class="col-time">{{ getCollectedAt(subTypeData.params) }}</span>
+              <!-- v0.5.6: 移除各列单独时间戳（AC-004-2），改为底部统一时间戳 -->
             </div>
             <div class="params-list">
               <div
@@ -89,16 +86,20 @@
         </template>
       </div>
 
+      <!-- v0.5.6: 统一时间戳（REQ-FUNC-004，AC-004-1） -->
       <div class="panel-footer" v-if="hasData">
-        <el-text type="info" size="small">每 30 秒自动刷新</el-text>
+        <el-text type="info" size="small">
+          上次数据更新于：{{ lastUpdatedAt || '—' }}
+        </el-text>
       </div>
     </template>
   </div>
 </template>
 
 <script>
-import { Refresh } from '@element-plus/icons-vue'
+import { Loading } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
+import mqtt from 'mqtt'
 
 // 温度字段（int16 ÷10, °C）
 const TEMP_PARAMS = new Set([
@@ -151,12 +152,16 @@ const FAULT_PARAMS = new Set([
 
 export default {
   name: 'DeviceCardsView',
-  components: { Refresh },
+  components: { Loading },
   data() {
     return {
       loading: false,
       deviceData: {},
       refreshTimer: null,
+      // v0.5.6: 按需采集状态（MOD-FE-01）
+      ondemandInFlight: false,
+      ondemandTimeoutTimer: null,
+      _mqttDisconnect: null,
     }
   },
   computed: {
@@ -166,25 +171,48 @@ export default {
     hasData() {
       return Object.keys(this.deviceData).length > 0
     },
+    // v0.5.6: 统一时间戳（REQ-FUNC-004，取所有参数 collected_at 最大值）
+    lastUpdatedAt() {
+      let maxTs = null
+      for (const groupData of Object.values(this.deviceData)) {
+        for (const subTypeData of Object.values(groupData.sub_types || {})) {
+          for (const param of (subTypeData.params || [])) {
+            if (param.collected_at && (!maxTs || param.collected_at > maxTs)) {
+              maxTs = param.collected_at
+            }
+          }
+        }
+      }
+      return maxTs || null
+    },
   },
   mounted() {
     if (this.specificPart) {
       this.fetchData()
+      this.triggerOndemandRefresh()  // 打开即触发一次按需采集
       this.startAutoRefresh()
+      this.connectMqttDone()
     }
   },
   watch: {
     specificPart(newVal) {
       this.deviceData = {}
       this.stopAutoRefresh()
+      this.disconnectMqttDone()
+      this._clearOndemandTimeout()
+      this.ondemandInFlight = false
       if (newVal) {
         this.fetchData()
+        this.triggerOndemandRefresh()
         this.startAutoRefresh()
+        this.connectMqttDone()
       }
     },
   },
   beforeUnmount() {
     this.stopAutoRefresh()
+    this.disconnectMqttDone()
+    this._clearOndemandTimeout()
   },
   methods: {
     async fetchData() {
@@ -208,6 +236,93 @@ export default {
       }
     },
 
+    // v0.5.6: 触发按需采集请求（REQ-FUNC-001，MOD-FE-01）
+    async triggerOndemandRefresh() {
+      if (!this.specificPart) return
+      if (this.ondemandInFlight) return  // 防重入：当前采集进行中则跳过
+
+      this.ondemandInFlight = true
+      try {
+        await api.post('/api/devices/ondemand-refresh/', {
+          specific_part: this.specificPart,
+        })
+        // 等待 MQTT done 通知触发 fetchData()
+        // 超时 20 秒后降级重置，不阻塞下一轮
+        this.ondemandTimeoutTimer = setTimeout(() => {
+          console.warn('[DeviceCards] 按需采集 done 通知 20s 超时，重置 inFlight 标志')
+          this.ondemandInFlight = false
+          this.ondemandTimeoutTimer = null
+          // 降级：直接读取 DB 快照
+          this.fetchData()
+        }, 20000)
+      } catch (e) {
+        // 降级：MQTT broker 不可达或 503，直接读 DB 快照
+        console.warn('[DeviceCards] ondemand 请求失败，降级读取 DB:', e)
+        this.ondemandInFlight = false
+        await this.fetchData()
+      }
+    },
+
+    // v0.5.6: 连接 MQTT WebSocket 订阅 done 通知（REQ-FUNC-003，AC-003-1）
+    // 直接使用 paho mqtt 客户端，不通过 useMqttWebSocket composable（避免 Options API 中
+    // onUnmounted 无法注册的问题），手动在 beforeUnmount 中调用 disconnectMqttDone()。
+    connectMqttDone() {
+      if (!this.specificPart) return
+      const topic = `/datacollection/plc/ondemand/done/${this.specificPart}`
+      try {
+        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+        const brokerUrl = `${proto}://${window.location.host}/mqtt-ws/`
+        const mqttClient = mqtt.connect(brokerUrl, { clean: true })
+        mqttClient.on('connect', () => {
+          mqttClient.subscribe(topic, { qos: 1 })
+        })
+        mqttClient.on('message', (receivedTopic, payload) => {
+          this.handleOndemandDone({ topic: receivedTopic, payload: payload.toString() })
+        })
+        mqttClient.on('error', (err) => {
+          console.warn('[DeviceCards] MQTT WebSocket 错误，降级为 30s 轮询:', err)
+          this._mqttDisconnect = null
+        })
+        this._mqttDisconnect = () => { mqttClient.end() }
+      } catch (e) {
+        console.warn('[DeviceCards] MQTT WebSocket 连接失败，降级为 30s 轮询:', e)
+        this._mqttDisconnect = null
+      }
+    },
+
+    disconnectMqttDone() {
+      if (this._mqttDisconnect) {
+        try {
+          this._mqttDisconnect()
+        } catch (e) {
+          // 忽略断开时的错误
+        }
+        this._mqttDisconnect = null
+      }
+    },
+
+    // v0.5.6: 处理 MQTT done 通知（REQ-FUNC-003，AC-003-2）
+    handleOndemandDone({ payload }) {
+      try {
+        const data = JSON.parse(payload)
+        if (data.specific_part !== this.specificPart) return
+        // 清除超时计时器，重置 inFlight 标志
+        this._clearOndemandTimeout()
+        this.ondemandInFlight = false
+        // 立即拉取最新数据更新 UI
+        this.fetchData()
+      } catch (e) {
+        // JSON 解析失败或字段不匹配，忽略
+      }
+    },
+
+    _clearOndemandTimeout() {
+      if (this.ondemandTimeoutTimer) {
+        clearTimeout(this.ondemandTimeoutTimer)
+        this.ondemandTimeoutTimer = null
+      }
+    },
+
     goToRoomHistory() {
       this.$router.push({
         name: 'RoomHistory',
@@ -224,12 +339,6 @@ export default {
           sub_type_display: subTypeDisplay,
         },
       })
-    },
-
-    getCollectedAt(params) {
-      if (!params || !params.length) return ''
-      const t = params.find(p => p.collected_at)?.collected_at
-      return t ? t.slice(11, 16) : ''
     },
 
     expandParams(params) {
@@ -332,8 +441,18 @@ export default {
       return String(rawValue)
     },
 
+    // v0.5.6: 30 秒定时器改为触发按需采集（REQ-FUNC-002，AC-002-1）
+    // 若 MQTT WebSocket 不可用（_mqttDisconnect 为 null），30s 后降级直接读 DB
     startAutoRefresh() {
-      this.refreshTimer = setInterval(() => { this.fetchData() }, 30000)
+      this.refreshTimer = setInterval(() => {
+        if (this._mqttDisconnect) {
+          // MQTT 可用：触发按需采集，等待 done 通知更新 UI
+          this.triggerOndemandRefresh()
+        } else {
+          // 降级：MQTT 不可用，直接读 DB 快照（AC-003-3）
+          this.fetchData()
+        }
+      }, 30000)
     },
 
     stopAutoRefresh() {
@@ -393,106 +512,93 @@ export default {
   flex-shrink: 0;
 }
 
-.nav-refresh-btn {
+/* v0.5.6: 按需采集进行中加载指示器（替代刷新按钮） */
+.nav-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
   flex-shrink: 0;
+  padding: 0 6px;
 }
 
-/* 横向卡片滚动行 */
+.nav-loading-text {
+  font-size: 12px;
+  color: #409eff;
+}
+
+/* 卡片主体区域 */
 .cards-scroll-row {
   display: flex;
-  flex-direction: row;
   flex-wrap: nowrap;
-  gap: 0;
+  gap: 12px;
+  padding: 12px;
   overflow-x: auto;
-  padding: 12px 12px 16px;
-  align-items: flex-start;
 }
 
-/* 每个 sub_type 列 */
 .subtype-col {
-  flex: 0 0 178px;
-  width: 178px;
+  min-width: 180px;
+  flex-shrink: 0;
   background: #fff;
-  border: 1px solid #e4e7ed;
-  border-right: none;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   overflow: hidden;
-}
-
-.subtype-col:first-child {
-  border-radius: 4px 0 0 4px;
-}
-
-.subtype-col:last-child {
-  border-right: 1px solid #e4e7ed;
-  border-radius: 0 4px 4px 0;
 }
 
 .col-header {
-  padding: 6px 8px 4px;
-  border-bottom: 2px solid #409eff;
-  background: #f0f6ff;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
 }
 
 .col-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #303133;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block;
 }
 
-.col-time {
-  font-size: 11px;
-  color: #909399;
-  display: block;
-  margin-top: 1px;
-}
-
-/* 参数列表 */
 .params-list {
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
 .param-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 3px 8px;
-  border-bottom: 1px solid #f2f3f5;
-  font-size: 12px;
-  min-height: 24px;
+  justify-content: space-between;
+  padding: 4px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid #f5f5f5;
 }
 
 .param-row:last-child {
   border-bottom: none;
 }
 
-.param-row:nth-child(even) {
-  background-color: #f9fafb;
-}
-
 .param-label {
   color: #606266;
   flex: 1;
-  min-width: 0;
-  margin-right: 6px;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
 }
 
 .param-value {
-  font-weight: 500;
   color: #303133;
-  white-space: nowrap;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 
+/* v0.5.6: 底部统一时间戳（REQ-FUNC-004） */
 .panel-footer {
-  text-align: center;
-  padding: 8px 0 16px;
+  padding: 8px 12px;
+  background: #fff;
+  border-top: 1px solid #e4e7ed;
+  text-align: right;
 }
 </style>

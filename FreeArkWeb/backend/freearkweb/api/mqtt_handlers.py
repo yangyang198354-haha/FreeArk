@@ -874,6 +874,24 @@ class PLCLatestDataHandler(MessageHandler):
 
 
 # ---------------------------------------------------------------------------
+# v0.5.6 — OndemandPLCLatestDataHandler (MOD-BE-03)
+#
+# 按需采集专用 handler：仅写 plc_latest_data，不写 device_param_history（ADR-004）。
+# 继承 PLCLatestDataHandler，覆盖 _write_history() 为 no-op，改动量最小，逻辑清晰。
+# ---------------------------------------------------------------------------
+class OndemandPLCLatestDataHandler(PLCLatestDataHandler):
+    """按需采集专用 handler。
+
+    仅调用 _bulk_upsert()，覆盖 _write_history() 为 no-op，
+    防止 device_param_history 因按需采集（每 30 秒）大量膨胀（OQ-003 决议）。
+    """
+
+    def _write_history(self, records):
+        """按需采集不写历史（ADR-004，OQ-003 用户已确认）。"""
+        logger.debug('OndemandPLCLatestDataHandler: 跳过历史写入（按需采集不写 device_param_history）')
+
+
+# ---------------------------------------------------------------------------
 # MOD-MQTT-01 — ScreenConnectivityHandler（已适配心跳方案）
 #
 # 历史：旧版通过 datacollection ICMP 探测写入 status/last_checked_at。

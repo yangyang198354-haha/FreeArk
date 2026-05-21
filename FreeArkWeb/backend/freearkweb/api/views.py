@@ -2116,3 +2116,104 @@ def device_tree_sync_batch_status(request, task_id):
     if record is None:
         return Response({'error': '任务不存在或已过期'}, status=404)
     return Response(record)
+
+
+# ===========================================================================
+# v0.5.6 — 按需采集触发接口 (MOD-BE-01, REQ-FUNC-001)
+# ===========================================================================
+
+# 进程内防重入缓存：{specific_part: last_request_timestamp}
+# TTL = 25s：同一 specific_part 25 秒内重复请求直接返回 202，不重复发布 MQTT
+_ondemand_inflight: dict = {}
+_ONDEMAND_INFLIGHT_TTL = 25  # 秒
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def device_ondemand_refresh(request):
+    """POST /api/devices/ondemand-refresh/
+
+    触发指定专有部分的按需 PLC 数据采集。
+    向 MQTT broker 发布 /datacollection/plc/ondemand/request/<specific_part>。
+    返回 202 Accepted（不等待采集完成）。
+
+    Request body:
+        {"specific_part": "9-1-31-3104"}
+
+    Responses:
+        202: {"status": "accepted", "specific_part": "..."}
+        400: {"detail": "specific_part 为必填项"}
+        503: {"detail": "MQTT broker 不可达，无法提交采集请求"}
+    """
+    import time as _time
+    specific_part = (request.data.get('specific_part') or '').strip()
+    if not specific_part:
+        return Response({'detail': 'specific_part 为必填项'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 防重入：同一 specific_part 25 秒内不重复发布（幂等保护）
+    now = _time.monotonic()
+    last_ts = _ondemand_inflight.get(specific_part)
+    if last_ts is not None and (now - last_ts) < _ONDEMAND_INFLIGHT_TTL:
+        logger.info(
+            'device_ondemand_refresh: 防重入幂等返回 202: specific_part=%s', specific_part
+        )
+        return Response({'status': 'accepted', 'specific_part': specific_part},
+                        status=status.HTTP_202_ACCEPTED)
+
+    # 向 MQTT broker 发布按需采集指令
+    import json as _json
+    import paho.mqtt.publish as mqtt_publish
+    from django.conf import settings as dj_settings
+    import os as _os
+
+    mqtt_config_path = _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+        'mqtt_config.json',
+    )
+    try:
+        with open(mqtt_config_path, 'r', encoding='utf-8') as f:
+            mqtt_cfg = _json.load(f)
+    except Exception:
+        mqtt_cfg = {}
+
+    broker_host = mqtt_cfg.get('host', '192.168.31.98')
+    broker_port = int(mqtt_cfg.get('port', 32788))
+    broker_user = mqtt_cfg.get('username') or None
+    broker_pass = mqtt_cfg.get('password') or None
+
+    request_topic = f'/datacollection/plc/ondemand/request/{specific_part}'
+    import datetime as _dt
+    payload_body = _json.dumps({
+        'specific_part': specific_part,
+        'requested_at': _dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    })
+
+    auth = {'username': broker_user, 'password': broker_pass} if broker_user else None
+    try:
+        mqtt_publish.single(
+            request_topic,
+            payload=payload_body,
+            qos=1,
+            hostname=broker_host,
+            port=broker_port,
+            auth=auth,
+        )
+        logger.info(
+            'device_ondemand_refresh: 已发布 MQTT 指令: topic=%s specific_part=%s',
+            request_topic, specific_part,
+        )
+    except Exception as e:
+        logger.error(
+            'device_ondemand_refresh: MQTT 发布失败: specific_part=%s error=%s',
+            specific_part, e, exc_info=True,
+        )
+        return Response(
+            {'detail': f'MQTT broker 不可达，无法提交采集请求: {e}'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    # 记录本次请求时间（防重入缓存）
+    _ondemand_inflight[specific_part] = now
+
+    return Response({'status': 'accepted', 'specific_part': specific_part},
+                    status=status.HTTP_202_ACCEPTED)
