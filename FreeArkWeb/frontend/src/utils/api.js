@@ -9,60 +9,64 @@ function getApiUrl(endpoint) {
   return `${baseUrl}${endpoint}`;
 }
 
-// 缓存CSRF token，避免频繁获取
+// 缓存CSRF token，避免频繁调用 /api/get-csrf-token/
+// 注意：仅由 ensureCSRFToken() 负责写入此缓存。
+// 登出时必须通过 clearCSRFToken() 将其重置，否则 Django rotate_token()
+// 产生的新 token 与此缓存不一致，导致后续请求 CSRF 验证失败。
 let cachedCSRFToken = null;
 
-// 获取CSRF Token函数
+// 清除 CSRF token 缓存（供 logout 时调用）
+// BUG-CSRF-001 修复：登出后重置缓存，防止下次登录携带过期 token
+function clearCSRFToken() {
+  cachedCSRFToken = null;
+}
+
+// 从 cookie 直接读取 CSRF token（不使用内存缓存，保证读到最新值）
+// BUG-CSRF-001 修复：去除内部缓存短路，确保 Django rotate_token() 后能感知新 token
 function getCSRFToken() {
-  // 如果已有缓存的token，直接返回
-  if (cachedCSRFToken) {
-    return cachedCSRFToken;
-  }
-  
-  // 从cookie中获取CSRF token
   const cookieParts = document.cookie.split('; ');
   for (let i = 0; i < cookieParts.length; i++) {
     const row = cookieParts[i];
     if (row.indexOf('csrftoken=') === 0) {
       const cookieValue = row.substring('csrftoken='.length);
-      const decodedValue = decodeURIComponent(cookieValue);
-      // 缓存token
-      cachedCSRFToken = decodedValue;
-      return decodedValue;
+      return decodeURIComponent(cookieValue);
     }
   }
-  
   return null;
 }
 
-// 确保获取CSRF Token的函数
+// 确保 CSRF token 已就绪
+// 若 cookie 中已有 token（例如 Django login() 刚写入），直接使用，无需网络请求。
+// 若 cookie 中没有，才调用 /api/get-csrf-token/ 触发后端写入 cookie。
+// BUG-CSRF-001 修复：不再依赖 cachedCSRFToken 的短路判断，
+// 改为每次先尝试从 cookie 读取（getCSRFToken() 已去除内部缓存）。
 async function ensureCSRFToken() {
   try {
-    // 如果已有缓存的token，直接返回
-    if (cachedCSRFToken) {
+    // 优先从 cookie 直接读取（Django login() 会通过 Set-Cookie 写入最新 token）
+    const tokenFromCookie = getCSRFToken();
+    if (tokenFromCookie) {
+      // 更新内存缓存，供本次请求链使用
+      cachedCSRFToken = tokenFromCookie;
       return true;
     }
-    
-    // 与 getApiUrl 保持一致：优先环境变量，否则取当前 origin
+
+    // cookie 中没有 token，调用后端接口触发写入
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
       || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
-
-    // 规范化API基础URL，确保末尾没有斜杠
     const normalizedBaseUrl = apiBaseUrl.replace(/\/$/, '');
-    
-    // 调用get-csrf-token端点获取CSRF token
+
     const response = await fetch(`${normalizedBaseUrl}/api/get-csrf-token/`, {
       method: 'GET',
-      credentials: 'include', // 确保包含cookies
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'Origin': window.location.origin // 设置正确的origin头
+        'Origin': window.location.origin
       },
-      mode: 'cors' // 显式设置为cors模式
+      mode: 'cors'
     });
-    
+
     if (response.ok) {
-      // 重新获取token并缓存
+      // 后端已通过 Set-Cookie 写入 csrftoken，从 cookie 重新读取
       cachedCSRFToken = getCSRFToken();
       return true;
     } else {
@@ -245,7 +249,25 @@ const api = {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(urlObject);
-  }
+  },
+
+  // 登出：调用后端销毁 session/Token，并清除本地 CSRF 缓存
+  // BUG-CSRF-001 修复：统一由此方法处理登出，调用方无需关心缓存细节
+  async logout() {
+    try {
+      // 通知后端销毁 session 和 Token
+      await authenticatedFetch('/api/auth/logout/', { method: 'POST' });
+    } catch (e) {
+      // 后端登出失败（如 token 已失效）时仍继续本地清理，不阻断登出流程
+      console.warn('后端登出请求失败，继续本地清理:', e.message);
+    } finally {
+      // 清除内存中缓存的 CSRF token
+      clearCSRFToken();
+    }
+  },
+
+  // 暴露 clearCSRFToken，供特殊场景手动清除（如强制刷新 token）
+  clearCSRFToken
 };
 
 export default api;

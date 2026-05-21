@@ -196,14 +196,21 @@ export default {
     }
     
     // 退出登录处理
-    const handleLogout = () => {
-      // 清除本地存储的token和用户信息
+    // BUG-CSRF-001 修复：改为 async，先调用后端 logout（销毁 session/Token），
+    // 再清除本地状态（含 CSRF 缓存），最后跳转登录页。
+    // 若后端请求失败，api.logout() 内部已捕获异常并继续清理，不阻断登出。
+    const handleLogout = async () => {
+      // 1. 通知后端销毁 session/Token，并清除 CSRF 内存缓存
+      await api.logout()
+      // 2. 清除本地存储的 token 和用户信息
       localStorage.removeItem('userToken')
       localStorage.removeItem('isAuthenticated')
       localStorage.removeItem('userInfo')
-      // 清除cookie
+      // 3. 清除认证 cookie
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
-      // 跳转到登录页面
+      // 4. 清除 CSRF cookie，防止下次登录时浏览器携带过期 cookie
+      document.cookie = 'csrftoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
+      // 5. 跳转到登录页面
       router.push('/login')
     }
     
