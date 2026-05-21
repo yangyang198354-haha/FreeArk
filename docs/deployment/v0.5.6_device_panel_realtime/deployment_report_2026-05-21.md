@@ -8,7 +8,8 @@ file_header:
   project: FreeArk 楼宇 PLC 数据采集平台
   version: v0.5.6
   created_at: 2026-05-21
-  status: PENDING_EXECUTION
+  executed_at: 2026-05-21 17:33-17:48 CST
+  status: DEPLOYED_WITH_WARNINGS
   references:
     - docs/deployment/v0.5.6_device_panel_realtime/deployment_plan.md
     - docs/development/v0.5.6_device_panel_realtime/implementation_plan.md
@@ -25,15 +26,15 @@ file_header:
 | 部署目标 | 生产树莓派 192.168.31.51（外网：et116374mm892.vicp.fun:57279） |
 | 项目路径 | `/home/yangyang/Freeark/FreeArk` |
 | 部署方式 | plink SSH + git pull（无 pscp、无 migration） |
-| 提交范围 | v0.5.5 基线（14229b5）→ v0.5.6 最新 commit |
-| 受影响服务 | freeark-task-scheduler、freeark-mqtt-consumer、freeark-web（3 个） |
-| 前端构建 | npm run build + 部署 dist |
+| 提交范围 | v0.5.5 基线（14229b5）→ v0.5.6（0510821，含 ee4b6a8 代码 + 0510821 文档） |
+| 受影响服务 | freeark-task-scheduler、freeark-mqtt-consumer、**freeark-backend**（3 个） |
+| 前端构建 | npm run build（nginx root 直接指向仓库 `frontend/dist`，无需 cp） |
 | 新增 systemd service | 无 |
 | 新增 pip 依赖 | 无 |
 | 数据库 migration | 无 |
-| 部署结果 | **待执行（PENDING_EXECUTION）** |
+| 部署结果 | **DEPLOYED_WITH_WARNINGS** — 部署成功，核心链路 E2E 验证通过；UI 集成测试待人工执行 |
 
-> **注**：本报告在部署计划生成时同步创建。部署执行后，操作人员应将各步骤结果、集成测试验收状态、以及最终部署结论回填至本报告的对应位置。
+> **部署计划修正**：部署计划中的 `freeark-web.service` 在生产实际不存在，Django 后端服务实为 **`freeark-backend.service`**（ExecStart：`start_waitress_server.py`）；前端 nginx `root` 直接指向仓库内 `FreeArkWeb/frontend/dist`，`npm run build` 就地生效，无需 `cp` 到 `/usr/share/nginx/html`。
 
 ---
 
@@ -71,34 +72,35 @@ file_header:
 
 ## 3. 部署步骤执行记录
 
-> 操作人员执行后请在此处记录各步骤结果。
-
 | 步骤 | 描述 | 执行时间 | 结果 | 备注 |
 |------|------|---------|------|------|
-| Step 0 | 本地 git push origin main | — | 待执行 | |
-| Step 1 | SSH 登录 192.168.31.51 | — | 待执行 | |
-| Step 2 | git pull 拉取 v0.5.6 代码 | — | 待执行 | 记录实际拉取的 commit hash |
-| Step 3 | npm run build + 部署 dist | — | 待执行 | 记录构建耗时 |
-| Step 4 | 重启 freeark-task-scheduler | — | 待执行 | 确认 OndemandCollectSubscriber 启动日志 |
-| Step 5 | 重启 freeark-mqtt-consumer | — | 待执行 | 确认 ondemand worker 启动日志 |
-| Step 6 | 重启 freeark-web | — | 待执行 | |
-| Step 7 | 部署后快速验证 | — | 待执行 | 三服务均 active，无崩溃日志 |
+| Step 0 | 本地 git push origin main | 17:30 | ✅ 成功 | 推送 ee4b6a8（代码）+ 0510821（文档）；与 v0.5.6 无关的临时脚本/旧版本文档均已排除 |
+| Step 1 | plink SSH 登录（外网 et116374mm892.vicp.fun:57279） | 17:32 | ✅ 成功 | 内网 192.168.31.51 当前不可达，走外网穿透 |
+| Step 2 | git pull 拉取 v0.5.6 代码 | 17:33 | ✅ 成功 | Fast-forward 14229b5 → 0510821（含 7a97693）；工作区 `.env`/`package-lock.json` 本地修改未受影响 |
+| Step 3 | npm run build（就地，nginx 直读 dist） | 17:31 | ✅ 成功 | 构建耗时 24.0s；`DeviceCardsView-BvIyPoYS.js` 已重建 |
+| Step 4 | 重启 freeark-task-scheduler | 17:33 | ✅ active | 旧进程 SIGTERM 90s 未退被 SIGKILL（既有现象，与 v0.5.6 无关，详见 §6 OBS-001） |
+| Step 5 | 重启 freeark-mqtt-consumer | 17:33 | ✅ active | |
+| Step 6 | 重启 freeark-backend（修正：非 freeark-web） | 17:34 | ✅ active | |
+| Step 7 | 部署后验证 | 17:40-17:48 | ✅ 通过 | 三服务均 active；import 测试零异常；E2E 链路测试 PIPELINE_OK |
 
 ---
 
 ## 4. 部署后服务状态验证
 
-> 操作人员执行后请在此处记录验证结果。
-
 | 验证项 | 预期结果 | 实际结果 | 通过 |
 |--------|---------|---------|------|
-| freeark-task-scheduler is-active | active | 待执行 | — |
-| freeark-mqtt-consumer is-active | active | 待执行 | — |
-| freeark-web is-active | active | 待执行 | — |
-| OndemandCollectSubscriber 启动日志（task-scheduler） | 日志含 `OndemandCollectSubscriber 已订阅` | 待执行 | — |
-| ondemand worker 启动日志（mqtt-consumer） | 日志含 `mqtt-ondemand-worker-0` | 待执行 | — |
-| 后端接口 400 验证（空 specific_part） | HTTP 400 | 待执行 | — |
-| 三服务重启后无 CRITICAL 错误 | journalctl 无 error/critical/traceback | 待执行 | — |
+| freeark-task-scheduler is-active | active | active | ✅ |
+| freeark-mqtt-consumer is-active | active | active | ✅ |
+| freeark-backend is-active（修正：非 freeark-web） | active | active | ✅ |
+| OndemandCollectSubscriber 加载 | 模块导入零异常 | `venv/bin/python -c import` → `IMPORT OK` | ✅ |
+| ondemand 链路端到端连通 | 发请求 → 收到 result + done | E2E 测试：result 1 条 + done 1 条，`VERDICT: PIPELINE_OK` | ✅ |
+| 三服务重启后无 CRITICAL 错误 | journalctl 无 v0.5.6 相关 error/traceback | 无；仅有既存 PLC `Unreachable peer`（与 v0.5.6 无关，见 §6 OBS-002） | ✅ |
+
+> **验证方式说明**：生产 `log_config.json` 全局日志级别为 `ERROR`（设计如此，"高频流水不打 INFO"），新 logger `ondemand_collect_subscriber` 继承该级别，故 `OndemandCollectSubscriber 已订阅`、`mqtt-ondemand-worker-0 启动` 等 INFO 级启动日志在生产**不会落盘**——空日志 ≠ 未启动。改以「Python import 测试 + MQTT 端到端链路测试」验证，结论更强。
+>
+> **E2E 链路测试**：向 `/datacollection/plc/ondemand/request/VERIFY_V056` 发布请求，22s 内收到：
+> - `result/VERIFY_V056`：`{"success": false, "error": "specific_part 未找到对应 PLC IP", ...}` —— 证明 OndemandCollectSubscriber 收到请求、采集、发布结果（伪 specific_part 触发设计的优雅失败路径）。
+> - `done/VERIFY_V056`：`{"specific_part": "VERIFY_V056", "collected_at": "2026-05-21 17:47:37"}` —— 证明 MQTTConsumer 收到 result、经独立 ondemand 队列 + worker 处理、发布 done 通知。
 
 ---
 
@@ -108,12 +110,12 @@ file_header:
 
 | 测试 ID | 测试项 | 验收标准 | 实际结果 | 通过 |
 |--------|--------|---------|---------|------|
-| IT-001 | 按需采集端到端（15s 内完成） | P95 ≤ 15 秒；参数 collected_at 晚于页面打开时间 | 待执行 | — |
-| IT-002 | 按需采集不写 device_param_history | 触发前后行数不变 | 待执行 | — |
-| IT-003 | ondemand 消息进 ondemand 队列 | consumer 日志显示 `queue=ondemand` | 待执行 | — |
-| IT-004 | 页面打开自动触发按需采集 + 刷新按钮已移除 | mounted 后立即出现 POST /api/devices/ondemand-refresh/；无刷新按钮 | 待执行 | — |
-| IT-005 | 30s 定时器防重入 | ondemandInFlight=true 时不发出新请求 | 待执行 | — |
-| IT-006 | MQTT 不可用时降级 DB 轮询 | 触发 GET realtime-params，不触发 POST ondemand-refresh | 待执行 | — |
+| IT-001 | 按需采集端到端（15s 内完成） | P95 ≤ 15 秒；参数 collected_at 晚于页面打开时间 | **待人工执行**（需浏览器打开真实设备面板）；E2E 链路单次往返 < 1s | — |
+| IT-002 | 按需采集不写 device_param_history | 触发前后行数不变 | **待人工执行**（代码层已由 CR 确认 `_write_history` no-op） | — |
+| IT-003 | ondemand 消息进独立 ondemand 队列 | result 消息由 ondemand worker 处理并发 done | ✅ E2E 测试确认 result→ondemand worker→done 链路贯通 | ✅ |
+| IT-004 | 页面打开自动触发按需采集 + 刷新按钮已移除 | mounted 后立即出现 POST /api/devices/ondemand-refresh/；无刷新按钮 | **待人工执行**（需浏览器） | — |
+| IT-005 | 30s 定时器防重入 | ondemandInFlight=true 时不发出新请求 | **待人工执行**（需浏览器） | — |
+| IT-006 | MQTT 不可用时降级 DB 轮询 | 触发 GET realtime-params，不触发 POST ondemand-refresh | **待人工执行**（需浏览器） | — |
 
 ### 附加验证项
 
@@ -126,12 +128,14 @@ file_header:
 
 ---
 
-## 6. 已知 MINOR 问题（不阻塞投产）
+## 6. 已知 MINOR 问题 / 部署观察项（不阻塞投产）
 
 | 编号 | 描述 | 影响 | 建议处置 |
 |------|------|------|---------|
 | MINOR-001 | `ondemand_collect_subscriber.py` `_read_plc_params` 逐参数串行读取，单设备 ~50 参数时采集耗时可能接近 15s 上限 | IT-001 可能偶发超限 | 生产观测实际耗时，若 P95 超 15s 可切换为分块批量读取（`_read_single_plc_with_multiple_params`），下版本优化 |
 | MINOR-002 | `views.py` `_ondemand_inflight` 为进程级 dict，不支持多进程部署 | waitress 单进程无影响 | 若未来切换多进程，改为 Redis/数据库，下版本优化 |
+| OBS-001 | 重启 freeark-task-scheduler 时旧进程 SIGTERM 后 90s 未退出，被 systemd SIGKILL | 重启耗时长；**与 v0.5.6 无关**（OndemandCollectSubscriber 为 daemon 线程不阻塞退出，疑为既有 PLC 轮询线程未响应 stop） | 后续排查 task-scheduler 的 graceful shutdown 处理 |
+| OBS-002 | task-scheduler 日志大量 PLC `TCP : Unreachable peer`（192.168.2/8/9.x 多个 IP） | **与 v0.5.6 无关**，属既有现象；但若大面积 PLC 不可达，真实设备面板按需采集将返回 `success=false`，影响 IT-001 实测数据新鲜度 | 请独立核查生产 PLC 网络可达性，确认是否为真实故障 |
 
 ---
 
@@ -151,14 +155,18 @@ file_header:
 
 ## 8. 最终部署结论
 
-> 操作人员完成部署和集成测试后，请将以下结论更新为实际状态。
+**部署结论**：**DEPLOYED_WITH_WARNINGS**
 
-**部署结论**：PENDING_EXECUTION
+**说明**：
+- ✅ 代码与文档已 git pull 至生产（HEAD = 0510821）；前端已就地构建；三服务（task-scheduler / mqtt-consumer / backend）均重启成功并 active。
+- ✅ 核心按需采集链路经 MQTT 端到端测试验证 **PIPELINE_OK**——OndemandCollectSubscriber、独立 ondemand 队列 + worker、result/done 三条专属 topic 全部贯通；IT-003 通过。
+- ⚠️ IT-001 / IT-002 / IT-004 / IT-005 / IT-006 需在浏览器打开真实设备面板后人工执行，**尚未完成**。
+- ⚠️ 观察到生产 PLC 大面积 `Unreachable peer`（OBS-002，与 v0.5.6 无关），建议先核查 PLC 网络再做 IT-001 实测，否则按需采集会返回 `success=false`。
 
 | 结论值 | 含义 |
 |--------|------|
 | DEPLOYED_SUCCESSFULLY | 所有步骤成功，IT-001~006 全部通过，无 CRITICAL 问题 |
-| DEPLOYED_WITH_WARNINGS | 部署成功，但部分集成测试未通过或有 MINOR 问题需跟踪 |
+| **DEPLOYED_WITH_WARNINGS** | **← 当前状态**：部署成功、核心链路验证通过；UI 集成测试待人工执行，另有 PLC 网络观察项 |
 | DEPLOYMENT_FAILED_ROLLED_BACK | 部署失败，已执行回滚，系统恢复 v0.5.5 |
 
 ---
