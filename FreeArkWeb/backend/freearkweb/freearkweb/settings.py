@@ -393,6 +393,16 @@ LOGGING = {
             'backupCount': _LOG_BACKUP_COUNT,
             'delay': True,
         },
+        'dph_cleanup_service_log': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOG_DIR, 'dph_cleanup_service.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': _LOG_MAX_BYTES,
+            'backupCount': _LOG_BACKUP_COUNT,
+            'delay': True,
+        },
     },
     # root logger：生产默认 ERROR，设置 APP_LOG_LEVEL 环境变量可临时拉回 INFO 排障
     'root': {
@@ -461,6 +471,14 @@ LOGGING = {
         'plc_cleanup_service': {
             'handlers': ['console', 'plc_cleanup_service_log'],
             'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
+            'propagate': False,
+        },
+        # device_param_history 清理服务豁免：固定 INFO，
+        # 清理结果（每批删除行数、最终累计、批次数）必须落盘可核查，
+        # 不随生产 root 的 ERROR 默认值，否则清理是否成功无从验证
+        'dph_cleanup_service': {
+            'handlers': ['console', 'dph_cleanup_service_log'],
+            'level': 'INFO',
             'propagate': False,
         },
         # PLC 连接监控豁免（设备上下线状态变化值得保留）

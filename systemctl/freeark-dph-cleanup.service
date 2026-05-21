@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=yangyang
+Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=/home/yangyang/Freeark/FreeArk/
 ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py dph_cleanup_service --days 7 --batch-size 5000 --sleep-ms 200 --cron "0 3 * * *"
 Restart=on-failure
