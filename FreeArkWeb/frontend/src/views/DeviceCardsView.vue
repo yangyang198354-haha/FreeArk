@@ -61,6 +61,7 @@
       <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
 
       <!-- 横向卡片行：每个 sub_type 一列 -->
+      <!-- REQ-FUNC-001: cards-scroll-row 支持横向滚动 -->
       <div v-else class="cards-scroll-row">
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
           <div
@@ -68,25 +69,39 @@
             :key="subKey"
             class="subtype-col"
           >
+            <!-- REQ-FUNC-006: 列标题区新增折叠/展开按钮（AC-006-1） -->
             <div class="col-header">
               <span class="col-title">{{ subTypeData.display }}</span>
-              <!-- v0.5.6: 移除各列单独时间戳（AC-004-2），改为底部统一时间戳 -->
+              <button
+                class="col-collapse-btn"
+                :title="collapsedCols[subKey] ? '展开' : '折叠'"
+                @click.stop="toggleCollapse(subKey)"
+              >
+                <!-- AC-006-2/3: 箭头图标随折叠状态旋转 -->
+                <span class="collapse-arrow" :class="{ 'is-collapsed': collapsedCols[subKey] }">›</span>
+              </button>
             </div>
-            <div class="params-list">
+            <!-- REQ-FUNC-006: v-show 控制参数列表显隐（AC-006-4/6, ADR-004） -->
+            <div class="params-list" v-show="!collapsedCols[subKey]">
               <div
                 v-for="param in expandParams(subTypeData.params)"
                 :key="param.param_name"
                 class="param-row"
               >
-                <span class="param-label" :title="param.display_name">{{ param.display_name }}</span>
-                <span class="param-value">{{ formatValue(param.param_name, param.value) }}</span>
+                <!-- REQ-FUNC-001: 移除 title 截断提示，标签改为完整显示（AC-001-1） -->
+                <span class="param-label">{{ param.display_name }}</span>
+                <!-- REQ-FUNC-005: 动态 class 绑定故障/正常状态颜色（AC-005-4/6, ADR-001） -->
+                <span
+                  class="param-value"
+                  :class="getValueClass(param.param_name, param.value)"
+                >{{ formatValue(param.param_name, param.value) }}</span>
               </div>
             </div>
           </div>
         </template>
       </div>
 
-      <!-- v0.5.6: 统一时间戳（REQ-FUNC-004，AC-004-1） -->
+      <!-- v0.5.6: 统一时间戳 — REQ-FUNC-002: 左对齐（AC-002-1） -->
       <div class="panel-footer" v-if="hasData">
         <el-text type="info" size="small">
           上次数据更新于：{{ lastUpdatedAt || '—' }}
@@ -132,7 +147,7 @@ const FRESH_AIR_FAULT_BITS = [
   '进水温度传感器故障', '加湿器故障', '新风水阀故障', '防冻保护故障', '出风温度传感器故障',
 ]
 
-// 故障字段（0→无, 其他→故障）
+// 故障字段（0→正常, 其他→故障）— REQ-FUNC-005
 const FAULT_PARAMS = new Set([
   'living_room_temp_sensor_error', 'living_room_humidity_sensor_error',
   'living_room_external_temp_sensor_error', 'living_room_communication_error',
@@ -162,6 +177,9 @@ export default {
       ondemandInFlight: false,
       ondemandTimeoutTimer: null,
       _mqttDisconnect: null,
+      // REQ-FUNC-006: 卡片列折叠状态（ADR-004）
+      // { [subKey]: boolean }，true = 已折叠；缺键/false = 展开（初始全部展开）
+      collapsedCols: {},
     }
   },
   computed: {
@@ -197,6 +215,7 @@ export default {
   watch: {
     specificPart(newVal) {
       this.deviceData = {}
+      this.collapsedCols = {}  // REQ-FUNC-006: 切换专有部分时重置折叠状态
       this.stopAutoRefresh()
       this.disconnectMqttDone()
       this._clearOndemandTimeout()
@@ -360,6 +379,24 @@ export default {
       return result
     },
 
+    // REQ-FUNC-005: 判断是否为状态类参数（故障/正常二值参数）（ADR-001）
+    isStatusParam(paramName) {
+      return FAULT_PARAMS.has(paramName) || paramName.startsWith('fresh_air_fault_bit_')
+    },
+
+    // REQ-FUNC-005: 返回动态 CSS class（AC-005-4/6，ADR-001）
+    // 故障（非零） → 'status-fault'（红色）；正常（零） → 'status-ok'（绿色）；普通参数 → ''
+    getValueClass(paramName, rawValue) {
+      if (!this.isStatusParam(paramName)) return ''
+      const v = rawValue === null || rawValue === undefined ? 0 : Number(rawValue)
+      return v === 0 ? 'status-ok' : 'status-fault'
+    },
+
+    // REQ-FUNC-006: 切换指定卡片列的折叠/展开状态（ADR-004，AC-006-4/6）
+    toggleCollapse(subKey) {
+      this.collapsedCols[subKey] = !this.collapsedCols[subKey]
+    },
+
     formatValue(paramName, rawValue) {
       if (rawValue === null || rawValue === undefined) return '-'
       const v = Number(rawValue)
@@ -376,12 +413,14 @@ export default {
         return v === 0 ? '关闭' : '开启'
       }
 
+      // REQ-FUNC-005: 新风机故障位（AC-005-3/4）—— '无'/'故障' → '正常'/'故障'
       if (paramName.startsWith('fresh_air_fault_bit_')) {
-        return v === 0 ? '无' : '故障'
+        return v === 0 ? '正常' : '故障'
       }
 
+      // REQ-FUNC-005: 通用故障字段（AC-005-1/2/5）—— '无'/'故障(N)' → '正常'/'故障'
       if (FAULT_PARAMS.has(paramName)) {
-        return v === 0 ? '无' : '故障(' + v + ')'
+        return v === 0 ? '正常' : '故障'
       }
 
       if (paramName === 'hydraulic_module_valve_opening' || paramName === 'fresh_air_valve_opening') {
@@ -466,22 +505,47 @@ export default {
 </script>
 
 <style scoped>
+/* REQ-FUNC-004: CSS 设计令牌（MODULE-UI-004），统一色彩变量 */
 .device-panel {
+  /* 主色系 */
+  --color-primary: #409EFF;
+  --color-primary-light: #ECF5FF;
+
+  /* 文字色 */
+  --color-text-primary: #303133;
+  --color-text-secondary: #606266;
+  --color-text-info: #909399;
+
+  /* 背景色 */
+  --color-bg-page: #f0f2f5;
+  --color-bg-card: #ffffff;
+  --color-bg-header: #EBF5FF;
+  --color-bg-row-alt: #FAFCFF;
+
+  /* 边框色 */
+  --color-border-base: #E4E7ED;
+  --color-border-light: #F0F2F5;
+
+  /* 状态色（REQ-FUNC-005，AC-005-1/2） */
+  --color-status-fault: #F56C6C;
+  --color-status-ok: #67C23A;
+
   width: 100%;
-  background-color: #f5f7fa;
-  min-height: 100vh;
+  /* REQ-FUNC-003: 移除 min-height: 100vh，改为 height: auto（AC-003-1，ADR-003） */
+  background-color: var(--color-bg-page);
   box-sizing: border-box;
 }
 
 /* 顶部导航栏 */
+/* REQ-FUNC-004: padding 从 6px 12px 增大至 8px 16px（MODULE-UI-001 间距规范） */
 .panel-nav-bar {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 0;
   background: #fff;
-  border-bottom: 1px solid #e4e7ed;
-  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border-base);
+  padding: 8px 16px;
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -497,7 +561,10 @@ export default {
 .nav-label {
   font-size: 13px;
   font-weight: 500;
-  color: #303133;
+  color: var(--color-text-primary);
+  /* REQ-FUNC-001: 导航栏子系统名称不截断（AC-001-3） */
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .nav-history-btn {
@@ -528,77 +595,144 @@ export default {
 }
 
 /* 卡片主体区域 */
+/* REQ-FUNC-001/003: padding/gap 增大（MODULE-UI-001 间距规范） */
 .cards-scroll-row {
   display: flex;
   flex-wrap: nowrap;
-  gap: 12px;
-  padding: 12px;
+  gap: 16px;
+  padding: 16px;
   overflow-x: auto;
 }
 
+/* REQ-FUNC-001: 宽度由内容决定，移除固定 min-width: 180px（ADR-002，AC-001-2） */
+/* REQ-FUNC-004: border-radius 增大，box-shadow 加深（MODULE-UI-006 卡片投影） */
 .subtype-col {
-  min-width: 180px;
+  width: max-content;
+  min-width: 160px;
   flex-shrink: 0;
-  background: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
   overflow: hidden;
 }
 
+/* REQ-FUNC-004: 列标题配色（MODULE-UI-005 列标题设计，AC-004-2） */
 .col-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px 6px;
-  border-bottom: 1px solid #f0f0f0;
-  background: #fafafa;
+  padding: 10px 14px 8px;
+  /* REQ-FUNC-004: 主蓝底线替代原浅灰线，主蓝浅色背景替代原 #fafafa */
+  border-bottom: 2px solid var(--color-primary);
+  background: var(--color-bg-header);
 }
 
+/* REQ-FUNC-004: 标题文字改为深蓝色（AC-004-2，MODULE-UI-005） */
 .col-title {
   font-size: 13px;
   font-weight: 600;
-  color: #303133;
+  color: #1A6EBF;
   white-space: nowrap;
 }
 
-.params-list {
-  padding: 6px 0;
+/* REQ-FUNC-006: 折叠/展开切换按钮（MODULE-UI-006，AC-006-1） */
+.col-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-left: 8px;
+  color: #1A6EBF;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  line-height: 1;
 }
 
+.col-collapse-btn:hover {
+  background: rgba(26, 110, 191, 0.12);
+}
+
+/* REQ-FUNC-006: 折叠箭头图标旋转动画（AC-006-2/3） */
+.collapse-arrow {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 1;
+  /* 展开状态：›旋转90°指向下 */
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.collapse-arrow.is-collapsed {
+  /* 折叠状态：›原始方向指向右 */
+  transform: rotate(0deg);
+}
+
+.params-list {
+  padding: 4px 0;
+}
+
+/* REQ-FUNC-004: 斑马纹行区分（MODULE-UI-004，AC-004-3） */
 .param-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
+  padding: 5px 14px;
   font-size: 13px;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .param-row:last-child {
   border-bottom: none;
 }
 
-.param-label {
-  color: #606266;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 60%;
+/* REQ-FUNC-004: 斑马纹（MODULE-UI-004，AC-004-3） */
+.param-row:nth-child(even) {
+  background-color: var(--color-bg-row-alt);
 }
 
+.param-row:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+/* REQ-FUNC-001: 移除 overflow: hidden / text-overflow: ellipsis / max-width: 60%，
+   改为 white-space: nowrap + overflow: visible，标签完整显示撑开列宽（AC-001-1，ADR-002） */
+.param-label {
+  color: var(--color-text-secondary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* REQ-FUNC-001: margin-left 从 8px 增大至 12px（MODULE-UI-001，AC-001-1） */
 .param-value {
-  color: #303133;
+  color: var(--color-text-primary);
   font-weight: 500;
   flex-shrink: 0;
-  margin-left: 8px;
+  margin-left: 12px;
+  white-space: nowrap;
 }
 
-/* v0.5.6: 底部统一时间戳（REQ-FUNC-004） */
+/* REQ-FUNC-005: 故障状态——红色加粗（AC-005-1/3，ADR-001，OQ-003 定稿：静态颜色，无闪烁） */
+.status-fault {
+  color: var(--color-status-fault);
+  font-weight: 600;
+}
+
+/* REQ-FUNC-005: 正常状态——淡绿色（AC-005-2/4，ADR-001） */
+.status-ok {
+  color: var(--color-status-ok);
+  font-weight: 500;
+}
+
+/* REQ-FUNC-002/004: 底部时间戳——左对齐，与卡片区 padding 对齐（AC-002-1/2，MODULE-UI-002） */
 .panel-footer {
-  padding: 8px 12px;
+  padding: 10px 16px;
   background: #fff;
-  border-top: 1px solid #e4e7ed;
-  text-align: right;
+  border-top: 1px solid var(--color-border-base);
+  /* REQ-FUNC-002: text-align 从 right 改为 left（AC-002-1） */
+  text-align: left;
 }
 </style>
