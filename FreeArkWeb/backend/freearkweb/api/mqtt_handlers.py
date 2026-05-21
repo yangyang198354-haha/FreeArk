@@ -526,11 +526,37 @@ class ConnectionStatusHandler(MessageHandler):
         return building, unit, room_number
     
     def _update_connection_status(self, specific_part, status, building, unit, room_number):
-        """更新设备连接状态"""
-        logger.debug(f"ConnectionStatusHandler: 更新连接状态 - specific_part={specific_part}, status={status}")
-        
+        """更新设备连接状态。
+
+        [v0.5.5 P2] 快/慢路径分离，消除正常运行期间的 select_for_update() 行锁：
+
+        快路径（缓存命中且状态一致）：
+          - status='online'  -> QuerySet.update(last_online_time=now())，无事务无行锁
+          - status='offline' -> 完全跳过，零 DB 写入
+
+        慢路径（缓存 miss 或状态变化）：
+          - 保留原有 transaction.atomic() + select_for_update() 行锁语义
+          - 保证 PLCStatusChangeHistory 写入的原子性，不漏记
+          - 事务提交成功后才更新 _conn_status_cache（异常时不更新，下次重试）
+        """
+        cached = _conn_status_cache.get(specific_part)
+
+        # ── 快路径：状态无变化，跳过行锁事务 ──────────────────────────────
+        if cached == status:
+            if status == 'online':
+                # 仅刷新 last_online_time，无事务，无行锁
+                PLCConnectionStatus.objects.filter(
+                    specific_part=specific_part
+                ).update(last_online_time=timezone.now())
+            # status == 'offline' 且无变化：零 DB 写入
+            logger.debug(f"ConnectionStatusHandler: 快路径（无状态变化）- {specific_part}: {status}")
+            return
+
+        # ── 慢路径：缓存 miss 或状态变化，走完整行锁事务 ──────────────────
+        logger.debug(
+            f"ConnectionStatusHandler: 慢路径（缓存={cached!r} -> status={status!r}）- {specific_part}"
+        )
         try:
-            # 使用事务确保数据库操作的原子性
             with transaction.atomic():
                 # 查询或创建PLCConnectionStatus记录
                 plc_status, created = PLCConnectionStatus.objects.select_for_update().get_or_create(
@@ -542,11 +568,8 @@ class ConnectionStatusHandler(MessageHandler):
                         'room_number': room_number
                     }
                 )
-                
+
                 # 检查状态是否发生变化
-                status_changed = False
-                old_status = None
-                
                 if created:
                     # 新创建的记录，状态变化为当前状态
                     status_changed = True
@@ -554,11 +577,11 @@ class ConnectionStatusHandler(MessageHandler):
                 else:
                     # 记录已存在，检查状态是否变化
                     old_status = plc_status.connection_status
-                    if old_status != status:
-                        status_changed = True
+                    status_changed = (old_status != status)
+                    if status_changed:
                         logger.debug(f"ConnectionStatusHandler: ✅ 状态发生变化 - {specific_part}: {old_status} -> {status}")
-                
-                # 如果状态发生变化，记录状态变化历史
+
+                # 如果状态发生变化（含新建），记录状态变化历史
                 if status_changed:
                     try:
                         PLCStatusChangeHistory.objects.create(
@@ -572,24 +595,38 @@ class ConnectionStatusHandler(MessageHandler):
                         logger.debug(f"ConnectionStatusHandler: ✅ 记录状态变化历史成功 - {specific_part}: {status}")
                     except Exception as e:
                         logger.error(f"ConnectionStatusHandler: ❌ 记录状态变化历史失败 - {specific_part}: {e}")
-                
-                # 更新状态和最后在线时间
+
+                # 更新 PLCConnectionStatus 行
                 if not created:
-                    plc_status.connection_status = status
-                    plc_status.building = building
-                    plc_status.unit = unit
-                    plc_status.room_number = room_number
-                
-                # 如果状态是在线，更新最后在线时间
-                if status == 'online':
-                    plc_status.last_online_time = timezone.now()
-                
-                # 保存记录
-                plc_status.save()
-                
-                logger.debug(f"ConnectionStatusHandler: ✅ 更新连接状态成功 - {specific_part}: {status}")
-                
+                    if status_changed:
+                        # 状态变化：全字段更新
+                        plc_status.connection_status = status
+                        plc_status.building = building
+                        plc_status.unit = unit
+                        plc_status.room_number = room_number
+                        if status == 'online':
+                            plc_status.last_online_time = timezone.now()
+                        plc_status.save()
+                    else:
+                        # 并发竞争：两 worker 同时 cache miss，本 worker 后进入，
+                        # 发现 DB 中状态已与 status 一致，仅在需要时刷新 last_online_time
+                        if status == 'online':
+                            plc_status.last_online_time = timezone.now()
+                            plc_status.save(update_fields=['last_online_time'])
+                        logger.debug(f"ConnectionStatusHandler: 慢路径-并发无变化 - {specific_part}: {status}")
+                else:
+                    # created=True：get_or_create 的 INSERT 已写入初始字段，
+                    # 若 status='online' 补写 last_online_time
+                    if status == 'online':
+                        plc_status.last_online_time = timezone.now()
+                        plc_status.save(update_fields=['last_online_time'])
+
+            # 事务提交成功后更新缓存（放在 with 块外，确保事务已提交）
+            _conn_status_cache[specific_part] = status
+            logger.debug(f"ConnectionStatusHandler: ✅ 慢路径完成，缓存更新 - {specific_part}: {status}")
+
         except Exception as e:
+            # 异常时不更新缓存，保留 miss 状态，下次调用仍走慢路径重试
             logger.error(f"ConnectionStatusHandler: 更新连接状态失败 - {specific_part}: {e}", exc_info=True)
 
 
@@ -611,6 +648,16 @@ _general_hist_last_hour: dict = {}
 # energy 参数每小时也只保留第一条 device_param_history 样本。
 # (specific_part, param_name) -> 'YYYY-MM-DD-HH'；线程安全模型同上（依赖 GIL）。
 _energy_hist_last_hour: dict = {}
+
+# [v0.5.5 P2] ConnectionStatus 进程内状态缓存。
+# key: specific_part (str) -> last_known_status: str ('online' | 'offline')
+# 用途：设备状态无变化时跳过 select_for_update() 行锁，走轻量快路径。
+#   - 命中且与当前 status 一致 -> 快路径（online 仅刷新 last_online_time；offline 零写入）
+#   - 缓存 miss 或与 status 不一致 -> 慢路径（保留原有 select_for_update 行锁事务）
+# 线程安全：依赖 CPython GIL；极端并发（两 worker 同时 miss）下两者均走慢路径，
+#   后者在 select_for_update 处排队，行为与优化前一致。
+# 仅进程内有效，服务重启后清空，首批消息走慢路径自动重建。
+_conn_status_cache: dict = {}
 
 # 支持的时间戳格式
 _TIMESTAMP_FORMATS = (
