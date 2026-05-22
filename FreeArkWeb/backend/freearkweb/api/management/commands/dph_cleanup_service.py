@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 
 import schedule
 from django.core.management.base import BaseCommand
-from django.db import connection
+from django.db import connection, OperationalError
 
 from .common import (
     get_service_logger,
@@ -104,7 +104,13 @@ class Command(BaseCommand):
         try:
             self.stdout.write(f'[dph_cleanup] 常驻模式启动，cron={cron_expr}，按 Ctrl+C 退出')
             while True:
-                schedule.run_pending()
+                try:
+                    schedule.run_pending()
+                except Exception as exc:
+                    # 防止 schedule 内部任何未被 _run_cleanup 捕获的异常冲出主循环。
+                    # 正常情况下 _run_cleanup 已自行捕获所有异常，此处是最后一道防线。
+                    log_error(logger, 'dph_cleanup schedule loop unexpected error', exc)
+                    self.stderr.write(f'[dph_cleanup] 调度循环异常（已捕获，服务继续运行）: {exc}')
                 time.sleep(1)
         except KeyboardInterrupt:
             log_service_stop(logger, 'device_param_history 清理服务')
@@ -129,6 +135,11 @@ class Command(BaseCommand):
           device_param_history.collected_at 有单列索引（db_index=True）。
           device_param_history.created_at   无独立索引——禁止在 WHERE 子句中单独过滤。
           所有时间边界查询均使用 collected_at，保证走索引。
+
+        异常处理：
+          捕获 OperationalError（MySQL Lost connection / server gone away）和所有其他异常，
+          记录完整错误日志后 return（不重新抛出），防止异常冲出调用方的 while True 调度循环
+          导致进程崩溃。systemd Restart=on-failure 作为最终兜底。
         """
         cutoff_dt = datetime.now() - timedelta(days=days)
         cutoff_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -139,108 +150,135 @@ class Command(BaseCommand):
             f'batch_size={batch_size}，dry_run={dry_run}'
         )
 
-        with connection.cursor() as cur:
-            # Step 1: 找出待删除的边界 id
-            # 用 collected_at 索引做 backward index scan + LIMIT 1，只读 1 行即返回，
-            # 避免 MAX(id) 聚合扫描整个 collected_at 索引区间（1700 万+ 行，
-            # 会在仅 128MB 缓冲池的生产库上跑数十秒并触发 "Lost connection"）。
-            # collected_at 与自增 id 单调相关，取「collected_at < cutoff 中
-            # collected_at 最大的那行」的 id 作为删除上界已足够；
-            # Step 3 的 DELETE 仍带 collected_at < cutoff 兜底，绝不会误删保留期数据。
-            cur.execute(
-                'SELECT id FROM device_param_history '
-                'WHERE collected_at < %s '
-                'ORDER BY collected_at DESC LIMIT 1',
-                [cutoff_str],
-            )
-            row = cur.fetchone()
-            max_delete_id = row[0] if row and row[0] is not None else None
+        try:
+            with connection.cursor() as cur:
+                # Step 1: 找出待删除的边界 id
+                # 用 collected_at 索引做 backward index scan + LIMIT 1，只读 1 行即返回，
+                # 避免 MAX(id) 聚合扫描整个 collected_at 索引区间（1700 万+ 行，
+                # 会在仅 128MB 缓冲池的生产库上跑数十秒并触发 "Lost connection"）。
+                # collected_at 与自增 id 单调相关，取「collected_at < cutoff 中
+                # collected_at 最大的那行」的 id 作为删除上界已足够；
+                # Step 3 的 DELETE 仍带 collected_at < cutoff 兜底，绝不会误删保留期数据。
+                cur.execute(
+                    'SELECT id FROM device_param_history '
+                    'WHERE collected_at < %s '
+                    'ORDER BY collected_at DESC LIMIT 1',
+                    [cutoff_str],
+                )
+                row = cur.fetchone()
+                max_delete_id = row[0] if row and row[0] is not None else None
 
-            if max_delete_id is None:
-                self.stdout.write('[dph_cleanup] 无需删除（保留窗口内没有超期数据）')
-                log_task_completion(logger, 'dph_cleanup', {'deleted': 0, 'reason': '无超期数据'})
-                return
+                if max_delete_id is None:
+                    self.stdout.write('[dph_cleanup] 无需删除（保留窗口内没有超期数据）')
+                    log_task_completion(logger, 'dph_cleanup', {'deleted': 0, 'reason': '无超期数据'})
+                    return
 
-            # Step 2: 找出当前最小 id（主键 MIN，走主键索引，极快）
-            cur.execute('SELECT MIN(id) FROM device_param_history')
-            min_row = cur.fetchone()
-            min_id = min_row[0] if min_row and min_row[0] is not None else 1
+                # Step 2: 找出当前最小 id（主键 MIN，走主键索引，极快）
+                cur.execute('SELECT MIN(id) FROM device_param_history')
+                min_row = cur.fetchone()
+                min_id = min_row[0] if min_row and min_row[0] is not None else 1
+
+                self.stdout.write(
+                    f'[dph_cleanup] 待删 id 范围: [{min_id}, {max_delete_id}]，'
+                    f'预计约 {max_delete_id - min_id + 1} 行（含已保留行，实删行数取决于 collected_at）'
+                )
+
+                if dry_run:
+                    # 演练：用 id 跨度估算待删行数，不做 COUNT(*) 扫描。
+                    # COUNT(*) WHERE id<=max_delete_id 要扫 2000 万+ 聚簇索引行，
+                    # 在 128MB 缓冲池的库上同样会超时断连；
+                    # id 为自增主键、近似连续，(max_delete_id - min_id + 1) 是删除量的良好估计。
+                    estimated = max_delete_id - min_id + 1
+                    estimated_batches = (estimated + batch_size - 1) // batch_size if estimated > 0 else 0
+                    self.stdout.write(
+                        f'[dph_cleanup][DRY-RUN] 预计删除约 {estimated} 行'
+                        f'（id 区间 [{min_id}, {max_delete_id}]，collected_at < {cutoff_str}；'
+                        f'按 id 跨度估算，未做 COUNT 扫描），'
+                        f'预计批次数 约 {estimated_batches}（batch_size={batch_size}）'
+                    )
+                    log_task_completion(logger, 'dph_cleanup dry-run', {
+                        'estimated_rows': estimated,
+                        'estimated_batches': estimated_batches,
+                        'cutoff_collected_at': cutoff_str,
+                        'max_delete_id': max_delete_id,
+                        'min_id': min_id,
+                    })
+                    return
+
+                # Step 3: 分批删除（collected_at < cutoff，主键范围推进）
+                total_deleted = 0
+                batch_num = 0
+                current_min = min_id
+
+                while current_min <= max_delete_id:
+                    batch_num += 1
+                    # 每批按主键范围删，同时过滤 collected_at 保证只删超期数据
+                    # MySQL 走主键扫描（id 范围），undo log 可控
+                    cur.execute(
+                        '''DELETE FROM device_param_history
+                           WHERE id >= %s AND id <= %s
+                             AND collected_at < %s
+                           LIMIT %s''',
+                        [current_min, max_delete_id, cutoff_str, batch_size],
+                    )
+                    deleted_in_batch = cur.rowcount
+
+                    if deleted_in_batch == 0:
+                        # 该范围内全是保留期内数据（collected_at >= cutoff），跳出
+                        break
+
+                    total_deleted += deleted_in_batch
+                    self.stdout.write(
+                        f'[dph_cleanup] 批次 {batch_num}: 删除 {deleted_in_batch} 行，'
+                        f'累计删除 {total_deleted} 行'
+                    )
+                    logger.info(
+                        f'dph_cleanup batch={batch_num} deleted={deleted_in_batch} total={total_deleted}'
+                    )
+
+                    # 推进到下一批起始 id
+                    # 当 rowcount < batch_size 时该段已删完，步进 batch_size 避免重复扫
+                    if deleted_in_batch < batch_size:
+                        current_min += batch_size
+
+                    # 批次间休眠
+                    if sleep_ms > 0:
+                        time.sleep(sleep_ms / 1000.0)
 
             self.stdout.write(
-                f'[dph_cleanup] 待删 id 范围: [{min_id}, {max_delete_id}]，'
-                f'预计约 {max_delete_id - min_id + 1} 行（含已保留行，实删行数取决于 collected_at）'
+                f'[dph_cleanup] 完成，共删除 {total_deleted} 行，共 {batch_num} 批次'
             )
+            log_task_completion(logger, 'dph_cleanup', {
+                'total_deleted': total_deleted,
+                'batches': batch_num,
+                'cutoff_collected_at': cutoff_str,
+            })
 
-            if dry_run:
-                # 演练：用 id 跨度估算待删行数，不做 COUNT(*) 扫描。
-                # COUNT(*) WHERE id<=max_delete_id 要扫 2000 万+ 聚簇索引行，
-                # 在 128MB 缓冲池的库上同样会超时断连；
-                # id 为自增主键、近似连续，(max_delete_id - min_id + 1) 是删除量的良好估计。
-                estimated = max_delete_id - min_id + 1
-                estimated_batches = (estimated + batch_size - 1) // batch_size if estimated > 0 else 0
-                self.stdout.write(
-                    f'[dph_cleanup][DRY-RUN] 预计删除约 {estimated} 行'
-                    f'（id 区间 [{min_id}, {max_delete_id}]，collected_at < {cutoff_str}；'
-                    f'按 id 跨度估算，未做 COUNT 扫描），'
-                    f'预计批次数 约 {estimated_batches}（batch_size={batch_size}）'
-                )
-                log_task_completion(logger, 'dph_cleanup dry-run', {
-                    'estimated_rows': estimated,
-                    'estimated_batches': estimated_batches,
-                    'cutoff_collected_at': cutoff_str,
-                    'max_delete_id': max_delete_id,
-                    'min_id': min_id,
-                })
-                return
+        except OperationalError as exc:
+            # MySQL "Lost connection to MySQL server during query" (errno 2013)
+            # 或 "MySQL server has gone away" (errno 2006)。
+            # 在表膨胀（3600 万行 / 11.6 GB）+ InnoDB buffer pool 仅 128 MB 的生产环境下，
+            # Step 1 的边界查询可能阻塞 100s+ 后触发服务端连接超时。
+            # 捕获后记录错误并 return，不重新抛出，防止异常冲出 cron 模式的 while True 主循环
+            # 导致整个 dph_cleanup_service 进程崩溃。
+            # systemd Restart=on-failure / RestartSec=30s 是进程崩溃时的最终兜底。
+            err_msg = (
+                f'[dph_cleanup] DB OperationalError（可能为 MySQL Lost connection 或超时）: {exc}。'
+                f'本次清理轮次中止，等待下次调度。'
+                f'根因：device_param_history 表膨胀导致边界查询超时；'
+                f'建议缩表或调大 innodb_buffer_pool_size。'
+            )
+            log_error(logger, 'dph_cleanup OperationalError', exc)
+            self.stderr.write(err_msg)
+            # 关闭已损坏的数据库连接，避免后续请求复用坏连接
+            connection.close()
 
-            # Step 3: 分批删除（collected_at < cutoff，主键范围推进）
-            total_deleted = 0
-            batch_num = 0
-            current_min = min_id
-
-            while current_min <= max_delete_id:
-                batch_num += 1
-                # 每批按主键范围删，同时过滤 collected_at 保证只删超期数据
-                # MySQL 走主键扫描（id 范围），undo log 可控
-                cur.execute(
-                    '''DELETE FROM device_param_history
-                       WHERE id >= %s AND id <= %s
-                         AND collected_at < %s
-                       LIMIT %s''',
-                    [current_min, max_delete_id, cutoff_str, batch_size],
-                )
-                deleted_in_batch = cur.rowcount
-
-                if deleted_in_batch == 0:
-                    # 该范围内全是保留期内数据（collected_at >= cutoff），跳出
-                    break
-
-                total_deleted += deleted_in_batch
-                self.stdout.write(
-                    f'[dph_cleanup] 批次 {batch_num}: 删除 {deleted_in_batch} 行，'
-                    f'累计删除 {total_deleted} 行'
-                )
-                logger.info(
-                    f'dph_cleanup batch={batch_num} deleted={deleted_in_batch} total={total_deleted}'
-                )
-
-                # 推进到下一批起始 id
-                # 当 rowcount < batch_size 时该段已删完，步进 batch_size 避免重复扫
-                if deleted_in_batch < batch_size:
-                    current_min += batch_size
-
-                # 批次间休眠
-                if sleep_ms > 0:
-                    time.sleep(sleep_ms / 1000.0)
-
-        self.stdout.write(
-            f'[dph_cleanup] 完成，共删除 {total_deleted} 行，共 {batch_num} 批次'
-        )
-        log_task_completion(logger, 'dph_cleanup', {
-            'total_deleted': total_deleted,
-            'batches': batch_num,
-            'cutoff_collected_at': cutoff_str,
-        })
+        except Exception as exc:
+            # 捕获所有其他未预期异常，同样防止进程崩溃
+            err_msg = f'[dph_cleanup] 未预期异常: {exc}，本次清理轮次中止。'
+            log_error(logger, 'dph_cleanup unexpected error', exc)
+            self.stderr.write(err_msg)
+            connection.close()
 
     # ------------------------------------------------------------------
     # 调度配置
