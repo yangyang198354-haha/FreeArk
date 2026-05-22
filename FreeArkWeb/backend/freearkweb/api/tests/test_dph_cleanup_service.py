@@ -15,6 +15,12 @@ dph_cleanup_service 单元测试套件
   TC-U-DPH-011  通用 Exception 后调用 connection.close()
   TC-U-DPH-012  _setup_schedule：有效 cron 表达式注册每日任务
   TC-U-DPH-013  _setup_schedule：无效 cron 表达式退回默认 03:00
+  TC-U-DPH-014  _apply_cleanup_db_timeout：将 read/write_timeout 放大到 600s
+  TC-U-DPH-015  _apply_cleanup_db_timeout：OPTIONS 无超时项时（SQLite）为无操作
+  TC-U-DPH-016  _apply_cleanup_db_timeout：修改超时后关闭旧连接
+  TC-U-DPH-017  _run_cleanup：max_batches > 0 时单轮最多执行 max_batches 个批次
+  TC-U-DPH-018  _run_cleanup：max_batches=0 表示不限制，正常删完不提前停止
+  TC-U-DPH-019  handle()：--once 模式将 --max-batches 透传给 _run_cleanup
 
 运行方式：
     cd FreeArkWeb/backend/freearkweb
@@ -478,3 +484,148 @@ class TC_U_DPH_013_SetupScheduleInvalid(TestCase):
         mock_day.at.assert_called_with('03:00')
         stdout_output = cmd.stdout.getvalue()
         self.assertIn('cron 解析失败', stdout_output)
+
+
+# ---------------------------------------------------------------------------
+# TC-U-DPH-014 ~ 016：_apply_cleanup_db_timeout() 进程级超时放大（DPH-CLEANUP-002）
+# ---------------------------------------------------------------------------
+
+class TC_U_DPH_014_ApplyDbTimeout(TestCase):
+    """TC-U-DPH-014: _apply_cleanup_db_timeout 将 read/write_timeout 放大到 600s"""
+
+    @patch(f'{CMD_MODULE}.connections')
+    def test_raises_read_and_write_timeout(self, mock_connections):
+        from api.management.commands.dph_cleanup_service import (
+            _apply_cleanup_db_timeout, DPH_CLEANUP_DB_TIMEOUT,
+        )
+        mock_conn = MagicMock()
+        mock_conn.settings_dict = {
+            'OPTIONS': {'charset': 'utf8mb4', 'read_timeout': 60, 'write_timeout': 60}
+        }
+        mock_connections.__getitem__.return_value = mock_conn
+
+        changed = _apply_cleanup_db_timeout()
+
+        self.assertTrue(changed)
+        self.assertEqual(mock_conn.settings_dict['OPTIONS']['read_timeout'],
+                         DPH_CLEANUP_DB_TIMEOUT)
+        self.assertEqual(mock_conn.settings_dict['OPTIONS']['write_timeout'],
+                         DPH_CLEANUP_DB_TIMEOUT)
+        # charset 等其它选项不应被改动
+        self.assertEqual(mock_conn.settings_dict['OPTIONS']['charset'], 'utf8mb4')
+
+
+class TC_U_DPH_015_ApplyDbTimeout_NoOp(TestCase):
+    """TC-U-DPH-015: OPTIONS 无 read_timeout 时（如 SQLite），_apply_cleanup_db_timeout 无操作"""
+
+    @patch(f'{CMD_MODULE}.connections')
+    def test_no_timeout_keys_is_noop(self, mock_connections):
+        from api.management.commands.dph_cleanup_service import _apply_cleanup_db_timeout
+        mock_conn = MagicMock()
+        mock_conn.settings_dict = {'OPTIONS': {}}  # SQLite 风格，无超时项
+        mock_connections.__getitem__.return_value = mock_conn
+
+        changed = _apply_cleanup_db_timeout()
+
+        self.assertFalse(changed)
+        # 不应向 OPTIONS 添加任何键
+        self.assertNotIn('read_timeout', mock_conn.settings_dict['OPTIONS'])
+        self.assertNotIn('write_timeout', mock_conn.settings_dict['OPTIONS'])
+        # 未修改则不应关闭连接
+        mock_conn.close.assert_not_called()
+
+
+class TC_U_DPH_016_ApplyDbTimeout_ClosesConnection(TestCase):
+    """TC-U-DPH-016: 修改超时后关闭旧连接，使新 OPTIONS 在下次连接时生效"""
+
+    @patch(f'{CMD_MODULE}.connections')
+    def test_closes_connection_when_changed(self, mock_connections):
+        from api.management.commands.dph_cleanup_service import _apply_cleanup_db_timeout
+        mock_conn = MagicMock()
+        mock_conn.settings_dict = {'OPTIONS': {'read_timeout': 60, 'write_timeout': 60}}
+        mock_connections.__getitem__.return_value = mock_conn
+
+        _apply_cleanup_db_timeout()
+
+        mock_conn.close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TC-U-DPH-017 / 018：--max-batches 单轮批次上限（DPH-CLEANUP-002）
+# ---------------------------------------------------------------------------
+
+class TC_U_DPH_017_MaxBatchesCap(TestCase):
+    """TC-U-DPH-017: max_batches > 0 时，_run_cleanup 单轮最多执行 max_batches 个批次"""
+
+    @patch(f'{CMD_MODULE}.time')
+    @patch(f'{CMD_MODULE}.connection')
+    def test_run_cleanup_stops_at_max_batches(self, mock_conn, mock_time):
+        """
+        构造「每批都删满 batch_size 行」的场景（current_min 不推进），
+        若无 max_batches 上限会无限循环；设 max_batches=3 应恰好执行 3 个 DELETE 批次后停止。
+        """
+        mock_cursor = MagicMock()
+        # 边界 id 足够大，保证 current_min 不会越界
+        mock_cursor.fetchone.side_effect = [(10_000_000,), (1,)]
+        # 每批都删满 batch_size 行
+        mock_cursor.rowcount = 5000
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_conn.cursor.return_value.__exit__.return_value = False
+        mock_time.sleep = MagicMock()
+
+        cmd = _make_command()
+        cmd._run_cleanup(days=7, batch_size=5000, sleep_ms=0, dry_run=False, max_batches=3)
+
+        # execute = 2 次 SELECT + 3 次 DELETE
+        self.assertEqual(mock_cursor.execute.call_count, 5)
+        delete_calls = [c for c in mock_cursor.execute.call_args_list
+                        if 'DELETE' in c[0][0].upper()]
+        self.assertEqual(len(delete_calls), 3)
+        # stdout 应说明因达到批次上限而停止
+        self.assertIn('批次上限', cmd.stdout.getvalue())
+
+
+class TC_U_DPH_018_MaxBatchesUnlimited(TestCase):
+    """TC-U-DPH-018: max_batches=0 表示不限制，正常删完不提前停止"""
+
+    @patch(f'{CMD_MODULE}.time')
+    @patch(f'{CMD_MODULE}.connection')
+    def test_max_batches_zero_runs_to_completion(self, mock_conn, mock_time):
+        """max_batches=0：单批 rowcount=3000<batch_size，删完即结束，不出现批次上限提示"""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.side_effect = [(3000,), (1,)]
+        mock_cursor.rowcount = 3000
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_conn.cursor.return_value.__exit__.return_value = False
+        mock_time.sleep = MagicMock()
+
+        cmd = _make_command()
+        cmd._run_cleanup(days=7, batch_size=5000, sleep_ms=0, dry_run=False, max_batches=0)
+
+        stdout_output = cmd.stdout.getvalue()
+        self.assertIn('完成', stdout_output)
+        self.assertNotIn('批次上限', stdout_output)
+
+
+# ---------------------------------------------------------------------------
+# TC-U-DPH-019：handle() 将 --max-batches 透传给 _run_cleanup（DPH-CLEANUP-002）
+# ---------------------------------------------------------------------------
+
+class TC_U_DPH_019_HandlePassesMaxBatches(TestCase):
+    """TC-U-DPH-019: --once 模式下 handle() 将 max_batches 透传给 _run_cleanup"""
+
+    @patch(f'{CMD_MODULE}._apply_cleanup_db_timeout', return_value=False)
+    def test_handle_passes_max_batches_to_run_cleanup(self, _mock_apply):
+        cmd = _make_command()
+        cmd._run_cleanup = MagicMock()
+        options = {
+            'days': 7, 'batch_size': 5000, 'sleep_ms': 0,
+            'cron': '0 3 * * *', 'once': True, 'dry_run': False,
+            'max_batches': 7,
+        }
+        cmd.handle(**options)
+
+        cmd._run_cleanup.assert_called_once()
+        # _run_cleanup(days, batch_size, sleep_ms, dry_run, max_batches)
+        args = cmd._run_cleanup.call_args[0]
+        self.assertEqual(args[4], 7, 'handle() 应把 max_batches=7 透传给 _run_cleanup')

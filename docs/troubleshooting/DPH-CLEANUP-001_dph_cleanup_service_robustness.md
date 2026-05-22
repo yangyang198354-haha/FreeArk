@@ -159,3 +159,27 @@ python manage.py dph_cleanup_service --days 7 --cron "0 3 * * *"
 - 根因分析（FINAL，含 SSH 实测证据）: `docs/troubleshooting/dph_oneshot_rca_2026-05-22.md`
 - 生产 DB 性能问题背景: `memory/project_db_perf_dashboard_timeout.md`
 - `plc_data_clean_up_service.py` — 同模式参考实现（已有稳定运行记录）
+
+---
+
+## 8. 【2026-05-22 更正】深层根因归因修正（DPH-CLEANUP-002）
+
+**更正时间**：2026-05-22 ｜ **更正人**：PM Orchestrator（Yang Yang 核实）
+**保留原文不删除，本节追加更正，保持可追溯性。**
+
+### 8.1 原文错误
+
+§2「根因摘要」与 §6「遗留问题」把深层根因 / 遗留风险归结为 "InnoDB buffer pool 仅 128MB"。
+
+### 8.2 实测更正
+
+2026-05-22 生产 MySQL 9.4.0（192.168.31.98）`SHOW VARIABLES` 实测：`innodb_buffer_pool_size` = 2147483648 = **2 GB**（非 128 MB）。2026-05-20 dashboard 调查时 buffer pool 确为 128MB（当时正确），之后已由运维调大到 2GB；本结案报告沿用了过时的 128MB 旧值。
+
+### 8.3 真实深层根因
+
+真凶是 `settings.py` MYSQL_DATABASE OPTIONS 中的 **`read_timeout=60` / `write_timeout=60`**（客户端 socket 超时 60 秒）——耗时超 60s 的清理查询被客户端强行断开。服务端未设此类限制（`max_execution_time=0`）。
+
+### 8.4 DPH-CLEANUP-001 修复的有效性
+
+**DPH-CLEANUP-001 的 `except OperationalError` / `except Exception` 修复依然完全正确、保留。**
+DPH-CLEANUP-002 在此基础上增加：① 客户端读写超时放大（read/write_timeout → 600s，仅清理进程），使 OperationalError 极少发生、容错块成为纵深防御；② `--max-batches` 单轮批次上限，分多轮清理约 2646 万行积压。详见 `docs/troubleshooting/dph_oneshot_rca_2026-05-22.md` §九。

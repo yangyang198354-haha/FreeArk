@@ -289,6 +289,46 @@ except OperationalError as e:
 
 ---
 
-*文档状态：**FINAL***
+## 九、【2026-05-22 更正】根因归因修正（DPH-CLEANUP-002）
+
+**更正人**：PM Orchestrator（Yang Yang 核实）
+**更正时间**：2026-05-22
+**保留原文不删除，本节追加更正说明，保持可追溯性。**
+
+### 9.1 原文错误结论（§4.4 / §5.1 / §6.3）
+
+原文将"深层根因"归结为：InnoDB buffer pool 仅 128 MB，表膨胀导致索引无法常驻内存、查询随机 I/O 超时。
+
+### 9.2 实测更正（2026-05-22 生产 MySQL 9.4.0 `SHOW VARIABLES`）
+
+| 项目 | 原文 | 2026-05-22 实测 |
+|------|------|----------------|
+| `innodb_buffer_pool_size` | 128 MB | **2 GB**（2147483648 字节） |
+| `innodb_buffer_pool_chunk_size` | （未区分） | 134217728 = 128 MB（chunk 大小，非 pool 总大小） |
+| `max_execution_time` | 未采集 | 0（服务端不限制 SELECT 执行时间） |
+| `wait_timeout` / `interactive_timeout` | 未采集 | 28800（8 小时） |
+| MySQL Uptime | 未采集 | 约 42.7 小时（服务端未崩溃、未频繁重启） |
+| `device_param_history` | 3600 万行 / 11.6 GB | 37,668,794 行 / 11.33 GB |
+
+**关于 buffer pool**：2026-05-20 dashboard 调查时 buffer pool 确为 128 MB（该次记录当时正确），之后已由运维调大到 2 GB。本 RCA（2026-05-22）沿用了 dashboard 调查的 128 MB 旧值、未重新核实生产实际配置，导致"深层根因"结论过时失准。
+
+### 9.3 真正的根因
+
+`OperationalError (2013, 'Lost connection to ... server during query')` 的真凶是 **Django `settings.py` MySQL 连接 OPTIONS 中的 `read_timeout=60` / `write_timeout=60`**（`FreeArkWeb/backend/freearkweb/freearkweb/settings.py` 第 126-127 行）。
+
+这是 mysqlclient 客户端 socket 超时。任何查询响应耗时超过 60 秒，客户端即强行断连并抛 OperationalError 2013。dph_cleanup 在 3766 万行大表上的边界查询 / 批量 DELETE 单条耗时常超 60s，被客户端 60s 超时掐断。服务端（`max_execution_time=0`、`wait_timeout=8h`、Uptime 正常）并未掐断查询。
+
+### 9.4 DPH-CLEANUP-001 修复仍然有效
+
+DPH-CLEANUP-001 已部署的 `except OperationalError` / `except Exception` 异常容错修复**依然正确有效，保留**。错误的只是"深层根因"归因。DPH-CLEANUP-002 在此基础上：① 把 dph 清理进程的客户端 read/write 超时放大到 600s，使长查询能跑到完、不再被掐断；② 新增 `--max-batches` 单轮批次上限，把约 2646 万行历史积压分多轮逐步清理。
+
+### 9.5 §6.3 建议更正
+
+原 §6.3 建议中"InnoDB buffer pool 调优（128MB → 512MB/1GB）"**不再需要**（实际已是 2GB）。其余建议（表瘦身、清理任务查询优化）依然有效。
+
+---
+
+*文档状态：**FINAL（含 2026-05-22 §九 根因更正）***
 *静态分析阶段作者：PM Orchestrator / devops_engineer sub-agent*
 *FINAL 升级时间：2026-05-22（并入 SSH 实测证据：证据 1-5，采集于 2026-05-21）*
+*根因更正：2026-05-22（§九，DPH-CLEANUP-002 — buffer pool 实为 2GB，真因为客户端 read_timeout=60）*

@@ -227,3 +227,20 @@ commit: 15d2a54
 服务状态: active (running), 无重启, 无崩溃
 遗留风险: RISK-DPH-001/002 (HIGH) — 建议步骤 D 单独立项
 ```
+
+---
+
+## 11. 【2026-05-22 更正】RISK-DPH-001 根因更正（DPH-CLEANUP-002）
+
+**更正时间**：2026-05-22 ｜ **更正人**：PM Orchestrator（Yang Yang 核实）
+**保留原文不删除，本节追加更正，保持可追溯性。**
+
+§7「遗留风险」中 RISK-DPH-001 原文：「生产 `innodb_buffer_pool_size` 仅 128MB，远低于表体积（11.6GB）」。
+
+**更正**：2026-05-22 生产 MySQL 9.4.0 实测 `innodb_buffer_pool_size = 2147483648 = 2 GB`，非 128MB。2026-05-20 dashboard 调查时 buffer pool 确为 128MB（当时正确），之后已由运维调大到 2GB；本报告 §7 沿用了过时旧值。
+
+`OperationalError 'Lost connection'` 的真因是 Django 客户端 `read_timeout=60s`（settings.py OPTIONS），而非 buffer pool 不足。RISK-DPH-001 应重述为：**DPH-CLEANUP-001 仅解决了"异常不传播、进程不崩溃"，未解决 60s 客户端超时导致清理慢查询被频繁掐断的问题**——该问题由 DPH-CLEANUP-002（read/write_timeout 放大到 600s）修复。
+
+RISK-DPH-002（积压约 2646 万行）描述依然准确，由 DPH-CLEANUP-002 的 `--max-batches` 分轮清理策略 + 一次性后台全量清理共同解决。
+
+详见 `docs/troubleshooting/dph_oneshot_rca_2026-05-22.md` §九。
