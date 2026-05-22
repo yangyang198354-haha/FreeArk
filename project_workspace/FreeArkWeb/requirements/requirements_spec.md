@@ -5,8 +5,10 @@ author_agent: sub_agent_requirement_analyst
 phase: PHASE_01
 project: FreeArkWeb
 created_at: 2026-04-14
-status: DRAFT
-source: reverse_engineering — api/models.py, api/views.py, api/serializers.py, api/urls.py
+updated_at: 2026-05-22
+status: APPROVED
+source: reverse_engineering — api/models.py, api/views.py, api/serializers.py, api/urls.py, frontend/src/views/*.vue
+change_log: 2026-05-22 — 增量补充 UI 调整需求 REQ-FUNC-027~034（5项 UI 变更）
 -->
 
 ---
@@ -116,6 +118,53 @@ FreeArkWeb 是一套面向住宅楼宇集中供暖/供冷管理场景的后端 R
 ---
 
 ## 5. 接口端点汇总
+
+---
+
+## 6. UI 调整功能需求（2026-05-22 增量）
+
+> 背景：已上线的 FreeArkWeb 前端完成了科技深蓝主题统一改造（v0.5.8）。本节记录 5 项 UI 细化调整需求，均为增量变更，不引入新的后端接口。
+
+### 6.1 系统看板 — 近 7 天电量趋势图 legend 控制与负数 Y 轴
+
+| ID | 需求描述 | 来源 |
+|----|---------|------|
+| REQ-FUNC-027 | 近 7 天电量趋势图在图表区上方新增 legend checkbox 控制组：用户可勾选/取消勾选各数据系列（制冷、制热、总用电量）以控制其在图表中的显示与隐藏 | 用户需求第1项 |
+| REQ-FUNC-028 | legend checkbox 默认状态：制冷=勾选，制热=勾选，总用电量=不勾选 | 用户需求第1项 |
+| REQ-FUNC-029 | 当趋势图数据集包含负值时，Chart.js Y 轴须自动扩展至负数范围，不得裁剪负数部分（即移除 `beginAtZero: true` 约束，改由 Chart.js 自动计算 min） | 用户需求第1项；来源：HomeView.vue L546 `beginAtZero: true` |
+
+### 6.2 全站页面标题副标题补齐
+
+| ID | 需求描述 | 来源 |
+|----|---------|------|
+| REQ-FUNC-030 | 所有主功能页面在 `<h2>` 标题下方应有一行 `.page-subtitle` 简介文案。核查现状：HomeView（已有）、DailyUsageReportView（已有）、MonthlyUsageReportView（已有）、UsageQueryView（已有）、PlcStatusView（已有）、SpecificPartDetailView（已有）、DeviceParamHistoryView（已有，以 specific_part 为副标题）、RoomHistoryView（已有，以 specific_part 为副标题）；**缺失**副标题的页面为：设备列表（DeviceManagementDeviceListView）、业主管理（OwnerManagementView）、服务管理（ServicesView）、创建用户（CreateUserView）、修改密码（ChangePasswordView）、设置记录（PlcWriteRecordView） | 用户需求第2项；来源：各 .vue 文件 page-header 核查 |
+
+### 6.3 设备列表"PLC最后在线时间"列名与宽度
+
+| ID | 需求描述 | 来源 |
+|----|---------|------|
+| REQ-FUNC-031 | 【已核实】`PLCConnectionStatus.last_online_time` 字段的更新机制：由 `mqtt_handlers.py` 中 `_update_connection_status()` 函数在每次收到 MQTT 数据包时（即每次 PLC 设备上报数据，触发 ConnectionStatus 快/慢路径处理）写入 `timezone.now()`。该时间戳表示"PLC 设备最后一次发送 MQTT 数据包的时间"，本质为**最近一次通信/心跳时间**，而非"最近一次从离线恢复为在线的时间"。因此列名应从"PLC最后在线时间"改为"PLC上次心跳" | 用户需求第3项；来源：mqtt_handlers.py `_update_connection_status()` 快路径 L534、慢路径 L607-L622 |
+| REQ-FUNC-032 | 设备列表"PLC上次心跳"列宽度收紧，从 `min-width="160"` 改为固定 `width="150"`（显示格式 YYYY-MM-DD HH:MM:SS，150px 可容纳） | 用户需求第3项；来源：DeviceManagementDeviceListView.vue L111 |
+
+### 6.4 设备面板新增返回按钮
+
+| ID | 需求描述 | 来源 |
+|----|---------|------|
+| REQ-FUNC-033 | DeviceCardsView（设备面板，路由 `/device-cards?specific_part=...`）须在页面顶部新增"返回"按钮，点击后执行 `router.back()` 或 `router.push('/device-management/device-list')` 返回上一页（设备列表） | 用户需求第4项；来源：DeviceCardsView.vue、router/index.js |
+
+### 6.5 设置面板从弹窗改为内嵌页面
+
+| ID | 需求描述 | 来源 |
+|----|---------|------|
+| REQ-FUNC-034 | 当前"设置"功能通过 `el-dialog` 弹窗在设备列表页内渲染 `DeviceSettingsPanelView`（`settingsDialogVisible` 控制），须改为独立路由页面：新增路由 `/device-management/device-settings?specific_part=...`，`DeviceSettingsPanelView` 以全页面内嵌方式呈现，并配有"返回"按钮（返回设备列表）；设备列表中的"设置"按钮改为路由跳转而非弹窗触发；页面风格、配色遵循全站科技深蓝主题设计规范 | 用户需求第5项；来源：DeviceManagementDeviceListView.vue L221-L232（el-dialog），DeviceSettingsPanelView.vue |
+
+### 6.6 约束说明
+
+| ID | 约束描述 |
+|----|---------|
+| REQ-NFN-007 | 以上5项均为纯前端 UI 调整，不新增后端 API 接口 |
+| REQ-NFN-008 | 所有新增页面/组件须遵循已统一的科技深蓝主题设计规范（Design Token、global.css、`.page-header`/`.page-subtitle` 样式约定） |
+| REQ-NFN-009 | DeviceSettingsPanelView 改为独立路由页面后，MQTT WebSocket 连接（ackTopic 订阅）的生命周期须由页面 `onMounted`/`onUnmounted` 管理，不受弹窗状态影响 |
 
 | 路径 | 方法 | 认证要求 | 关联需求 |
 |------|------|---------|---------|

@@ -5,8 +5,10 @@ author_agent: sub_agent_requirement_analyst
 phase: PHASE_02
 project: FreeArkWeb
 created_at: 2026-04-14
-status: DRAFT
-source: reverse_engineering — api/views.py, api/models.py, api/urls.py
+updated_at: 2026-05-22
+status: APPROVED
+source: reverse_engineering — api/views.py, api/models.py, api/urls.py, frontend/src/views/*.vue
+change_log: 2026-05-22 — 新增 US-016~US-020（5项 UI 调整用户故事）
 -->
 
 ---
@@ -383,3 +385,188 @@ source: reverse_engineering — api/views.py, api/models.py, api/urls.py
 - Given：startDate/endDate 使用 YYYYMM（6位）格式，如 "202501"
 - When：POST /api/billing/list/
 - Then：HTTP 200，正常返回账单数据（自动转换为 YYYY-MM 格式）
+
+---
+
+## US-016 近 7 天趋势图 Legend 勾选控制
+
+**As** 能源管理员
+**I want to** 在"近 7 天电量趋势图"中通过 checkbox 控制各数据系列的显示与隐藏
+**So that** 专注查看关心的系列（如只看制冷和制热），避免总用电量折线遮挡柱状图
+
+关联需求：REQ-FUNC-027、REQ-FUNC-028、REQ-FUNC-029
+
+### 验收标准
+
+**AC-016-01**
+- Given：用户打开系统看板页（/home）
+- When：页面加载完毕，趋势图渲染完成
+- Then：图表上方显示三个 checkbox：制冷（勾选）、制热（勾选）、总用电量（不勾选）；图表中显示制冷柱、制热柱，不显示总用电量折线
+
+**AC-016-02**
+- Given：制冷 checkbox 已勾选
+- When：用户点击制冷 checkbox 取消勾选
+- Then：图表中制冷系列消失，制热系列和（若已勾选）总用电量系列保持不变；Y 轴范围自动重新计算
+
+**AC-016-03**
+- Given：所有 checkbox 均取消勾选
+- When：用户勾选总用电量 checkbox
+- Then：图表显示总用电量折线，并对应的数据标签可见
+
+**AC-016-04**
+- Given：趋势图数据集中存在负数值（如某日用电差值为负）
+- When：图表渲染
+- Then：Y 轴最小值自动扩展至覆盖最小负数值，负数柱状图/折线完整显示，不被裁剪；Y 轴不强制从 0 开始
+
+**AC-016-05**
+- Given：趋势图数据集全为非负值
+- When：图表渲染
+- Then：Y 轴正常显示，与 AC-016-04 无视觉冲突
+
+---
+
+## US-017 全站页面副标题补齐
+
+**As** 平台使用者
+**I want to** 在每个页面标题下看到一句简短的功能描述
+**So that** 快速理解当前页面的用途，无需查阅文档
+
+关联需求：REQ-FUNC-030
+
+### 验收标准
+
+**AC-017-01**
+- Given：用户进入设备列表页（/device-management/device-list）
+- When：页面加载
+- Then：h2 下方显示 `.page-subtitle`，文案为"查看和管理所有设备的运行状态"
+
+**AC-017-02**
+- Given：用户进入业主管理页（/owner-management）
+- When：页面加载
+- Then：h2 下方显示 `.page-subtitle`，文案为"管理业主信息及设备绑定关系"
+
+**AC-017-03**
+- Given：用户进入服务管理页（/services）
+- When：页面加载
+- Then：h2 下方显示 `.page-subtitle`，文案为"查看和管理系统后台服务运行状态"
+
+**AC-017-04**
+- Given：用户进入创建用户页（/create-user）
+- When：页面加载
+- Then：h2 下方显示 `.page-subtitle`，文案为"为员工创建系统登录账号"
+
+**AC-017-05**
+- Given：用户进入修改密码页（/change-password）
+- When：页面加载
+- Then：h2 下方显示 `.page-subtitle`，文案为"修改当前登录账号的密码"
+
+**AC-017-06**
+- Given：用户进入设置记录页（/plc-write-records）
+- When：页面加载
+- Then：h2 下方显示 `.page-subtitle`，文案为"查看 PLC 参数写入操作的历史记录"
+
+**AC-017-07**
+- Given：已有副标题的页面（系统看板、日报表、月报表、用量查询、PLC监控等）
+- When：页面加载
+- Then：副标题文案保持不变，不受本次改动影响
+
+---
+
+## US-018 设备列表"PLC上次心跳"列名与宽度
+
+**As** 设备运维人员
+**I want to** 在设备列表中看到准确命名且宽度合理的"PLC上次心跳"列
+**So that** 正确理解该时间戳的含义（最近一次 MQTT 通信时间），且列宽不浪费空间
+
+关联需求：REQ-FUNC-031、REQ-FUNC-032
+
+### 验收标准
+
+**AC-018-01**
+- Given：用户打开设备列表页
+- When：表格渲染
+- Then：原"PLC最后在线时间"列的表头文字显示为"PLC上次心跳"
+
+**AC-018-02**
+- Given：设备列表表格渲染
+- When：查看"PLC上次心跳"列的宽度
+- Then：该列宽度为固定 150px（而非原 min-width 160px），显示时间格式 YYYY-MM-DD HH:MM:SS 在 150px 内完整展示，不截断
+
+**AC-018-03**
+- Given：PLC 设备有心跳记录
+- When：查看对应行"PLC上次心跳"列
+- Then：显示最近一次 MQTT 数据上报时间，格式为 YYYY-MM-DD HH:MM:SS
+
+**AC-018-04**
+- Given：PLC 设备从未有过心跳记录（last_online_time 为 null）
+- When：查看对应行"PLC上次心跳"列
+- Then：显示"—"
+
+---
+
+## US-019 设备面板返回按钮
+
+**As** 运维人员
+**I want to** 在设备面板页面有"返回"按钮
+**So that** 查看完设备参数后可快速返回设备列表，无需使用浏览器的回退功能
+
+关联需求：REQ-FUNC-033
+
+### 验收标准
+
+**AC-019-01**
+- Given：用户从设备列表点击"设备面板"进入 /device-cards?specific_part=...
+- When：设备面板页面加载
+- Then：页面顶部显示"返回"按钮（el-button，带箭头图标或文字），位置在页面标题区域
+
+**AC-019-02**
+- Given：用户在设备面板页面
+- When：点击"返回"按钮
+- Then：浏览器导航到上一页（设备列表页），specific_part 参数不丢失（浏览器历史正常）
+
+**AC-019-03**
+- Given：用户直接通过 URL 访问 /device-cards?specific_part=... 无上一页历史
+- When：点击"返回"按钮
+- Then：跳转到 /device-management/device-list
+
+---
+
+## US-020 设置面板改为内嵌独立页面
+
+**As** 运维人员
+**I want to** 通过独立页面（而非弹窗）访问设备参数设置
+**So that** 设置操作有足够的空间展示所有参数分组，操作体验更佳，且可通过"返回"按钮回到设备列表
+
+关联需求：REQ-FUNC-034
+
+### 验收标准
+
+**AC-020-01**
+- Given：用户在设备列表中点击某行的"设置"按钮
+- When：点击事件触发
+- Then：不弹出 el-dialog 弹窗，而是路由跳转到 /device-management/device-settings?specific_part=...
+
+**AC-020-02**
+- Given：用户进入 /device-management/device-settings?specific_part=3-1-7-702
+- When：页面加载
+- Then：页面标题区显示"参数设置"（h2）和副标题（包含 specific_part），下方展示设备参数分组（与原弹窗内容一致），页面顶部有"返回"按钮
+
+**AC-020-03**
+- Given：用户在设置页面
+- When：点击"返回"按钮
+- Then：路由跳回 /device-management/device-list
+
+**AC-020-04**
+- Given：用户在设置页面修改了参数并点击"提交"
+- When：MQTT 写入完成（ACK 回执或超时）
+- Then：操作结果（成功/失败/超时）在页面内正常显示；页面不自动关闭（不同于弹窗的 destroy-on-close）
+
+**AC-020-05**
+- Given：用户在设置页面
+- When：页面处于活跃状态（onMounted）
+- Then：MQTT WebSocket 连接已建立（订阅 ackTopic）；用户离开页面（onUnmounted）时 WebSocket 连接正常断开
+
+**AC-020-06**
+- Given：设置页面
+- When：视觉审查
+- Then：背景色、卡片样式、按钮风格、字体与全站科技深蓝主题一致（遵循 global.css Design Token）；不出现与主题不符的白色弹窗阴影

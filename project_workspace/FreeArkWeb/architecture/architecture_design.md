@@ -5,8 +5,10 @@ author_agent: sub_agent_system_architect
 phase: PHASE_03
 project: FreeArkWeb
 created_at: 2026-04-14
-status: DRAFT
-source: reverse_engineering — api/ directory, freearkweb/settings.py
+updated_at: 2026-05-22
+status: APPROVED
+source: reverse_engineering — api/ directory, freearkweb/settings.py, frontend/src/views/*.vue
+change_log: 2026-05-22 — 新增前端架构章节（§4 前端整体架构、§5 需求覆盖矩阵补充）
 -->
 
 ---
@@ -126,4 +128,70 @@ PLC设备 --MQTT--> Broker
 | REQ-FUNC-018~021 | api/views.py (PLC status views), api/models.py (PLCConnectionStatus, PLCStatusChangeHistory) |
 | REQ-FUNC-022~026 | api/views.py (get_bill_list), api/models.py (SpecificPartInfo, UsageQuantityMonthly) |
 
-**覆盖状态**：所有 REQ-FUNC-001 ~ REQ-FUNC-026 均有对应模块覆盖，无缺口。
+| REQ-FUNC-027~029 | frontend/HomeView.vue（Chart.js legend checkbox、Y轴 beginAtZero 移除） |
+| REQ-FUNC-030 | frontend/6个 Vue 文件（副标题补齐） |
+| REQ-FUNC-031~032 | frontend/DeviceManagementDeviceListView.vue（列名、列宽变更） |
+| REQ-FUNC-033 | frontend/DeviceCardsView.vue（返回按钮） |
+| REQ-FUNC-034 | frontend/router/index.js + DeviceManagementSettingsView.vue（新增）+ DeviceManagementDeviceListView.vue（移除弹窗） |
+
+**覆盖状态**：所有 REQ-FUNC-001 ~ REQ-FUNC-034 均有对应模块覆盖，无缺口。
+
+---
+
+## 4. 前端整体架构（2026-05-22 补充）
+
+### 4.1 技术栈
+
+| 层次 | 技术 | 版本约束 |
+|------|------|---------|
+| 框架 | Vue 3（Composition API） | 已锁定 |
+| UI 组件库 | Element Plus | 已锁定 |
+| 图表库 | Chart.js + chartjs-plugin-datalabels | 已锁定 |
+| 路由 | Vue Router 4（createWebHistory） | 已锁定 |
+| HTTP 客户端 | 自封装 api.js（原生 fetch） | 已锁定 |
+| MQTT | mqtt.js（WebSocket） + useMqttWebSocket composable | 已锁定 |
+| 构建工具 | Vite | 已锁定 |
+
+### 4.2 目录结构（关键部分）
+
+```
+frontend/src/
+  views/
+    HomeView.vue                          — 系统看板（含趋势图）
+    DeviceManagementDeviceListView.vue    — 设备列表
+    DeviceCardsView.vue                   — 设备面板
+    DeviceSettingsPanelView.vue           — 设备设置参数（内嵌组件）
+    DeviceManagementSettingsView.vue      — 【新增】设备设置独立页面容器
+    ...（其余页面）
+  components/
+    Layout.vue                            — 整体布局（侧边栏、顶栏、内容区）
+    CascadingSelector.vue                 — 楼栋-单元-户号级联选择器
+  composables/
+    useMqttWebSocket.js                   — MQTT WebSocket 连接 composable
+  router/
+    index.js                              — 路由配置（含 requiresAuth 守卫）
+  utils/
+    api.js                                — HTTP 请求封装
+```
+
+### 4.3 设计规范约定（Design Token，全站统一）
+
+> 来源：global.css，已在 v0.5.8 科技深蓝主题改造中统一
+
+| Token | 用途 |
+|-------|------|
+| `--color-primary` | 主色（蓝色系） |
+| `--color-text-primary` | 主文字色 |
+| `--color-text-placeholder` | 副文字色（用于 .page-subtitle） |
+| `--font-size-lg` | 页面标题 h2 |
+| `--font-size-sm` | 副标题 .page-subtitle |
+| `--font-weight-semibold` | 标题字重 |
+| `.page-header` | 页面标题容器 |
+| `.page-subtitle` | 标题下方副标题（color: var(--color-text-placeholder), font-size: var(--font-size-sm)） |
+
+### 4.4 本次 UI 调整不变约束
+
+1. 不新增后端 API 接口（纯前端变更）。
+2. 不修改 Design Token 定义（仅在新增组件中引用已有 token）。
+3. DeviceSettingsPanelView.vue 的内部逻辑（参数加载、批量提交、MQTT ACK 处理）完全不变，仅改变其宿主（从 el-dialog 改为独立路由页面）。
+4. 现有已有副标题的页面文案不改动。
