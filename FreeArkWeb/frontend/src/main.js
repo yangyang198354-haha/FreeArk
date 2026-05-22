@@ -7,8 +7,10 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 
-// 导入全局样式
+// 导入全局样式（旧 tokens，保留历史兼容）
 import './assets/global.css'
+// FreeArk_UIRefresh：新 Design Token 覆盖（位于旧文件之后，以保证优先级）
+import './styles/global.css'
 
 const app = createApp(App)
 

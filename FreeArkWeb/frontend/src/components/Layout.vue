@@ -3,7 +3,11 @@
     <!-- 顶部导航栏 -->
     <header class="app-header">
       <div class="header-left">
-        <div class="logo">自由方舟能耗采集平台</div>
+        <!-- 折叠触发器（AC-UI-001-04）-->
+        <button class="sidebar-toggle-btn" @click="toggleSidebar" :title="isCollapsed ? '展开导航栏' : '折叠导航栏'">
+          <el-icon :size="20"><Fold v-if="!isCollapsed" /><Expand v-else /></el-icon>
+        </button>
+        <span class="header-logo-text">自由方舟能耗采集平台</span>
       </div>
       <div class="header-right">
         <el-dropdown>
@@ -22,23 +26,24 @@
         </el-dropdown>
       </div>
     </header>
-    
+
     <!-- 主体内容区域 -->
     <div class="app-main">
-      <!-- 左侧导航栏 -->
-      <aside class="app-sidebar">
+      <!-- 左侧导航栏（AC-UI-001-04/05）-->
+      <aside class="app-sidebar" :class="{ 'is-collapsed': isCollapsed }">
         <el-menu
           :default-active="activeMenu"
           class="sidebar-menu"
           router
           unique-opened
+          :collapse="isCollapsed"
+          :collapse-transition="false"
         >
           <el-menu-item index="/home">
             <el-icon><HomeFilled /></el-icon>
-            <span>系统看板</span>
+            <template #title><span>系统看板</span></template>
           </el-menu-item>
 
-          <!-- 设备管理（MOD-FE-01, US-001）— 移至导航第二位 -->
           <el-sub-menu index="device-management">
             <template #title>
               <el-icon><List /></el-icon>
@@ -47,10 +52,9 @@
             <el-menu-item index="/device-management/device-list">设备列表</el-menu-item>
           </el-sub-menu>
 
-          <!-- 只有管理员才能看到业主信息管理菜单（第三位） -->
           <el-menu-item index="/owner-management" v-if="userRole === 'admin'">
             <el-icon><House /></el-icon>
-            <span>业主信息管理</span>
+            <template #title><span>业主信息管理</span></template>
           </el-menu-item>
 
           <el-sub-menu index="usage">
@@ -71,7 +75,6 @@
             <el-menu-item index="/services">服务列表</el-menu-item>
           </el-sub-menu>
 
-          <!-- 只有管理员才能看到用户管理菜单 -->
           <el-sub-menu index="user" v-if="userRole === 'admin'">
             <template #title>
               <el-icon><User /></el-icon>
@@ -82,12 +85,12 @@
           </el-sub-menu>
         </el-menu>
       </aside>
-      
+
       <!-- 右侧内容区域 -->
       <main class="app-content">
         <div class="content-wrapper">
           <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
+            <transition name="fade-slide" mode="out-in">
               <component :is="Component" />
             </transition>
           </router-view>
@@ -100,9 +103,10 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-// 导入 Element Plus 图标组件
-import { User, ArrowDown, HomeFilled, Document, Setting, House, List } from '@element-plus/icons-vue'
+import { User, ArrowDown, HomeFilled, Document, Setting, House, List, Fold, Expand } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
+
+const SIDEBAR_STORAGE_KEY = 'freeark_sidebar_collapsed'
 
 export default {
   name: 'Layout',
@@ -114,19 +118,29 @@ export default {
     Setting,
     House,
     List,
+    Fold,
+    Expand,
   },
   setup() {
     const router = useRouter()
     const username = ref('')
     const userRole = ref('user')
     const loading = ref(false)
-    
-    // 计算当前激活的菜单项
+
+    // AC-UI-001-05: localStorage 持久化折叠状态
+    const isCollapsed = ref(
+      localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true'
+    )
+
+    const toggleSidebar = () => {
+      isCollapsed.value = !isCollapsed.value
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isCollapsed.value))
+    }
+
     const activeMenu = computed(() => {
       return router.currentRoute.value.path
     })
-    
-    // 格式化用户全名
+
     const formatFullName = (firstName, lastName) => {
       if (firstName && lastName) {
         return `${lastName}${firstName}`
@@ -137,23 +151,19 @@ export default {
       }
       return ''
     }
-    
-    // 加载用户信息
+
     const loadUserInfo = async () => {
       loading.value = true
       try {
         const response = await api.get('/api/auth/me/')
         if (response.success) {
-          // 优先显示用户姓名，其次是用户名
           const fullName = formatFullName(response.data.first_name, response.data.last_name)
           username.value = fullName || response.data.username || '用户'
           userRole.value = response.data.role || 'user'
-          // 保存用户信息到localStorage
           localStorage.setItem('userInfo', JSON.stringify(response.data))
         }
       } catch (error) {
         console.error('加载用户信息失败:', error)
-        // 401 / "未登录" 直接清空 token，跳转到登录页
         const isAuthError = error.message && (
           error.message.includes('401') ||
           error.message.includes('未登录') ||
@@ -163,7 +173,6 @@ export default {
           handleLogout()
           return
         }
-        // 其他网络/服务器错误：先尝试从 localStorage 降级展示
         const savedUserInfo = localStorage.getItem('userInfo')
         if (savedUserInfo) {
           const userInfo = JSON.parse(savedUserInfo)
@@ -177,10 +186,8 @@ export default {
         loading.value = false
       }
     }
-    
-    // 编辑个人资料处理
+
     const handleEditProfile = () => {
-      // 从localStorage获取当前用户ID
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
       const userId = userInfo.id
       if (userId) {
@@ -189,163 +196,234 @@ export default {
         console.error('无法获取当前用户ID')
       }
     }
-    
-    // 修改密码处理
+
     const handleChangePassword = () => {
       router.push('/change-password')
     }
-    
-    // 退出登录处理
-    // BUG-CSRF-001 修复：改为 async，先调用后端 logout（销毁 session/Token），
-    // 再清除本地状态（含 CSRF 缓存），最后跳转登录页。
-    // 若后端请求失败，api.logout() 内部已捕获异常并继续清理，不阻断登出。
+
     const handleLogout = async () => {
-      // 1. 通知后端销毁 session/Token，并清除 CSRF 内存缓存
       await api.logout()
-      // 2. 清除本地存储的 token 和用户信息
       localStorage.removeItem('userToken')
       localStorage.removeItem('isAuthenticated')
       localStorage.removeItem('userInfo')
-      // 3. 清除认证 cookie
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
-      // 4. 清除 CSRF cookie，防止下次登录时浏览器携带过期 cookie
       document.cookie = 'csrftoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
-      // 5. 跳转到登录页面
       router.push('/login')
     }
-    
-    // 组件挂载时加载用户信息
+
     onMounted(() => {
       loadUserInfo()
     })
-    
+
     return {
       username,
       userRole,
+      isCollapsed,
       activeMenu,
+      toggleSidebar,
       handleEditProfile,
       handleChangePassword,
-      handleLogout
+      handleLogout,
     }
   }
-}</script>
+}
+</script>
 
 <style scoped>
+/* ---- 整体布局 ---- */
 .app-layout {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-page);
 }
 
-/* 顶部导航栏 */
+/* ---- 顶部导航栏（§7.3）---- */
 .app-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 60px;
-  padding: 0 20px;
-  background-color: #409eff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: var(--header-height);
+  padding: 0 var(--space-5);
+  background-color: var(--color-header-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 100;
+  flex-shrink: 0;
 }
 
-.header-left .logo {
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* 折叠按钮 */
+.sidebar-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-header-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-base);
+  transition: background-color 150ms ease-in-out;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.header-logo-text {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-header-text);
+  white-space: nowrap;
 }
 
 .header-right .user-info {
   display: flex;
   align-items: center;
+  gap: var(--space-1);
   cursor: pointer;
-  color: #fff;
+  color: var(--color-header-text);
+  font-size: var(--font-size-base);
+  transition: opacity 150ms ease-in-out;
 }
 
-.header-right .el-icon {
-  margin-right: 5px;
-  color: #fff;
+.header-right .user-info:hover {
+  opacity: 0.85;
 }
 
-/* 主体内容区域 */
+/* ---- 主体区域 ---- */
 .app-main {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* 左侧导航栏 */
+/* ---- 左侧导航栏（§7.4）---- */
 .app-sidebar {
-  width: 200px;
-  background-color: #304156;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+  width: var(--sidebar-width-expanded);
+  background-color: var(--color-bg-sidebar);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.12);
   overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  /* AC-UI-001-04: 300ms 布局过渡 */
+  transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 左侧菜单样式 */
+.app-sidebar.is-collapsed {
+  width: var(--sidebar-width-collapsed);
+}
+
+/* 菜单容器 — 高度与侧边栏等高 */
 .sidebar-menu {
   border-right: none;
   height: 100%;
-  background-color: #304156;
+  background-color: var(--color-bg-sidebar) !important;
 }
 
-/* 修改Element Plus菜单样式 */
+/* Element Plus el-menu 背景色覆盖 */
 .sidebar-menu :deep(.el-menu) {
-  background-color: #304156;
-  color: #c0c4cc;
+  background-color: var(--color-bg-sidebar) !important;
 }
 
+/* 菜单项样式（§7.4）*/
 .sidebar-menu :deep(.el-menu-item),
 .sidebar-menu :deep(.el-sub-menu__title) {
-  color: #c0c4cc;
+  color: #94A3B8;
   background-color: transparent;
+  transition: background-color 200ms ease-out, color 200ms ease-out;
+  height: 50px;
+  line-height: 50px;
 }
 
 .sidebar-menu :deep(.el-menu-item:hover),
 .sidebar-menu :deep(.el-sub-menu__title:hover) {
-  color: #fff;
-  background-color: #409eff;
+  color: var(--color-text-inverse) !important;
+  background-color: var(--color-bg-sidebar-hover) !important;
 }
 
-.sidebar-menu :deep(.el-menu-item.is-active),
-.sidebar-menu :deep(.el-sub-menu__title.is-active) {
-  color: #fff;
-  background-color: #409eff;
+.sidebar-menu :deep(.el-menu-item.is-active) {
+  color: #FFFFFF !important;
+  background-color: var(--color-bg-sidebar-active) !important;
 }
 
-.sidebar-menu :deep(.el-sub-menu__title .el-icon),
-.sidebar-menu :deep(.el-menu-item .el-icon) {
-  color: inherit;
+/* 子菜单背景 */
+.sidebar-menu :deep(.el-sub-menu__list),
+.sidebar-menu :deep(.el-menu--inline) {
+  background-color: rgba(0, 0, 0, 0.2) !important;
 }
 
-.sidebar-menu :deep(.el-sub-menu__list) {
-  background-color: #304156;
+.sidebar-menu :deep(.el-sub-menu__list .el-menu-item) {
+  padding-left: 48px !important;
 }
 
-/* 右侧内容区域 */
+/* 折叠时图标大小（§7.4）*/
+.app-sidebar.is-collapsed :deep(.el-menu-item .el-icon),
+.app-sidebar.is-collapsed :deep(.el-sub-menu__title .el-icon) {
+  font-size: 20px;
+  margin-right: 0;
+}
+
+/* 折叠时弹出菜单样式覆盖 */
+:deep(.el-menu--popup) {
+  background-color: var(--color-bg-sidebar) !important;
+}
+
+:deep(.el-menu--popup .el-menu-item) {
+  color: #94A3B8;
+}
+
+:deep(.el-menu--popup .el-menu-item:hover) {
+  background-color: var(--color-bg-sidebar-hover) !important;
+  color: var(--color-text-inverse) !important;
+}
+
+:deep(.el-menu--popup .el-menu-item.is-active) {
+  background-color: var(--color-bg-sidebar-active) !important;
+  color: #FFFFFF !important;
+}
+
+/* ---- 右侧内容区域（§7.5）---- */
 .app-content {
   flex: 1;
-  padding: 20px;
+  padding: var(--space-5);
   overflow-y: auto;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-page);
+  min-width: 0;
 }
 
 .content-wrapper {
-  background-color: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  background-color: var(--color-bg-card);
+  border-radius: var(--radius-base);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  width: 100%;
 }
 
-/* 淡入淡出过渡效果 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
+/* ---- 路由切换动效（§5.3 fade-slide）---- */
+.fade-slide-enter-active {
+  transition: opacity 400ms ease-out, transform 400ms ease-out;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.fade-slide-leave-active {
+  transition: opacity 200ms ease-in;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-slide-leave-to {
   opacity: 0;
 }
 </style>

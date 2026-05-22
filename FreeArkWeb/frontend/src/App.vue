@@ -24,24 +24,12 @@ export default {
 </script>
 
 <style>
-/* 全局样式重置 */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #333;
-  background-color: #f5f7fa;
-}
+/* App.vue 全局样式 — 基础覆盖，Detail 由 global.css Design Token 提供 */
+/* AC-UI-001-01: 使用 Design Token 替代硬编码颜色 */
 
 /* 应用容器 */
 .app-container {
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-page);
 }
 </style>

@@ -5,14 +5,19 @@
       <el-button style="margin-top:8px" @click="loadParams">刷新</el-button>
     </div>
 
+    <!-- AC-UI-003-06: el-collapse 替换为常驻展开的分组标题 + 参数表格（§10.2）-->
     <template v-if="!loading && !loadError">
-      <el-collapse v-model="openGroups">
-        <el-collapse-item
+      <div class="param-groups">
+        <div
           v-for="group in groups"
           :key="group.sub_type"
-          :name="group.sub_type"
-          :title="group.sub_type_display"
+          class="param-group"
         >
+          <!-- 分组标题（始终可见，无折叠触发器）-->
+          <div class="group-header">
+            <span class="group-title">{{ group.sub_type_display }}</span>
+          </div>
+
           <el-table :data="group.params" size="small" border>
             <el-table-column label="参数" prop="display_name" width="160" />
             <el-table-column label="当前值" width="140">
@@ -49,8 +54,8 @@
               </template>
             </el-table-column>
           </el-table>
-        </el-collapse-item>
-      </el-collapse>
+        </div>
+      </div>
 
       <!-- 批量提交操作区 -->
       <div class="batch-actions">
@@ -100,7 +105,7 @@ export default {
     const loading = ref(false)
     const loadError = ref('')
     const groups = ref([])
-    const openGroups = ref([])
+    // AC-UI-003-06: openGroups 已移除（el-collapse 已替换为常驻展开布局，§10.2）
 
     const inputValues = ref({})
     const dirtyFields = ref(new Set())  // v0.5.0: 脏值追踪 Set（REQ-FUNC-004, ADR-10）
@@ -133,7 +138,7 @@ export default {
       try {
         const data = await api.get(`/api/device-settings/params/${encodeURIComponent(props.specificPart)}/`)
         groups.value = data.groups || []
-        openGroups.value = groups.value.map(g => g.sub_type)
+        // AC-UI-003-06: openGroups 已移除，分组始终展开
         groups.value.forEach(g => {
           g.params.forEach(p => {
             paramDisplayMap.value[p.param_name] = p.display_name
@@ -301,7 +306,7 @@ export default {
       loading,
       loadError,
       groups,
-      openGroups,
+      // openGroups: removed (AC-UI-003-06)
       inputValues,
       submitLoading,
       batchStatus,
@@ -321,6 +326,18 @@ export default {
 .device-settings-panel {
   min-height: 200px;
 }
+
+/* AC-UI-003-06: 常驻展开分组布局（§10.2）*/
+.param-groups {
+  width: 100%;
+}
+
+/* .param-group 和 .group-header / .group-title 样式由 global.css §11 提供；
+   此处仅补充 scoped 范围内的 el-table 间距 */
+.param-group :deep(.el-table) {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
 .load-error {
   padding: 16px;
 }

@@ -68,11 +68,11 @@
             <!-- 模式合计行：4 个 chip 水平排布 -->
             <div class="ps-mode-chips">
               <div class="ps-chip">
-                <div class="ps-chip-num" style="color: #409eff;">{{ powerStatus.mode_distribution.cooling }}</div>
+                <div class="ps-chip-num" style="color: var(--color-cooling);">{{ powerStatus.mode_distribution.cooling }}</div>
                 <div class="ps-chip-name">制冷</div>
               </div>
               <div class="ps-chip">
-                <div class="ps-chip-num" style="color: #f56c6c;">{{ powerStatus.mode_distribution.heating }}</div>
+                <div class="ps-chip-num" style="color: var(--color-heating);">{{ powerStatus.mode_distribution.heating }}</div>
                 <div class="ps-chip-name">制热</div>
               </div>
               <div class="ps-chip">
@@ -122,7 +122,7 @@
       <el-card class="stat-card" v-loading="loading.plcRate">
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: #67c23a">{{ plcRate.online_count }}</div>
+            <div class="stat-value" style="color: var(--color-success)">{{ plcRate.online_count }}</div>
             <div class="stat-label">PLC 在线</div>
             <div class="stat-sub">在线率 {{ plcRate.rate }}%</div>
           </div>
@@ -135,7 +135,7 @@
       <el-card class="stat-card" v-loading="loading.screenRate">
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: #67c23a">{{ screenRate.online_count }}</div>
+            <div class="stat-value" style="color: var(--color-success)">{{ screenRate.online_count }}</div>
             <div class="stat-label">大屏在线</div>
             <div class="stat-sub">在线率 {{ screenRate.rate }}%</div>
           </div>
@@ -148,7 +148,7 @@
       <el-card class="stat-card" v-loading="loading.plcRate">
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: #409eff">{{ plcRate.total_count }}</div>
+            <div class="stat-value" style="color: var(--color-primary)">{{ plcRate.total_count }}</div>
             <div class="stat-label">总设备数</div>
           </div>
           <div class="stat-icon plc-total">
@@ -225,8 +225,12 @@
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import Chart from 'chart.js/auto'
+import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { CircleCheck, CircleClose, Cpu, Calendar, Document, Monitor } from '@element-plus/icons-vue'
 import api from '../utils/api.js'
+
+// AC-UI-002-01/02/03: 注册 chartjs-plugin-datalabels 插件
+Chart.register(ChartDataLabels)
 
 export default {
   name: 'HomeView',
@@ -421,6 +425,7 @@ export default {
       }
     }
 
+    // AC-UI-002-01~07: Combo Chart（§9.4）
     function renderChart(data) {
       if (!usageChart.value) return
       const labels = data.map(d => d.date.slice(5))  // MM-DD
@@ -433,36 +438,78 @@ export default {
       }
       const ctx = usageChart.value.getContext('2d')
       chartInstance = new Chart(ctx, {
-        type: 'line',
+        // AC-UI-002-01: 容器类型 bar 支持混合图
+        type: 'bar',
         data: {
           labels,
           datasets: [
             {
-              // MOD-UI-002: 总用电量色值对齐总电量查询区块 #303133（深灰，PM 确认）
+              // AC-UI-002-01(c): 总用电量 — 折线，深灰（#1E293B）
+              type: 'line',
               label: '总用电量 (kWh)',
               data: totalValues,
-              borderColor: '#303133',
-              backgroundColor: 'rgba(48, 49, 51, 0.08)',
-              tension: 0.4,
-              fill: true
+              borderColor: '#1E293B',
+              backgroundColor: 'rgba(30, 41, 59, 0.05)',
+              borderWidth: 2,
+              tension: 0.35,
+              fill: false,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#1E293B',
+              order: 0,
+              // AC-UI-002-03: 折线数据标签
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                formatter: v => v.toFixed(1),
+                font: { size: 11, weight: '500' },
+                color: '#1E293B',
+                offset: 4,
+                clamp: true,
+                clip: false
+              }
             },
             {
-              // MOD-UI-002: 制冷色值对齐总电量查询区块 #409eff（蓝色）
+              // AC-UI-002-01(a): 制冷 — 柱状，蓝色（#2563EB）
+              type: 'bar',
               label: '制冷 (kWh)',
               data: coolingValues,
-              borderColor: '#409eff',
-              backgroundColor: 'rgba(64, 158, 255, 0.1)',
-              tension: 0.4,
-              fill: false
+              backgroundColor: 'rgba(37, 99, 235, 0.75)',
+              borderColor: '#2563EB',
+              borderWidth: 1,
+              borderRadius: 3,
+              order: 1,
+              // AC-UI-002-02: 柱状数据标签（零值不显示，AC-UI-002-04）
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                formatter: v => v > 0 ? v.toFixed(1) : '',
+                font: { size: 11, weight: '500' },
+                color: '#2563EB',
+                clamp: true,
+                clip: false
+              }
             },
             {
-              // MOD-UI-002: 制热色值对齐总电量查询区块 #f56c6c（红色）
+              // AC-UI-002-01(b): 制热 — 柱状，红色（#EF4444）
+              type: 'bar',
               label: '制热 (kWh)',
               data: heatingValues,
-              borderColor: '#f56c6c',
-              backgroundColor: 'rgba(245, 108, 108, 0.05)',
-              tension: 0.4,
-              fill: false
+              backgroundColor: 'rgba(239, 68, 68, 0.75)',
+              borderColor: '#EF4444',
+              borderWidth: 1,
+              borderRadius: 3,
+              order: 2,
+              // AC-UI-002-02: 柱状数据标签（零值不显示，AC-UI-002-04）
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                formatter: v => v > 0 ? v.toFixed(1) : '',
+                font: { size: 11, weight: '500' },
+                color: '#EF4444',
+                clamp: true,
+                clip: false
+              }
             }
           ]
         },
@@ -470,15 +517,40 @@ export default {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
+            // AC-UI-002-06: 图例
             legend: {
               display: true,
               position: 'top'
-            }
+            },
+            // AC-UI-002-05: tooltip 显示同一日期全部系列
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} kWh`
+              }
+            },
+            // 全局 datalabels 默认（被各 dataset 自有配置覆盖）
+            datalabels: {}
           },
           scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 12 }, color: '#475569' }
+            },
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              grid: { color: '#F1F5F9' },
+              ticks: {
+                font: { size: 12 },
+                color: '#475569',
+                callback: v => v.toFixed(0)
+              }
             }
+          },
+          // §9.5: 顶部留白给数据标签
+          layout: {
+            padding: { top: 24 }
           }
         }
       })
@@ -543,17 +615,18 @@ export default {
   margin-bottom: 20px;
 }
 
-/* MOD-UI-003: 删除局部 font-size 覆盖，统一由 global.css h2 提供（20px） */
+/* 页面标题对齐 Design Token（§11.5）*/
 .page-header h2 {
   margin: 0;
-  color: #303133;
-  font-weight: 600;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
 }
 
 .page-subtitle {
-  margin: 5px 0 0 0;
-  color: #909399;
-  font-size: 14px;
+  margin: var(--space-1) 0 0 0;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-sm);
 }
 
 /* 顶部卡片并排行（v0.5.3：总电量查询 + 系统开机状况） */
@@ -679,12 +752,13 @@ export default {
   color: #303133;
 }
 
+/* 对齐 Design Token（§2.3）*/
 .energy-item.cooling .energy-value {
-  color: #409eff;
+  color: var(--color-cooling);
 }
 
 .energy-item.heating .energy-value {
-  color: #f56c6c;
+  color: var(--color-heating);
 }
 
 .energy-label {
@@ -701,13 +775,14 @@ export default {
   margin-bottom: 20px;
 }
 
+/* AC-UI-001-06: 统计卡片 hover（§5.4）*/
 .stat-card {
-  transition: all 0.3s ease;
+  transition: transform 250ms ease-out, box-shadow 250ms ease-out;
 }
 
 .stat-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .stat-content {
@@ -721,15 +796,15 @@ export default {
 }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 5px;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
 }
 
 .stat-label {
-  font-size: 14px;
-  color: #909399;
+  font-size: var(--font-size-base);
+  color: var(--color-text-placeholder);
 }
 
 .stat-icon {
@@ -805,8 +880,9 @@ export default {
   margin-left: auto;
 }
 
+/* §9.5: 固定高度，给数据标签充分空间 */
 .chart-container {
-  height: calc(100% - 50px);
+  height: 300px;
   width: 100%;
 }
 

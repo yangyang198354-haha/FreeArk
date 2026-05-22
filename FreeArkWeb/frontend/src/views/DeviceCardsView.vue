@@ -60,37 +60,26 @@
       <!-- 无数据 -->
       <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
 
-      <!-- 横向卡片行：每个 sub_type 一列 -->
-      <!-- REQ-FUNC-001: cards-scroll-row 支持横向滚动 -->
-      <div v-else class="cards-scroll-row">
+      <!-- AC-UI-003-01/02: CSS Grid 布局，移除横向滚动与折叠控件（§10.1）-->
+      <div v-else class="cards-grid">
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
           <div
             v-for="(subTypeData, subKey) in groupData.sub_types"
             :key="subKey"
             class="subtype-col"
           >
-            <!-- REQ-FUNC-006: 列标题区新增折叠/展开按钮（AC-006-1） -->
+            <!-- AC-UI-003-01: 列标题区 — 移除折叠按钮，仅保留标题与历史数据按钮（§10.1）-->
             <div class="col-header">
               <span class="col-title">{{ subTypeData.display }}</span>
-              <button
-                class="col-collapse-btn"
-                :title="collapsedCols[subKey] ? '展开' : '折叠'"
-                @click.stop="toggleCollapse(subKey)"
-              >
-                <!-- AC-006-2/3: 箭头图标随折叠状态旋转 -->
-                <span class="collapse-arrow" :class="{ 'is-collapsed': collapsedCols[subKey] }">›</span>
-              </button>
             </div>
-            <!-- REQ-FUNC-006: v-show 控制参数列表显隐（AC-006-4/6, ADR-004） -->
-            <div class="params-list" v-show="!collapsedCols[subKey]">
+            <!-- AC-UI-003-02: params-list 始终展开，无 v-show 隐藏逻辑（§10.1）-->
+            <div class="params-list">
               <div
                 v-for="param in expandParams(subTypeData.params)"
                 :key="param.param_name"
                 class="param-row"
               >
-                <!-- REQ-FUNC-001: 移除 title 截断提示，标签改为完整显示（AC-001-1） -->
                 <span class="param-label">{{ param.display_name }}</span>
-                <!-- REQ-FUNC-005: 动态 class 绑定故障/正常状态颜色（AC-005-4/6, ADR-001） -->
                 <span
                   class="param-value"
                   :class="getValueClass(param.param_name, param.value)"
@@ -177,9 +166,7 @@ export default {
       ondemandInFlight: false,
       ondemandTimeoutTimer: null,
       _mqttDisconnect: null,
-      // REQ-FUNC-006: 卡片列折叠状态（ADR-004）
-      // { [subKey]: boolean }，true = 已折叠；缺键/false = 展开（初始全部展开）
-      collapsedCols: {},
+      // AC-UI-003-01/02: collapsedCols 已移除（折叠功能取消，§10.1）
     }
   },
   computed: {
@@ -215,7 +202,7 @@ export default {
   watch: {
     specificPart(newVal) {
       this.deviceData = {}
-      this.collapsedCols = {}  // REQ-FUNC-006: 切换专有部分时重置折叠状态
+      // collapsedCols 已移除（AC-UI-003-01/02）
       this.stopAutoRefresh()
       this.disconnectMqttDone()
       this._clearOndemandTimeout()
@@ -392,10 +379,7 @@ export default {
       return v === 0 ? 'status-ok' : 'status-fault'
     },
 
-    // REQ-FUNC-006: 切换指定卡片列的折叠/展开状态（ADR-004，AC-006-4/6）
-    toggleCollapse(subKey) {
-      this.collapsedCols[subKey] = !this.collapsedCols[subKey]
-    },
+    // AC-UI-003-01: toggleCollapse 已移除（折叠功能取消，§10.1）
 
     formatValue(paramName, rawValue) {
       if (rawValue === null || rawValue === undefined) return '-'
@@ -505,33 +489,16 @@ export default {
 </script>
 
 <style scoped>
-/* REQ-FUNC-004: CSS 设计令牌（MODULE-UI-004），统一色彩变量 */
+/* AC-UI-001-01: 对齐全局 Design Token（global.css），移除旧的局部颜色覆盖 */
 .device-panel {
-  /* 主色系 */
-  --color-primary: #409EFF;
-  --color-primary-light: #ECF5FF;
+  /* 状态色（REQ-FUNC-005，AC-005-1/2）— 对齐全局 Token */
+  --color-status-fault: var(--color-danger);
+  --color-status-ok:   var(--color-success);
 
-  /* 文字色 */
-  --color-text-primary: #303133;
-  --color-text-secondary: #606266;
-  --color-text-info: #909399;
-
-  /* 背景色 */
-  --color-bg-page: #f0f2f5;
-  --color-bg-card: #ffffff;
-  --color-bg-header: #EBF5FF;
-  --color-bg-row-alt: #FAFCFF;
-
-  /* 边框色 */
-  --color-border-base: #E4E7ED;
-  --color-border-light: #F0F2F5;
-
-  /* 状态色（REQ-FUNC-005，AC-005-1/2） */
-  --color-status-fault: #F56C6C;
-  --color-status-ok: #67C23A;
+  /* 行间背景（微差）*/
+  --color-bg-row-alt: rgba(37, 99, 235, 0.03);
 
   width: 100%;
-  /* REQ-FUNC-003: 移除 min-height: 100vh，改为 height: auto（AC-003-1，ADR-003） */
   background-color: var(--color-bg-page);
   box-sizing: border-box;
 }
@@ -543,9 +510,9 @@ export default {
   flex-wrap: nowrap;
   align-items: center;
   gap: 0;
-  background: #fff;
-  border-bottom: 1px solid var(--color-border-base);
-  padding: 8px 16px;
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-4);
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -575,7 +542,7 @@ export default {
 .nav-divider {
   width: 1px;
   height: 16px;
-  background: #dcdfe6;
+  background: var(--color-border);
   flex-shrink: 0;
 }
 
@@ -590,85 +557,59 @@ export default {
 }
 
 .nav-loading-text {
-  font-size: 12px;
-  color: #409eff;
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
 }
 
-/* 卡片主体区域 */
-/* REQ-FUNC-001/003: padding/gap 增大（MODULE-UI-001 间距规范） */
-.cards-scroll-row {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 16px;
-  padding: 16px;
-  overflow-x: auto;
+/* AC-UI-003-01/02/03: CSS Grid 自适应多列（§8.3，§10.1）
+   取消横向滚动，auto-fill minmax(280px,1fr) 自适应列数 */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+  width: 100%;
 }
 
-/* REQ-FUNC-001: 宽度由内容决定，移除固定 min-width: 180px（ADR-002，AC-001-2） */
-/* REQ-FUNC-004: border-radius 增大，box-shadow 加深（MODULE-UI-006 卡片投影） */
+/* AC-UI-003-03: 宽屏最多5列（§8.3）*/
+@media (min-width: 1800px) {
+  .cards-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* AC-UI-003-01: Grid 单元格，宽度由栅格决定（§10.1）*/
 .subtype-col {
-  width: max-content;
-  min-width: 160px;
-  flex-shrink: 0;
+  width: 100%;
   background: var(--color-bg-card);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
+  transition: box-shadow 250ms ease-out;
 }
 
-/* REQ-FUNC-004: 列标题配色（MODULE-UI-005 列标题设计，AC-004-2） */
+.subtype-col:hover {
+  box-shadow: var(--shadow-base);
+}
+
+/* 列标题区（对齐 Design Token §2，§10.1）*/
 .col-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px 8px;
-  /* REQ-FUNC-004: 主蓝底线替代原浅灰线，主蓝浅色背景替代原 #fafafa */
+  padding: var(--space-3) var(--space-4) var(--space-2);
   border-bottom: 2px solid var(--color-primary);
-  background: var(--color-bg-header);
+  background: var(--color-primary-bg);
 }
 
-/* REQ-FUNC-004: 标题文字改为深蓝色（AC-004-2，MODULE-UI-005） */
 .col-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1A6EBF;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-dark);
   white-space: nowrap;
 }
 
-/* REQ-FUNC-006: 折叠/展开切换按钮（MODULE-UI-006，AC-006-1） */
-.col-collapse-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 4px;
-  margin-left: 8px;
-  color: #1A6EBF;
-  display: flex;
-  align-items: center;
-  border-radius: 4px;
-  flex-shrink: 0;
-  transition: background 0.15s;
-  line-height: 1;
-}
-
-.col-collapse-btn:hover {
-  background: rgba(26, 110, 191, 0.12);
-}
-
-/* REQ-FUNC-006: 折叠箭头图标旋转动画（AC-006-2/3） */
-.collapse-arrow {
-  display: inline-block;
-  font-size: 14px;
-  line-height: 1;
-  /* 展开状态：›旋转90°指向下 */
-  transform: rotate(90deg);
-  transition: transform 0.2s ease;
-}
-
-.collapse-arrow.is-collapsed {
-  /* 折叠状态：›原始方向指向右 */
-  transform: rotate(0deg);
-}
+/* AC-UI-003-01: .col-collapse-btn 和 .collapse-arrow 已移除（折叠功能取消，§10.1）*/
 
 .params-list {
   padding: 4px 0;
@@ -680,7 +621,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 5px 14px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   border-bottom: 1px solid var(--color-border-light);
 }
 
@@ -729,10 +670,9 @@ export default {
 
 /* REQ-FUNC-002/004: 底部时间戳——左对齐，与卡片区 padding 对齐（AC-002-1/2，MODULE-UI-002） */
 .panel-footer {
-  padding: 10px 16px;
-  background: #fff;
-  border-top: 1px solid var(--color-border-base);
-  /* REQ-FUNC-002: text-align 从 right 改为 left（AC-002-1） */
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-card);
+  border-top: 1px solid var(--color-border);
   text-align: left;
 }
 </style>
