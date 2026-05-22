@@ -132,8 +132,9 @@ docs/_build/
 .trae/documents/
 .trae/documents/*
 
-# Claude Code 记忆目录
-.claude/
+# Claude Code 目录：忽略本地设置/记忆等，但纳入项目级 skills
+.claude/*
+!.claude/skills/
 
 # SDLC 过程产物（代码审查/测试/部署报告等，本地保留不进仓库）
 sdlc/
