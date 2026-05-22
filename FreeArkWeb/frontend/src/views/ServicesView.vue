@@ -1,7 +1,11 @@
 <template>
   <div class="services-view">
     <div class="page-header">
-      <h2>服务管理</h2>
+      <!-- REQ-FUNC-030 / AC-017-03: 标题+副标题包裹在 title-group，使副标题不与刷新按钮并排 -->
+      <div class="page-title-group">
+        <h2>服务管理</h2>
+        <p class="page-subtitle">查看和管理系统后台服务运行状态</p>
+      </div>
       <el-button
         :icon="Refresh"
         :loading="listLoading"
@@ -312,8 +316,14 @@ export default {
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+/* REQ-FUNC-030: title-group 让 h2+副标题纵向排列，与右侧刷新按钮分离 */
+.page-title-group {
+  display: flex;
+  flex-direction: column;
 }
 
 .page-header h2 {
@@ -321,6 +331,13 @@ export default {
   font-weight: 600;
   color: #303133;
   margin: 0;
+}
+
+/* REQ-FUNC-030: 副标题 */
+.page-subtitle {
+  margin: 5px 0 0 0;
+  color: #909399;
+  font-size: 13px;
 }
 
 .detail-loading {

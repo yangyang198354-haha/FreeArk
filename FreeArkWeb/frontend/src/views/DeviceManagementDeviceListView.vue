@@ -15,6 +15,8 @@
   <div class="device-management-device-list">
     <div class="page-header">
       <h2>设备列表</h2>
+      <!-- REQ-FUNC-030 / AC-017-01 -->
+      <p class="page-subtitle">查看和管理所有设备的运行状态</p>
     </div>
 
     <!-- 过滤栏 -->
@@ -108,7 +110,8 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="PLC最后在线时间" min-width="160" align="center">
+      <!-- REQ-FUNC-031/032: 列名改为"PLC上次心跳"，宽度从 min-width=160 改为固定 width=150 -->
+      <el-table-column label="PLC上次心跳" width="150" align="center">
         <template #default="{ row }">
           <span>{{ formatDateTime(row.plc_last_online_time) }}</span>
         </template>
@@ -218,18 +221,7 @@
       </template>
     </el-dialog>
 
-    <!-- 设备设置面板弹窗（FR1/FR2/FR3/FR5）-->
-    <el-dialog
-      v-model="settingsDialogVisible"
-      :title="`参数设置 — ${settingsSpecificPart}`"
-      width="720px"
-      destroy-on-close
-    >
-      <DeviceSettingsPanelView
-        v-if="settingsDialogVisible"
-        :specific-part="settingsSpecificPart"
-      />
-    </el-dialog>
+    <!-- REQ-FUNC-034: 设备设置弹窗已移除，改为独立路由页面（/device-management/device-settings） -->
 
   </div>
 </template>
@@ -241,12 +233,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, RefreshLeft } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
-import DeviceSettingsPanelView from '@/views/DeviceSettingsPanelView.vue'
+// REQ-FUNC-034: DeviceSettingsPanelView 不再在此处引入，已改为独立路由页面
 
 export default {
   name: 'DeviceManagementDeviceListView',
 
-  components: { Search, RefreshLeft, CascadingSelector, DeviceSettingsPanelView },
+  components: { Search, RefreshLeft, CascadingSelector },
 
   setup() {
     const router = useRouter()
@@ -269,9 +261,7 @@ export default {
     const plcHistoryList = ref([])
     const plcHistorySpecificPart = ref('')
 
-    // 设置面板弹窗状态（FR1）
-    const settingsDialogVisible = ref(false)
-    const settingsSpecificPart = ref('')
+    // REQ-FUNC-034: 设置面板已改为独立路由页面，settingsDialogVisible/settingsSpecificPart 已移除
 
     // --- API 调用 ---
     const fetchList = async () => {
@@ -387,9 +377,9 @@ export default {
       fetchPlcHistory(row.specific_part)
     }
 
+    // REQ-FUNC-034 / AC-020-01: 设置按钮改为路由跳转（不再弹窗）
     const handleOpenSettings = (row) => {
-      settingsSpecificPart.value = row.specific_part
-      settingsDialogVisible.value = true
+      router.push('/device-management/device-settings?specific_part=' + encodeURIComponent(row.specific_part))
     }
 
     // --- 辅助函数 ---
@@ -473,8 +463,6 @@ export default {
       handleReset,
       handlePageChange,
       handlePageSizeChange,
-      settingsDialogVisible,
-      settingsSpecificPart,
       handleGoToDevicePanel,
       handleOpenPlcHistory,
       handleOpenSettings,
@@ -497,6 +485,13 @@ export default {
 
 .page-header {
   margin-bottom: 16px;
+}
+
+/* REQ-FUNC-030: 副标题样式（与全站 HomeView 等保持一致） */
+.page-subtitle {
+  margin: 5px 0 0 0;
+  color: #909399;
+  font-size: 13px;
 }
 
 /* MOD-UI-003: 删除局部 font-size: 18px 覆盖（global.css h2 已统一为 20px，局部 18px 会覆盖全局值造成不一致） */

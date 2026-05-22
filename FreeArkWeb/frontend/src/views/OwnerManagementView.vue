@@ -2,6 +2,8 @@
   <div class="owner-management-view">
     <div class="page-header">
       <h2>业主管理</h2>
+      <!-- REQ-FUNC-030 / AC-017-02 -->
+      <p class="page-subtitle">管理业主信息及设备绑定关系</p>
     </div>
 
     <!-- 搜索过滤栏：MOD-UI-001-B .card 替换为 el-card -->
@@ -814,5 +816,12 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* REQ-FUNC-030: 副标题 */
+.page-subtitle {
+  margin: 5px 0 0 0;
+  color: #909399;
+  font-size: 13px;
 }
 </style>

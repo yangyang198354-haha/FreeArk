@@ -160,10 +160,25 @@
 
     <!-- 图表区域 -->
     <div class="charts-section">
+      <!-- REQ-FUNC-027/028/029: 趋势图 + legend checkbox（OQ-01 方案A：放在 #header 插槽右侧） -->
       <el-card class="chart-card" v-loading="loading.trend">
         <template #header>
-          <div class="card-header">
+          <div class="card-header trend-header">
             <span>近 7 天用电量趋势图</span>
+            <div class="trend-legend-checkboxes">
+              <label class="legend-checkbox-item">
+                <input type="checkbox" v-model="checkedSeries.cooling" @change="toggleSeries('cooling')" />
+                <span class="legend-dot cooling-dot"></span>制冷
+              </label>
+              <label class="legend-checkbox-item">
+                <input type="checkbox" v-model="checkedSeries.heating" @change="toggleSeries('heating')" />
+                <span class="legend-dot heating-dot"></span>制热
+              </label>
+              <label class="legend-checkbox-item">
+                <input type="checkbox" v-model="checkedSeries.total" @change="toggleSeries('total')" />
+                <span class="legend-dot total-dot"></span>总用电量
+              </label>
+            </div>
           </div>
         </template>
         <div class="chart-container">
@@ -245,6 +260,20 @@ export default {
   setup() {
     const usageChart = ref(null)
     let chartInstance = null
+
+    // REQ-FUNC-027/028: legend checkbox 状态（OQ-01：制冷/制热默认勾选，总用电量默认不勾选）
+    const checkedSeries = reactive({ total: false, cooling: true, heating: true })
+
+    // REQ-FUNC-027: 切换系列显示（label 映射对应 renderChart datasets 顺序）
+    function toggleSeries(key) {
+      if (!chartInstance) return
+      const labelMap = { total: '总用电量 (kWh)', cooling: '制冷 (kWh)', heating: '制热 (kWh)' }
+      const ds = chartInstance.data.datasets.find(d => d.label === labelMap[key])
+      if (ds) {
+        ds.hidden = !checkedSeries[key]
+        chartInstance.update()
+      }
+    }
 
     // 日期范围（默认本年）
     const currentYear = new Date().getFullYear()
@@ -444,10 +473,11 @@ export default {
           labels,
           datasets: [
             {
-              // AC-UI-002-01(c): 总用电量 — 折线，深灰（#1E293B）
+              // AC-UI-002-01(c): 总用电量 — 折线，深灰（#1E293B）；REQ-FUNC-028: 默认隐藏
               type: 'line',
               label: '总用电量 (kWh)',
               data: totalValues,
+              hidden: !checkedSeries.total,
               borderColor: '#1E293B',
               backgroundColor: 'rgba(30, 41, 59, 0.05)',
               borderWidth: 2,
@@ -470,10 +500,11 @@ export default {
               }
             },
             {
-              // AC-UI-002-01(a): 制冷 — 柱状，蓝色（#2563EB）
+              // AC-UI-002-01(a): 制冷 — 柱状，蓝色（#2563EB）；REQ-FUNC-028: 默认显示
               type: 'bar',
               label: '制冷 (kWh)',
               data: coolingValues,
+              hidden: !checkedSeries.cooling,
               backgroundColor: 'rgba(37, 99, 235, 0.75)',
               borderColor: '#2563EB',
               borderWidth: 1,
@@ -491,10 +522,11 @@ export default {
               }
             },
             {
-              // AC-UI-002-01(b): 制热 — 柱状，红色（#EF4444）
+              // AC-UI-002-01(b): 制热 — 柱状，红色（#EF4444）；REQ-FUNC-028: 默认显示
               type: 'bar',
               label: '制热 (kWh)',
               data: heatingValues,
+              hidden: !checkedSeries.heating,
               backgroundColor: 'rgba(239, 68, 68, 0.75)',
               borderColor: '#EF4444',
               borderWidth: 1,
@@ -517,10 +549,9 @@ export default {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            // AC-UI-002-06: 图例
+            // AC-UI-002-06: 内置图例禁用（REQ-FUNC-027: 改用 #header 插槽自定义 checkbox）
             legend: {
-              display: true,
-              position: 'top'
+              display: false
             },
             // AC-UI-002-05: tooltip 显示同一日期全部系列
             tooltip: {
@@ -539,7 +570,7 @@ export default {
               ticks: { font: { size: 12 }, color: '#475569' }
             },
             y: {
-              beginAtZero: true,
+              // REQ-FUNC-029: 移除 beginAtZero，支持负值（Y 轴由 Chart.js 自动计算 min）
               grid: { color: '#F1F5F9' },
               ticks: {
                 font: { size: 12 },
@@ -599,7 +630,10 @@ export default {
       loading,
       fetchTotalEnergy,
       fetchServices,
-      powerStatus
+      powerStatus,
+      // REQ-FUNC-027/028: legend checkbox
+      checkedSeries,
+      toggleSeries
     }
   }
 }
@@ -874,6 +908,56 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* REQ-FUNC-027: 趋势图 header — 标题左对齐，checkbox 组右对齐 */
+.trend-header {
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+
+.trend-legend-checkboxes {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.legend-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-regular, #606266);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.legend-checkbox-item input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--color-primary, #409eff);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legend-dot.cooling-dot {
+  background-color: #2563EB;
+}
+
+.legend-dot.heating-dot {
+  background-color: #EF4444;
+}
+
+.legend-dot.total-dot {
+  background-color: #1E293B;
+  border-radius: 50%;
 }
 
 .date-picker-group {

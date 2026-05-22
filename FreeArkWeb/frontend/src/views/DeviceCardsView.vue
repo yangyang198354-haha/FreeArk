@@ -11,6 +11,18 @@
     />
 
     <template v-else>
+      <!-- REQ-FUNC-033/034: 页面头部 — 返回按钮 + 标题 + 副标题 + 设置入口（OQ-03） -->
+      <div class="panel-page-header">
+        <div class="panel-header-left">
+          <el-button :icon="ArrowLeft" size="small" @click="goBack">返回</el-button>
+          <h2 class="panel-title">设备面板</h2>
+          <p class="page-subtitle">专有部分：{{ specificPart }}</p>
+        </div>
+        <div class="panel-header-right">
+          <el-button type="warning" size="small" @click="goToSettings">参数设置</el-button>
+        </div>
+      </div>
+
       <!-- 顶部导航栏：每个子系统一个标签 + 历史数据链接 + 按需采集加载指示 -->
       <div class="panel-nav-bar">
         <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
@@ -101,7 +113,7 @@
 </template>
 
 <script>
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, ArrowLeft } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 import mqtt from 'mqtt'
 
@@ -156,7 +168,7 @@ const FAULT_PARAMS = new Set([
 
 export default {
   name: 'DeviceCardsView',
-  components: { Loading },
+  components: { Loading, ArrowLeft },
   data() {
     return {
       loading: false,
@@ -221,6 +233,25 @@ export default {
     this._clearOndemandTimeout()
   },
   methods: {
+    // REQ-FUNC-033 / AC-019-02/03: 返回按钮
+    goBack() {
+      if (window.history.length > 1) {
+        this.$router.back()
+      } else {
+        this.$router.push('/device-management/device-list')
+      }
+    },
+
+    // REQ-FUNC-034 / OQ-03: 设备面板内的设置入口
+    goToSettings() {
+      if (this.specificPart) {
+        this.$router.push(
+          '/device-management/device-settings?specific_part=' +
+          encodeURIComponent(this.specificPart)
+        )
+      }
+    },
+
     async fetchData() {
       if (!this.specificPart) return
       this.loading = true
@@ -501,6 +532,44 @@ export default {
   width: 100%;
   background-color: var(--color-bg-page);
   box-sizing: border-box;
+}
+
+/* REQ-FUNC-033/034: 页面头部（返回按钮 + 标题 + 设置入口） */
+.panel-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 0 12px 0;
+  margin-bottom: 4px;
+}
+
+.panel-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel-header-left .el-button {
+  align-self: flex-start;
+}
+
+.panel-title {
+  margin: 4px 0 0 0;
+  font-size: var(--font-size-lg, 20px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary, #303133);
+}
+
+.page-subtitle {
+  margin: 2px 0 0 0;
+  color: #909399;
+  font-size: 13px;
+}
+
+.panel-header-right {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
 }
 
 /* 顶部导航栏 */

@@ -3,6 +3,8 @@
   <div class="create-user-view">
     <div class="page-header">
       <h2>创建用户</h2>
+      <!-- REQ-FUNC-030 / AC-017-04 -->
+      <p class="page-subtitle">为员工创建系统登录账号</p>
     </div>
 
     <!-- MOD-UI-001-D: .card > .card-body 替换为 el-card；原生表单控件替换为 Element Plus 组件 -->
@@ -229,5 +231,16 @@ export default {
 /* MOD-UI-001-D: 根容器无 background/shadow/padding，由 Layout .content-wrapper 提供 */
 .create-user-view {
   padding: 0;
+}
+
+.page-header {
+  margin-bottom: 16px;
+}
+
+/* REQ-FUNC-030: 副标题 */
+.page-subtitle {
+  margin: 5px 0 0 0;
+  color: #909399;
+  font-size: 13px;
 }
 </style>

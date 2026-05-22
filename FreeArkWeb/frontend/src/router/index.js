@@ -114,6 +114,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // REQ-FUNC-034: 设备参数设置独立路由页面（specific_part 通过 query param 传入）
+    path: '/device-management/device-settings',
+    name: 'DeviceSettings',
+    component: () => import('../views/DeviceManagementSettingsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

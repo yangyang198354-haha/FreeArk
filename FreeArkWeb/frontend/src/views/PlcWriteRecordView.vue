@@ -2,6 +2,8 @@
   <div class="plc-write-record">
     <div class="page-header">
       <h2>设置记录</h2>
+      <!-- REQ-FUNC-030 / AC-017-06 -->
+      <p class="page-subtitle">查看 PLC 参数写入操作的历史记录</p>
     </div>
 
     <div class="filter-bar">
@@ -255,6 +257,13 @@ export default {
   font-weight: 600;
   color: #303133;
   margin: 0;
+}
+
+/* REQ-FUNC-030: 副标题 */
+.page-subtitle {
+  margin: 5px 0 0 0;
+  color: #909399;
+  font-size: 13px;
 }
 .filter-bar {
   display: flex;

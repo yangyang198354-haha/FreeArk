@@ -2,6 +2,8 @@
   <div class="page-container">
     <div class="page-header">
       <h2>修改登录密码</h2>
+      <!-- REQ-FUNC-030 / AC-017-05 -->
+      <p class="page-subtitle">修改当前登录账号的密码</p>
     </div>
     
     <!-- 修改密码表单 -->
@@ -125,4 +127,15 @@ export default {
 
 <style scoped>
 /* 所有样式已移至home.css */
+
+/* REQ-FUNC-030: 副标题（局部覆盖，确保 scoped 样式生效） */
+.page-header {
+  margin-bottom: 16px;
+}
+
+.page-subtitle {
+  margin: 5px 0 0 0;
+  color: #909399;
+  font-size: 13px;
+}
 </style>
