@@ -3,7 +3,10 @@ django>=5.2.0
 djangorestframework
 django-cors-headers
 python-dotenv
-paho-mqtt>=1.6.1,<2.0
+paho-mqtt>=1.6.1
+# 注：生产实际运行 paho-mqtt 2.1.0；mqtt.Client() 未显式传 callback_api_version
+# 时 paho 2.x 默认走 VERSION1 回调签名，与本项目 1.x 风格代码兼容。详见
+# docs/requirements/v0.5.9_heartbeat_broker_config/ OQ-001 决策回滚说明。
 
 # 数据库驱动
 mysqlclient
