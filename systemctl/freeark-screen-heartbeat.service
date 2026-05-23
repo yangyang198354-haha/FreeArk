@@ -1,6 +1,11 @@
 [Unit]
 Description=FreeArk Screen Heartbeat Consumer Service
 After=network.target
+# 防 crash-loop：300s 窗口内最多重启 5 次，超过则进入 failed 状态
+# 注意：StartLimitIntervalSec / StartLimitBurst 必须在 [Unit] 段，
+# 放在 [Service] 段会被 systemd 警告"Unknown key ... ignoring"并完全失效。
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -9,8 +14,6 @@ WorkingDirectory=/home/yangyang/Freeark/FreeArk/
 ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py screen_heartbeat_consumer
 Restart=on-failure
 RestartSec=30s
-StartLimitIntervalSec=300
-StartLimitBurst=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=freeark-screen-heartbeat
