@@ -191,6 +191,16 @@ class OndemandCollectSubscriber:
 
             logger.info('收到按需采集请求: specific_part=%s topic=%s', specific_part, topic)
 
+            # v0.5.7 M7-B: 读取 allowed_params 白名单（若无则为 None，触发全量采集）
+            allowed_params = data.get('allowed_params')  # list[str] or None
+            if allowed_params is not None:
+                allowed_params = set(allowed_params)  # 转为 set，O(1) 查找
+                logger.debug(
+                    '[ondemand] 收到 allowed_params 白名单: specific_part=%s, 参数数=%d',
+                    specific_part, len(allowed_params),
+                )
+            # ── end v0.5.7 M7-B ──────────────────────────────────────────────
+
             with self._pending_lock:
                 if specific_part in self._pending:
                     logger.info('防重入：%s 已有进行中的采集任务，跳过', specific_part)
@@ -202,13 +212,21 @@ class OndemandCollectSubscriber:
                 self._pending.add(specific_part)
 
             # 在单线程执行池中执行采集，不阻塞 paho 网络线程
-            self._executor.submit(self._execute_ondemand, specific_part)
+            # v0.5.7 M7-B: 传入 allowed_params，None 表示全量采集（向后兼容）
+            self._executor.submit(self._execute_ondemand, specific_part, allowed_params)
 
         except Exception as e:
             logger.error('OndemandCollectSubscriber._on_request 异常: %s', e, exc_info=True)
 
-    def _execute_ondemand(self, specific_part: str) -> None:
-        """在线程池中执行：读取单设备 PLC 数据，发布结果 topic。"""
+    def _execute_ondemand(self, specific_part: str, allowed_params=None) -> None:
+        """在线程池中执行：读取单设备 PLC 数据，发布结果 topic。
+
+        Args:
+            specific_part: 目标专有部分标识。
+            allowed_params: 参数名白名单（set[str] 或 None）。
+                            若为 None，全量采集（向后兼容旧版 Django 或未同步设备树）。
+                            若为 set，仅采集白名单内的参数（v0.5.7 FR-v0.5.7-05）。
+        """
         logger.info('[ondemand] 开始采集: specific_part=%s', specific_part)
         t_start = time.monotonic()
 
@@ -223,8 +241,13 @@ class OndemandCollectSubscriber:
                 return
 
             # 2. 构建读取参数配置列表
+            # v0.5.7 M7-B: 根据 allowed_params 白名单裁剪 PLC 读取配置
+            _full_param_count = len(self._plc_config)
             configs = []
             for param_name, param_info in self._plc_config.items():
+                # v0.5.7 M7-B: 若白名单存在且参数不在白名单内，跳过（不发起该 PLC 地址读取）
+                if allowed_params is not None and param_name not in allowed_params:
+                    continue
                 configs.append({
                     'ip': plc_ip,
                     'db_num': param_info.get('db_num'),
@@ -234,6 +257,13 @@ class OndemandCollectSubscriber:
                     'device_id': specific_part,
                     'param_key': param_name,
                 })
+
+            if allowed_params is not None:
+                logger.info(
+                    '[ondemand] 采集侧裁剪: specific_part=%s, 实际采集 %d / 总计 %d 个参数',
+                    specific_part, len(configs), _full_param_count,
+                )
+            # ── end v0.5.7 M7-B ──────────────────────────────────────────────
 
             if not configs:
                 logger.warning('[ondemand] plc_config 为空，无参数可采集: specific_part=%s', specific_part)

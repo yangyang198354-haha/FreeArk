@@ -13,6 +13,7 @@ from rest_framework.pagination import PageNumberPagination
 from .models import DeviceConfig, DeviceAttrDef, PLCLatestData, OwnerInfo, PLCWriteRecord
 from .param_value_label import get_value_options, get_display_value
 from .serializers_device_settings import PLCWriteRecordSerializer, DeviceSettingsBatchWriteSerializer
+from .utils_room_filter import get_available_sub_types  # v0.5.7 M3: 房型过滤
 
 logger = logging.getLogger(__name__)
 
@@ -158,10 +159,17 @@ def device_settings_params(request, specific_part):
     for tag, rows in attr_defs_by_tag.items():
         attr_defs[tag] = rows[0]
 
+    # v0.5.7 M3: 查询该专有部分可用的 sub_type 集合（带 300s 缓存）
+    available_sub_types = get_available_sub_types(specific_part)
+
     groups = {}
     for cfg in configs:
         # P5 后端过滤：不返回只读参数
         if not _is_writable(cfg.param_name):
+            continue
+
+        # v0.5.7 M3: 跳过不属于该专有部分房型的温控面板 sub_type
+        if cfg.sub_type not in available_sub_types:
             continue
 
         key = cfg.sub_type

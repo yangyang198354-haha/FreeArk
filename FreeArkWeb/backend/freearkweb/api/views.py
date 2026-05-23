@@ -13,6 +13,12 @@ from datetime import timedelta
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory, ScreenConnectivityStatus
+from .utils_room_filter import (  # v0.5.7: 房型过滤工具
+    get_available_sub_types,
+    get_allowed_param_names,
+    invalidate_room_filter_cache,
+    SYSTEM_LEVEL_SUB_TYPES,
+)
 from .serializers import (
     UserSerializer,
     UserRegistrationSerializer, UserLoginSerializer, UserCreateSerializer,
@@ -1626,6 +1632,10 @@ def get_device_realtime_params(request):
     if group_filter:
         configs_qs = configs_qs.filter(group=group_filter)
 
+    # v0.5.7 M2: 查询该专有部分可用的 sub_type 集合（带 300s 缓存）
+    # 设备树未同步时降级为仅系统级面板（方案 B，PM OQ-v0.5.7-02 已锁定）
+    available_sub_types = get_available_sub_types(specific_part)
+
     # 超过此阈值未更新的参数标记为 is_stale=True
     _STALE_MINUTES = 10
     _stale_cutoff = _dt.now() - _td(minutes=_STALE_MINUTES)
@@ -1635,6 +1645,10 @@ def get_device_realtime_params(request):
     for cfg in configs_qs:
         group_key = cfg.group
         sub_key = cfg.sub_type
+
+        # v0.5.7 M2: 跳过不属于该专有部分房型的温控面板 sub_type
+        if sub_key not in available_sub_types:
+            continue
 
         if group_key not in result:
             result[group_key] = {
@@ -2064,6 +2078,9 @@ def device_tree_sync_one(request):
         logger.exception('device_tree_sync_one unexpected error sp=%s', specific_part)
         return Response({'error': f'未预期错误: {e}'}, status=500)
 
+    # v0.5.7 M5: 设备树同步成功后主动清除该专有部分的房型过滤缓存
+    invalidate_room_filter_cache(specific_part)
+
     return Response({
         'code': 200,
         'message': 'ok',
@@ -2100,6 +2117,10 @@ def device_tree_sync_batch(request):
 
     prune = bool(payload.get('prune')) if isinstance(payload, dict) else False
     task_id, total = start_batch_sync(specific_parts, prune=prune)
+    # v0.5.7 M5: 批量同步启动时预清除全部房型过滤缓存（同步完成后缓存会按需重建）
+    # 批量同步在后台线程执行，同步期间各户缓存自然因 TTL 超期或按需刷新；
+    # 此处预清除确保同步结束后再次访问时立即读取最新房间信息，不等 300s TTL 超期。
+    invalidate_room_filter_cache()
     return Response({'task_id': task_id, 'total': total}, status=202)
 
 
@@ -2183,10 +2204,28 @@ def device_ondemand_refresh(request):
 
     request_topic = f'/datacollection/plc/ondemand/request/{specific_part}'
     import datetime as _dt
-    payload_body = _json.dumps({
+
+    # v0.5.7 M7-A: 计算 allowed_params 白名单，注入 ondemand 指令
+    # 采集侧收到后仅读取白名单内的 PLC 地址，彻底闭环 BG-04（FR-v0.5.7-05）
+    _allowed_params = get_allowed_param_names(specific_part)
+    _payload_dict = {
         'specific_part': specific_part,
         'requested_at': _dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-    })
+    }
+    if _allowed_params:
+        _payload_dict['allowed_params'] = _allowed_params
+        logger.debug(
+            'device_ondemand_refresh: specific_part=%s, allowed_params 共 %d 个参数',
+            specific_part, len(_allowed_params),
+        )
+    else:
+        # allowed_params 为空或计算失败 → 不注入，采集侧降级为全量采集
+        logger.debug(
+            'device_ondemand_refresh: specific_part=%s, allowed_params 为空，采集侧将全量采集',
+            specific_part,
+        )
+    payload_body = _json.dumps(_payload_dict)
+    # ── end v0.5.7 M7-A ────────────────────────────────────────────────────
 
     auth = {'username': broker_user, 'password': broker_pass} if broker_user else None
     try:

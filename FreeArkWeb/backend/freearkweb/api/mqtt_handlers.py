@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from django.db import transaction, connection
 from django.utils import timezone
 from .models import PLCData, PLCConnectionStatus, PLCStatusChangeHistory, PLCLatestData, DeviceParamHistory, ScreenConnectivityStatus
+from .utils_room_filter import get_panel_param_blocklist  # v0.5.7 M4: 落库侧房型过滤
 
 # 获取logger
 logger = logging.getLogger(__name__)
@@ -729,11 +730,16 @@ class PLCLatestDataHandler(MessageHandler):
         if not isinstance(data_dict, dict):
             return
 
+        # v0.5.7 M4: 获取该专有部分不应落库的参数黑名单（带 300s 缓存）
+        # 兜底防御层：覆盖所有 MQTT 消息来源（定时采集、按需采集、其他）
+        param_blocklist = get_panel_param_blocklist(specific_part)
+
         total_params = len(data_dict)
         records = []
         skipped_excluded = 0
         skipped_not_dict = 0
         skipped_failed = 0
+        skipped_room_filter = 0  # v0.5.7 M4: 房型过滤跳过计数
 
         for param_name, param_data in data_dict.items():
             # 排除由 PLCDataHandler 处理的参数
@@ -744,6 +750,17 @@ class PLCLatestDataHandler(MessageHandler):
                     f"topic={topic}, device_id={specific_part}, param={param_name}, 原因=in _EXCLUDED_PARAMS"
                 )
                 continue
+
+            # v0.5.7 M4: 跳过不存在房间的温控面板参数（落库侧防御层，不落库）
+            if param_blocklist and param_name in param_blocklist:
+                skipped_room_filter += 1
+                logger.debug(
+                    'PLCLatestDataHandler: 跳过不存在房间参数 %s/%s (room_filter)',
+                    specific_part, param_name,
+                )
+                continue
+            # ── end v0.5.7 M4 ───────────────────────────────────────────────
+
             if not isinstance(param_data, dict):
                 skipped_not_dict += 1
                 logger.debug(
@@ -785,7 +802,8 @@ class PLCLatestDataHandler(MessageHandler):
         logger.debug(
             f"PLCLatestDataHandler: 消息处理摘要 - topic={topic}, device_id={specific_part}, "
             f"总参数数={total_params}, 有效参数数={valid_count}, "
-            f"跳过(excluded={skipped_excluded}, not_dict={skipped_not_dict}, failed={skipped_failed})"
+            f"跳过(excluded={skipped_excluded}, not_dict={skipped_not_dict}, "
+            f"failed={skipped_failed}, room_filter={skipped_room_filter})"  # v0.5.7 M4
         )
 
         if not records:
