@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'channels',  # Django Channels — WebSocket 支持（见 ADR-001）
 ]
 
 MIDDLEWARE = [
@@ -268,6 +269,31 @@ REST_FRAMEWORK = {
 
 # 静态文件配置
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# ---------------------------------------------------------------------------
+# Django Channels 配置（WebSocket 支持，见 ADR-001）
+# ---------------------------------------------------------------------------
+# 使用 InMemoryChannelLayer：单进程场景，无需 Redis
+# 注意：Uvicorn 必须以 --workers 1 启动（InMemoryChannelLayer 不支持多进程）
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# OpenClaw Gateway 集成配置（见 ADR-002 v1.2，REQ-FUNC-005，REQ-NFR-004）
+# ---------------------------------------------------------------------------
+# 协议：WebSocket Gateway RPC（protocol v4），由 openclaw_adapter.py 实现
+# 路径：'/' 是 OpenClaw Gateway 的唯一 WS 端点；http(s):// 会被适配层升级为 ws(s)://
+# 安全约束：
+#   OPENCLAW_GATEWAY_TOKEN 必须在生产服务器的 .env 文件中设置（不提交 git）
+#   该 token 仅在服务端使用，绝不写入前端代码或任何 HTTP 响应
+# 本地开发测试：在 FreeArkWeb/backend/freearkweb/.env 中设置
+OPENCLAW_BASE_URL = os.environ.get('OPENCLAW_BASE_URL', 'http://127.0.0.1:18789')
+OPENCLAW_GATEWAY_TOKEN = os.environ.get('OPENCLAW_GATEWAY_TOKEN', '')  # 必填，生产强 token
+OPENCLAW_TIMEOUT = int(os.environ.get('OPENCLAW_TIMEOUT', '60'))         # 总流响应超时（秒）
+OPENCLAW_CONNECT_TIMEOUT = int(os.environ.get('OPENCLAW_CONNECT_TIMEOUT', '10'))  # WS 升级 + 握手超时
 
 # 移除django-crontab配置，改用命令内置的定时功能
 # 这些服务将在start_services.bat中直接启动

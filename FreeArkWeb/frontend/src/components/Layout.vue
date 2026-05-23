@@ -75,6 +75,12 @@
             <el-menu-item index="/services">服务列表</el-menu-item>
           </el-sub-menu>
 
+          <!-- 方舟龙虾聊天（REQ-FUNC-001：所有登录用户可见，不加角色限制）-->
+          <el-menu-item index="/chat">
+            <el-icon><ChatDotRound /></el-icon>
+            <template #title><span>和方舟龙虾聊天</span></template>
+          </el-menu-item>
+
           <el-sub-menu index="user" v-if="userRole === 'admin'">
             <template #title>
               <el-icon><User /></el-icon>
@@ -103,7 +109,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, ArrowDown, HomeFilled, Document, Setting, House, List, Fold, Expand } from '@element-plus/icons-vue'
+import { User, ArrowDown, HomeFilled, Document, Setting, House, List, Fold, Expand, ChatDotRound } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 
 const SIDEBAR_STORAGE_KEY = 'freeark_sidebar_collapsed'
@@ -120,6 +126,7 @@ export default {
     List,
     Fold,
     Expand,
+    ChatDotRound,
   },
   setup() {
     const router = useRouter()

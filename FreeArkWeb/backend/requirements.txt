@@ -15,5 +15,14 @@ mysqlclient
 six
 schedule>=1.1.0
 
-# 生产环境WSGI服务器
+# 生产环境WSGI服务器（保留，部署阶段切换至 uvicorn 后可移除）
 waitress>=3.0.0
+
+# ASGI 服务器（替换 Waitress，支持 WebSocket；见 ADR-001）
+uvicorn>=0.29.0
+
+# WebSocket 支持（Django Channels；见 ADR-001）
+channels>=4.0.0
+
+# 异步 HTTP / WebSocket 客户端（OpenClaw Gateway WS RPC v4 调用；见 ADR-002 v1.2）
+aiohttp>=3.9.0
