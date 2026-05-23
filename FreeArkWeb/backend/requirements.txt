@@ -19,7 +19,9 @@ schedule>=1.1.0
 waitress>=3.0.0
 
 # ASGI 服务器（替换 Waitress，支持 WebSocket；见 ADR-001）
-uvicorn>=0.29.0
+# 必须用 [standard] 拓展，否则 base 包缺 websockets/wsproto 后端，
+# 生产会出 "Unsupported upgrade request" 警告 + WS 握手 404（2026-05-23 部署期踩坑）
+uvicorn[standard]>=0.29.0
 
 # WebSocket 支持（Django Channels；见 ADR-001）
 channels>=4.0.0

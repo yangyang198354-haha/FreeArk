@@ -6,9 +6,12 @@ After=network.target
 Type=simple
 User=yangyang
 WorkingDirectory=/home/yangyang/Freeark/FreeArk/
-# 使 Python stdout/stderr 不缓冲，启动日志（含 Waitress 启动参数）实时写入 journal
+# 使 Python stdout/stderr 不缓冲，启动日志（含 Uvicorn 启动参数）实时写入 journal
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/start_waitress_server.py
+# Uvicorn ASGI（替换 Waitress，2026-05-23 OpenClaw 集成 + WebSocket 支持，见 ADR-001）
+# --workers 1 必需：InMemoryChannelLayer 不支持多进程；--app-dir 指定 freearkweb 包的父目录
+# 回滚到 Waitress: 将下行 ExecStart 改回 `python <repo>/FreeArkWeb/backend/freearkweb/start_waitress_server.py`
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/uvicorn freearkweb.asgi:application --host 0.0.0.0 --port 8000 --workers 1 --app-dir /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
 Restart=on-failure
 RestartSec=30s
 StandardOutput=journal
