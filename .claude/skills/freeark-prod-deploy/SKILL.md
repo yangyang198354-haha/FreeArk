@@ -321,6 +321,101 @@ cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb &&
 
 ---
 
+## 12. OpenClaw Control UI 内网访问
+
+OpenClaw Gateway 绑 `127.0.0.1:18789`（loopback）是安全决策，不能直连。
+管理 agent / skill / LLM 配置需要 Control UI 的话有两条路：
+
+### 12.1 临时访问 —— SSH 端口转发（无需改任何服务端配置）
+
+任一开发机执行（保持终端开着）：
+```bash
+ssh -L 18789:127.0.0.1:18789 -p 22 yangyang@192.168.31.51
+```
+浏览器开 `http://localhost:18789/`，粘贴 token（见下）即进入。SSH 关闭 → 隧道关闭，无残留。
+
+### 12.2 持久访问 —— Nginx LAN 反代（已部署）
+
+在 Pi 上添加了独立 server 块 `/etc/nginx/sites-enabled/freeark-openclaw`（端口 18790），
+内网 192.168.31.0/24 直接浏览器访问，不用每次开 SSH：
+
+```
+http://192.168.31.51:18790/
+```
+
+**三层防护**：
+1. **网卡层**：`listen 192.168.31.51:18790` 仅绑 wlan0 IP，不监听 0.0.0.0
+2. **网络层**：`allow 192.168.31.0/24; deny all;` 拒绝子网外访问
+3. **应用层**：OpenClaw Bearer Token 必填
+
+frp/花生壳只转发已映射的端口（57279/8080），**18790 不在映射列表里**，外网到不了。
+
+**配置文件全文**（仅供重建参考）：
+```nginx
+# /etc/nginx/sites-enabled/freeark-openclaw
+server {
+    listen 192.168.31.51:18790;
+    server_name _;
+
+    allow 192.168.31.0/24;
+    deny all;
+
+    location / {
+        proxy_pass http://127.0.0.1:18789;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;             # Control UI 内部有 WS / 流式响应
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    error_page 403 = @forbidden;
+    location @forbidden {
+        default_type text/plain;
+        return 403 "Access denied: OpenClaw admin UI is restricted to LAN 192.168.31.0/24\n";
+    }
+}
+```
+
+部署/重建命令：
+```bash
+sudo nano /etc/nginx/sites-enabled/freeark-openclaw   # 粘贴上面内容
+sudo nginx -t                                          # 验语法
+sudo systemctl reload nginx                            # 生效
+```
+
+⚠️ **不要把这个反代 listen 改成 0.0.0.0 或映射进 frp/花生壳**——OpenClaw Gateway 持有 LLM API key，外网暴露就是 Shodan 上 1.7 万台裸奔实例之一。
+
+### 12.3 取 Token
+
+```bash
+ssh -p 22 yangyang@192.168.31.51 "cat ~/.openclaw_gateway_token"
+```
+
+64 字符随机串，粘到 Control UI 的 token 输入框即可。
+**token 也写在 `~/.openclaw/openclaw.json`（plaintext 模式）和 `FreeArkWeb/backend/.env` 的 `OPENCLAW_GATEWAY_TOKEN=` 行；三处必须同步**。OpenClaw 重装后会生成新 token，需要同步更新 FreeArk `.env` 并重启 `freeark-backend`。
+
+### 12.4 关掉 Control UI 访问（保留 OpenClaw 本体）
+
+```bash
+sudo rm /etc/nginx/sites-enabled/freeark-openclaw
+sudo systemctl reload nginx
+```
+端口 18790 立即不再 LISTEN，OpenClaw Gateway 本身（127.0.0.1:18789）不受影响。
+
+### 12.5 UI 改完配置后
+
+多数 OpenClaw 配置变更要重启 Gateway 才生效（**用户服务，不加 sudo**）：
+```bash
+ssh -p 22 yangyang@192.168.31.51 "systemctl --user restart openclaw-gateway.service"
+```
+
+---
+
 ## 附：维护说明
 
 本手册信息采集于 **2026-05-23（OpenClaw 集成 + ASGI 迁移完成日）**。基础设施变更后请同步更新本文件。
