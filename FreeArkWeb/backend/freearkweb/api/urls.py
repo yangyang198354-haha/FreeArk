@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import views_device_settings
+from . import views_heartbeat_config
 
 urlpatterns = [
     # CSRF token获取
@@ -84,4 +85,8 @@ urlpatterns = [
     path('device-settings/params/<str:specific_part>/', views_device_settings.device_settings_params, name='device-settings-params'),
     path('device-settings/write/', views_device_settings.device_settings_write, name='device-settings-write'),
     path('device-settings/records/', views_device_settings.device_settings_records, name='device-settings-records'),
+
+    # 心跳 Broker 配置接口（v0.5.9, REQ-FUNC-002）
+    path('heartbeat-broker-config/', views_heartbeat_config.heartbeat_broker_config_get, name='heartbeat-broker-config-get'),
+    path('heartbeat-broker-config/update/', views_heartbeat_config.heartbeat_broker_config_put, name='heartbeat-broker-config-put'),
 ]

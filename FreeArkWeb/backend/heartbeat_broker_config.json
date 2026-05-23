@@ -1,0 +1,11 @@
+{
+  "protocol": "mqtt",
+  "host": "47.117.41.184",
+  "port": 11883,
+  "path": "/mqtt",
+  "username": "admin",
+  "password": "public",
+  "topic": "/screen/upload/screen/to/cloud/#",
+  "client_id": "freeark-screen-heartbeat",
+  "keepalive": 60
+}
