@@ -240,29 +240,37 @@ def _match_panel_sub_types(ori_room_names: list) -> frozenset:
     1. panel_study_room：任意房间名含"次卧"或"书房"
     2. panel_bedroom：任意房间名含"主卧"
     3. panel_children_room：任意房间名含"儿童房"或"主卧"
-    4. panel_fourth_children：任意房间名含"儿童房"，且满足以下任一条件：
-       - 该房间名同时含"四"（明确的四房户型标识）
-       - 或房间总数 >= 4（间接推断四房户型）
+    4. panel_fourth_children（v0.5.7-fix2 校正）：同时满足以下核心条件：
+       - 任意房间名含"书房"（has_study_room）—— 四房户型的决定性特征
+       - 任意房间名含"儿童房"（has_children_keyword）
+       OR（冗余识别）任意房间名同时含"儿童房"且含"四"字
+
+    修复说明（fix2，2026-05-23）：
+    原判断「含儿童房 AND 房间数 >= 4」中 len(ori_room_names) >= 4 为错误启发式。
+    生产数据中三房户型（9-1-10-1002）房间总数为 5（含全屋/客厅等非卧室），
+    全部误触发 panel_fourth_children，导致修复无效。
+    根据生产全量 40 个专有部分扫描：「含书房 = 四房」，100% 吻合，无例外。
+    核心判定规则改为「含书房 AND 含儿童房」，原「含'四'字」分支保留作冗余识别。
 
     说明：
     - panel_children_room 与 panel_fourth_children 均含"儿童房"关键词。
       panel_children_room 覆盖三房儿童房，panel_fourth_children 覆盖四房儿童房。
-      三房户型的 ori_room_name 如"儿童房"（无"四"字），不含四房判断 → 仅命中 panel_children_room。
-      四房户型的 ori_room_name 如"四房儿童房"（含"四"字）→ 同时命中两者（panel_children_room 和
-      panel_fourth_children），这是正确的：四房户型既有 panel_children_room 对应的参数组，
-      也有 panel_fourth_children 对应的参数组。
+      三房户型（无书房）：仅命中 panel_children_room，不命中 panel_fourth_children。
+      四房户型（有书房且有儿童房）：同时命中两者，这是正确的。
     """
     available: set = set()
     all_names_joined = ' '.join(ori_room_names)
 
     for sub_type, keywords in SUB_TYPE_TO_ROOM_KEYWORDS.items():
         if sub_type == 'panel_fourth_children':
-            # 四房儿童房：需要有"儿童房"关键词，且至少一个房间名含"四"或房间总数 >= 4
-            has_fourth_children = any(
-                '儿童房' in name and ('四' in name or len(ori_room_names) >= 4)
-                for name in ori_room_names
+            # fix2：核心判定改为「含书房 AND 含儿童房」
+            # 冗余识别：房间名中含"四"且含"儿童房"（防御未来出现「四房儿童房」显式命名）
+            has_study_room = any('书房' in name for name in ori_room_names)
+            has_children_keyword = any('儿童房' in name for name in ori_room_names)
+            has_explicit_fourth = any(
+                '儿童房' in name and '四' in name for name in ori_room_names
             )
-            if has_fourth_children:
+            if (has_study_room and has_children_keyword) or has_explicit_fourth:
                 available.add(sub_type)
         else:
             if any(kw in all_names_joined for kw in keywords):

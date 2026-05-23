@@ -6,15 +6,18 @@ file_header:
   title: FreeArk v0.5.7 — 用户故事（按房型过滤设备面板、参数设置与 PLC 采集点裁剪）
   author_agent: sub_agent_system_architect (via PM Orchestrator, incremental revision)
   project: FreeArk 能耗采集平台
-  version: v0.5.7-rev1
+  version: v0.5.7-fix2
   created_at: 2026-05-22
-  revised_at: 2026-05-22
+  revised_at: 2026-05-23
   status: APPROVED
   revision_note: |
     PM 决策锁定（2026-05-22）：
     - OQ-v0.5.7-02 = 方案 B，US-v0.5.7-01 降级策略验收标准更新
     - OQ-v0.5.7-03 = 不纳入，US-v0.5.7-05 标记为本版本不实施
     - OQ-v0.5.7-04 = 纳入，US-v0.5.7-06 升级为必须项，验收口径改为「采集侧实际不发起无效点位读取」
+    fix2 修订（2026-05-23）：
+    - US-v0.5.7-01 AC 校正：panel_fourth_children 激活条件改为「含书房 AND 含儿童房」
+    - US-v0.5.7-01 新增两条 AC 验证生产实测用例（1001 四房激活/1002 三房不激活）
   base_document: docs/user_stories.md (v1.0.0)
   references:
     - docs/requirements_spec_v0.5.7.md
@@ -68,6 +71,18 @@ file_header:
 - **Given** 某专有部分尚未完成设备树同步（`device_floor` 表中无该 specific_part 记录）  
   **When** 管理员打开该专有部分的设备面板页  
   **Then** 降级处理（**方案 B，PM 已锁定**）：系统级面板（main_thermostat / fresh_air / energy_meter / hydraulic_module / air_quality）正常显示，所有房间温控面板（`panel_*`）全部隐藏；页面不报错，数据展示与已同步设备树的专有部分相同格式
+
+**fix2 校正（2026-05-23）—— panel_fourth_children 激活条件更正**
+
+以下两条 AC 替代原「房间数 ≥ 4」启发式规则（根据生产 bug FR-CORR-v0.5.7-01）：
+
+- **Given** 专有部分 `9-1-10-1001` 的 `device_room` 表中**同时存在**「书房」和「儿童房」对应记录（4 房大户型）  
+  **When** 管理员打开该专有部分的设备面板页  
+  **Then** 响应数据中**包含** `panel_fourth_children` 子类型（四房儿童房面板激活）
+
+- **Given** 专有部分 `9-1-10-1002` 的 `device_room` 表中**仅含「儿童房」**而**不含「书房」**（3 房小户型）  
+  **When** 管理员打开该专有部分的设备面板页  
+  **Then** 响应数据中**不包含** `panel_fourth_children` 子类型（三房不激活四房儿童房面板），即使该户型含有儿童房记录且房间总数 ≥ 4
 
 ---
 

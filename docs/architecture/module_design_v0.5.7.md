@@ -6,9 +6,9 @@ file_header:
   title: FreeArk v0.5.7 — 按房型过滤设备面板、参数设置与 PLC 采集点裁剪 模块设计
   author_agent: sub_agent_system_architect (via PM Orchestrator, incremental revision)
   project: FreeArk 能耗采集平台
-  version: v0.5.7-rev1
+  version: v0.5.7-fix2
   created_at: 2026-05-22
-  revised_at: 2026-05-22
+  revised_at: 2026-05-23
   status: APPROVED
   revision_note: |
     PM 决策锁定（2026-05-22）：
@@ -18,6 +18,10 @@ file_header:
       M7-B：ondemand_collect_subscriber.py 读取白名单，裁剪 PLC 读取
     - 更新模块依赖关系图（含 M7）
     - 补充 M7 相关测试要点
+    fix2 修订（2026-05-23，生产验证 bug 修复）：
+    - M1 §1.3 _match_panel_sub_types() 规则 4 更新：
+      panel_fourth_children 判定由「含儿童房 AND 房间数≥4」改为「含书房 AND 含儿童房」
+    - 更新模块 M1 测试要点：UT-M1-04 场景更新，新增四房/三房生产用例专项测试要点
   references:
     - docs/architecture/architecture_design_v0.5.7.md
     - docs/requirements_spec_v0.5.7.md
@@ -183,13 +187,19 @@ def _match_panel_sub_types(ori_room_names: list) -> frozenset:
     2. panel_bedroom：任意房间名含"主卧"（但"主卧"命中的是 panel_bedroom，
        "儿童房"含"主卧"的情况由 panel_children_room 处理，不影响 panel_bedroom）
     3. panel_children_room：任意房间名含"儿童房"或"主卧"
-    4. panel_fourth_children：任意房间名同时含"儿童房"且（含"四"或该户型已有4个房间以上）
+    4. panel_fourth_children（fix2 校正）：同时满足：
+       - 任意房间名含"书房"（has_study_room）—— 对应四房户型特征
+       - 任意房间名含"儿童房"（has_children_keyword）
+       OR（冗余识别）任意房间名同时含"儿童房"且含"四"字
 
-    简化版本（v0.5.7）：
+       生产根因说明：原「房间数 ≥ 4」为错误启发式，三房户型（9-1-10-1002）
+       房间总数也达到 5（含全屋/客厅等非卧室），导致三房误激活 panel_fourth_children。
+       生产全量 40 个专有部分扫描确认「含书房 = 四房」，100% 吻合，无例外。
+
+    简化版本（v0.5.7-fix2）：
     - 遍历所有房间名，对每个 sub_type 检查关键词匹配
-    - panel_fourth_children 额外要求：至少有一个房间名含"儿童房"
-      （因为三房的 panel_children_room 对应的 plc 参数名为 children_room_*，
-       四房的对应 fourth_children_room_*，通过关键词区分是否有"四"字）
+    - panel_fourth_children 核心判定改为：has_study_room AND has_children_keyword
+      原「含'四'字」分支保留作冗余识别（防御未来显式命名如「四房儿童房」），不删除
     """
     available = set()
 
@@ -198,13 +208,14 @@ def _match_panel_sub_types(ori_room_names: list) -> frozenset:
 
     for sub_type, keywords in SUB_TYPE_TO_ROOM_KEYWORDS.items():
         if sub_type == 'panel_fourth_children':
-            # 四房儿童房：需要有"儿童房"关键词，且房间名中至少一个包含"四"字提示四房户型
-            # 或者：直接判断是否有 ori_room_name 同时含"四"和"儿童房"
-            has_fourth_children = any(
-                '儿童房' in name and ('四' in name or len(ori_room_names) >= 4)
-                for name in ori_room_names
+            # fix2：核心判定改为「含书房 AND 含儿童房」
+            # 冗余识别保留：房间名中含"四"且含"儿童房"（防御未来显式命名）
+            has_study_room = any('书房' in name for name in ori_room_names)
+            has_children_keyword = any('儿童房' in name for name in ori_room_names)
+            has_explicit_fourth = any(
+                '儿童房' in name and '四' in name for name in ori_room_names
             )
-            if has_fourth_children:
+            if (has_study_room and has_children_keyword) or has_explicit_fourth:
                 available.add(sub_type)
         else:
             if any(kw in all_names_joined for kw in keywords):
@@ -717,6 +728,10 @@ cleanup_invalid_device_params.py (M6)
 |---------|---------|
 | 专有部分已同步设备树，存在 4 个房间（无儿童房） | `get_available_sub_types()` 不含 `panel_fourth_children` |
 | 专有部分已同步设备树，存在 5 个房间（含儿童房） | `get_available_sub_types()` 含 `panel_fourth_children` |
+| **fix2 新增**：`9-1-10-1001`（含书房 + 含儿童房，6 间） | `get_available_sub_types()` **含** `panel_fourth_children` |
+| **fix2 新增**：`9-1-10-1002`（含儿童房但无书房，5 间） | `get_available_sub_types()` **不含** `panel_fourth_children` |
+| **fix2 新增**：三房（5 间，含儿童房，无书房）—— 验证修复有效 | `_match_panel_sub_types()` 不含 `panel_fourth_children` |
+| **fix2 新增**：四房（6 间，含书房 + 含儿童房）—— 验证正向激活 | `_match_panel_sub_types()` 含 `panel_fourth_children` |
 | 专有部分未同步设备树（device_floor 无记录）**（OQ-02 方案 B 锁定）** | `get_available_sub_types()` 仅含 `SYSTEM_LEVEL_SUB_TYPES`，所有 `panel_*` 不可用 |
 | 缓存命中：连续两次调用同一 specific_part | 第二次不查 DB（通过 mock 验证） |
 | 缓存失效：invalidate 后再次调用 | 重新查 DB |

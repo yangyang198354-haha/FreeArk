@@ -6,13 +6,20 @@ file_header:
   title: FreeArk v0.5.7 — 实现计划
   author_agent: sub_agent_software_developer (via PM Orchestrator)
   project: FreeArk 能耗采集平台
-  version: v0.5.7
+  version: v0.5.7-fix2
   created_at: 2026-05-23
+  revised_at: 2026-05-23
   status: APPROVED
   references:
     - docs/architecture/module_design_v0.5.7.md
     - docs/architecture/architecture_design_v0.5.7.md
     - docs/requirements_spec_v0.5.7.md
+  fix2_note: |
+    fix2（2026-05-23）：单文件修改，仅变更 utils_room_filter.py 中
+    _match_panel_sub_types() 的 panel_fourth_children 判定逻辑。
+    受影响文件：api/utils_room_filter.py（行 235-271 → fix2 新实现）
+    不受影响：plc_config.json、PLC 程序、views.py、mqtt_handlers.py
+              views_device_settings.py、ondemand_collect_subscriber.py
 ```
 
 ---

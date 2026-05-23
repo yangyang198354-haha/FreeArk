@@ -6,14 +6,64 @@ file_header:
   title: FreeArk v0.5.7 — 测试执行报告
   author_agent: sub_agent_test_engineer (via PM Orchestrator)
   project: FreeArk 能耗采集平台
-  version: v0.5.7-fix1
+  version: v0.5.7-fix2
   created_at: 2026-05-23
-  last_updated: 2026-05-23 (v0.5.7-fix1 — 修复 8 个失败测试后重写)
+  last_updated: 2026-05-23 (v0.5.7-fix2 — fix2 逻辑分析完成，待 PM 真实运行确认)
   status: APPROVED
   references:
     - docs/test_plan_v0.5.7.md
     - FreeArkWeb/backend/freearkweb/api/tests/test_room_filter_v057.py
 ```
+
+---
+
+## fix2 修订说明（2026-05-23）
+
+fix2 回环对测试文件的变更如下：
+
+**修改的测试（逻辑更新，名称更新）**：
+- `test_four_room_inferred_by_count` → 重命名为 `test_four_room_inferred_by_study_room`：
+  触发条件由「房间数 ≥ 4」改为「含书房 AND 含儿童房」，测试数据不变（`['主卧', '次卧', '书房', '儿童房']`
+  同时满足两条件），断言 `assertIn('panel_fourth_children', result)` 仍然有效
+- `test_four_room_with_fourth_children`：补充注释说明此为冗余识别路径（含「四」字），
+  不是生产主判定路径；断言不变
+- `test_three_room_with_children`：补充注释说明 fix2 规则（无书房不触发），断言不变
+- `test_four_room_with_fourth_children_room`（UT-M1-04）：
+  房间名从 `['主卧', '次卧', '四房儿童房', '书房']` 改为 `['主卧', '次卧', '儿童房', '书房']`
+  （使用生产真实房间名，无「四房儿童房」这种含"四"字命名），断言不变
+- `test_blocklist_empty_when_all_rooms_exist`（UT-M1-09）：
+  房间集从含「四房儿童房」改为含「书房」+「儿童房」，断言不变
+- `test_empty_blocklist_no_filtering`（UT-M4-05）：同上
+- `test_four_room_with_fourth_children_panel_included`（IT-M2-04）：
+  房间集从含「四房儿童房」改为含「书房」+「儿童房」，断言不变
+
+**新增的测试（fix2 专项）**：
+- `test_three_room_with_children_but_no_study`：生产 1002 真实房间集，5 间无书房，
+  `assertNotIn('panel_fourth_children', ...)` — 核心回归测试
+- `test_four_room_with_study_and_children`：生产 1001 真实房间集，6 间含书房，
+  `assertIn('panel_fourth_children', ...)` — 核心正向测试
+- `test_production_1001_four_room_activates_fourth_children`（DB 级集成测试）
+- `test_production_1002_three_room_no_fourth_children`（DB 级集成测试，关键回归）
+
+**测试总数**：40（fix1）+ 4（fix2 新增）= **44 个**（重命名不计数变化）
+
+**Django runner 期望输出（fix2 修复后）**：
+```
+Found 44 test(s).
+............................................
+----------------------------------------------------------------------
+Ran 44 tests in X.XXXs
+
+OK
+```
+
+**重要说明（纪律遵守）**：
+> fix2 的门控 PASS 确认必须在 PM 执行以下命令并返回 `Ran 44 tests ... OK` 后生效：
+> ```
+> cd C:\Users\胖子熊\MyProject\FreeArk\FreeArkWeb\backend\freearkweb
+> python manage.py test api.tests.test_room_filter_v057 --settings=freearkweb.test_settings -v 2
+> ```
+> 本文档逻辑分析已完成，等待 PM 真实运行确认。
 
 ---
 

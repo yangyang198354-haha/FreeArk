@@ -6,9 +6,9 @@ file_header:
   title: FreeArk v0.5.7 — 按房型过滤设备面板、参数设置与 PLC 采集点裁剪 架构设计
   author_agent: sub_agent_system_architect (via PM Orchestrator, incremental revision)
   project: FreeArk 能耗采集平台
-  version: v0.5.7-rev1
+  version: v0.5.7-fix2
   created_at: 2026-05-22
-  revised_at: 2026-05-22
+  revised_at: 2026-05-23
   status: APPROVED
   revision_note: |
     PM 决策锁定（2026-05-22）：
@@ -16,6 +16,9 @@ file_header:
     - M6 清理命令：本版本不实施（OQ-v0.5.7-03）
     - ADR-v0.5.7-06：决策反转，采集侧裁剪纳入本版本（OQ-v0.5.7-04）
       新增 M7 模块（ondemand_collect_subscriber 改造）、MQTT payload 扩展设计
+    fix2 修订（2026-05-23，生产验证 bug 修复）：
+    - ADR-v0.5.7-02 补充 panel_fourth_children 四房识别设计校正（见下方注释）
+    - 生产全量 40 专有部分扫描结果确认：书房存在 = 四房，100% 吻合，无例外
   references:
     - docs/requirements_spec_v0.5.7.md
     - docs/user_stories_v0.5.7.md
@@ -117,6 +120,34 @@ SYSTEM_LEVEL_SUB_TYPES: frozenset[str] = frozenset({
 - `fourth_children_room_*`：描述为「四房儿童房」
 
 这与 `device_room.ori_room_name` 的屏侧返回值吻合。
+
+**fix2 校正（2026-05-23）—— panel_fourth_children 四房识别规则**
+
+原设计注释中 `_match_panel_sub_types()` 依赖「含儿童房 AND（含'四'字 OR 房间数 ≥ 4）」。
+生产验证发现 `len(ori_room_names) >= 4` 为错误启发式：三房户型实际房间数也达到 5
+（含全屋/客厅等非卧室），全部被误触发，导致 `9-1-10-1001` 与 `9-1-10-1002` 的
+`get_available_sub_types()` 返回值完全相同，`get_panel_param_blocklist()` 对两者
+均返回空集，v0.5.7 功能性等同未生效。
+
+**生产全量扫描依据**（40 个专有部分，100% 吻合，无例外）：
+```
+户型       房号尾号    房间数  含书房  含儿童房
+4房大户型  xxx01/04    6      是      是
+3房小户型  xxx02/03    5      否      是
+```
+结论：「含书房」= 四房户型，精确无误，取代原房间数启发式。
+
+**校正后的 panel_fourth_children 激活规则**：
+```python
+# 新规则（fix2）
+has_study_room = any('书房' in name for name in ori_room_names)
+has_children_keyword = any('儿童房' in name for name in ori_room_names)
+if has_study_room and has_children_keyword:
+    available.add('panel_fourth_children')
+```
+
+原「含'四'字」分支作为冗余识别保留（防御未来出现「四房儿童房」显式命名），
+但核心判定规则改为「书房 AND 儿童房同时存在」。其他 panel sub_type 的判定规则不变。
 
 ---
 

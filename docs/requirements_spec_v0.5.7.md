@@ -6,15 +6,20 @@ file_header:
   title: FreeArk v0.5.7 — 按房型过滤设备面板、参数设置与 PLC 采集点裁剪
   author_agent: sub_agent_system_architect (via PM Orchestrator, incremental revision)
   project: FreeArk 能耗采集平台
-  version: v0.5.7-rev1
+  version: v0.5.7-fix2
   created_at: 2026-05-22
-  revised_at: 2026-05-22
+  revised_at: 2026-05-23
   status: APPROVED
   revision_note: |
     PM 决策锁定（2026-05-22）：
     - OQ-v0.5.7-02 = 方案 B（设备树未同步时仅显示系统级面板，panel_* 全部隐藏）
     - OQ-v0.5.7-03 = 不纳入本版本（存量清理留后续，FR-v0.5.7-06 标记为本版本不实施）
     - OQ-v0.5.7-04 = 纳入本版本（采集侧裁剪必须实现，FR-v0.5.7-05 升级为必须项）
+    fix2 修订（2026-05-23，生产验证 bug 修复）：
+    - FR-v0.5.7-01 补充验收标准校正条目（FR-CORR-v0.5.7-01）：
+      4 房户型识别口径由「房间总数 ≥ 4」更正为「同时含书房 AND 含儿童房」。
+      根据生产全量 40 个专有部分扫描结果，书房存在与否 100% 吻合四房/三房划分，
+      无例外，取代原启发式房间数判断。
   base_document: docs/requirements_spec.md (v1.0.0)
   references:
     - FreeArkWeb/backend/freearkweb/api/models.py
@@ -101,6 +106,28 @@ FreeArk 平台服务多种户型（三房、四房等），各户型的实际房
 **验收标准（针对代码实证）**：
 - `device_room` 表中 `specific_part=9-1-10-1002` 无「儿童房」对应记录时，API 响应中不应包含 `panel_fourth_children` 子类型。
 - `device_room` 表中 `specific_part=9-1-10-1001` 有「书房」对应记录时，API 响应中应包含 `panel_study_room` 子类型（若有 PLCLatestData 记录）。
+
+**FR-CORR-v0.5.7-01（fix2 校正条目，2026-05-23）：四房户型识别口径**
+
+来源：生产验证 bug 报告（2026-05-23）——`_match_panel_sub_types()` 中
+`len(ori_room_names) >= 4` 在三房户型（房间总数同样 ≥ 4，含全屋/客厅等非卧室）
+误触发 `panel_fourth_children`，导致 `9-1-10-1001` 与 `9-1-10-1002` 功能等同，
+修复无效。
+
+**生产全量扫描依据**（40 个专有部分，100% 吻合，无例外）：
+- 4 房大户型（尾号 01/04）：房间集含「书房」→ 6 个房间
+- 3 房小户型（尾号 02/03）：房间集不含「书房」→ 5 个房间
+- 关键样本：
+  - `9-1-10-1001` 房间集：主卧、书房、儿童房、全屋、客厅、次卧（含书房 → 四房）
+  - `9-1-10-1002` 房间集：主卧、儿童房、全屋、客厅、次卧（无书房 → 三房）
+
+**校正规则**：`panel_fourth_children` 的激活条件由「含儿童房 AND 房间数 ≥ 4」
+更改为「**含书房 AND 含儿童房**」。
+
+**新验收标准**：
+- `9-1-10-1001`（含书房 + 含儿童房）：`panel_fourth_children` 激活
+- `9-1-10-1002`（不含书房，仅含儿童房）：`panel_fourth_children` **不激活**
+- 无「儿童房」关键词的任何户型：`panel_fourth_children` 不激活（无论是否有书房）
 
 ---
 

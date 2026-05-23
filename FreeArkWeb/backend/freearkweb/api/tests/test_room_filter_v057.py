@@ -171,24 +171,56 @@ class TestMatchPanelSubTypes(TestCase):
         self.assertNotIn('panel_fourth_children', result)  # 无儿童房
 
     def test_three_room_with_children(self):
-        """三房户型（主卧、次卧、儿童房），儿童房名无"四"字"""
+        """三房户型（主卧、次卧、儿童房），无书房。
+        fix2：无书房时不触发 panel_fourth_children（原注释「无四字不触发」已更新为「无书房不触发」）。
+        """
         names = ['主卧', '次卧', '儿童房']
         result = _match_panel_sub_types(names)
         self.assertIn('panel_children_room', result)
-        self.assertNotIn('panel_fourth_children', result)  # UT-M1-01：无"四"字不触发
+        self.assertNotIn('panel_fourth_children', result)  # fix2：无书房不触发
 
     def test_four_room_with_fourth_children(self):
-        """四房户型（四房儿童房，名称含"四"字）"""
+        """冗余识别路径（fix2 保留）：房间名含"四"字且含"儿童房" → 触发 panel_fourth_children。
+        fix2 保留此路径作为防御（防未来出现「四房儿童房」显式命名），
+        但核心生产判定路径已改为「含书房 AND 含儿童房」（见 test_four_room_inferred_by_study_room）。
+        """
         names = ['主卧', '次卧', '儿童房', '四房儿童房']
         result = _match_panel_sub_types(names)
         self.assertIn('panel_children_room', result)
-        self.assertIn('panel_fourth_children', result)     # UT-M1-02：含"四"字触发
+        self.assertIn('panel_fourth_children', result)     # 冗余识别：含"四"字路径
 
-    def test_four_room_inferred_by_count(self):
-        """四房户型（>=4 个房间，儿童房名无"四"字但有4间房）"""
-        names = ['主卧', '次卧', '书房', '儿童房']  # 4 个房间，触发 panel_fourth_children
+    def test_four_room_inferred_by_study_room(self):
+        """fix2：四房户型通过「含书房 AND 含儿童房」识别（非房间总数）。
+        原测试名 test_four_room_inferred_by_count 已重命名，触发条件更新为
+        「含书房 AND 含儿童房」（v0.5.7-fix2 修复生产 bug）。
+        房间名无"四"字，但同时有书房和儿童房 → 应激活 panel_fourth_children。
+        """
+        names = ['主卧', '次卧', '书房', '儿童房']  # 含书房 + 含儿童房 → 四房
         result = _match_panel_sub_types(names)
         self.assertIn('panel_fourth_children', result)
+
+    def test_three_room_with_children_but_no_study(self):
+        """fix2 专项：三房户型（含儿童房但无书房），不激活 panel_fourth_children。
+        对应生产 bug 根因验证：房间数为 5（主卧/儿童房/全屋/客厅/次卧），
+        原 len>=4 判断误触发；fix2 改为「含书房 AND 含儿童房」后应不触发。
+        """
+        # 生产 9-1-10-1002 的真实房间集
+        names = ['主卧', '儿童房', '全屋', '客厅', '次卧']  # 5 间，无书房
+        result = _match_panel_sub_types(names)
+        self.assertNotIn('panel_fourth_children', result,
+                         '三房（无书房）不应激活 panel_fourth_children（fix2 核心验证）')
+        self.assertIn('panel_children_room', result,
+                      '三房含儿童房应激活 panel_children_room')
+
+    def test_four_room_with_study_and_children(self):
+        """fix2 专项：四房户型（含书房 + 含儿童房），激活 panel_fourth_children。
+        对应生产 9-1-10-1001 的真实房间集。
+        """
+        # 生产 9-1-10-1001 的真实房间集
+        names = ['主卧', '书房', '儿童房', '全屋', '客厅', '次卧']  # 6 间，含书房
+        result = _match_panel_sub_types(names)
+        self.assertIn('panel_fourth_children', result,
+                      '四房（含书房+含儿童房）应激活 panel_fourth_children（fix2 核心验证）')
 
     def test_no_children_no_fourth_children(self):
         """完全没有儿童房 → panel_fourth_children 不触发。
@@ -257,13 +289,39 @@ class TestGetAvailableSubTypes(RoomFilterTestBase):
             self.assertNotIn(panel, result)
 
     def test_four_room_with_fourth_children_room(self):
-        """UT-M1-04：四房户型，含所有 panel sub_type"""
-        self._setup_three_room('9-1-10-1001', ['主卧', '次卧', '四房儿童房', '书房'])
+        """UT-M1-04（fix2 更新）：四房户型，通过「含书房 AND 含儿童房」激活所有 panel sub_type。
+        fix2：激活条件由「四房儿童房（含四字）」改为「书房存在 AND 儿童房存在」。
+        房间名不再需要含"四"字，书房的存在即为四房标志。
+        """
+        # 使用生产真实房间名（无"四"字），验证 fix2 规则
+        self._setup_three_room('9-1-10-1001', ['主卧', '次卧', '儿童房', '书房'])
         result = get_available_sub_types('9-1-10-1001')
-        self.assertIn('panel_fourth_children', result)
+        self.assertIn('panel_fourth_children', result,
+                      '四房（含书房+含儿童房）应激活 panel_fourth_children')
         self.assertIn('panel_children_room', result)
         self.assertIn('panel_bedroom', result)
         self.assertIn('panel_study_room', result)
+
+    def test_production_1001_four_room_activates_fourth_children(self):
+        """fix2 专项 IT：模拟生产 9-1-10-1001（六间），panel_fourth_children 激活。
+        对应 FR-CORR-v0.5.7-01 验收标准第一条。
+        """
+        self._setup_three_room('9-1-10-fix2-1001',
+                               ['主卧', '书房', '儿童房', '全屋', '客厅', '次卧'])
+        result = get_available_sub_types('9-1-10-fix2-1001')
+        self.assertIn('panel_fourth_children', result,
+                      '生产 1001（含书房+儿童房，6 间）应激活 panel_fourth_children')
+
+    def test_production_1002_three_room_no_fourth_children(self):
+        """fix2 专项 IT：模拟生产 9-1-10-1002（五间，无书房），panel_fourth_children 不激活。
+        对应 FR-CORR-v0.5.7-01 验收标准第二条。
+        关键验证：房间总数 5 ≥ 4，但无书房，fix2 前会误触发，fix2 后正确不触发。
+        """
+        self._setup_three_room('9-1-10-fix2-1002',
+                               ['主卧', '儿童房', '全屋', '客厅', '次卧'])
+        result = get_available_sub_types('9-1-10-fix2-1002')
+        self.assertNotIn('panel_fourth_children', result,
+                         '生产 1002（无书房，5 间）不应激活 panel_fourth_children（fix2 核心回归验证）')
 
     def test_cache_hit_no_second_db_query(self):
         """UT-M1-05：缓存命中时不发出第二次 DB 查询。
@@ -340,14 +398,16 @@ class TestGetPanelParamBlocklist(RoomFilterTestBase):
         self.assertNotIn('system_switch', blocklist)
 
     def test_blocklist_empty_when_all_rooms_exist(self):
-        """UT-M1-09：所有 panel 均可用时，blocklist 为空"""
+        """UT-M1-09（fix2 更新）：四房户型全量房间（含书房+儿童房），blocklist 为空。
+        fix2：房间名无需含"四"字，书房存在即可激活 panel_fourth_children。
+        """
         owner = _make_owner('9-1-10-BL02')
         floor = _make_device_floor(owner)
-        # 四房户型全量房间
-        for name in ['主卧', '次卧', '书房', '四房儿童房']:
+        # fix2：使用生产真实房间名（书房+儿童房），不依赖「四房儿童房」命名
+        for name in ['主卧', '次卧', '书房', '儿童房']:
             _make_device_room(floor, name)
         blocklist = get_panel_param_blocklist('9-1-10-BL02')
-        # panel_fourth_children 可用，blocklist 中不含其参数
+        # panel_fourth_children 可用（含书房+含儿童房），blocklist 中不含其参数
         self.assertNotIn('fourth_children_room_temperature', blocklist)
 
 
@@ -447,18 +507,21 @@ class TestPLCLatestDataHandlerRoomFilter(RoomFilterTestBase):
         )
 
     def test_empty_blocklist_no_filtering(self):
-        """UT-M4-05：全量房间存在时，blocklist 为空，无参数被过滤"""
+        """UT-M4-05（fix2 更新）：四房全量房间（含书房+儿童房），blocklist 为空，无参数被过滤。
+        fix2：不再依赖「四房儿童房」这个含"四"字的房间名，改用书房+儿童房识别四房。
+        """
         sp = '9-1-10-M405'
         owner = _make_owner(sp)
         floor = _make_device_floor(owner)
-        for name in ['主卧', '次卧', '书房', '四房儿童房']:
+        # fix2：使用生产真实房间名
+        for name in ['主卧', '次卧', '书房', '儿童房']:
             _make_device_room(floor, name)
         handler = PLCLatestDataHandler()
         payload = _make_mqtt_payload(sp, {
             'fourth_children_room_temperature': (25, True),
         })
         handler.handle('test/topic', payload)
-        # 四房儿童房存在，不应被过滤
+        # 四房（含书房+儿童房），panel_fourth_children 可用，不应被过滤
         self.assertTrue(
             PLCLatestData.objects.filter(
                 specific_part=sp,
@@ -685,11 +748,14 @@ class TestGetDeviceRealtimeParamsWithRoomFilter(RoomFilterTestBase):
         self.assertIn('main_thermostat', all_sub_types)
 
     def test_four_room_with_fourth_children_panel_included(self):
-        """IT-M2-04：四房户型含儿童房，panel_fourth_children 出现在响应中"""
+        """IT-M2-04（fix2 更新）：四房户型（含书房+含儿童房），panel_fourth_children 出现在响应中。
+        fix2：房间名无需含"四"字，书房+儿童房同时存在即激活。
+        """
         sp = '9-1-10-IT204'
         owner = _make_owner(sp)
         floor = _make_device_floor(owner)
-        for name in ['主卧', '次卧', '书房', '四房儿童房']:
+        # fix2：使用生产真实房间名
+        for name in ['主卧', '次卧', '书房', '儿童房']:
             _make_device_room(floor, name)
         self._make_plc_data(sp)
 
