@@ -545,13 +545,33 @@ class ConnectionStatusHandler(MessageHandler):
         # ── 快路径：状态无变化，跳过行锁事务 ──────────────────────────────
         if cached == status:
             if status == 'online':
-                # 仅刷新 last_online_time，无事务，无行锁
-                PLCConnectionStatus.objects.filter(
-                    specific_part=specific_part
+                # [v0.5.8 F2] 加 connection_status='online' 守卫，利用 rows_affected
+                # 检测 Path B（plc_connection_monitor）是否已悄悄把 DB 翻成 offline。
+                # 常态（rows==1）：仅刷 last_online_time，无事务，无行锁，零额外开销。
+                # 异常（rows==0）：DB 已被置 offline，cache 脏；清除 cache 并 fall-through
+                # 到慢路径自动补正，写 source='mqtt'/status='online' history，前端实时感知。
+                rows = PLCConnectionStatus.objects.filter(
+                    specific_part=specific_part,
+                    connection_status='online',
                 ).update(last_online_time=timezone.now())
-            # status == 'offline' 且无变化：零 DB 写入
-            logger.debug(f"ConnectionStatusHandler: 快路径（无状态变化）- {specific_part}: {status}")
-            return
+                if rows > 0:
+                    logger.debug(
+                        f"ConnectionStatusHandler: 快路径（无状态变化）- {specific_part}: online"
+                    )
+                    return
+                # rows == 0：cache/DB 不一致，回退慢路径
+                logger.warning(
+                    f"ConnectionStatusHandler: {specific_part} cache/DB 不一致，"
+                    f"cache=online 但 DB 已被 monitor 置 offline，回退慢路径补正"
+                )
+                _conn_status_cache.pop(specific_part, None)
+                # fall-through：不 return，执行流进入下方慢路径块
+            else:
+                # status == 'offline' 且无变化：零 DB 写入
+                logger.debug(
+                    f"ConnectionStatusHandler: 快路径（无状态变化）- {specific_part}: offline"
+                )
+                return
 
         # ── 慢路径：缓存 miss 或状态变化，走完整行锁事务 ──────────────────
         logger.debug(
