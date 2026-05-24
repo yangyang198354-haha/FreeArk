@@ -135,10 +135,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         不维护 chat_history，不构建 messages 数组，
         仅透传 session_key（OpenClaw 负责上下文管理）。
+
+        CONFIRM-7 (lobster-agent-api-channel)：在消息前附加 chatuser 前缀，
+        供 Agent 提取并在 Tier-2 写操作的 operator 字段中追溯到实际操作用户。
+        前缀格式：[__freeark_user__:<username>]（对话文本对用户透明，Agent 感知）。
         """
         try:
+            # CONFIRM-7: 注入 chatuser 前缀（约 3 行）
+            chat_user = getattr(self.user, 'username', 'unknown')
+            augmented_message = f"[__freeark_user__:{chat_user}] {user_message}"
             async for token in OpenClawAdapter.stream_chat(
-                message=user_message,
+                message=augmented_message,
                 session_key=self.session_key,
             ):
                 await self.send(json.dumps({

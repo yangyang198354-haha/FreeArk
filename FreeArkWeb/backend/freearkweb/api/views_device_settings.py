@@ -244,6 +244,18 @@ def device_settings_write(request):
 
     batch_request_id = str(uuid.uuid4())
 
+    # CONFIRM-7 (lobster-agent-api-channel): operator_override 追溯 chatuser
+    # 仅当认证用户为 openclaw-agent 且 operator_override 格式合法时才采用
+    operator_override = ser.validated_data.get('operator_override', '')
+    effective_operator = request.user.username
+    if (
+        operator_override
+        and request.user.username == 'openclaw-agent'
+        and operator_override.startswith('openclaw-agent::')
+        and len(operator_override) <= 150
+    ):
+        effective_operator = operator_override
+
     # 预取当前值快照
     param_names = [item['param_name'] for item in items]
     old_value_map = {
@@ -267,7 +279,7 @@ def device_settings_write(request):
                 param_name=param_name,
                 old_value=old_value,
                 new_value=str(new_value),
-                operator=request.user.username,
+                operator=effective_operator,  # CONFIRM-7: 使用 effective_operator（可为 openclaw-agent::<chatuser>）
                 status='pending',
             )
             records.append(rec)
@@ -276,7 +288,7 @@ def device_settings_write(request):
         'request_id': batch_request_id,
         'specific_part': specific_part,
         'plc_ip': plc_ip,
-        'operator': request.user.username,
+        'operator': effective_operator,  # CONFIRM-7: MQTT payload 也使用 effective_operator
         'submitted_at': timezone.now().isoformat(),
         'items': [
             {'param_name': item['param_name'], 'new_value': item['new_value']}
