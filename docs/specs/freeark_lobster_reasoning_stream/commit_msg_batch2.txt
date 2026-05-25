@@ -1,0 +1,13 @@
+feat(reasoning-stream): ChatView.vue v1.1 前端 reasoning 展示
+
+- 消息结构扩展: reasoning:'', reasoningStreaming:false
+- handleMessage 新增 reasoning_token / reasoning_end case
+- 助手气泡内 <details> 折叠区 (v-if msg.reasoning || msg.reasoningStreaming)
+- :open="msg.reasoningStreaming" 控制展开/折叠 (reasoning_end 后自动折叠)
+- thinking-indicator v-if 条件扩展, 排除 reasoning 活跃期
+- 新增 .reasoning-details / .reasoning-summary / .reasoning-text 样式
+- 原生 HTML details/summary, 零新增 JS 依赖 (C-010)
+- {{ msg.reasoning }} Vue 插值渲染, 无 XSS 风险
+
+需求: REQ-FUNC-011, REQ-NFR-005/006
+US: US-RSN-005/006/007

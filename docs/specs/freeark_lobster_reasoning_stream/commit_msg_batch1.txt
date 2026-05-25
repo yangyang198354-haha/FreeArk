@@ -1,0 +1,20 @@
+feat(reasoning-stream): adapter v1.3 + consumer v1.2 后端核心实现
+
+- openclaw_adapter.py v1.3:
+  - yield 协议从 str 升级为 tuple[str, str] (kind, text)
+  - 防御性双路 reasoning 解析: _REASONING_FIELD='reasoningDelta' + kind=='reasoning' 备用路径
+  - reasoning_effort 透传: settings.OPENCLAW_REASONING_EFFORT -> params.reasoningEffort
+  - stream_complete/stream_incomplete INFO 日志 (reasoning/content tokens + 各阶段毫秒)
+  - 日志不含 token 文本 (REQ-NFR-007)
+
+- consumers.py v1.2:
+  - _handle_chat 解包 (kind, text) 二元组
+  - kind routing: reasoning->reasoning_token, content->reasoning_end+stream_token
+  - _reasoning_ended 防重复 reasoning_end (ARCH-C-004)
+  - 局部状态变量, 不跨请求持久化 (REQ-NFR-009)
+
+- settings.py: 追加 OPENCLAW_REASONING_EFFORT 读取
+
+注意: adapter v1.3 和 consumer v1.2 必须同批次部署 (ARCH-C-002)
+需求: REQ-FUNC-009/010/012, REQ-NFR-007/008/009
+US: US-RSN-002/003/004/008 (走法B, 防御性解析)

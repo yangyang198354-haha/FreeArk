@@ -1,0 +1,16 @@
+test(reasoning-stream): WS 兼容性回归测试 TransactionTestCase
+
+- ChatConsumerReasoningProtocolTest:
+  - test_reasoning_then_content_message_sequence: 断言消息时序
+    reasoning_token*2 -> reasoning_end -> stream_token*2 -> stream_end
+  - test_reasoning_end_sent_only_once: 断言 reasoning_end 恰好 1 次 (ARCH-C-004)
+
+- ChatConsumerNoReasoningCompatTest:
+  - test_no_reasoning_sequence_is_compat: 无 reasoning 时序列退化为
+    stream_token*N + stream_end, 无 reasoning_token/reasoning_end (AC-NFR-005-01)
+
+- channels.testing WebsocketCommunicator + mock OpenClawAdapter.stream_chat
+- channels 不可用时 skipTest 优雅降级
+
+需求: REQ-NFR-005, AC-010-01~05, AC-NFR-005-01
+US: US-RSN-010
