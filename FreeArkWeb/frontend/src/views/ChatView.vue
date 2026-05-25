@@ -41,9 +41,24 @@
 
           <!-- 消息气泡 -->
           <div class="chat-bubble" :class="msg.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--assistant'">
-            <!-- 流式状态光标 -->
+            <!-- 思考过程折叠区（仅在有 reasoning 内容或正在 reasoning 时渲染）-->
+            <!-- v-if 条件覆盖 AC-011-05 降级场景：reasoning 和 reasoningStreaming 均为空/false 时不渲染 -->
+            <details
+              v-if="msg.reasoning || msg.reasoningStreaming"
+              :open="msg.reasoningStreaming"
+              class="reasoning-details"
+            >
+              <summary class="reasoning-summary">🧠 思考过程</summary>
+              <span class="reasoning-text">{{ msg.reasoning }}</span>
+            </details>
+
+            <!-- 正式回答区（不变） -->
             <span class="bubble-content">{{ msg.content }}</span>
-            <span v-if="msg.streaming && !msg.content" class="thinking-indicator">正在思考...</span>
+            <!-- 「正在思考...」：仅在无 reasoning 活动且 content 为空时显示（降级兼容） -->
+            <span
+              v-if="msg.streaming && !msg.content && !msg.reasoning && !msg.reasoningStreaming"
+              class="thinking-indicator"
+            >正在思考...</span>
             <span v-if="msg.streaming && msg.content" class="stream-cursor">|</span>
           </div>
 
@@ -116,7 +131,8 @@ export default {
   },
   setup() {
     // --- 状态 ---
-    const messages = ref([])          // { role: 'user'|'assistant', content: string, streaming?: boolean }
+    // v1.1 消息结构：{ role, content, reasoning, streaming, reasoningStreaming }
+    const messages = ref([])
     const inputText = ref('')
     const isWaiting = ref(false)      // 等待 OpenClaw 响应期间
     const wsConnected = ref(false)
@@ -206,7 +222,7 @@ export default {
       connectWS()
     }
 
-    // --- 消息处理 ---
+    // --- 消息处理（v1.1）---
     function handleMessage(event) {
       let data
       try {
@@ -222,8 +238,30 @@ export default {
           errorMessage.value = ''
           break
 
+        // v1.1 新增：reasoning_token — 追加到 msg.reasoning，触发 <details> 展示
+        case 'reasoning_token': {
+          const last = messages.value[messages.value.length - 1]
+          if (last && last.role === 'assistant' && last.streaming) {
+            last.reasoning += data.token || ''
+            if (!last.reasoningStreaming) {
+              last.reasoningStreaming = true  // 触发 <details open> 渲染
+            }
+          }
+          scrollToBottom()
+          break
+        }
+
+        // v1.1 新增：reasoning_end — 折叠 <details>，content 即将开始
+        case 'reasoning_end': {
+          const last = messages.value[messages.value.length - 1]
+          if (last && last.role === 'assistant') {
+            last.reasoningStreaming = false  // 移除 :open 绑定，<details> 自动折叠
+          }
+          break
+        }
+
         case 'stream_token': {
-          // 找到最后一条 streaming 的 assistant 消息，追加 token
+          // 找到最后一条 streaming 的 assistant 消息，追加 token（不变）
           const last = messages.value[messages.value.length - 1]
           if (last && last.role === 'assistant' && last.streaming) {
             last.content += data.token || ''
@@ -256,11 +294,13 @@ export default {
           break
 
         default:
+          // 静默忽略未知消息类型（向后兼容：旧前端不会有 reasoning_* 分支，
+          // 新增的消息类型在旧前端中走此 default 分支，不影响功能）
           break
       }
     }
 
-    // --- 发送消息 ---
+    // --- 发送消息（v1.1：助手消息结构扩展）---
     function handleSend() {
       const text = inputText.value.trim()
       if (!text || !wsConnected.value || isWaiting.value) return
@@ -278,10 +318,16 @@ export default {
       // 发送 WebSocket 消息
       ws.send(JSON.stringify({ type: 'chat_message', message: text }))
 
-      // 清空输入，添加助手占位消息（streaming 状态）
+      // 清空输入，添加助手占位消息（v1.1 扩展结构）
       inputText.value = ''
       isWaiting.value = true
-      messages.value.push({ role: 'assistant', content: '', streaming: true })
+      messages.value.push({
+        role: 'assistant',
+        content: '',
+        reasoning: '',            // v1.1 新增：reasoning 文本（默认空）
+        streaming: true,
+        reasoningStreaming: false, // v1.1 新增：收到首个 reasoning_token 后置 true
+      })
 
       scrollToBottom()
     }
@@ -526,7 +572,7 @@ export default {
   50% { opacity: 0; }
 }
 
-/* 思考中提示 */
+/* 思考中提示（降级：无 reasoning 时显示） */
 .thinking-indicator {
   color: var(--color-text-secondary, #94A3B8);
   font-style: italic;
@@ -537,6 +583,48 @@ export default {
 @keyframes fade-pulse {
   0%, 100% { opacity: 0.6; }
   50% { opacity: 1; }
+}
+
+/* ---- 思考过程折叠区（v1.1 新增）---- */
+.reasoning-details {
+  margin-bottom: var(--space-2, 8px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: var(--space-2, 8px);
+}
+
+.reasoning-summary {
+  cursor: pointer;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--color-text-secondary, #94A3B8);
+  user-select: none;
+  list-style: none;         /* 移除默认三角 */
+}
+
+/* Firefox 需要单独设置 */
+.reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reasoning-summary::before {
+  content: '▶ ';
+  font-size: 9px;
+}
+
+details[open] .reasoning-summary::before {
+  content: '▼ ';
+}
+
+.reasoning-text {
+  display: block;
+  margin-top: var(--space-1, 4px);
+  font-size: var(--font-size-sm, 12px);
+  color: var(--color-text-secondary, #94A3B8);
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  max-height: 300px;        /* 防止超长 reasoning 撑破布局 */
+  overflow-y: auto;
 }
 
 /* ---- 错误提示 ---- */
