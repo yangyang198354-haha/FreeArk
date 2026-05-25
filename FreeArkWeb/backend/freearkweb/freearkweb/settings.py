@@ -294,6 +294,10 @@ OPENCLAW_BASE_URL = os.environ.get('OPENCLAW_BASE_URL', 'http://127.0.0.1:18789'
 OPENCLAW_GATEWAY_TOKEN = os.environ.get('OPENCLAW_GATEWAY_TOKEN', '')  # 必填，生产强 token
 OPENCLAW_TIMEOUT = int(os.environ.get('OPENCLAW_TIMEOUT', '60'))         # 总流响应超时（秒）
 OPENCLAW_CONNECT_TIMEOUT = int(os.environ.get('OPENCLAW_CONNECT_TIMEOUT', '10'))  # WS 升级 + 握手超时
+# reasoning_effort：控制 DeepSeek v4-flash 的推理深度（low/medium/high），空字符串=使用模型默认值
+# 实际值由 devops 在生产 .env 中写入，此处仅读取；代码层不硬编码
+# 需求引用：REQ-FUNC-012，ADR-008（adapter 侧透传方案 A）
+OPENCLAW_REASONING_EFFORT = os.environ.get('OPENCLAW_REASONING_EFFORT', '')
 
 # 移除django-crontab配置，改用命令内置的定时功能
 # 这些服务将在start_services.bat中直接启动
