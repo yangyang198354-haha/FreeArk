@@ -199,13 +199,28 @@
     </findings>
   </gate_review>
 
-  <user_confirms time="2026-05-26T23:15:00+08:00">
-    <confirm signal="PRODUCTION_DEPLOY_CONFIRM" status="ISSUED" scope="§1-§5（前置+migrate+pull+重启）"/>
-    <confirm signal="USER_MD_CONFIRM" status="PENDING"/>
-    <confirm signal="SKELETON_LOCK_CONFIRM" status="PENDING"/>
+  <user_confirms time="2026-05-27T00:10:00+08:00">
+    <confirm signal="PRODUCTION_DEPLOY_CONFIRM" status="COMPLETE" scope="§1-§5（前置+migrate+pull+重启）" completed_at="2026-05-26T23:50:00+08:00"/>
+    <confirm signal="USER_MD_CONFIRM" status="SKIPPED" reason="当前仅 admin 一个用户，'老板' 称呼仍有价值；GROUP_C 未实现 user_preference 表，DB 注入替代尚不可用；推迟到多用户场景时重新评估"/>
+    <confirm signal="SKELETON_LOCK_CONFIRM" status="DEFERRED" reason="先观察一段时间确认骨架文件不需调整，再决定是否 chattr +i（OS 层不可逆）"/>
   </user_confirms>
 
-  <orchestration_status>GATE_E_PASS_PRODUCTION_DEPLOY_IN_PROGRESS</orchestration_status>
+  <deploy_report time="2026-05-26T23:55:00+08:00">
+    <commit_deployed>95c3c78 (含 d584d1b + 752faf0 + 519ddb1)</commit_deployed>
+    <migration>0025_chat_session_message applied OK</migration>
+    <backend_pid>35373 (active running)</backend_pid>
+    <health_check>HTTP 200 /api/health/</health_check>
+    <verification>
+      - ChatSession=1, ChatMessage=6（admin 3 轮对话写入）
+      - 历史注入跨轮生效：轮 3 用户未提"成都"，助手主动用"成都朗诗乐府"
+      - ARCH-C-006 兼容性通过：3 次 stream_complete 无 ERROR/TypeError
+    </verification>
+    <known_risks>
+      - US-RSN-001（reasoning_stream 悬置）：reasoning_tokens=0 持续；事实查询型问题未触发 reasoning，用户决议接受现状不探查
+    </known_risks>
+  </deploy_report>
+
+  <orchestration_status>PROJECT_COMPLETE_USER_MD_SKIPPED_SKELETON_LOCK_DEFERRED</orchestration_status>
 
   <audit_log>
     <log time="2026-05-26T15:00:00+08:00" state="PM_INIT_WORKSPACE" action="初始化 freeark_lobster_memory_isolation 工作区，创建 phase_status.md" result="OK" invocation_id="INIT-001" trace_id="freeark_lobster_memory_isolation"/>
@@ -224,6 +239,9 @@
     <log time="2026-05-26T23:00:00+08:00" state="PM_INVOKE_AGENT" action="启动 sub_agent_devops_engineer GROUP_E（PARTIAL_FLOW，仅文档）：deployment_plan.md（11章节）+ cicd_pipeline.md（手动 Pipeline + 3 个 Gate/CONFIRM 等待点）" result="COMPLETE" invocation_id="GROUP_E-001" trace_id="freeark_lobster_memory_isolation"/>
     <log time="2026-05-26T23:00:00+08:00" state="PM_GATE_PASS" action="GROUP_E 门控通过（GATE-E-001 PASS）：11 章节全覆盖，无密钥泄露，3 个独立 CONFIRM 标注" result="PASS" invocation_id="GROUP_E-001" trace_id="freeark_lobster_memory_isolation"/>
     <log time="2026-05-26T23:15:00+08:00" state="USER_CONFIRM_DEPLOY" action="用户发出 PRODUCTION_DEPLOY_CONFIRM，授权 §1-§5（前置+mysqldump+migrate+git pull+重启 backend）；USER_MD 和 SKELETON_LOCK 暂不授权" result="CONFIRMED" invocation_id="DEPLOY-CONFIRM-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T23:50:00+08:00" state="MAIN_AGENT_DEPLOY_EXEC" action="主代理执行 §1 前置+§4 git pull (HEAD ef3c509→95c3c78)+§3 migration 0025 apply+§5 重启 freeark-backend PID 35373" result="OK" invocation_id="DEPLOY-CONFIRM-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T23:55:00+08:00" state="MAIN_AGENT_VERIFY" action="用户触发 3 轮对话验证：ChatSession=1 ChatMessage=6；历史注入跨轮生效；ARCH-C-006 兼容通过；US-RSN-001 reasoning_tokens=0 持续（事实查询未触发 reasoning，用户接受现状）" result="PASS" invocation_id="VERIFY-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-27T00:10:00+08:00" state="USER_DEFER_REMAINING" action="用户决议：USER_MD_SKIP（保留现状）+ SKELETON_LOCK_DEFERRED（推后观察）；本期项目主体部署完成" result="SKIP_DEFER" invocation_id="CONFIRM-FINAL" trace_id="freeark_lobster_memory_isolation"/>
   </audit_log>
 
 </phase_status>
