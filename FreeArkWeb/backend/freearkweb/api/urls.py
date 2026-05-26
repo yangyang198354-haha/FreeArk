@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import views_device_settings
 from . import views_heartbeat_config
+from . import memory_views
 
 urlpatterns = [
     # CSRF token获取
@@ -89,4 +90,8 @@ urlpatterns = [
     # 心跳 Broker 配置接口（v0.5.9, REQ-FUNC-002）
     path('heartbeat-broker-config/', views_heartbeat_config.heartbeat_broker_config_get, name='heartbeat-broker-config-get'),
     path('heartbeat-broker-config/update/', views_heartbeat_config.heartbeat_broker_config_put, name='heartbeat-broker-config-put'),
+
+    # 记忆隔离接口（freeark_lobster_memory_isolation，REQ-FUNC-017）
+    path('memory/me/', memory_views.MyMemoryView.as_view(), name='memory-me'),
+    path('admin/memory/<int:user_id>/', memory_views.AdminMemoryView.as_view(), name='admin-memory-user'),
 ]

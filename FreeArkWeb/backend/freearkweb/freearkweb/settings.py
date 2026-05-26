@@ -299,6 +299,10 @@ OPENCLAW_CONNECT_TIMEOUT = int(os.environ.get('OPENCLAW_CONNECT_TIMEOUT', '10'))
 # 需求引用：REQ-FUNC-012，ADR-008（adapter 侧透传方案 A）
 OPENCLAW_REASONING_EFFORT = os.environ.get('OPENCLAW_REASONING_EFFORT', '')
 
+# 记忆隔离：每次对话注入的最近历史轮数（每轮含 user + assistant 各一条）
+# ADR-010 方案 10-A，N=20 轮（40 条消息）
+CHAT_HISTORY_INJECT_TURNS = int(os.environ.get('CHAT_HISTORY_INJECT_TURNS', 20))
+
 # 移除django-crontab配置，改用命令内置的定时功能
 # 这些服务将在start_services.bat中直接启动
 

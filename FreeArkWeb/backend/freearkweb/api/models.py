@@ -590,6 +590,53 @@ class DeviceAttrBinding(models.Model):
         return f"{self.device_id} <-> {self.attr_def_id}"
 
 
+# ---------------------------------------------------------------------------
+# 记忆隔离模型（freeark_lobster_memory_isolation，ADR-013 方案 13-B）
+# ---------------------------------------------------------------------------
+
+
+class ChatSession(models.Model):
+    """per-user 对话会话，对应一次 WS 连接生命周期。"""
+    user = models.ForeignKey(
+        'api.CustomUser',
+        on_delete=models.CASCADE,
+        related_name='chat_sessions',
+    )
+    session_key = models.CharField(max_length=36)
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'api_chat_session'
+        indexes = [
+            models.Index(fields=['user', 'started_at'], name='chat_sess_user_start_idx'),
+        ]
+
+    def __str__(self):
+        return f"ChatSession user={self.user_id} key={self.session_key[:8]}..."
+
+
+class ChatMessage(models.Model):
+    """per-session 消息记录；只存 content，不存 reasoning。"""
+    session = models.ForeignKey(
+        ChatSession,
+        on_delete=models.CASCADE,
+        related_name='messages',
+    )
+    role = models.CharField(max_length=20)   # 'user' | 'assistant'
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'api_chat_message'
+        indexes = [
+            models.Index(fields=['session', 'created_at'], name='chat_msg_sess_time_idx'),
+        ]
+
+    def __str__(self):
+        return f"ChatMessage session={self.session_id} role={self.role}"
+
+
 class PLCWriteRecord(models.Model):
     STATUS_CHOICES = (
         ('pending', '待回执'),

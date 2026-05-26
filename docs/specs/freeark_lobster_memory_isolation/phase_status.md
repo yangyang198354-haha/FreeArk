@@ -78,15 +78,36 @@
     <note>GATE-B-001 唯一 MINOR（module_design 基于方案 D）因用户选定方案 D 自动消解，无需重做。</note>
   </user_decisions>
 
-  <!-- ===== GROUP_C 等待用户 CONFIRM 启动开发 ===== -->
+  <!-- ===== GROUP_C：代码实现 ===== -->
   <group id="GROUP_C" agent="sub_agent_software_developer">
     <phase id="PHASE_05" name="实现计划">
-      <status>PENDING</status>
-      <note>ADR 已 CONFIRMED；等待用户明确指令"启动 GROUP_C 开发"后启动</note>
+      <status>APPROVED</status>
+      <output_files>
+        <file status="APPROVED">docs/specs/freeark_lobster_memory_isolation/implementation_plan.md</file>
+      </output_files>
+      <retry_count>0</retry_count>
+      <completed_at>2026-05-26T20:00:00+08:00</completed_at>
     </phase>
+    <phase id="PHASE_06" name="代码实现">
+      <status>AWAITING_REVIEW</status>
+      <output_files>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/api/models.py（ChatSession + ChatMessage 追加）</file>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/api/migrations/0025_chat_session_message.py</file>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/api/chat_memory.py</file>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/api/consumers.py（v1.2 → v1.3）</file>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/api/memory_views.py</file>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/api/urls.py（追加 memory endpoints）</file>
+        <file status="DRAFT">FreeArkWeb/backend/freearkweb/freearkweb/settings.py（追加 CHAT_HISTORY_INJECT_TURNS）</file>
+        <file status="DRAFT">scripts/skeleton_guard.sh</file>
+        <file status="DRAFT">docs/specs/freeark_lobster_memory_isolation/code_review_report.md</file>
+      </output_files>
+      <retry_count>0</retry_count>
+      <completed_at>2026-05-26T20:00:00+08:00</completed_at>
+    </phase>
+    <note>GROUP_C 代码实现完成，自检 code review 完成。不 commit，等待用户决策 GROUP_D（测试）。</note>
   </group>
 
-  <orchestration_status>ADR_CONFIRMED_AWAITING_GROUP_C_KICKOFF_SIGNAL</orchestration_status>
+  <orchestration_status>GROUP_C_COMPLETE_AWAITING_USER_DECISION_ON_GROUP_D</orchestration_status>
 
   <audit_log>
     <log time="2026-05-26T15:00:00+08:00" state="PM_INIT_WORKSPACE" action="初始化 freeark_lobster_memory_isolation 工作区，创建 phase_status.md" result="OK" invocation_id="INIT-001" trace_id="freeark_lobster_memory_isolation"/>
@@ -96,6 +117,8 @@
     <log time="2026-05-26T17:30:00+08:00" state="PM_GATE_PASS" action="GROUP_B 门控通过（GATE-B-001 PASS，1 MINOR）：5 个 ADR 各 ≥2 方案，所有 REQ-FUNC/NFR 有模块覆盖，接口已类型化，无循环依赖，VERIFY 清单完整" result="PASS" invocation_id="GROUP_B-001" trace_id="freeark_lobster_memory_isolation"/>
     <log time="2026-05-26T17:30:00+08:00" state="PM_AWAIT_DEPLOY_CONFIRM" action="PARTIAL_FLOW 任务范围（GROUP_A+GROUP_B）已完成，等待用户明确 CONFIRM 信号以决定是否启动 GROUP_C" result="WAITING" invocation_id="CONFIRM-001" trace_id="freeark_lobster_memory_isolation"/>
     <log time="2026-05-26T18:00:00+08:00" state="USER_ADR_CONFIRMED" action="用户 CONFIRM 5 个 ADR：009=D, 010=10-A(N=20), 011=11-B+11-C, 012=12-A, 013=13-B；GATE-B MINOR 自动消解" result="CONFIRMED" invocation_id="ADR-CONFIRM-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T20:00:00+08:00" state="PM_INVOKE_AGENT" action="启动 sub_agent_software_developer GROUP_C：Batch-P0/P1/P2 全部完成，code_review_report CRITICAL=0 MAJOR=2(已修复) MINOR=4(2已修复)" result="COMPLETE" invocation_id="GROUP_C-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T20:00:00+08:00" state="PM_PHASE_COMPLETE" action="GROUP_C 实现完成，等待用户决策：是否启动 GROUP_D 测试" result="WAITING_USER" invocation_id="GROUP_C-001" trace_id="freeark_lobster_memory_isolation"/>
   </audit_log>
 
 </phase_status>
