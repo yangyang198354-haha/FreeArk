@@ -171,7 +171,41 @@
     </findings>
   </gate_review>
 
-  <orchestration_status>GROUP_D_APPROVED_AWAITING_GROUP_E</orchestration_status>
+  <!-- ===== GROUP_E：DevOps 部署（文档产出）===== -->
+  <group id="GROUP_E" agent="sub_agent_devops_engineer">
+    <phase id="PHASE_10" name="部署计划">
+      <status>APPROVED</status>
+      <output_files>
+        <file status="APPROVED">docs/specs/freeark_lobster_memory_isolation/deployment_plan.md</file>
+        <file status="APPROVED">docs/specs/freeark_lobster_memory_isolation/cicd_pipeline.md</file>
+      </output_files>
+      <retry_count>0</retry_count>
+      <completed_at>2026-05-26T23:00:00+08:00</completed_at>
+      <scope_note>PARTIAL_FLOW GROUP_E：仅产出部署文档，不执行任何生产部署操作。三个独立 CONFIRM 等待点已在文档中明确标注。</scope_note>
+    </phase>
+  </group>
+
+  <gate_review id="GATE-E-001" status="PASS">
+    <gate_decision>PASS</gate_decision>
+    <reviewed_at>2026-05-26T23:00:00+08:00</reviewed_at>
+    <findings>
+      <finding severity="NONE">11 章节全覆盖：§0 约束 / §1 前置 / §2 兼容 / §3 migrate / §4 git pull / §5 重启 / §6 chattr / §7 USER.md / §8 验证 / §9 reasoning_stream 悬置 / §10 回滚 / §11 时间估算</finding>
+      <finding severity="NONE">§3 migrate 含三路命令：dry-run + apply + 回滚到 0024，回滚命令具体可执行</finding>
+      <finding severity="NONE">§6 chattr +i 独立 SKELETON_LOCK_CONFIRM，独立于代码部署 CONFIRM</finding>
+      <finding severity="NONE">§7 USER.md 通用化独立 USER_MD_CONFIRM</finding>
+      <finding severity="NONE">§9 reasoning_stream 悬置项仅只读，不修改 reasoning_stream 任何文件（HC-10 满足）</finding>
+      <finding severity="NONE">cicd_pipeline Gate 1 明确"Pipeline 在此挂起"</finding>
+      <finding severity="NONE">全文无密钥泄露，无 Docker/pscp 指令</finding>
+    </findings>
+  </gate_review>
+
+  <user_confirms time="2026-05-26T23:15:00+08:00">
+    <confirm signal="PRODUCTION_DEPLOY_CONFIRM" status="ISSUED" scope="§1-§5（前置+migrate+pull+重启）"/>
+    <confirm signal="USER_MD_CONFIRM" status="PENDING"/>
+    <confirm signal="SKELETON_LOCK_CONFIRM" status="PENDING"/>
+  </user_confirms>
+
+  <orchestration_status>GATE_E_PASS_PRODUCTION_DEPLOY_IN_PROGRESS</orchestration_status>
 
   <audit_log>
     <log time="2026-05-26T15:00:00+08:00" state="PM_INIT_WORKSPACE" action="初始化 freeark_lobster_memory_isolation 工作区，创建 phase_status.md" result="OK" invocation_id="INIT-001" trace_id="freeark_lobster_memory_isolation"/>
@@ -187,6 +221,9 @@
     <log time="2026-05-26T22:20:00+08:00" state="MAIN_AGENT_TEST_EXEC" action="主代理执行测试，130 tests 中 2 failures 6 errors" result="FAIL" invocation_id="GROUP_D-001" trace_id="freeark_lobster_memory_isolation"/>
     <log time="2026-05-26T22:25:00+08:00" state="MAIN_AGENT_BUGFIX" action="主代理修复 2 个 bug：chat_memory.py order_by 二级键 + skeleton_guard_sh 测试 Windows skip" result="OK" invocation_id="PM-DEC-003" trace_id="freeark_lobster_memory_isolation"/>
     <log time="2026-05-26T22:30:00+08:00" state="PM_GATE_PASS" action="GROUP_D 门控通过（GATE-D-001 PASS）：130 tests 100% 通过（118 passed + 12 Windows skip），reasoning_stream 回归全绿" result="PASS" invocation_id="GROUP_D-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T23:00:00+08:00" state="PM_INVOKE_AGENT" action="启动 sub_agent_devops_engineer GROUP_E（PARTIAL_FLOW，仅文档）：deployment_plan.md（11章节）+ cicd_pipeline.md（手动 Pipeline + 3 个 Gate/CONFIRM 等待点）" result="COMPLETE" invocation_id="GROUP_E-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T23:00:00+08:00" state="PM_GATE_PASS" action="GROUP_E 门控通过（GATE-E-001 PASS）：11 章节全覆盖，无密钥泄露，3 个独立 CONFIRM 标注" result="PASS" invocation_id="GROUP_E-001" trace_id="freeark_lobster_memory_isolation"/>
+    <log time="2026-05-26T23:15:00+08:00" state="USER_CONFIRM_DEPLOY" action="用户发出 PRODUCTION_DEPLOY_CONFIRM，授权 §1-§5（前置+mysqldump+migrate+git pull+重启 backend）；USER_MD 和 SKELETON_LOCK 暂不授权" result="CONFIRMED" invocation_id="DEPLOY-CONFIRM-001" trace_id="freeark_lobster_memory_isolation"/>
   </audit_log>
 
 </phase_status>
