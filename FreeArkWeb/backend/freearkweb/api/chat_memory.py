@@ -44,7 +44,7 @@ def load_history(user, limit: int = None) -> list:
     rows = (
         ChatMessage.objects
         .filter(session__user=user)
-        .order_by('-created_at')
+        .order_by('-created_at', '-id')
         .values('role', 'content')[:limit * 2]
     )
     # 倒序取到的结果重新升序排列后返回
