@@ -170,7 +170,36 @@
     </findings>
   </gate_review>
 
-  <orchestration_status>GROUP_D_APPROVED_AWAITING_GROUP_E</orchestration_status>
+  <!-- ===== GROUP_E：DevOps 部署计划 ===== -->
+  <group id="GROUP_E" agent="sub_agent_devops_engineer">
+    <phase id="PHASE_10" name="部署计划文档">
+      <status>AWAITING_REVIEW</status>
+      <output_files>
+        <file status="WRITTEN">docs/specs/freeark_lobster_reasoning_stream/deployment_plan.md</file>
+        <file status="WRITTEN">docs/specs/freeark_lobster_reasoning_stream/cicd_pipeline.md</file>
+      </output_files>
+      <retry_count>0</retry_count>
+      <completed_at>2026-05-26T14:00:00+08:00</completed_at>
+    </phase>
+  </group>
+
+  <gate_review id="GATE-E-001" status="PASS">
+    <gate_decision>PASS</gate_decision>
+    <reviewed_at>2026-05-26T14:00:00+08:00</reviewed_at>
+    <findings>
+      <finding severity="NONE">deployment_plan.md 已覆盖所有必须章节：前置检查、ARCH-C-002 同批次约束、前端构建、git pull 部署、systemd 重启清单、US-RSN-001 走法B后置验证（§6）、US-RSN-009 基线测量（§7）、回滚方案（§9）、部署后验证（§8）</finding>
+      <finding severity="NONE">ARCH-C-002 同批次部署约束已在文档中用显著标注（§2，"最高优先级约束"）列出合法/非法组合矩阵</finding>
+      <finding severity="NONE">US-RSN-001 字段探查流程（§6.3）完整：reasoning_tokens=0 触发条件、PROBE logger 步骤、_REASONING_FIELD 单行改动、探查后清理、arch doc 更新</finding>
+      <finding severity="NONE">US-RSN-009 基线测量步骤（§7）完整：reasoning_ms 采集方法（APP_LOG_LEVEL=INFO + journalctl）、T0/T0' 双轮测量、50% 效果比门控、RISK-003/004 上报路径</finding>
+      <finding severity="NONE">回滚方案（§9）完整：git checkout 旧 commit 特定文件、dist 备份恢复、systemd 重启、回滚验证；回滚决策须 PM/运维确认</finding>
+      <finding severity="NONE">PRODUCTION_DEPLOY_CONFIRM 强制等待点在 cicd_pipeline.md Gate 1 中明确标注，不得绕过</finding>
+      <finding severity="NONE">cicd_pipeline.md 以 ASCII 流程图 + 手动步骤覆盖完整 pipeline：Stage 1 本地验证 → Gate 1 CONFIRM → Stage 2 前置检查 → Stage 3 代码部署 → Stage 4 前端构建 → Stage 5 服务重启 → Stage 6 验证 → Stage 7A 上线后验证</finding>
+      <finding severity="NONE">禁止 Docker、禁止 pscp 在 deployment_plan.md §0 和 §4 明确标注</finding>
+      <finding severity="NONE">不含任何 SSH 密钥、token 明文；OPENCLAW_GATEWAY_TOKEN 仅以 cut -c1-8 比对前缀方式验证，不打印完整值</finding>
+    </findings>
+  </gate_review>
+
+  <orchestration_status>GROUP_E_DOCS_APPROVED_AWAITING_PRODUCTION_DEPLOY_CONFIRM</orchestration_status>
 
   <audit_log>
     <log time="2026-05-25T12:00:00+08:00" state="PM_GATE_PASS" action="GROUP_A 门控通过" result="PASS" invocation_id="GROUP_A-001" trace_id="freeark_lobster_reasoning_stream"/>
@@ -183,6 +212,9 @@
     <log time="2026-05-26T11:30:00+08:00" state="PM_BUG_DETECTED" action="发现 GROUP_C ae089f1 测试位置 Bug：tests.py vs tests/ 包冲突，导致测试不可发现" result="BLOCKING" invocation_id="GROUP_D-001" trace_id="freeark_lobster_reasoning_stream"/>
     <log time="2026-05-26T11:45:00+08:00" state="PM_USER_DECISION" action="用户决议方案 1：迁移到 api/tests/test_reasoning_stream.py + 回滚 tests.py" result="CONFIRMED" invocation_id="PM-DEC-002" trace_id="freeark_lobster_reasoning_stream"/>
     <log time="2026-05-26T12:00:00+08:00" state="PM_GATE_PASS" action="GROUP_D 门控通过：34/34 测试 100% 通过" result="PASS" invocation_id="GROUP_D-001" trace_id="freeark_lobster_reasoning_stream"/>
+    <log time="2026-05-26T14:00:00+08:00" state="PM_INVOKE_AGENT" action="启动 sub_agent_devops_engineer GROUP_E：deployment_plan.md + cicd_pipeline.md（仅文档，不执行实际部署）" result="IN_PROGRESS" invocation_id="GROUP_E-001" trace_id="freeark_lobster_reasoning_stream"/>
+    <log time="2026-05-26T14:00:00+08:00" state="PM_GATE_PASS" action="GROUP_E 门控通过（GATE-E-001 PASS）：deployment_plan + cicd_pipeline 覆盖所有必须章节" result="PASS" invocation_id="GROUP_E-001" trace_id="freeark_lobster_reasoning_stream"/>
+    <log time="2026-05-26T14:00:00+08:00" state="PM_AWAIT_DEPLOY_CONFIRM" action="等待用户明确 PRODUCTION_DEPLOY_CONFIRM 信号，文档阶段完成" result="WAITING" invocation_id="CONFIRM-E-001" trace_id="freeark_lobster_reasoning_stream"/>
   </audit_log>
 
 </phase_status>
