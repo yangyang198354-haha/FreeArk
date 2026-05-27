@@ -256,6 +256,9 @@ class ComputeFromDbBatchTest(TestCase):
     """_compute_from_db_batch 直接从 DB 计算（不经缓存）"""
 
     def setUp(self):
+        # hotfix BUG-FCC-001: 清缓存避免 _get_param_to_subtypes 跨测试污染
+        from django.core.cache import cache
+        cache.clear()
         # 种入测试数据：3-1-7-702 有 3 个故障
         make_plc_latest('3-1-7-702', 'comm_fault_timeout', 1)
         make_plc_latest('3-1-7-702', 'living_room_temp_sensor_error', 1)
@@ -303,6 +306,97 @@ class ComputeFromDbBatchTest(TestCase):
         result = _compute_from_db_batch(['3-1-9-902'])
         # error_abc 不匹配 ^error_\d+$，comm_fault_timeout=0，合计 0
         self.assertEqual(result['3-1-9-902'], 0)
+
+
+# ===========================================================================
+# 四·B、单元测试 — sub_type 户型过滤（hotfix BUG-FCC-001）
+# ===========================================================================
+
+class SubTypeFilterTest(TestCase):
+    """Hotfix BUG-FCC-001: 户型不存在的房型故障字段不计入故障数。
+
+    与 views.get_device_realtime_params 的 sub_type 过滤口径保持一致。
+    """
+
+    def setUp(self):
+        from django.core.cache import cache
+        from .models import DeviceConfig
+        cache.clear()
+
+        # 建 DeviceConfig:
+        #   fourth_children_room_communication_error 属于 panel_fourth_children
+        #   bedroom_temp_sensor_error 属于 panel_bedroom
+        #   fresh_air_fault_status 属于 fresh_air
+        DeviceConfig.objects.create(
+            param_name='fourth_children_room_communication_error',
+            display_name='第四儿童房通讯故障',
+            group='hvac', sub_type='panel_fourth_children',
+            group_display='暖通', sub_type_display='第四儿童房',
+            is_active=True,
+        )
+        DeviceConfig.objects.create(
+            param_name='bedroom_temp_sensor_error',
+            display_name='主卧温度传感器故障',
+            group='hvac', sub_type='panel_bedroom',
+            group_display='暖通', sub_type_display='主卧',
+            is_active=True,
+        )
+        DeviceConfig.objects.create(
+            param_name='fresh_air_fault_status',
+            display_name='新风机故障状态',
+            group='hvac', sub_type='fresh_air',
+            group_display='暖通', sub_type_display='新风',
+            is_active=True,
+        )
+
+        # 种入 10-1-16-1601 三个故障字段
+        make_plc_latest('10-1-16-1601', 'fourth_children_room_communication_error', 1)
+        make_plc_latest('10-1-16-1601', 'fresh_air_fault_status', 16)  # popcount=1
+        make_plc_latest('10-1-16-1601', 'bedroom_temp_sensor_error', 1)
+
+    def tearDown(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_filter_out_subtype_not_in_available_set(self):
+        """sub_type ∉ available_sub_types → 跳过（复现 BUG-FCC-001 修复后行为）
+
+        模拟"户型无第四儿童房"：available_sub_types 不含 panel_fourth_children
+        预期：fourth_children_room_communication_error 不计入
+        """
+        with patch(
+            'api.utils_room_filter.get_available_sub_types',
+            return_value=frozenset(['fresh_air', 'panel_bedroom']),
+        ):
+            result = _compute_from_db_batch(['10-1-16-1601'])
+        # fresh_air_fault_status(=16, popcount=1) + bedroom_temp_sensor_error(=1) = 2
+        # fourth_children_room_communication_error 被过滤
+        self.assertEqual(result['10-1-16-1601'], 2)
+
+    def test_all_subtypes_available_counts_all(self):
+        """所有 sub_type 都可见 → 全部计入"""
+        with patch(
+            'api.utils_room_filter.get_available_sub_types',
+            return_value=frozenset(['fresh_air', 'panel_bedroom', 'panel_fourth_children']),
+        ):
+            result = _compute_from_db_batch(['10-1-16-1601'])
+        # 三个都计入：1(popcount) + 1(bedroom) + 1(fourth_children) = 3
+        self.assertEqual(result['10-1-16-1601'], 3)
+
+    def test_param_without_device_config_still_counts(self):
+        """DeviceConfig 无条目（如 comm_fault_timeout）→ 保留原行为（计入）
+
+        系统级/PLC 通信故障字段不绑定 sub_type，不应受户型过滤影响。
+        """
+        make_plc_latest('10-1-16-1601', 'comm_fault_timeout', 1)
+        with patch(
+            'api.utils_room_filter.get_available_sub_types',
+            return_value=frozenset(['fresh_air', 'panel_bedroom']),
+        ):
+            result = _compute_from_db_batch(['10-1-16-1601'])
+        # popcount(16)=1 + bedroom=1 + comm_fault_timeout=1 = 3
+        # fourth_children 被过滤
+        self.assertEqual(result['10-1-16-1601'], 3)
 
 
 # ===========================================================================

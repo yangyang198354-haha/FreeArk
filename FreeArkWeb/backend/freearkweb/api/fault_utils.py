@@ -241,6 +241,9 @@ def invalidate_fault_count_cache(specific_part: str) -> None:
 def get_fault_details(specific_part: str) -> list:
     """获取处于故障状态的参数列表（仅当前非正常字段）。
 
+    Hotfix BUG-FCC-001：与 _compute_from_db_batch 同样按 sub_type 过滤，
+    避免详情列出"户型不存在房型的故障"。
+
     Returns:
         list: [{"param_name": str, "value": int}, ...]，按 param_name 升序
     """
@@ -255,6 +258,8 @@ def get_fault_details(specific_part: str) -> list:
         Q(param_name__startswith='error_')
     ).values('param_name', 'value')
 
+    param_to_subtypes = _get_param_to_subtypes()
+
     details = []
     for rec in qs:
         pn = rec['param_name']
@@ -263,6 +268,9 @@ def get_fault_details(specific_part: str) -> list:
             continue
         # error_ 前缀字段：精确正则验证（排除 error_xxx_status 等非数字后缀）
         if pn.startswith('error_') and not _ERROR_N_PATTERN.match(pn):
+            continue
+        # hotfix BUG-FCC-001: 跳过该专有部分户型不存在的 sub_type 字段
+        if not _is_param_visible_for_section(pn, specific_part, param_to_subtypes):
             continue
         details.append({'param_name': pn, 'value': val})
 
@@ -292,6 +300,51 @@ def get_fault_details_updated_at(specific_part: str):
 
 
 # ---------------------------------------------------------------------------
+# 内部函数 — DeviceConfig 映射缓存（hotfix BUG-FCC-001）
+# ---------------------------------------------------------------------------
+
+_PARAM_SUBTYPE_CACHE_KEY: str = 'fault_count:param_to_subtypes'
+_PARAM_SUBTYPE_CACHE_TTL: int = 60
+
+
+def _get_param_to_subtypes() -> dict:
+    """获取 {param_name: frozenset[sub_type]} 映射。
+
+    同一 param_name 可能在多个 sub_type 下激活（unique_together=(param_name, sub_type)），
+    所以值是 sub_type 集合。
+
+    缓存 60s（与故障数缓存对齐），DeviceConfig 极少变更。
+    """
+    cached = cache.get(_PARAM_SUBTYPE_CACHE_KEY)
+    if cached is not None:
+        return cached
+
+    from .models import DeviceConfig
+    mapping: dict = defaultdict(set)
+    for pn, st in DeviceConfig.objects.filter(is_active=True).values_list('param_name', 'sub_type'):
+        mapping[pn].add(st)
+    result = {k: frozenset(v) for k, v in mapping.items()}
+    cache.set(_PARAM_SUBTYPE_CACHE_KEY, result, _PARAM_SUBTYPE_CACHE_TTL)
+    return result
+
+
+def _is_param_visible_for_section(param_name: str, specific_part: str, param_to_subtypes: dict) -> bool:
+    """判断某 param 在指定 specific_part 的设备面板上是否可见（hotfix BUG-FCC-001）。
+
+    与 views.get_device_realtime_params 的 sub_type 过滤口径保持一致：
+      - 若该 param 在 DeviceConfig 中无条目（如 comm_fault_timeout、error_<N>）→ 保留原行为，视为可见
+      - 若该 param 的所有 sub_type 都不在 get_available_sub_types(specific_part) → 不可见，应跳过
+    """
+    sub_types_of_param = param_to_subtypes.get(param_name)
+    if sub_types_of_param is None:
+        # DeviceConfig 无此 param 条目 → 系统级/PLC 级字段，保留原行为
+        return True
+    from .utils_room_filter import get_available_sub_types
+    available = get_available_sub_types(specific_part)
+    return bool(sub_types_of_param & available)
+
+
+# ---------------------------------------------------------------------------
 # 内部函数 — DB 批量查询（单条 SQL，避免 N+1）
 # ---------------------------------------------------------------------------
 
@@ -302,6 +355,10 @@ def _compute_from_db_batch(specific_parts: list) -> dict:
 
     DB 层使用 param_name__startswith='error_'（等价 LIKE 'error_%'，可利用前缀索引）
     Python 层用 _ERROR_N_PATTERN 精确过滤，排除 error_xxx_status 等非数字后缀字段。
+
+    Hotfix BUG-FCC-001（2026-05-27）：与设备面板 (views.get_device_realtime_params)
+    的 sub_type 过滤口径对齐——某字段的 sub_type 不在该 specific_part 的
+    available_sub_types 集合时跳过，避免列表统计了"户型不存在房型的故障"。
 
     Args:
         specific_parts: 待查询的 specific_part 列表（可为空列表）
@@ -326,14 +383,21 @@ def _compute_from_db_batch(specific_parts: list) -> dict:
         Q(param_name__startswith='error_')   # LIKE 'error_%' 可利用前缀索引
     ).values('specific_part', 'param_name', 'value')
 
+    # hotfix BUG-FCC-001: 加载 param → sub_types 映射用于过滤
+    param_to_subtypes = _get_param_to_subtypes()
+
     # 按 specific_part 分组，Python 层 pivot 汇总
     groups: dict = defaultdict(list)
     for rec in qs:
+        sp = rec['specific_part']
         pn = rec['param_name']
         # error_ 前缀字段在 Python 层精确验证（排除 error_xxx_status 等非数字后缀）
         if pn.startswith('error_') and not _ERROR_N_PATTERN.match(pn):
             continue
-        groups[rec['specific_part']].append((pn, rec['value']))
+        # hotfix BUG-FCC-001: 跳过该专有部分户型不存在的 sub_type 字段
+        if not _is_param_visible_for_section(pn, sp, param_to_subtypes):
+            continue
+        groups[sp].append((pn, rec['value']))
 
     result = {}
     for sp in specific_parts:
