@@ -18,7 +18,7 @@ Protocol summary (one WS connection per chat.send call):
   4. Server sends res ok:true with hello-ok payload (server, protocol,
      auth, policy, features.methods, features.events)
   5. Client sends req method:"chat.send" with
-     {sessionKey, message, idempotencyKey[, reasoningEffort]}
+     {sessionKey, message, idempotencyKey[, thinking]}
   6. Server sends res ok:true {runId, status:"started"}
   7. Server streams event:"chat" frames whose payload.state ∈
      {delta, final, aborted, error}; payload carries reasoning/content deltas.
@@ -31,7 +31,9 @@ v1.3 变更（相对 v1.2）：
   - reasoning 字段防御性解析：_REASONING_FIELD 常量（首选 'reasoningDelta'）
     + kind=='reasoning' 备用路径，覆盖 OpenClaw 两种可能结构
   - reasoning_effort 透传：从 Django settings 读 OPENCLAW_REASONING_EFFORT，
-    合法时注入 chat.send params.reasoningEffort（ADR-008）
+    合法时注入 chat.send params.thinking（OpenClaw 2026.5.20 实测协议名；
+    2026-05-27 BUG-STREAM-001 修正：原代码错用 params.reasoningEffort 会被
+    OpenClaw 以 INVALID_REQUEST 拒绝，env var 设置后整个聊天会挂）
   - 分段统计日志：对话结束时 INFO 输出 reasoning_tokens/content_tokens/各阶段毫秒数
     不打印 token 文本本身（REQ-NFR-007）
 
@@ -81,13 +83,21 @@ _DEFAULT_SCOPES = ("operator.read", "operator.write", "operator.admin")
 _PROTOCOL_VERSION = 4
 
 # Reasoning field name in event:chat state:delta payload.
-# TODO(US-RSN-001): Confirm actual field name via production log probe (AC-008-01).
-# Candidate values: 'reasoningDelta', 'thinkingDelta', 'reasoning'
-# The fallback kind=='reasoning' path in stream_chat() covers the alternative
-# structure where kind distinguishes reasoning/content and deltaText carries both.
-# If reasoning_tokens remains 0 after deployment, trigger GROUP_E probe procedure
-# to confirm the actual field name and update this constant (single-line fix).
+# 2026-05-27 实测（BUG-STREAM-001，probe_reasoning_fields.py）：DeepSeek v4-flash
+# 经 OpenClaw 2026.5.20 Gateway 返回的 delta payload 字段集为
+#   {deltaText, message, runId, seq, sessionKey, state}
+# **无 reasoningDelta、无 thinkingDelta、无 kind 字段**。即便 chat.send 带
+# thinking=high，结构与 thinking=off 完全一致 → 当前模型上此字段名是死路径。
+# 保留下面的常量与 stream_chat() 的双路径解析作为防御性代码：未来切换到 Claude
+# extended thinking / deepseek-reasoner 等真正分离 reasoning 流的模型时，
+# 若字段名变化只需改这一行（dual-path 会覆盖 'kind' 分支结构）。
 _REASONING_FIELD = 'reasoningDelta'
+
+# Valid values for chat.send params.thinking (OpenClaw schema 2026.5.20).
+# 'off' is a legitimate pass-through (explicitly disable thinking even if the
+# model defaults to on); rest map to OpenAI/Anthropic-style effort tiers.
+_VALID_THINKING = ('off', 'minimal', 'low', 'medium', 'high',
+                   'xhigh', 'adaptive', 'max')
 
 
 class OpenClawAdapter:
@@ -105,8 +115,9 @@ class OpenClawAdapter:
             'token': getattr(settings, 'OPENCLAW_GATEWAY_TOKEN', ''),
             'timeout': getattr(settings, 'OPENCLAW_TIMEOUT', 60),
             'connect_timeout': getattr(settings, 'OPENCLAW_CONNECT_TIMEOUT', 10),
-            # reasoning_effort: '', 'low', 'medium', or 'high'
-            # Empty string means do not pass the param (use model default).
+            # reasoning_effort: '' (omit, use model default), or one of
+            # _VALID_THINKING values. Maps to chat.send params.thinking on the wire
+            # (2026-05-27: confirmed param name is 'thinking', not 'reasoningEffort').
             'reasoning_effort': getattr(settings, 'OPENCLAW_REASONING_EFFORT', '') or '',
         }
 
@@ -172,21 +183,23 @@ class OpenClawAdapter:
         """Construct the 'chat.send' request frame.
 
         Args:
-          reasoning_effort: If non-empty and a valid value ('low'/'medium'/'high'),
-                            injected as params.reasoningEffort to control DeepSeek
-                            reasoning depth. Empty string omits the param entirely
-                            (model uses its default). Invalid values are rejected
-                            upstream in _get_config validation.
+          reasoning_effort: If non-empty and a member of _VALID_THINKING, injected
+                            as params.thinking on the wire. Empty string omits the
+                            param entirely (model uses its default). Invalid values
+                            are dropped here and logged upstream by stream_chat().
+
+        Wire param name 'thinking' confirmed by 2026-05-27 production probe
+        (BUG-STREAM-001). Pre-fix, this code sent 'reasoningEffort' which OpenClaw
+        rejected with INVALID_REQUEST, breaking chat whenever OPENCLAW_REASONING_EFFORT
+        was set to a non-empty value.
         """
         params = {
             'sessionKey': session_key,
             'message': message,
             'idempotencyKey': idempotency_key,
         }
-        if reasoning_effort in ('low', 'medium', 'high'):
-            # camelCase key per OpenClaw RPC convention; confirm with US-RSN-001
-            # probe if the actual key differs (ARCH-C-003).
-            params['reasoningEffort'] = reasoning_effort
+        if reasoning_effort in _VALID_THINKING:
+            params['thinking'] = reasoning_effort
         return {
             'type': 'req',
             'id': req_id,
@@ -253,10 +266,10 @@ class OpenClawAdapter:
 
         # Validate reasoning_effort early; warn and clear if invalid.
         reasoning_effort = cfg.get('reasoning_effort', '')
-        if reasoning_effort and reasoning_effort not in ('low', 'medium', 'high'):
+        if reasoning_effort and reasoning_effort not in _VALID_THINKING:
             logger.warning(
-                'OPENCLAW_REASONING_EFFORT=%s 非法（low/medium/high），忽略',
-                reasoning_effort,
+                'OPENCLAW_REASONING_EFFORT=%s 非法（合法值：%s），忽略',
+                reasoning_effort, '/'.join(_VALID_THINKING),
             )
             reasoning_effort = ''
 

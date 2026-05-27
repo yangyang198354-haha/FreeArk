@@ -399,34 +399,49 @@ class AdapterBuildChatSendFrameTest(TestCase):
             reasoning_effort=reasoning_effort,
         )
 
-    def test_TC_UNIT_007_low_injects_reasoning_effort(self):
-        """TC-UNIT-007：reasoning_effort='low' 注入 params.reasoningEffort（AC-012-01）。"""
-        frame = self._build('low')
-        self.assertIn('reasoningEffort', frame['params'])
-        self.assertEqual(frame['params']['reasoningEffort'], 'low')
+    def test_TC_UNIT_007_low_injects_thinking(self):
+        """TC-UNIT-007：reasoning_effort='low' 注入 params.thinking（AC-012-01）。
 
-    def test_TC_UNIT_008a_medium_injects_reasoning_effort(self):
+        Wire 协议参数名为 'thinking'（2026-05-27 实测，BUG-STREAM-001）；
+        早期实现误用 'reasoningEffort' 会被 OpenClaw 拒收。
+        """
+        frame = self._build('low')
+        self.assertIn('thinking', frame['params'])
+        self.assertEqual(frame['params']['thinking'], 'low')
+        # Sanity: 不再发送旧的错误字段
+        self.assertNotIn('reasoningEffort', frame['params'])
+
+    def test_TC_UNIT_008a_medium_injects_thinking(self):
         """TC-UNIT-008：reasoning_effort='medium' 注入。"""
         frame = self._build('medium')
-        self.assertEqual(frame['params']['reasoningEffort'], 'medium')
+        self.assertEqual(frame['params']['thinking'], 'medium')
 
-    def test_TC_UNIT_008b_high_injects_reasoning_effort(self):
+    def test_TC_UNIT_008b_high_injects_thinking(self):
         """TC-UNIT-008：reasoning_effort='high' 注入。"""
         frame = self._build('high')
-        self.assertEqual(frame['params']['reasoningEffort'], 'high')
+        self.assertEqual(frame['params']['thinking'], 'high')
+
+    def test_extended_thinking_values_injected(self):
+        """OpenClaw 2026.5.20 thinking 支持的所有合法值都应注入。"""
+        for v in ('off', 'minimal', 'xhigh', 'adaptive', 'max'):
+            frame = self._build(v)
+            self.assertEqual(frame['params'].get('thinking'), v,
+                             f'value {v!r} 未注入')
 
     def test_TC_UNIT_009_invalid_value_not_injected(self):
         """
         TC-UNIT-009：_build_chat_send_frame 本身不做校验（校验在 stream_chat 前段）。
-        非法值（如 'ultra'）不在 ('low','medium','high') 中 → 不注入。
+        非法值（如 'ultra2'）不在 _VALID_THINKING 中 → 不注入。
         （WARNING 日志由 stream_chat 发出，此函数不涉及，见 AdapterReasoningEffortWarningTest。）
         """
-        frame = self._build('ultra')
+        frame = self._build('ultra2')
+        self.assertNotIn('thinking', frame['params'])
         self.assertNotIn('reasoningEffort', frame['params'])
 
     def test_TC_UNIT_010_empty_string_not_injected(self):
-        """TC-UNIT-010：reasoning_effort='' 时不注入 reasoningEffort（AC-012-03）。"""
+        """TC-UNIT-010：reasoning_effort='' 时不注入 thinking（AC-012-03）。"""
         frame = self._build('')
+        self.assertNotIn('thinking', frame['params'])
         self.assertNotIn('reasoningEffort', frame['params'])
 
     def test_frame_structure_invariants(self):
@@ -441,11 +456,10 @@ class AdapterBuildChatSendFrameTest(TestCase):
 
     def test_reasoning_effort_none_not_injected(self):
         """reasoning_effort=None（边界）：不应注入（实际 config 防止 None，防御性测试）。"""
-        # _build_chat_send_frame: `if reasoning_effort in ('low','medium','high'):`
-        # None not in tuple → 不注入
         frame = OpenClawAdapter._build_chat_send_frame(
             'rid', 'sess', 'msg', 'idem', reasoning_effort=None
         )
+        self.assertNotIn('thinking', frame['params'])
         self.assertNotIn('reasoningEffort', frame['params'])
 
 
@@ -460,18 +474,18 @@ class AdapterReasoningEffortWarningTest(TestCase):
 
     def test_TC_UNIT_009_warning_on_invalid_effort_via_module_logic(self):
         """
-        非法值 'ultra' → 触发 logger.warning 并置空。
+        非法值 'ultra2' → 触发 logger.warning 并置空。
         直接在测试中重现 stream_chat 校验逻辑（不启动 WS）。
         """
-        invalid_effort = 'ultra'
+        from api.openclaw_adapter import _VALID_THINKING
+        invalid_effort = 'ultra2'
         with self.assertLogs('api.openclaw_adapter', level='WARNING') as log_ctx:
-            # 直接重现 stream_chat 校验段逻辑
             reasoning_effort = invalid_effort
-            if reasoning_effort and reasoning_effort not in ('low', 'medium', 'high'):
+            if reasoning_effort and reasoning_effort not in _VALID_THINKING:
                 import logging as _logging
                 _logging.getLogger('api.openclaw_adapter').warning(
-                    'OPENCLAW_REASONING_EFFORT=%s 非法（low/medium/high），忽略',
-                    reasoning_effort,
+                    'OPENCLAW_REASONING_EFFORT=%s 非法（合法值：%s），忽略',
+                    reasoning_effort, '/'.join(_VALID_THINKING),
                 )
                 reasoning_effort = ''
         self.assertEqual(reasoning_effort, '')
@@ -479,6 +493,7 @@ class AdapterReasoningEffortWarningTest(TestCase):
 
     def test_valid_effort_no_warning(self):
         """合法值不触发 WARNING。"""
+        from api.openclaw_adapter import _VALID_THINKING
         import logging as _logging
         import io
         handler = _logging.StreamHandler(io.StringIO())
@@ -487,7 +502,7 @@ class AdapterReasoningEffortWarningTest(TestCase):
         logger_obj.addHandler(handler)
         try:
             reasoning_effort = 'low'
-            if reasoning_effort and reasoning_effort not in ('low', 'medium', 'high'):
+            if reasoning_effort and reasoning_effort not in _VALID_THINKING:
                 logger_obj.warning('should not appear')
                 reasoning_effort = ''
             output = handler.stream.getvalue()

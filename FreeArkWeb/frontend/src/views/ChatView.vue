@@ -52,8 +52,16 @@
               <span class="reasoning-text">{{ msg.reasoning }}</span>
             </details>
 
-            <!-- 正式回答区（不变） -->
-            <span class="bubble-content">{{ msg.content }}</span>
+            <!-- 正式回答区：流式期间按 chunk 渲染（每段独立 fade-in，缓解 OpenClaw
+                 ~21 字/帧的块状到达观感）；流结束后切换到整段渲染避免长消息保留过多 DOM -->
+            <template v-if="msg.streaming && msg.chunks && msg.chunks.length">
+              <span
+                v-for="(chunk, ci) in msg.chunks"
+                :key="ci"
+                class="bubble-chunk"
+              >{{ chunk }}</span>
+            </template>
+            <span v-else class="bubble-content">{{ msg.content }}</span>
             <!-- 「正在思考...」：仅在无 reasoning 活动且 content 为空时显示（降级兼容） -->
             <span
               v-if="msg.streaming && !msg.content && !msg.reasoning && !msg.reasoningStreaming"
@@ -261,10 +269,17 @@ export default {
         }
 
         case 'stream_token': {
-          // 找到最后一条 streaming 的 assistant 消息，追加 token（不变）
+          // 找到最后一条 streaming 的 assistant 消息，追加 token
+          // content：保留聚合字符串供 stream_end 后整段渲染 / 持久化
+          // chunks：保留每帧增量供流式期间逐 chunk 淡入动画（A2）
           const last = messages.value[messages.value.length - 1]
           if (last && last.role === 'assistant' && last.streaming) {
-            last.content += data.token || ''
+            const tok = data.token || ''
+            last.content += tok
+            if (tok) {
+              if (!last.chunks) last.chunks = []
+              last.chunks.push(tok)
+            }
           }
           scrollToBottom()
           break
@@ -324,6 +339,7 @@ export default {
       messages.value.push({
         role: 'assistant',
         content: '',
+        chunks: [],               // A2: 流式期间每帧增量数组，用于逐 chunk 淡入动画
         reasoning: '',            // v1.1 新增：reasoning 文本（默认空）
         streaming: true,
         reasoningStreaming: false, // v1.1 新增：收到首个 reasoning_token 后置 true
@@ -570,6 +586,19 @@ export default {
 @keyframes cursor-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* A2: 流式 chunk 渐入。OpenClaw Gateway 当前以 ~21 字/帧、170ms 间隔吐 delta，
+   每帧一个 .bubble-chunk 在挂载瞬间触发一次 fade-in，把块状到达的视觉跳跃感拉平。
+   动画 250ms < 帧间隔 170ms ≈ 不重叠，体感像连续生成。 */
+.bubble-chunk {
+  display: inline;
+  animation: chunk-fade-in 250ms ease-out;
+}
+
+@keyframes chunk-fade-in {
+  from { opacity: 0.25; }
+  to   { opacity: 1; }
 }
 
 /* 思考中提示（降级：无 reasoning 时显示） */
