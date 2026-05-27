@@ -130,11 +130,17 @@ class _MacCache:
 def _handle_message(msg, mac_cache: _MacCache) -> None:
     """解析单条 MQTT 消息并驱动故障状态机。
 
-    解析流程（ADR-FM-04 §4.1）：
+    解析流程（ADR-FM-04 §4.1，hotfix BUG-FM-002 后实际报文字段）：
       1. JSON 解析，验证 header.name == "DeviceStatusUpdate"
-      2. MAC → specific_part 映射
-      3. 提取 deviceSn, productCode
-      4. 遍历 items[]，对每个 fault_candidate 字段调用状态机
+      2. MAC → specific_part 映射（topic 末段或 header.screenMac）
+      3. 从 payload.data 提取 deviceSn, productCode
+      4. 遍历 items[]，对每个 fault_candidate 字段（attrTag）调用状态机
+
+    实际报文结构（生产 EMQX 实测）：
+      {"header": {"name": "DeviceStatusUpdate", "screenMac": "<mac>"},
+       "payload": {"code": 200,
+                   "data": {"deviceSn": <int>, "productCode": <int>,
+                            "items": [{"attrTag": "<name>", "attrValue": "<v>"}]}}}
     """
     from api.fault_consumer.fault_classifier import (
         is_fault_candidate,
@@ -148,21 +154,23 @@ def _handle_message(msg, mac_cache: _MacCache) -> None:
 
     # 1. JSON 解析
     try:
-        payload = json.loads(msg.payload.decode('utf-8', errors='replace'))
+        root = json.loads(msg.payload.decode('utf-8', errors='replace'))
     except (json.JSONDecodeError, Exception) as exc:
         logger.warning('JSON 解析失败，跳过: topic=%s err=%s', msg.topic, exc)
         return
 
     # 2. 验证报文类型
-    header = payload.get('header') or {}
+    header = root.get('header') or {}
     if header.get('name') != 'DeviceStatusUpdate':
         logger.debug('非 DeviceStatusUpdate 报文，跳过: topic=%s name=%s',
                      msg.topic, header.get('name'))
         return
 
-    # 3. MAC → specific_part
+    # 3. MAC → specific_part（优先 topic 末段，回退 header.screenMac）
     topic_parts = msg.topic.rstrip('/').split('/')
     mac = topic_parts[-1] if topic_parts else ''
+    if not mac:
+        mac = str(header.get('screenMac', '') or '')
     if not mac:
         logger.warning('无法解析 MAC: topic=%s', msg.topic)
         return
@@ -172,8 +180,12 @@ def _handle_message(msg, mac_cache: _MacCache) -> None:
         logger.debug('未找到 mac=%s 对应的 specific_part，跳过', mac)
         return
 
-    # 4. 提取设备信息
-    data = payload.get('data') or {}
+    # 4. 提取设备信息（嵌套在 root.payload.data 中，非 root.data）
+    payload_obj = root.get('payload') or {}
+    data = payload_obj.get('data') or {}
+    # 兼容旧测试结构：若 root.data 存在则回退使用（仅老格式有效）
+    if not data and 'data' in root:
+        data = root.get('data') or {}
     device_sn = str(data.get('deviceSn', '') or '')
     product_code = str(data.get('productCode', '') or '')
     items = data.get('items') or []
@@ -182,12 +194,13 @@ def _handle_message(msg, mac_cache: _MacCache) -> None:
         logger.debug('报文缺少 deviceSn，跳过: topic=%s', msg.topic)
         return
 
-    # 5. 遍历 items，处理故障字段
+    # 5. 遍历 items，处理故障字段（实际字段名 attrTag/attrValue）
     for item in items:
         if not isinstance(item, dict):
             continue
-        param_name = str(item.get('paramName', '') or '')
-        value = item.get('value')
+        # 优先 attrTag/attrValue（生产实际格式），回退 paramName/value（旧测试格式）
+        param_name = str(item.get('attrTag') or item.get('paramName') or '')
+        value = item.get('attrValue') if 'attrValue' in item else item.get('value')
 
         if not param_name:
             continue

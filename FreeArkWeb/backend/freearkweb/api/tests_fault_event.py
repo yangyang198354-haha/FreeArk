@@ -1213,6 +1213,75 @@ class TestHandleMessageIntegration(TestCase):
         _handle_message(msg, cache)  # 不应抛异常
         self.assertEqual(FaultEvent.objects.count(), 0)
 
+    def test_real_payload_format_attr_tag_triggers_t1(self):
+        """BUG-FM-002 回归：生产真实报文（root.payload.data + attrTag/attrValue）"""
+        from api.management.commands.fault_consumer import _handle_message
+        mac = '7ae30fbf429887b3'
+        specific_part = '3-1-7-702'
+        cache = self._make_cache_with_mac(mac, specific_part)
+
+        # 完全按生产实测格式构造（探针 #1）
+        real_payload = {
+            'header': {
+                'ackCode': 1,
+                'messageId': '6212',
+                'name': 'DeviceStatusUpdate',
+                'screenMac': mac,
+            },
+            'payload': {
+                'code': 200,
+                'data': {
+                    'deviceSn': 21997,
+                    'productCode': 270001,
+                    'items': [
+                        {'attrTag': 'comm_fault_timeout', 'attrValue': 'timeout'},
+                    ],
+                },
+            },
+        }
+        msg = self._make_msg(
+            topic='/screen/upload/screen/to/cloud/' + mac,
+            payload_dict=real_payload,
+        )
+
+        self.assertEqual(FaultEvent.objects.count(), 0)
+        _handle_message(msg, cache)
+        self.assertEqual(FaultEvent.objects.count(), 1)
+        fe = FaultEvent.objects.first()
+        self.assertEqual(fe.specific_part, specific_part)
+        self.assertEqual(fe.fault_code, 'comm_fault_timeout')
+        self.assertEqual(fe.device_sn, '21997')
+        self.assertTrue(fe.is_active)
+
+    def test_real_payload_non_fault_attr_tag_skipped(self):
+        """BUG-FM-002 回归：真实报文中遥测字段（非故障 attrTag）应被 classifier 跳过"""
+        from api.management.commands.fault_consumer import _handle_message
+        mac = 'e1926f76ea2db0b4'
+        cache = self._make_cache_with_mac(mac, '3-1-7-702')
+
+        payload = {
+            'header': {'name': 'DeviceStatusUpdate', 'screenMac': mac},
+            'payload': {
+                'code': 200,
+                'data': {
+                    'deviceSn': 22154,
+                    'productCode': 270001,
+                    'items': [
+                        # 探针 #2/#3/#4 中实测的遥测字段
+                        {'attrTag': 'primary_valve_opening', 'attrValue': '0.1'},
+                        {'attrTag': '2nd_inwater_temp_detect', 'attrValue': '15.6'},
+                        {'attrTag': 'pau_through_temp', 'attrValue': '15.9'},
+                    ],
+                },
+            },
+        }
+        msg = self._make_msg(
+            topic='/screen/upload/screen/to/cloud/' + mac,
+            payload_dict=payload,
+        )
+        _handle_message(msg, cache)
+        self.assertEqual(FaultEvent.objects.count(), 0)
+
 
 # ===========================================================================
 # P1-2  API + DB 集成测试（真实 SQLite + 过滤 + 排序 + 索引结构）
