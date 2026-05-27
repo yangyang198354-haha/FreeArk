@@ -22,7 +22,7 @@ After=network.target
 Type=oneshot
 User=yangyang
 WorkingDirectory=/home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
-ExecStart=/home/yangyang/Freeark/venv/bin/python manage.py fault_cleanup --days=90 --batch-size=1000
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python manage.py fault_cleanup --days=90 --batch-size=1000
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=freeark-fault-cleanup
