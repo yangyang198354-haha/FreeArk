@@ -1800,7 +1800,7 @@ def device_management_device_list(request):
     """
     GET /api/device-management/device-list/
 
-    返回本小区所有专有部分的设备列表，支持四维过滤与分页。
+    返回本小区所有专有部分的设备列表，支持五维过滤与分页。
 
     大屏在线判断基于心跳：last_seen_at 距今 <= ONLINE_THRESHOLD_MINUTES 分钟 → online，
     否则 offline；ScreenConnectivityStatus 中无记录 → unknown。
@@ -1813,6 +1813,9 @@ def device_management_device_list(request):
       screen_status  (str, 可选)  — "online" | "offline" | "unknown"
       system_switch  (str, 可选)  — "on" | "off"
       plc_status     (str, 可选)  — "online" | "offline"
+      fault_status   (str, 可选)  — "has_fault" | "no_fault"（Python 层全量过滤，ADR-FFF-001）
+                                    has_fault: fault_count > 0；no_fault: fault_count == 0；
+                                    fault_count=None 在两侧均排除（ADR-FFF-003）
       page           (int, 可选)  — 默认 1
       page_size      (int, 可选)  — 分页 UI 通常用 10/20/50，内部全量采集可用 ≤2000，默认 20
 
@@ -1843,6 +1846,10 @@ def device_management_device_list(request):
     system_switch_filter = request.GET.get('system_switch', '').strip().lower()
     plc_status_filter = request.GET.get('plc_status', '').strip().lower()
     operation_mode_filter = request.GET.get('operation_mode', '').strip()
+    # REQ-FUNC-FFF-02: 故障状态过滤（ADR-FFF-001 Python 层全量过滤）
+    fault_status_filter = request.GET.get('fault_status', '').strip().lower()
+    if fault_status_filter not in ('has_fault', 'no_fault'):
+        fault_status_filter = ''
 
     try:
         page = max(1, int(request.GET.get('page', 1)))
@@ -1963,20 +1970,49 @@ def device_management_device_list(request):
             pass
 
     # ---- 8. 分页 ----
-    total_before_screen_filter = qs.count()
+    # ADR-FFF-002: fault_status 或 screen_status 存在时走全量拉取路径（Python 层过滤）
+    need_full_scan = (
+        screen_status_filter in ('online', 'offline', 'unknown')
+        or fault_status_filter in ('has_fault', 'no_fault')
+    )
 
-    # 若需要按大屏状态过滤，在 Python 层处理（从 DB 取全量后过滤）
-    if screen_status_filter in ('online', 'offline', 'unknown'):
+    all_fault_counts = None  # 全量故障数缓存，用于 step 9a 复用
+
+    if need_full_scan:
         all_rows = list(qs)
-        filtered = [
-            owner for owner in all_rows
-            if _compute_screen_status(owner._screen_last_seen_at) == screen_status_filter
-        ]
-        total = len(filtered)
+
+        # 8a. screen_status 过滤（若存在，ADR-FFF-002 先于 fault_status）
+        if screen_status_filter in ('online', 'offline', 'unknown'):
+            all_rows = [
+                owner for owner in all_rows
+                if _compute_screen_status(owner._screen_last_seen_at) == screen_status_filter
+            ]
+
+        # 8b. fault_status 过滤（若存在，ADR-FFF-001 Python 层，ADR-FFF-003 None 两侧排除）
+        if fault_status_filter in ('has_fault', 'no_fault'):
+            from .fault_utils import get_fault_count_batch_cached
+            all_specific_parts = [owner.specific_part for owner in all_rows]
+            all_fault_counts = get_fault_count_batch_cached(all_specific_parts)
+            if fault_status_filter == 'has_fault':
+                # fault_count > 0 且不为 None（ADR-FFF-003）
+                all_rows = [
+                    owner for owner in all_rows
+                    if all_fault_counts.get(owner.specific_part) is not None
+                    and all_fault_counts.get(owner.specific_part) > 0
+                ]
+            else:  # no_fault
+                # fault_count == 0 严格等于（ADR-FFF-003：None 排除）
+                all_rows = [
+                    owner for owner in all_rows
+                    if all_fault_counts.get(owner.specific_part) == 0
+                ]
+
+        # REQ-FUNC-FFF-03: total 在所有 Python 层过滤完毕后计算
+        total = len(all_rows)
         start = (page - 1) * page_size
-        page_rows = filtered[start:start + page_size]
+        page_rows = all_rows[start:start + page_size]
     else:
-        total = total_before_screen_filter
+        total = qs.count()
         start = (page - 1) * page_size
         page_rows = list(qs[start:start + page_size])
 
@@ -1985,8 +2021,16 @@ def device_management_device_list(request):
 
     # ---- 9a. 批量获取故障数量（v0.5.3-FCC, REQ-FUNC-FC-02）----
     from .fault_utils import get_fault_count_batch_cached
-    page_specific_parts = [owner.specific_part for owner in page_rows]
-    fault_counts = get_fault_count_batch_cached(page_specific_parts)
+    if all_fault_counts is not None:
+        # fault_status 过滤时已在 step 8b 全量查过，直接取 page_rows 子集（REQ-NFR-FFF-01 不重复查询）
+        fault_counts = {
+            owner.specific_part: all_fault_counts.get(owner.specific_part)
+            for owner in page_rows
+        }
+    else:
+        # 现有逻辑：仅查 page_rows 的故障数
+        page_specific_parts = [owner.specific_part for owner in page_rows]
+        fault_counts = get_fault_count_batch_cached(page_specific_parts)
 
     results = []
     for owner in page_rows:

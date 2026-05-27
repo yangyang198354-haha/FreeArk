@@ -86,6 +86,17 @@
         <el-option label="通风" :value="3" />
         <el-option label="除湿" :value="4" />
       </el-select>
+      <!-- REQ-FUNC-FFF-01: 故障状态过滤 -->
+      <el-select
+        v-model="filterFaultStatus"
+        placeholder="故障状态"
+        clearable
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="仅有故障" value="has_fault" />
+        <el-option label="仅无故障" value="no_fault" />
+      </el-select>
       <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
       <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
     </div>
@@ -281,6 +292,7 @@ export default {
     const filterPlcStatus = ref('')
     const filterSystemSwitch = ref('')
     const filterOperationMode = ref(null)
+    const filterFaultStatus = ref('')
 
     // PLC 历史弹窗状态
     const plcHistoryDialogVisible = ref(false)
@@ -318,6 +330,9 @@ export default {
         }
         if (filterOperationMode.value !== null && filterOperationMode.value !== '') {
           params.operation_mode = filterOperationMode.value
+        }
+        if (filterFaultStatus.value) {
+          params.fault_status = filterFaultStatus.value
         }
 
         const queryString = new URLSearchParams(params).toString()
@@ -379,6 +394,7 @@ export default {
       filterPlcStatus.value = ''
       filterSystemSwitch.value = ''
       filterOperationMode.value = null
+      filterFaultStatus.value = ''
       currentPage.value = 1
       fetchList()
     }
@@ -479,6 +495,7 @@ export default {
       filterPlcStatus,
       filterSystemSwitch,
       filterOperationMode,
+      filterFaultStatus,
       plcHistoryDialogVisible,
       plcHistoryLoading,
       plcHistoryList,
