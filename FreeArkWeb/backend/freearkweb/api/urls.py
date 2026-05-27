@@ -68,6 +68,9 @@ urlpatterns = [
     path('devices/param-history/', views.get_device_param_history, name='device-param-history'),
     # v0.5.6: 按需采集触发接口 (MOD-BE-01, REQ-FUNC-001)
     path('devices/ondemand-refresh/', views.device_ondemand_refresh, name='device-ondemand-refresh'),
+    # v0.5.3-FCC: 故障数量查询接口 (REQ-FUNC-FC-05/FC-06)
+    path('devices/fault-count/', views.device_fault_count, name='device-fault-count'),
+    path('devices/fault-summary/', views.device_fault_summary, name='device-fault-summary'),
 
     # 设备管理 — 设备列表接口 (MOD-BE-01, US-002~007)
     path('device-management/device-list/', views.device_management_device_list, name='device-management-device-list'),

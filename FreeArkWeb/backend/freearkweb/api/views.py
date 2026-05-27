@@ -2,6 +2,7 @@ import calendar
 import logging
 import subprocess
 from datetime import date, timedelta
+from django.utils.timezone import now as django_now
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -1982,6 +1983,11 @@ def device_management_device_list(request):
     # ---- 9. 序列化结果 ----
     _OPERATION_MODE_MAP = {1: '制冷', 2: '制热', 3: '通风', 4: '除湿'}
 
+    # ---- 9a. 批量获取故障数量（v0.5.3-FCC, REQ-FUNC-FC-02）----
+    from .fault_utils import get_fault_count_batch_cached
+    page_specific_parts = [owner.specific_part for owner in page_rows]
+    fault_counts = get_fault_count_batch_cached(page_specific_parts)
+
     results = []
     for owner in page_rows:
         last_seen_at = owner._screen_last_seen_at   # datetime | None
@@ -2022,6 +2028,9 @@ def device_management_device_list(request):
             'plc_last_online_time': plc_last_online.isoformat() if plc_last_online else None,
             # 同步设备信息按钮可用性：unique_id (screenMAC) 非空才能调远程接口
             'has_screen_mac': bool((owner.unique_id or '').strip()),
+            # v0.5.3-FCC: 故障数量（REQ-FUNC-FC-02）
+            # None = PLCLatestData 中无该 specific_part 记录（前端显示 —）
+            'fault_count': fault_counts.get(owner.specific_part),
         })
 
     return Response({
@@ -2256,3 +2265,199 @@ def device_ondemand_refresh(request):
 
     return Response({'status': 'accepted', 'specific_part': specific_part},
                     status=status.HTTP_202_ACCEPTED)
+
+
+# ---------------------------------------------------------------------------
+# v0.5.3-FCC: 故障数量查询 API（REQ-FUNC-FC-05）
+# GET /api/devices/fault-count/?specific_part=3-1-7-702[,3-1-7-703,...]
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def device_fault_count(request):
+    """查询指定专有部分的故障数量和故障明细。
+
+    GET /api/devices/fault-count/?specific_part=3-1-7-702[,3-1-7-703,...]
+
+    查询参数：
+        specific_part (str): 必须，逗号分隔，最多 50 个
+
+    响应 200：
+        {
+          "success": true,
+          "data": [
+            {
+              "specific_part": "3-1-7-702",
+              "fault_count": 3,
+              "fault_details": [
+                {"param_name": "comm_fault_timeout", "value": 1},
+                {"param_name": "living_room_temp_sensor_error", "value": 1}
+              ],
+              "updated_at": "2026-05-26T10:30:00+08:00"
+            }
+          ],
+          "queried_at": "2026-05-26T10:30:05+08:00"
+        }
+
+    错误响应：
+        400  specific_part 缺失或超过 50 个
+        401  未鉴权（DRF 默认）
+        500  DB 异常
+    """
+    from .fault_utils import get_fault_count_batch_cached, get_fault_details, get_fault_details_updated_at
+
+    sp_param = request.GET.get('specific_part', '').strip()
+    if not sp_param:
+        return Response(
+            {'success': False, 'error': '参数 specific_part 不能为空'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    specific_parts = [s.strip() for s in sp_param.split(',') if s.strip()]
+    if not specific_parts:
+        return Response(
+            {'success': False, 'error': '参数 specific_part 不能为空'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if len(specific_parts) > 50:
+        return Response(
+            {'success': False, 'error': '一次最多查询 50 个专有部分'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        fault_counts = get_fault_count_batch_cached(specific_parts)
+        data = []
+        for sp in specific_parts:
+            fc = fault_counts.get(sp)
+            if fc is None:
+                # PLCLatestData 中无记录
+                data.append({
+                    'specific_part': sp,
+                    'fault_count': None,
+                    'fault_details': [],
+                    'updated_at': None,
+                })
+            else:
+                details = get_fault_details(sp)
+                updated_at = get_fault_details_updated_at(sp)
+                data.append({
+                    'specific_part': sp,
+                    'fault_count': fc,
+                    'fault_details': details,
+                    'updated_at': updated_at.isoformat() if updated_at else None,
+                })
+    except Exception as exc:
+        logger.exception('device_fault_count: 查询异常 specific_parts=%s', specific_parts)
+        return Response(
+            {'success': False, 'error': '查询故障数量时发生内部错误'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    return Response({
+        'success': True,
+        'data': data,
+        'queried_at': django_now().isoformat(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# v0.5.3-FCC: 故障汇总查询 API（REQ-FUNC-FC-06 / OpenClaw freeark_get_fault_summary）
+# GET /api/devices/fault-summary/
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def device_fault_summary(request):
+    """查询有故障的专有部分汇总（按故障数降序，最多 100 条）。
+
+    GET /api/devices/fault-summary/
+
+    可选查询参数：
+        building (str): 楼栋过滤，如 "3"
+        unit (str): 单元过滤，如 "1"
+        min_fault_count (int): 最小故障数过滤，默认 1
+
+    响应 200：
+        {
+          "success": true,
+          "total_with_faults": 5,
+          "data": [
+            {"specific_part": "3-1-7-702", "building": "3", "unit": "1",
+             "room_number": "702", "fault_count": 5},
+            ...
+          ],
+          "queried_at": "2026-05-26T10:30:05+08:00"
+        }
+
+    错误响应：
+        400  min_fault_count 非法
+        401  未鉴权
+        500  内部错误
+    """
+    from .fault_utils import get_fault_count_batch_cached
+
+    building_filter = request.GET.get('building', '').strip()
+    unit_filter = request.GET.get('unit', '').strip()
+    min_fc_raw = request.GET.get('min_fault_count', '1').strip()
+
+    try:
+        min_fault_count = int(min_fc_raw)
+        if min_fault_count < 0:
+            raise ValueError('min_fault_count 不能为负数')
+    except (ValueError, TypeError):
+        return Response(
+            {'success': False, 'error': 'min_fault_count 必须是非负整数'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        qs = OwnerInfo.objects.all()
+        if building_filter:
+            qs = qs.filter(Q(building=building_filter) | Q(building=f'{building_filter}栋'))
+        if unit_filter:
+            qs = qs.filter(Q(unit=unit_filter) | Q(unit=f'{unit_filter}单元'))
+
+        all_owners = list(qs.values('specific_part', 'building', 'unit', 'room_number'))
+        if not all_owners:
+            return Response({
+                'success': True,
+                'total_with_faults': 0,
+                'data': [],
+                'queried_at': django_now().isoformat(),
+            })
+
+        all_specific_parts = [o['specific_part'] for o in all_owners]
+        fault_counts = get_fault_count_batch_cached(all_specific_parts)
+
+        # 过滤 fault_count >= min_fault_count 且非 None
+        filtered = []
+        for owner in all_owners:
+            sp = owner['specific_part']
+            fc = fault_counts.get(sp)
+            if fc is not None and fc >= min_fault_count:
+                filtered.append({
+                    'specific_part': sp,
+                    'building': owner['building'],
+                    'unit': owner['unit'],
+                    'room_number': owner['room_number'],
+                    'fault_count': fc,
+                })
+
+        # 按 fault_count 降序，最多 100 条
+        filtered.sort(key=lambda x: x['fault_count'], reverse=True)
+        filtered = filtered[:100]
+
+    except Exception as exc:
+        logger.exception('device_fault_summary: 查询异常')
+        return Response(
+            {'success': False, 'error': '查询故障汇总时发生内部错误'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    return Response({
+        'success': True,
+        'total_with_faults': len(filtered),
+        'data': filtered,
+        'queried_at': django_now().isoformat(),
+    })

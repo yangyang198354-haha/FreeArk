@@ -347,6 +347,77 @@ def freeark_get_plc_latest(params: dict) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Tool 15: freeark_get_fault_count  (v0.5.3-FCC, REQ-FUNC-FC-06)
+# GET /api/devices/fault-count/?specific_part=<id>[,<id>,...]
+# ──────────────────────────────────────────────────────────────────────
+def freeark_get_fault_count(params: dict) -> dict:
+    """查询指定专有部分的当前故障数量和故障参数明细。
+
+    Args:
+        params.specific_part: 专有部分 ID，支持逗号分隔多个（最多 50 个）
+                              如 "3-1-7-702" 或 "3-1-7-702,3-1-8-802"
+
+    Returns:
+        success: true + data（含 fault_count、fault_details、updated_at）+ summary
+    """
+    specific_part = params.get("specific_part")
+    if not specific_part:
+        return {
+            "success": False,
+            "error": "缺少必要参数 specific_part，格式如 '3-1-7-702'，支持逗号分隔多个（最多 50 个）",
+        }
+    result = _client().get(
+        "/api/devices/fault-count/",
+        {"specific_part": str(specific_part)},
+    )
+    if not result["success"]:
+        return result
+
+    resp_data = result.get("data", {})
+    parts = resp_data.get("data", []) if isinstance(resp_data, dict) else []
+    total_faults = sum((p.get("fault_count") or 0) for p in parts if p.get("fault_count") is not None)
+    return {
+        **resp_data,
+        "summary": f"查询了 {len(parts)} 个专有部分，共 {total_faults} 个故障",
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Tool 16: freeark_get_fault_summary  (v0.5.3-FCC, REQ-FUNC-FC-06)
+# GET /api/devices/fault-summary/
+# ──────────────────────────────────────────────────────────────────────
+def freeark_get_fault_summary(params: dict) -> dict:
+    """查询全系统/楼栋/单元中有故障的专有部分汇总（按故障数降序，最多 100 条）。
+
+    Args (all optional):
+        params.building: 楼栋过滤，如 "3"
+        params.unit: 单元过滤，如 "1"
+        params.min_fault_count: 最小故障数过滤，默认 1
+
+    Returns:
+        success: true + total_with_faults + data（含 specific_part、fault_count）+ summary
+    """
+    query = {}
+    if params.get("building"):
+        query["building"] = str(params["building"])
+    if params.get("unit"):
+        query["unit"] = str(params["unit"])
+    if params.get("min_fault_count") is not None:
+        query["min_fault_count"] = str(params["min_fault_count"])
+
+    result = _client().get("/api/devices/fault-summary/", query)
+    if not result["success"]:
+        return result
+
+    resp_data = result.get("data", {})
+    total = resp_data.get("total_with_faults", 0) if isinstance(resp_data, dict) else 0
+    return {
+        **resp_data,
+        "summary": f"共 {total} 个专有部分有故障",
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Handler 映射（供 freeark_tool.py dispatch 使用）
 # ──────────────────────────────────────────────────────────────────────
 TIER1_HANDLERS = {
@@ -364,4 +435,7 @@ TIER1_HANDLERS = {
     "freeark_get_device_tree": freeark_get_device_tree,
     "freeark_get_service_detail": freeark_get_service_detail,
     "freeark_get_plc_latest": freeark_get_plc_latest,
+    # v0.5.3-FCC: 故障查询工具
+    "freeark_get_fault_count": freeark_get_fault_count,
+    "freeark_get_fault_summary": freeark_get_fault_summary,
 }

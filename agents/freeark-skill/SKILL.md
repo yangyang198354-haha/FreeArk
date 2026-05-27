@@ -1,6 +1,6 @@
 ---
 name: freeark-skill
-description: "自由方舟（FreeArk）三恒系统 API 工具集。当用户询问 FreeArk 设备状态、实时参数、能耗数据、PLC 状态、看板摘要、写设备参数、服务管理、设备树同步等问题时使用。Tier-1 只读 14 个 + Tier-2 写操作 5 个（需用户确认）。"
+description: "自由方舟（FreeArk）三恒系统 API 工具集。当用户询问 FreeArk 设备状态、实时参数、能耗数据、PLC 状态、看板摘要、故障数量、写设备参数、服务管理、设备树同步等问题时使用。Tier-1 只读 16 个 + Tier-2 写操作 5 个（需用户确认）。"
 ---
 
 # FreeArk Skill — 自由方舟 API 工具集
@@ -30,7 +30,7 @@ echo '{"tool": "<tool_name>", "params": {<params>}}' | python3 /home/yangyang/Fr
 - 成功：`{"success": true, "data": ..., "summary": "..."}`
 - 失败：`{"success": false, "error": "..."}`
 
-## Tier-1 只读工具（14 个，无需确认）
+## Tier-1 只读工具（16 个，无需确认）
 
 | tool_name | 用途 | 必需参数 |
 |---|---|---|
@@ -48,6 +48,8 @@ echo '{"tool": "<tool_name>", "params": {<params>}}' | python3 /home/yangyang/Fr
 | `freeark_get_services_status` | systemd 服务清单与状态 | 无 |
 | `freeark_get_service_detail` | 单个服务详情 | `service_name` |
 | `freeark_get_write_records` | 历史写操作审计记录 | 可选过滤参数 |
+| `freeark_get_fault_count` | 查询指定专有部分的当前故障数量和故障参数明细 | `specific_part`（必须，逗号分隔最多 50 个，如 `"3-1-7-702"` 或 `"3-1-7-702,3-1-8-802"`）|
+| `freeark_get_fault_summary` | 查询全系统/楼栋/单元中有故障的专有部分汇总（按故障数降序，最多 100 条）| 可选：`building`（楼栋，如 `"3"`），`unit`（单元，如 `"1"`），`min_fault_count`（最小故障数，默认 1）|
 
 **specific_part 格式**：`<楼>-<单元>-<房号前缀>-<设备ID>`，如 `3-1-7-702`（3 号楼 1 单元 7XX 房间 702 设备）。
 
@@ -114,6 +116,77 @@ echo '{"tool": "<tool_name>", "params": {<params>}}' | python3 /home/yangyang/Fr
 
 具体故障诊断、参数调整建议，要基于实测数据（先调 Tier-1 工具看实时参数和 PLC 状态），不要凭空建议。
 
+### freeark_get_fault_count — 参数与返回说明
+
+```json
+{
+  "tool": "freeark_get_fault_count",
+  "params": {
+    "specific_part": "3-1-7-702"
+  }
+}
+```
+
+返回示例：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "specific_part": "3-1-7-702",
+      "fault_count": 3,
+      "fault_details": [
+        {"param_name": "comm_fault_timeout", "value": 1},
+        {"param_name": "living_room_temp_sensor_error", "value": 1},
+        {"param_name": "fresh_air_unit_communication_error", "value": 1}
+      ],
+      "updated_at": "2026-05-26T10:30:00+08:00"
+    }
+  ],
+  "queried_at": "2026-05-26T10:30:05+08:00",
+  "summary": "查询了 1 个专有部分，共 3 个故障"
+}
+```
+
+- `fault_count = null`：该专有部分在 plc_latest_data 中无任何记录（设备未上线）
+- `fault_count = 0`：有记录但当前无故障（绿色）
+- `fault_count > 0`：存在故障（红色），`fault_details` 列出故障参数名和值
+
+### freeark_get_fault_summary — 参数与返回说明
+
+```json
+{
+  "tool": "freeark_get_fault_summary",
+  "params": {
+    "building": "3",
+    "min_fault_count": 1
+  }
+}
+```
+
+返回示例：
+```json
+{
+  "success": true,
+  "total_with_faults": 5,
+  "data": [
+    {"specific_part": "3-1-7-702", "building": "3", "unit": "1", "room_number": "702", "fault_count": 5},
+    {"specific_part": "3-1-8-802", "building": "3", "unit": "1", "room_number": "802", "fault_count": 2}
+  ],
+  "queried_at": "2026-05-26T10:30:05+08:00",
+  "summary": "共 5 个专有部分有故障"
+}
+```
+
+调用示例（CLI）：
+```bash
+echo '{"tool": "freeark_get_fault_count", "params": {"specific_part": "3-1-7-702"}}' \
+  | python3 /home/yangyang/Freeark/FreeArk/agents/freeark-skill/scripts/freeark_tool.py
+
+echo '{"tool": "freeark_get_fault_summary", "params": {"building": "3", "min_fault_count": 1}}' \
+  | python3 /home/yangyang/Freeark/FreeArk/agents/freeark-skill/scripts/freeark_tool.py
+```
+
 ## 版本
 
-v2.1.0（PoC 通过后扩展全集 — SDLC 第三轮 Phase 2）
+v2.2.0（新增 freeark_get_fault_count 和 freeark_get_fault_summary 工具 — v0.5.3-FCC）

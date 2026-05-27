@@ -136,6 +136,22 @@
           </el-tag>
         </template>
       </el-table-column>
+      <!-- v0.5.3-FCC: 故障数量列（REQ-FUNC-FC-01）-->
+      <el-table-column label="故障数量" width="100" align="center">
+        <template #default="{ row }">
+          <span
+            v-if="row.fault_count === null || row.fault_count === undefined"
+            style="color: #909399;"
+          >—</span>
+          <span
+            v-else
+            :style="{
+              color: row.fault_count === 0 ? 'var(--color-success)' : 'var(--color-danger)',
+              fontWeight: 600
+            }"
+          >{{ row.fault_count }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="220" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
