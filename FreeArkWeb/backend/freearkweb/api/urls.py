@@ -3,6 +3,7 @@ from . import views
 from . import views_device_settings
 from . import views_heartbeat_config
 from . import memory_views
+from . import views_fault
 
 urlpatterns = [
     # CSRF token获取
@@ -97,4 +98,8 @@ urlpatterns = [
     # 记忆隔离接口（freeark_lobster_memory_isolation，REQ-FUNC-017）
     path('memory/me/', memory_views.MyMemoryView.as_view(), name='memory-me'),
     path('admin/memory/<int:user_id>/', memory_views.AdminMemoryView.as_view(), name='admin-memory-user'),
+
+    # 故障管理接口（v0.6.0-FM，FR-FM-05）
+    path('devices/fault-events/', views_fault.fault_event_list, name='fault-event-list'),
+    path('devices/fault-event-categories/', views_fault.fault_event_categories, name='fault-event-categories'),
 ]

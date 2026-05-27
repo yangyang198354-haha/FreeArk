@@ -1,0 +1,23 @@
+# freeark-fault-cleanup.timer — 故障事件清理定时器（v0.6.0-FM，ADR-FM-06）
+#
+# 每天凌晨 03:30 触发一次 freeark-fault-cleanup.service。
+# 与 freeark-dph-cleanup（常驻进程，03:00 cron）错开 30 分钟，避免同时 IO。
+#
+# 部署后检查：
+#   systemctl list-timers freeark-fault-cleanup.timer
+#   systemctl status freeark-fault-cleanup.timer
+
+[Unit]
+Description=FreeArk Fault Event Cleanup Timer (v0.6.0-FM)
+Requires=freeark-fault-cleanup.service
+
+[Timer]
+# 每天 03:30 触发
+OnCalendar=*-*-* 03:30:00
+# 系统重启后如果错过了触发时间，立即补执行
+Persistent=true
+# 允许 5 分钟内随机偏移，减少 IO 峰值
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

@@ -128,6 +128,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 故障管理页面（v0.6.0-FM，FR-FM-04）
+    path: '/device-management/faults',
+    name: 'FaultManagement',
+    component: () => import('../views/FaultManagementView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')

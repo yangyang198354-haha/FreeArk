@@ -1,0 +1,29 @@
+# freeark-fault-cleanup.service — 故障事件清理 one-shot（v0.6.0-FM，ADR-FM-06）
+#
+# 本 service 由 freeark-fault-cleanup.timer 驱动，每天 03:30 执行一次。
+#
+# 部署步骤（在生产服务器 192.168.31.51 执行）：
+#   sudo cp deployment/systemd/freeark-fault-cleanup.service /etc/systemd/system/
+#   sudo cp deployment/systemd/freeark-fault-cleanup.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now freeark-fault-cleanup.timer
+#
+# 手动触发（测试）：
+#   sudo systemctl start freeark-fault-cleanup.service
+#
+# 验证：
+#   journalctl -u freeark-fault-cleanup -n 20
+
+[Unit]
+Description=FreeArk Fault Event Cleanup (one-shot, v0.6.0-FM)
+After=network.target
+
+[Service]
+Type=oneshot
+User=yangyang
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
+ExecStart=/home/yangyang/Freeark/venv/bin/python manage.py fault_cleanup --days=90 --batch-size=1000
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-fault-cleanup
+Environment=DJANGO_SETTINGS_MODULE=freearkweb.settings

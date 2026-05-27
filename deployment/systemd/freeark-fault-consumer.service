@@ -1,0 +1,30 @@
+# freeark-fault-consumer.service — 故障事件 MQTT 消费者（v0.6.0-FM，ADR-FM-01）
+#
+# 部署步骤（在生产服务器 192.168.31.51 执行）：
+#   sudo cp deployment/systemd/freeark-fault-consumer.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now freeark-fault-consumer
+#
+# 验证：
+#   journalctl -u freeark-fault-consumer -n 30 -f
+#   systemctl status freeark-fault-consumer
+
+[Unit]
+Description=FreeArk Fault Event MQTT Consumer (v0.6.0-FM)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yangyang
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
+ExecStart=/home/yangyang/Freeark/venv/bin/python manage.py fault_consumer
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-fault-consumer
+Environment=DJANGO_SETTINGS_MODULE=freearkweb.settings
+
+[Install]
+WantedBy=multi-user.target

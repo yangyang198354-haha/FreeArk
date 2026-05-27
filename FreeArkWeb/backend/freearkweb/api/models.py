@@ -667,3 +667,72 @@ class PLCWriteRecord(models.Model):
 
     def __str__(self):
         return f"{self.request_id} {self.specific_part}/{self.param_name} {self.status}"
+
+
+# ---------------------------------------------------------------------------
+# 故障事件模型（v0.6.0-FM，ADR-FM-04）
+# ---------------------------------------------------------------------------
+
+
+class FaultEvent(models.Model):
+    """故障事件表。
+
+    由 freeark-fault-consumer 服务写入，记录 MQTT 上报的故障事件生命周期。
+    写入模式（ADR-FM-03）：
+      - 首次出现：INSERT(is_active=True)
+      - 故障持续：无 DB 操作（仅更新进程内内存）
+      - 故障恢复：UPDATE(is_active=False, recovered_at=now())
+
+    严禁：查询 device_param_history（3766 万行）；此表与 plc_latest_data 语义独立。
+    """
+    specific_part = models.CharField(max_length=64, verbose_name='房号')
+    device_sn = models.CharField(max_length=64, verbose_name='设备序列号')
+    product_code = models.CharField(max_length=32, verbose_name='产品编码')
+    fault_code = models.CharField(max_length=64, verbose_name='故障码')
+    fault_type = models.CharField(
+        max_length=16,
+        choices=[
+            ('comm',        '通信故障'),
+            ('sensor',      '传感器故障'),
+            ('fresh_air',   '新风故障'),
+            ('other_error', '其他故障'),
+        ],
+        verbose_name='故障大类',
+    )
+    fault_message = models.CharField(max_length=255, verbose_name='故障描述')
+    severity = models.CharField(
+        max_length=8,
+        choices=[('error', 'Error'), ('warning', 'Warning')],
+        verbose_name='严重级别',
+    )
+    first_seen_at = models.DateTimeField(verbose_name='首次出现时间')
+    last_seen_at = models.DateTimeField(verbose_name='最后活跃时间')
+    recovered_at = models.DateTimeField(null=True, blank=True, verbose_name='恢复时间')
+    is_active = models.BooleanField(default=True, verbose_name='是否活跃')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'fault_event'
+        verbose_name = '故障事件'
+        verbose_name_plural = '故障事件'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['specific_part', 'device_sn', 'fault_code', 'first_seen_at'],
+                name='uq_fault_event_key_time',
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=['specific_part', 'is_active'],
+                name='idx_fault_sp_active',
+            ),
+            models.Index(
+                fields=['first_seen_at', 'is_active'],
+                name='idx_fault_time_active',
+            ),
+        ]
+
+    def __str__(self):
+        status = 'ACTIVE' if self.is_active else 'RECOVERED'
+        return f"{self.specific_part} / {self.fault_code} [{status}] @ {self.first_seen_at}"
