@@ -102,7 +102,7 @@ class TestFaultStatusFilterLogicUnit(TestCase):
 
     # UT-FFF-01: has_fault 只返回 fault_count > 0 的设备
     def test_has_fault_returns_only_positive_fault_count(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "has_fault", "page_size": 50})
         self.assertEqual(resp.status_code, 200)
         sps = {r["specific_part"] for r in resp.data["results"]}
@@ -113,7 +113,7 @@ class TestFaultStatusFilterLogicUnit(TestCase):
 
     # UT-FFF-02: no_fault 只返回 fault_count == 0 的设备
     def test_no_fault_returns_only_zero_fault_count(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "no_fault", "page_size": 50})
         self.assertEqual(resp.status_code, 200)
         sps = {r["specific_part"] for r in resp.data["results"]}
@@ -124,21 +124,21 @@ class TestFaultStatusFilterLogicUnit(TestCase):
 
     # UT-FFF-03: ADR-FFF-003 — fault_count=None 在 has_fault 侧不出现
     def test_none_device_excluded_from_has_fault(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "has_fault", "page_size": 50})
         sps = {r["specific_part"] for r in resp.data["results"]}
         self.assertNotIn(self.sp_null, sps)
 
     # UT-FFF-04: ADR-FFF-003 — fault_count=None 在 no_fault 侧不出现
     def test_none_device_excluded_from_no_fault(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "no_fault", "page_size": 50})
         sps = {r["specific_part"] for r in resp.data["results"]}
         self.assertNotIn(self.sp_null, sps)
 
     # UT-FFF-05: 无 fault_status 参数时行为与 v0.5.3-FCC 一致，fault_count=None 正常出现
     def test_no_fault_status_param_returns_all_owners_with_null_fault_count(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"page_size": 50})
         self.assertEqual(resp.status_code, 200)
         sps = {r["specific_part"] for r in resp.data["results"]}
@@ -149,7 +149,7 @@ class TestFaultStatusFilterLogicUnit(TestCase):
 
     # UT-FFF-06: 非法 fault_status 值静默忽略，返回全量（4条）
     def test_invalid_fault_status_value_is_ignored(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "invalid_value", "page_size": 50})
         self.assertEqual(resp.status_code, 200)
         # 非法值静默忽略，不过滤，返回全量 4 条
@@ -157,14 +157,14 @@ class TestFaultStatusFilterLogicUnit(TestCase):
 
     # UT-FFF-07: REQ-FUNC-FFF-03 — has_fault 时 count 等于过滤后总数
     def test_count_reflects_filtered_total_has_fault(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "has_fault", "page_size": 50})
         # sp_has(3) 和 sp_none_(5) 满足条件，共 2 条
         self.assertEqual(resp.data["count"], 2)
 
     # UT-FFF-08: REQ-FUNC-FFF-03 — no_fault 时 count 等于过滤后总数
     def test_count_reflects_filtered_total_no_fault(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "no_fault", "page_size": 50})
         # 只有 sp_zero(0) 满足条件，共 1 条
         self.assertEqual(resp.data["count"], 1)
@@ -207,14 +207,14 @@ class TestFaultStatusFilterIntegration(TestCase):
 
     # IT-FFF-01: 分页 total 正确（全 5 条，has_fault 有 2 条，page_size=1 时翻页）
     def test_pagination_total_correct_has_fault(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "has_fault", "page": 1, "page_size": 1})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["count"], 2)   # 201(5) + 204(2)
         self.assertEqual(len(resp.data["results"]), 1)  # page_size=1
 
     def test_pagination_total_correct_no_fault(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "no_fault", "page": 1, "page_size": 1})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["count"], 2)   # 202(0) + 205(0)
@@ -228,7 +228,7 @@ class TestFaultStatusFilterIntegration(TestCase):
             specific_part="2-1-1-201",
             last_seen_at=timezone.now(),
         )
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({
                 "screen_status": "online",
                 "fault_status": "has_fault",
@@ -249,7 +249,7 @@ class TestFaultStatusFilterIntegration(TestCase):
             call_count["n"] += 1
             return {sp: original_map.get(sp) for sp in specific_parts}
 
-        with patch("api.views.get_fault_count_batch_cached", side_effect=mock_cached):
+        with patch("api.fault_utils.get_fault_count_batch_cached", side_effect=mock_cached):
             resp = self._get({"fault_status": "has_fault", "page_size": 50})
 
         self.assertEqual(resp.status_code, 200)
@@ -265,7 +265,7 @@ class TestFaultStatusFilterIntegration(TestCase):
             call_count["n"] += 1
             return {sp: original_map.get(sp) for sp in specific_parts}
 
-        with patch("api.views.get_fault_count_batch_cached", side_effect=mock_cached):
+        with patch("api.fault_utils.get_fault_count_batch_cached", side_effect=mock_cached):
             resp = self._get({"fault_status": "no_fault", "page_size": 50})
 
         self.assertEqual(resp.status_code, 200)
@@ -280,7 +280,7 @@ class TestFaultStatusFilterIntegration(TestCase):
             call_count["n"] += 1
             return {sp: original_map.get(sp) for sp in specific_parts}
 
-        with patch("api.views.get_fault_count_batch_cached", side_effect=mock_cached):
+        with patch("api.fault_utils.get_fault_count_batch_cached", side_effect=mock_cached):
             resp = self._get({"page_size": 50})
 
         self.assertEqual(resp.status_code, 200)
@@ -294,7 +294,7 @@ class TestFaultStatusFilterIntegration(TestCase):
         验证 count=5 / results=page_size 的正确性（与 45 条等比缩小的等效场景）。
         """
         all_has_fault = {sp: (i + 1) for i, sp in enumerate(self.fault_map.keys())}
-        with patch("api.views.get_fault_count_batch_cached", return_value=all_has_fault):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=all_has_fault):
             resp = self._get({"fault_status": "has_fault", "page": 1, "page_size": 3})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["count"], 5)
@@ -302,7 +302,7 @@ class TestFaultStatusFilterIntegration(TestCase):
 
     # IT-FFF-07: 越界分页（page=999）时结果 results 为空，count 不变
     def test_out_of_range_page_returns_empty_results(self):
-        with patch("api.views.get_fault_count_batch_cached", return_value=self.fault_map):
+        with patch("api.fault_utils.get_fault_count_batch_cached", return_value=self.fault_map):
             resp = self._get({"fault_status": "has_fault", "page": 999, "page_size": 20})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["results"], [])
