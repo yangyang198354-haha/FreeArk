@@ -1842,48 +1842,50 @@ class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
             is_active=True,
         )
 
-    # FM5-01：study_room_thermostat 能匹配 product_code=260001 的 error_N 故障（核心修复）
-    def test_study_room_thermostat_matches_product_code_260001_error_n(self):
-        """sub_type=study_room_thermostat 应能命中 product_code=260001 的 error_265。"""
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+    # FM5-01：v0.6.3 更新：study_room_thermostat 通过 device_sn 子查询（需 DeviceNode 数据）
+    # 无 DeviceNode 时，error_N 故障不被 study_room 命中（设计预期：精确房间过滤）
+    # 本测试验证 living_room_thermostat（直接 product_code=260001）能命中 error_265
+    def test_living_room_thermostat_matches_product_code_260001_error_n(self):
+        """v0.6.3：living_room_thermostat 通过 product_code=260001 直接过滤，命中 error_265。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertIn(self.fe_thermostat_main.id, ids)
 
-    # FM5-02：study_room_thermostat 能匹配 product_code=120003 的 error_N 故障
-    def test_study_room_thermostat_matches_product_code_120003_error_n(self):
-        """sub_type=study_room_thermostat 应能命中 product_code=120003 的 error_679。"""
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+    # FM5-02：v0.6.3 更新：study_room 不再通过 product_code 直接命中，需 DeviceNode 数据
+    # 本测试改为验证 living_room_thermostat 不命中 product_code=120003 的故障（120003 不在其范围）
+    def test_living_room_thermostat_does_not_match_product_code_120003(self):
+        """v0.6.3：living_room_thermostat 只映射 product_code=260001，不命中 120003。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
-        self.assertIn(self.fe_thermostat_panel.id, ids)
+        # fe_thermostat_panel 是 product_code=120003、error_679，无命名型 fault_code → 不命中
+        self.assertNotIn(self.fe_thermostat_panel.id, ids)
 
-    # FM5-03：living_room_thermostat 也匹配相同 product_code 集合（房间维度丢失，设计权衡）
-    def test_living_room_thermostat_same_result_as_study_room(self):
-        """living_room 和 study_room 温控因 product_code 相同，返回相同结果集（设计权衡）。"""
+    # FM5-03：living_room_thermostat 匹配 product_code=260001（无房间过滤）
+    # v0.6.3 更新：living_room 用直接 product_code 过滤，study_room 用 device_sn 子查询
+    # 因本测试无 DeviceNode 数据，study_room 只能命中命名型 fault_code
+    def test_living_room_thermostat_matches_product_code_260001(self):
+        """v0.6.3：living_room_thermostat 通过 product_code=260001 直接过滤（无房间过滤）。"""
         resp_lr = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
-        resp_sr = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
         self.assertEqual(resp_lr.status_code, 200)
-        self.assertEqual(resp_sr.status_code, 200)
         ids_lr = set(r['id'] for r in resp_lr.json()['results'])
-        ids_sr = set(r['id'] for r in resp_sr.json()['results'])
-        # 两者命中集合相同（均为 260001+120003 的故障）
-        self.assertEqual(ids_lr, ids_sr)
-        # 均命中温控设备的故障
+        # 命中 product_code=260001 的故障
         self.assertIn(self.fe_thermostat_main.id, ids_lr)
-        self.assertIn(self.fe_thermostat_panel.id, ids_lr)
+        # product_code=120003 不在 living_room_thermostat 的 product_codes 中 → 不命中
+        # （除非有命名型 fault_code 路径）
+        self.assertNotIn(self.fe_thermostat_panel.id, ids_lr)
 
-    # FM5-04：OR 联合：命名型 fault_code 与 product_code 共存，均能命中
-    def test_or_union_named_fault_code_and_product_code_both_hit(self):
-        """study_room_thermostat 的 OR 联合：命名型 fault_code 和 product_code 均可命中。"""
+    # FM5-04：OR 联合：命名型 fault_code 仍能命中（向后兼容路径）
+    def test_or_union_named_fault_code_still_hits(self):
+        """v0.6.3：study_room_thermostat 的命名型 fault_code OR 路径仍可命中（向后兼容）。"""
         resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
-        # product_code 路径命中
-        self.assertIn(self.fe_thermostat_main.id, ids)   # product_code=260001
-        self.assertIn(self.fe_thermostat_panel.id, ids)  # product_code=120003
         # 命名型 fault_code 路径命中（study_room_temp_sensor_error）
         self.assertIn(self.fe_study_room_named.id, ids)
+        # 无 DeviceNode 数据时，error_N 通用故障不被房间过滤路径命中（设计预期）
+        # 不断言 fe_thermostat_main/panel 在结果中（依赖 DeviceNode 数据，本 setUp 无）
 
     # FM5-05：study_room_thermostat 不命中无关设备（product_code=10016 主机）
     def test_sub_type_thermostat_does_not_hit_unrelated_product(self):
@@ -1985,3 +1987,423 @@ class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
         # 非法 sub_type 被过滤 → fault_codes/product_codes 均空 → 不过滤，返回全部 7 天内数据
         # （本 setUp 创建了 10 条在 7 天内的记录）
         self.assertEqual(resp.json()['count'], 10)
+
+
+# ===========================================================================
+# BUG-FM-006 回归测试：温控面板按房间过滤（room_filter Subquery）
+# ===========================================================================
+
+class TestBugFM006RoomFilter(FaultViewTestBase):
+    """BUG-FM-006 回归：sub_type 过滤通过 device_node JOIN device_room 的
+    ori_room_name 关键词，区分不同房间的温控面板 sub_type。
+
+    修复点：views_fault.py SUB_TYPE_ROOM_FILTER + DeviceNode Subquery。
+    设计：living_room_thermostat 用 product_code=260001（不过滤房间）；
+         study_room/bedroom/children_room/fourth_children_room 用 device_sn 集合
+         从 device_node JOIN device_room（ori_room_name regex）取得。
+    """
+
+    @staticmethod
+    def _make_device_node(owner_sp, floor_no, room_name, ori_room_name, room_type,
+                          device_sn, product_code, device_name='设备'):
+        """辅助：创建完整 OwnerInfo→DeviceFloor→DeviceRoom→DeviceNode 层级。"""
+        from api.models import OwnerInfo, DeviceFloor, DeviceRoom, DeviceNode as DN
+        owner, _ = OwnerInfo.objects.get_or_create(
+            specific_part=owner_sp,
+            defaults=dict(building='FM6test', unit='1', room_number='100'),
+        )
+        floor, _ = DeviceFloor.objects.get_or_create(
+            owner=owner, floor_no=floor_no,
+            defaults=dict(floor_name=f'Floor{floor_no}'),
+        )
+        room, _ = DeviceRoom.objects.get_or_create(
+            floor=floor, ori_room_name=ori_room_name,
+            defaults=dict(room_name=room_name, room_type=room_type),
+        )
+        dn = DN.objects.create(
+            room=room, device_sn=device_sn, product_code=product_code,
+            device_name=device_name, system_flag=1, category_code=1,
+        )
+        return dn
+
+    def setUp(self):
+        super().setUp()
+        now = timezone.now()
+
+        # 每个设备节点使用独立的 specific_part（OwnerInfo），避免 UniqueConstraint 冲突
+        self.dn_living    = self._make_device_node('FM6-living',    1, '客厅',  '客厅',  1, 60001, '260001', '主温控')
+        self.dn_study     = self._make_device_node('FM6-study',     1, '书房',  '书房',  2, 60002, '120003', '温控面板')
+        self.dn_secondary = self._make_device_node('FM6-secondary', 1, '次卧',  '次卧',  3, 60003, '120003', '温控面板')
+        self.dn_master    = self._make_device_node('FM6-master',    1, '主卧',  '主卧',  4, 60004, '120003', '温控面板')
+        self.dn_children  = self._make_device_node('FM6-children',  1, '儿童房','儿童房',5, 60005, '120003', '温控面板')
+
+        # 对应 FaultEvent（device_sn 为 str，product_code 为 str）
+        def _fe(sn_int, pc, sp='FM6-1-6-100'):
+            return _make_fault_event(
+                specific_part=sp,
+                device_sn=str(sn_int),
+                product_code=pc,
+                fault_code='error_100',
+                fault_type='other_error',
+                first_seen_at=now - timedelta(hours=1),
+                last_seen_at=now - timedelta(minutes=30),
+                is_active=True,
+            )
+
+        self.fe_living    = _fe(60001, '260001')
+        self.fe_study     = _fe(60002, '120003')
+        self.fe_secondary = _fe(60003, '120003')
+        self.fe_master    = _fe(60004, '120003')
+        self.fe_children  = _fe(60005, '120003')
+
+    # FM6-01：living_room_thermostat 只匹配 product_code=260001（不过滤房间）
+    def test_living_room_matches_product_code_260001_no_room_filter(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_living.id, ids)
+        # 温控面板（120003）不应命中（living_room_thermostat 只映射 260001）
+        self.assertNotIn(self.fe_study.id, ids)
+        self.assertNotIn(self.fe_master.id, ids)
+
+    # FM6-02：study_room_thermostat 同时匹配书房和次卧
+    def test_study_room_matches_study_and_secondary_bedroom(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_study.id, ids)      # 书房
+        self.assertIn(self.fe_secondary.id, ids)  # 次卧
+        self.assertNotIn(self.fe_master.id, ids)
+        self.assertNotIn(self.fe_children.id, ids)
+        self.assertNotIn(self.fe_living.id, ids)
+
+    # FM6-03：bedroom_thermostat 只匹配主卧
+    def test_bedroom_thermostat_matches_master_bedroom_only(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'bedroom_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_master.id, ids)
+        self.assertNotIn(self.fe_study.id, ids)
+        self.assertNotIn(self.fe_secondary.id, ids)
+        self.assertNotIn(self.fe_children.id, ids)
+        self.assertNotIn(self.fe_living.id, ids)
+
+    # FM6-04：children_room_thermostat 只匹配儿童房
+    def test_children_room_thermostat_matches_children_room_only(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'children_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_children.id, ids)
+        self.assertNotIn(self.fe_master.id, ids)
+        self.assertNotIn(self.fe_study.id, ids)
+        self.assertNotIn(self.fe_living.id, ids)
+
+    # FM6-05：fourth_children_room_thermostat 行为与 children_room_thermostat 等价
+    def test_fourth_children_room_equivalent_to_children_room(self):
+        resp_cr  = self.client.get(self.list_url, {'sub_type': 'children_room_thermostat'})
+        resp_fcr = self.client.get(self.list_url, {'sub_type': 'fourth_children_room_thermostat'})
+        self.assertEqual(resp_cr.status_code,  200)
+        self.assertEqual(resp_fcr.status_code, 200)
+        ids_cr  = set(r['id'] for r in resp_cr.json()['results'])
+        ids_fcr = set(r['id'] for r in resp_fcr.json()['results'])
+        # 两者命中相同的 device_sn 集合（均映射到"儿童房"关键词）
+        self.assertEqual(ids_cr, ids_fcr)
+        self.assertIn(self.fe_children.id, ids_fcr)
+
+    # FM6-06：fault_event 有 device_sn 但 device_node 无对应记录时，
+    #         room_keywords 路径不命中，但若有 fault_code__in 命中则仍返回
+    def test_device_not_in_device_node_room_path_miss_but_named_fault_code_hits(self):
+        now = timezone.now()
+        # device_sn=99999 不在 device_node 中
+        fe_orphan_named = _make_fault_event(
+            specific_part='FM6-orphan',
+            device_sn='99999',
+            product_code='120003',
+            fault_code='study_room_temp_sensor_error',  # 命名型 fault_code 在 SUB_TYPE_TO_FAULT_CODES
+            fault_type='sensor',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # 命名型 fault_code OR 路径仍应命中
+        self.assertIn(fe_orphan_named.id, ids)
+
+    def test_device_not_in_device_node_and_no_named_fault_code_not_hit(self):
+        now = timezone.now()
+        # device_sn=88888 不在 device_node 中，且 fault_code=error_999 不在命名型集合
+        fe_orphan_error = _make_fault_event(
+            specific_part='FM6-orphan2',
+            device_sn='88888',
+            product_code='120003',
+            fault_code='error_999',
+            fault_type='other_error',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # 既不在 device_node（房间路径 miss），也无命名型 fault_code → 不命中
+        self.assertNotIn(fe_orphan_error.id, ids)
+
+    # FM6-07：多 sub_type 同时选合并 device_sn 列表
+    def test_multi_sub_type_merges_device_sns(self):
+        resp = self.client.get(
+            self.list_url + '?sub_type=bedroom_thermostat&sub_type=study_room_thermostat'
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_master.id, ids)     # bedroom
+        self.assertIn(self.fe_study.id, ids)      # study_room（书房）
+        self.assertIn(self.fe_secondary.id, ids)  # study_room（次卧）
+        self.assertNotIn(self.fe_children.id, ids)
+        self.assertNotIn(self.fe_living.id, ids)
+
+    # FM6-08：fresh_air_unit 的 fault_code__startswith 前缀分支不受影响
+    def test_fresh_air_unit_prefix_branch_unaffected(self):
+        now = timezone.now()
+        fe_bit = _make_fault_event(
+            specific_part='FM6-fa',
+            device_sn='70001',
+            product_code='130004',
+            fault_code='fresh_air_fault_bit_3',
+            fault_type='fresh_air',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(fe_bit.id, ids)
+
+    # FM6-09：BUG-FM-003/004 现有行为不受破坏（fault_type / specific_part 过滤仍正常）
+    def test_bm003_004_existing_behavior_unaffected(self):
+        """fault_type 和 specific_part 过滤不受 BUG-FM-006 修复影响。"""
+        resp = self.client.get(self.list_url, {'fault_type': 'other_error'})
+        self.assertEqual(resp.status_code, 200)
+        # 本 setUp 创建的 5 条故障均为 other_error，应全部返回
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_living.id, ids)
+        self.assertIn(self.fe_master.id, ids)
+
+
+# ===========================================================================
+# BUG-FM-007 回归测试：新风机设备名称归一化
+# ===========================================================================
+
+class TestBugFM007DeviceNameOverride(FaultViewTestBase):
+    """BUG-FM-007 回归：product_code=130004 的 device_name 在 serializer 层
+    归一化为"新风机"（DeviceNode.device_name="新风" → 覆盖为"新风机"）。
+
+    修复点：serializers_fault.py get_device_name() + DEVICE_NAME_OVERRIDE。
+    """
+
+    @staticmethod
+    def _make_dn(sp, device_sn, product_code, device_name, floor_no=1):
+        """创建 OwnerInfo→DeviceFloor→DeviceRoom→DeviceNode（最小化辅助）。"""
+        from api.models import OwnerInfo, DeviceFloor, DeviceRoom, DeviceNode as DN
+        owner, _ = OwnerInfo.objects.get_or_create(
+            specific_part=sp,
+            defaults=dict(building='FM7test', unit='1', room_number='100'),
+        )
+        floor, _ = DeviceFloor.objects.get_or_create(
+            owner=owner, floor_no=floor_no,
+            defaults=dict(floor_name='F1'),
+        )
+        room, _ = DeviceRoom.objects.get_or_create(
+            floor=floor, ori_room_name='全屋',
+            defaults=dict(room_name='全屋', room_type=99),
+        )
+        dn = DN.objects.create(
+            room=room, device_sn=device_sn, product_code=product_code,
+            device_name=device_name, system_flag=1, category_code=1,
+        )
+        return dn
+
+    def setUp(self):
+        super().setUp()
+        # 强制 device_name_cache 过期，使后续创建的 DeviceNode 在查询时被加载
+        import api.device_name_cache as _cache_mod
+        _cache_mod._cache_loaded_at = 0.0
+
+    # FM7-01：product_code=130004 的故障，device_name 显示"新风机"
+    def test_fresh_air_device_name_overridden_to_xinfengji(self):
+        dn = self._make_dn('FM7-fa-1', 70100, '130004', '新风')
+        now = timezone.now()
+        fe = _make_fault_event(
+            specific_part='FM7-fa-1',
+            device_sn=str(dn.device_sn),  # '70100'
+            product_code='130004',
+            fault_code='error_82',
+            fault_type='other_error',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        import api.device_name_cache as _cache_mod
+        _cache_mod._cache_loaded_at = 0.0  # 确保缓存在请求时重建
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        results = resp.json()['results']
+        target = next(r for r in results if r['id'] == fe.id)
+        self.assertEqual(target['device_name'], '新风机',
+                         '期望 device_name=新风机（BUG-FM-007 归一化）')
+
+    # FM7-02：其他 product_code 不受影响
+    def test_other_product_code_not_affected(self):
+        dn = self._make_dn('FM7-thermostat-1', 70200, '120003', '温控面板', floor_no=2)
+        now = timezone.now()
+        fe = _make_fault_event(
+            specific_part='FM7-thermostat-1',
+            device_sn=str(dn.device_sn),
+            product_code='120003',
+            fault_code='error_733',
+            fault_type='other_error',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        import api.device_name_cache as _cache_mod
+        _cache_mod._cache_loaded_at = 0.0
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        results = resp.json()['results']
+        target = next(r for r in results if r['id'] == fe.id)
+        # 温控面板 device_name 不应被覆盖
+        self.assertEqual(target['device_name'], '温控面板')
+
+    # FM7-03：device_name_cache miss 时不抛异常（返回 None）
+    def test_device_name_cache_miss_no_exception(self):
+        """device_sn 不在 device_name_cache 中，get_device_name 应返回 None，不崩溃。"""
+        now = timezone.now()
+        fe = _make_fault_event(
+            specific_part='FM7-cache-miss',
+            device_sn='99998',  # 不存在于 device_node 的 sn
+            product_code='130004',
+            fault_code='error_82',
+            fault_type='other_error',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        # 不应抛 5xx
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        results = resp.json()['results']
+        target = next(r for r in results if r['id'] == fe.id)
+        # cache miss 时 get_device_name_by_sn 返回 None，override 不生效，device_name=None
+        self.assertIsNone(target['device_name'])
+
+    # FM7-04：device_name_cache miss 时 PRODUCT_CODE_LABELS 兜底路径仍工作
+    def test_product_code_labels_fallback_still_works(self):
+        """device_name=None 时，前端应走 device_type_label 兜底（PRODUCT_CODE_LABELS）。"""
+        now = timezone.now()
+        fe = _make_fault_event(
+            specific_part='FM7-fallback',
+            device_sn='99997',  # 不存在于 device_node
+            product_code='130004',
+            fault_code='error_82',
+            fault_type='other_error',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        results = resp.json()['results']
+        target = next(r for r in results if r['id'] == fe.id)
+        # device_type_label 由 PRODUCT_CODE_LABELS['130004'] = '新风机' 提供
+        self.assertEqual(target['device_type_label'], '新风机')
+
+
+# ===========================================================================
+# BUG-FM-008 回归测试：故障描述中文化
+# ===========================================================================
+
+class TestBugFM008FaultMessageZh(TestCase):
+    """BUG-FM-008 回归：get_fault_message() 优先字典查表（中文），
+    error_N 通用兜底，其他保持原 capitalize 逻辑。
+
+    同时验证回填命令 --dry-run 报告应回填行数。
+    """
+
+    # FM8-01：已映射的 error_N → 中文描述
+    def test_error_140_returns_chinese(self):
+        self.assertEqual(get_fault_message('error_140'), '低温故障')
+
+    def test_error_82_returns_chinese(self):
+        self.assertEqual(get_fault_message('error_82'), '新风机停机故障')
+
+    def test_error_679_returns_chinese(self):
+        self.assertEqual(get_fault_message('error_679'), '通信故障')
+
+    # FM8-02：未映射的 error_N → 通用兜底
+    def test_unmapped_error_n_generic_fallback(self):
+        self.assertEqual(get_fault_message('error_99999'), '设备故障 (错误码 99999)')
+
+    # FM8-03：命名型 fault_code（在 ERROR_CODE_LABELS 中）
+    def test_comm_fault_timeout_returns_chinese(self):
+        self.assertEqual(get_fault_message('comm_fault_timeout'), '通信超时')
+
+    # FM8-04：fresh_air_fault_bit_N 保持原 capitalize 逻辑（不在字典中）
+    def test_fresh_air_fault_bit_keeps_capitalize_logic(self):
+        self.assertEqual(get_fault_message('fresh_air_fault_bit_3'), 'Fresh air fault bit 3')
+
+    # FM8-05：命名型 fault_code — fresh_air_unit_stop_error
+    def test_fresh_air_unit_stop_error_returns_chinese(self):
+        self.assertEqual(get_fault_message('fresh_air_unit_stop_error'), '新风机停机故障')
+
+    # FM8-06：长度保护 ≤ 255
+    def test_result_length_within_255(self):
+        # 所有 ERROR_CODE_LABELS 值都应 ≤ 255 字符
+        from api.fault_consumer.constants import ERROR_CODE_LABELS
+        for key, val in ERROR_CODE_LABELS.items():
+            result = get_fault_message(key)
+            self.assertLessEqual(len(result), 255, f'{key} 对应描述超出 255 字符')
+        # 超长兜底测试（error_N 万位数字）
+        long_result = get_fault_message('error_' + '9' * 250)
+        self.assertLessEqual(len(long_result), 255)
+
+    # FM8-07：回填命令 --dry-run 报告应回填行数 ≠ 0
+    def test_backfill_command_dry_run_reports_nonzero_count(self):
+        """创建若干英文旧格式 fault_message 的记录，dry-run 应报告 > 0 条待回填。"""
+        from django.core.management import call_command
+        from io import StringIO
+        now = timezone.now()
+        # 创建旧格式（英文 capitalize）的记录，模拟 v0.6.2 写入的数据
+        _make_fault_event(
+            specific_part='FM8-backfill-1',
+            device_sn='80001',
+            product_code='270001',
+            fault_code='error_140',
+            fault_type='other_error',
+            fault_message='Error 140',       # 旧英文格式
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        _make_fault_event(
+            specific_part='FM8-backfill-2',
+            device_sn='80002',
+            product_code='260001',
+            fault_code='error_679',
+            fault_type='other_error',
+            fault_message='Error 679',       # 旧英文格式
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        out = StringIO()
+        call_command(
+            'backfill_fault_message_zh',
+            '--dry-run',
+            stdout=out,
+        )
+        output = out.getvalue()
+        # dry-run 应报告 2 行（两条旧格式记录需要更新）
+        self.assertIn('2', output, '期望 dry-run 输出包含影响行数 2')

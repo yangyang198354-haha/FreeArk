@@ -1,23 +1,36 @@
 """
-fault_consumer/constants.py — 故障消费者常量定义（MOD-BE-FM-01，v0.6.2-FM）
+fault_consumer/constants.py — 故障消费者常量定义（MOD-BE-FM-01，v0.6.3-FM）
 
 集中定义：
   - 故障类型映射（精确 + 后缀模式）
   - 位域故障正则
   - sub_type → fault_code 反向映射（供 API 过滤）
-  - sub_type → product_code 反向映射（BUG-FM-005 修复，供 OR 联合过滤）
+  - sub_type → (product_codes, room_keywords) 房间过滤规则（BUG-FM-006 修复）
+  - 设备名称覆盖字典（BUG-FM-007 修复）
+  - 故障码中文描述映射（BUG-FM-008 修复）
   - 标签字典（供 fault-event-categories 接口）
 
 严禁修改 api/fault_utils.py（v0.5.3-FCC 模块，只读引用）。
 
 变更记录：
-  v0.6.2-FM（BUG-FM-005）：新增 SUB_TYPE_TO_PRODUCT_CODES，用于在生产数据库中
-    fault_code 为通用 error_N 格式时，通过 product_code 识别设备类型。
-    背景：生产 fault_event 表中命名型 fault_code（如 study_room_*）实际上不存在，
-    几乎所有故障码均为 error_N 格式，导致 sub_type 过滤 100% 失效。
-    设计权衡：error_N 故障码不携带房间维度信息，因此多个温控 sub_type
-    （living_room/study_room/bedroom/children_room 等）均映射到相同 product_code
-    集合（260001/120003）。用户若需要按房间筛选，应同时使用 specific_part 筛选器。
+  v0.6.3-FM（BUG-FM-006）：新增 SUB_TYPE_ROOM_FILTER，替代 v0.6.2 的
+    SUB_TYPE_TO_PRODUCT_CODES。通过 device_node JOIN device_room 的
+    ori_room_name 关键词匹配，在 error_N 通用码场景下按房间区分温控面板。
+    living_room_thermostat（product_code=260001）天然无需房间过滤；
+    study_room/bedroom/children_room/fourth_children_room 各自携带房间关键词。
+    参见：docs/troubleshooting/BUG-FM-006_room_filter_by_device_join.md
+
+  v0.6.3-FM（BUG-FM-007）：新增 DEVICE_NAME_OVERRIDE，在 serializer 层覆盖
+    特定 product_code 的设备名称。130004（新风机）DeviceNode.device_name="新风"
+    统一归一化为"新风机"，不修改 DB 和 device_tree_sync。
+    参见：docs/troubleshooting/BUG-FM-007_fresh_air_device_name_normalization.md
+
+  v0.6.3-FM（BUG-FM-008）：新增 ERROR_CODE_LABELS，为 error_N 及命名型
+    fault_code 提供中文描述查表。get_fault_message() 优先字典查表，
+    未映射的 error_N 走通用兜底"设备故障 (错误码 N)"，其余保持原逻辑。
+    参见：docs/troubleshooting/BUG-FM-008_fault_message_zh_translation.md
+
+  v0.6.2-FM（BUG-FM-005）：新增 SUB_TYPE_TO_PRODUCT_CODES（已被 v0.6.3 替代）。
     参见：docs/troubleshooting/BUG-FM-005_sub_type_filter_breaks_on_generic_error_codes.md
 """
 
@@ -60,37 +73,50 @@ _FRESH_AIR_BIT_PATTERN = re.compile(r'^fresh_air_fault_bit_\d+$')
 _ERROR_N_PATTERN = re.compile(r'^error_\d+$')
 
 # ---------------------------------------------------------------------------
-# sub_type → product_code 列表（BUG-FM-005 修复，供 API 查询参数 sub_type 过滤）
-# ADR-FM-05-SUBTYPE-v2：当 fault_code 为通用 error_N 格式时，通过 product_code 识别设备类型。
+# sub_type → (product_codes, room_keywords) 房间过滤规则（BUG-FM-006 修复）
+# ADR-FM-06-ROOM-FILTER：通过 device_node JOIN device_room 的 ori_room_name
+# 关键词匹配，在 error_N 通用码场景下按房间区分温控面板 sub_type。
 #
-# 设计权衡（重要，维护人员必读）：
-#   - error_N 故障码不携带房间维度，因此温控类 sub_type（如 living_room_thermostat、
-#     study_room_thermostat 等）均映射到相同的 product_code 集合 ['260001', '120003']。
-#     这意味着这些 sub_type 过滤出的结果集是相同的——这是数据模型层面的限制，非 BUG。
-#   - 用户若需按房间区分，应配合 specific_part（房号）筛选器组合使用。
-#   - 本映射不替代 SUB_TYPE_TO_FAULT_CODES，两者在 views_fault.py 中 OR 联合使用。
+# 数据结构：dict[str, tuple[list[str], list[str]]]
+#   key   → sub_type 名称
+#   value → (product_codes, room_keywords)
+#           product_codes:  设备 product_code 列表
+#           room_keywords:  ori_room_name 关键词列表（OR 匹配；空列表=不过滤房间）
 #
-# product_code 来源（生产分布，2026-05 实测）：
-#   260001 → 主温控（529 条故障记录）
-#   120003 → 温控面板（486 条故障记录）
-#   130004 → 新风机（201 条故障记录）
-#   270001 → 水力模块（122 条故障记录）
-#   250001 → 能耗表（206 条故障记录）
-#   100007 → 空气品质传感器（360 条故障记录）
+# 房间过滤逻辑（views_fault.py 实现）：
+#   - room_keywords 非空 → 子查询 device_node JOIN device_room（ori_room_name__regex）
+#     取满足 (product_code, room_keyword) 的 device_sn 集合，q |= Q(device_sn__in=sns)
+#   - room_keywords 为空 → 直接 q |= Q(product_code__in=product_codes)（无房间过滤）
+#   - 同时保留 Q(fault_code__in=fault_codes)（命名型 fault_code 兼容路径）
+#   - 同时保留 fresh_air_unit 的 fault_code__startswith='fresh_air_fault_bit_' 前缀分支
+#
+# 生产设备分布（device_node JOIN device_room 实测，2026-05）：
+#   product_code=260001（主温控）  ori_room_name='客厅'  634 户
+#   product_code=120003（温控面板）ori_room_name='次卧'  634 户
+#   product_code=120003（温控面板）ori_room_name='主卧'  634 户
+#   product_code=120003（温控面板）ori_room_name='儿童房' 634 户
+#   product_code=120003（温控面板）ori_room_name='书房'  418 户
+#
+# 注意（维护人员必读）：
+#   - living_room_thermostat 的 product_code=260001 天然=客厅，room_keywords=[]（不过滤）
+#   - study_room_thermostat 映射书房+次卧（utils_room_filter v0.5.7 历史语义延续）
+#   - fourth_children_room_thermostat 保留（用户决定不删），房间关键词等同 children_room，
+#     device_room 中无独立"第四儿童房"，只能映射到"儿童房"关键词；UI 可见，行为与
+#     children_room_thermostat 等价（四房户型第二个儿童房，同一 device_room 分组）
+#   - 替代已废弃的 SUB_TYPE_TO_PRODUCT_CODES（v0.6.2）
 # ---------------------------------------------------------------------------
 
-SUB_TYPE_TO_PRODUCT_CODES: dict = {
-    # 5 个温控 sub_type 均映射到主温控(260001) + 温控面板(120003)
-    # （error_N 通用码丢失了房间维度，牺牲房间精度换取"能筛出来"）
-    'living_room_thermostat':           ['260001', '120003'],
-    'study_room_thermostat':            ['260001', '120003'],
-    'bedroom_thermostat':               ['260001', '120003'],
-    'children_room_thermostat':         ['260001', '120003'],
-    'fourth_children_room_thermostat':  ['260001', '120003'],
-    'fresh_air_unit':                   ['130004'],
-    'hydraulic_module':                 ['270001'],
-    'energy_meter':                     ['250001'],
-    'air_quality_sensor':               ['100007'],
+SUB_TYPE_ROOM_FILTER: dict = {
+    # (product_codes, room_keywords)；room_keywords 为空表示不过滤房间
+    'living_room_thermostat':           (['260001'], []),
+    'study_room_thermostat':            (['120003'], ['书房', '次卧']),
+    'bedroom_thermostat':               (['120003'], ['主卧']),
+    'children_room_thermostat':         (['120003'], ['儿童房']),
+    'fourth_children_room_thermostat':  (['120003'], ['儿童房']),
+    'fresh_air_unit':                   (['130004'], []),
+    'hydraulic_module':                 (['270001'], []),
+    'energy_meter':                     (['250001'], []),
+    'air_quality_sensor':               (['100007'], []),
 }
 
 # ---------------------------------------------------------------------------
@@ -189,4 +215,74 @@ PRODUCT_CODE_LABELS: dict = {
     # 260002：生产实测有 3 条故障记录，product_code 未在设备清单中出现，
     # 疑似为主温控的另一型号或测试设备，待硬件团队确认后更新标签。
     '260002': '未知设备 260002',
+}
+
+# ---------------------------------------------------------------------------
+# 设备名称强制覆盖（BUG-FM-007 修复，v0.6.3-FM）
+# 在 serializer 层（serializers_fault.py）覆盖 DeviceNode.device_name，
+# 最局部、最可逆，不修改 DB 和 device_tree_sync.py。
+#
+# 背景：130004（新风机）的 DeviceNode.device_name 全部 = "新风"（634 条统一），
+#       但 device_tree_sync.py:248 会用屏侧 deviceName 覆盖，直接改 DB 无效。
+#       改 sync 逻辑风险大，选择在 serializer 边界归一化显示名。
+#
+# 格式：product_code（str）→ 强制显示名（str）
+# ---------------------------------------------------------------------------
+
+DEVICE_NAME_OVERRIDE: dict = {
+    '130004': '新风机',
+}
+
+# ---------------------------------------------------------------------------
+# 故障码中文描述映射（BUG-FM-008 修复，v0.6.3-FM）
+# 来源：监听数据包含的内容.docx 解析整理
+#
+# 使用场景：fault_classifier.get_fault_message() 优先字典查表；
+#   未在此字典的 error_N 走通用兜底"设备故障 (错误码 N)"；
+#   未在此字典的命名码走原 _.replace('_',' ').capitalize() 逻辑。
+#
+# 严禁修改 fault_utils.py（v0.5.3-FCC 模块，只读引用）。
+# ---------------------------------------------------------------------------
+
+ERROR_CODE_LABELS: dict = {
+    # ── 通用 ──
+    'comm_fault_timeout': '通信超时',
+
+    # ── 水力模块 (product_code=270001) ──
+    'error_140': '低温故障',
+    'error_82':  '新风机停机故障',
+
+    # ── 主温控（客厅 product_code=260001 sn=22001）──
+    'error_673': '内置温度传感器故障',
+    'error_674': '内置湿度传感器故障',
+    'error_675': '外置温度传感器故障',
+    'error_679': '通信故障',
+
+    # ── 儿童房温控面板 (120003 sn=22549) ──
+    'error_703': '内置温度传感器故障',
+    'error_704': '内置湿度传感器故障',
+    'error_705': '外置温度传感器故障',
+    'error_709': '通信故障',
+
+    # ── 主卧温控面板 (120003 sn=22550) ──
+    'error_733': '内置温度传感器故障',
+    'error_734': '内置湿度传感器故障',
+    'error_735': '外置温度传感器故障',
+    'error_739': '通信故障',
+
+    # ── 次卧温控面板 (120003 sn=22551) ──
+    'error_763': '内置温度传感器故障',
+    'error_764': '内置湿度传感器故障',
+    'error_765': '外置温度传感器故障',
+    'error_769': '通信故障',
+
+    # ── 空气品质 (100007) 位域复合故障 ──
+    'error_194': '空气品质设备故障',
+
+    # ── 命名型 fault_code（已存在于 EXACT_FAULT_MAP）──
+    'fresh_air_unit_stop_error':               '新风机停机故障',
+    'fresh_air_unit_communication_error':      '新风机通信故障',
+    'hydraulic_module_low_temp_error':         '水力模块低温故障',
+    'energy_meter_status_communication_error': '能耗表通信故障',
+    'air_quality_sensor_communication_error':  '空气品质传感器通信故障',
 }

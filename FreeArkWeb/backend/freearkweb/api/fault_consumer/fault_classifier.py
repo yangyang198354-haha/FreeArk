@@ -1,5 +1,5 @@
 """
-fault_consumer/fault_classifier.py — 故障字段识别与分类（MOD-BE-FM-02，v0.6.0-FM）
+fault_consumer/fault_classifier.py — 故障字段识别与分类（MOD-BE-FM-02，v0.6.3-FM）
 
 提供三个纯函数：
   - is_fault_candidate(param_name) → bool
@@ -11,12 +11,18 @@ fault_consumer/fault_classifier.py — 故障字段识别与分类（MOD-BE-FM-0
 扩展支持 fresh_air_fault_bit_* 位域字段（v0.6.0 新增）。
 """
 
+import re as _re
+
 from .constants import (
     EXACT_FAULT_MAP,
     SUFFIX_FAULT_RULES,
     _FRESH_AIR_BIT_PATTERN,
     _ERROR_N_PATTERN,
+    ERROR_CODE_LABELS,
 )
+
+# error_N 数字提取（仅用于 get_fault_message 兜底，不依赖 fault_utils）
+_ERROR_N_DIGITS = _re.compile(r'^error_(\d+)$')
 
 # 从 fault_utils 只读引用具名故障字段集合
 try:
@@ -113,13 +119,23 @@ def get_fault_type_and_severity(param_name: str) -> tuple:
 
 
 def get_fault_message(param_name: str) -> str:
-    """生成 fault_event.fault_message 可读描述。
+    """生成 fault_event.fault_message 可读描述（BUG-FM-008 修复，v0.6.3-FM）。
 
-    基于 param_name 格式化（下划线→空格，首字母大写）。
-    AB-004（故障码中文字典表）实现后可替换此函数。
+    优先级：
+      1. ERROR_CODE_LABELS 字典查表（中文描述，覆盖 error_N 和命名型 fault_code）
+      2. error_N 通用兜底："设备故障 (错误码 N)"
+      3. 其他（fresh_air_fault_bit_N 等）：下划线→空格，首字母大写（原逻辑保留）
 
     Returns:
         str: 故障描述文本，最长 255 字符
     """
+    # 1. 优先字典查表
+    if param_name in ERROR_CODE_LABELS:
+        return ERROR_CODE_LABELS[param_name][:255]
+    # 2. error_N 通用兜底
+    m = _ERROR_N_DIGITS.match(param_name)
+    if m:
+        return f'设备故障 (错误码 {m.group(1)})'[:255]
+    # 3. 其他（fresh_air_fault_bit_N 等）维持原逻辑
     msg = param_name.replace('_', ' ').capitalize()
     return msg[:255]
