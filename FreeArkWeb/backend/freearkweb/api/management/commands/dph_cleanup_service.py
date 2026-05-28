@@ -36,7 +36,7 @@ from datetime import datetime, timedelta
 
 import schedule
 from django.core.management.base import BaseCommand
-from django.db import connection, connections, OperationalError
+from django.db import connection, connections, OperationalError, close_old_connections
 
 from .common import (
     get_service_logger,
@@ -211,7 +211,14 @@ class Command(BaseCommand):
           捕获 OperationalError（MySQL Lost connection / server gone away）和所有其他异常，
           记录完整错误日志后 return（不重新抛出），防止异常冲出调用方的 while True 调度循环
           导致进程崩溃。systemd Restart=on-failure 作为最终兜底。
+
+        BUG-DPH-003 修复：
+          常驻 cron 模式下两次 03:00 触发间隔 24h，超过 MySQL wait_timeout (默认 8h)，
+          复用的 ORM 连接会被服务端关闭，下次 cleanup 时报 (2006, 'Server has gone away')。
+          在每次进入清理前调用 close_old_connections() 丢弃陈旧连接，强制重新建连。
         """
+        close_old_connections()
+
         cutoff_dt = datetime.now() - timedelta(days=days)
         cutoff_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
 
