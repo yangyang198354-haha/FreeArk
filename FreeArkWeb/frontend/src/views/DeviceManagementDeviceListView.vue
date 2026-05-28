@@ -14,19 +14,10 @@
 <template>
   <div class="device-management-device-list">
     <div class="page-header">
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <div>
-          <h2>设备列表</h2>
-          <!-- REQ-FUNC-030 / AC-017-01 -->
-          <p class="page-subtitle">查看和管理所有设备的运行状态</p>
-        </div>
-        <!-- v0.6.0-FM：故障管理导航入口（MOD-FE-FM-03） -->
-        <el-button
-          type="warning"
-          @click="$router.push({ name: 'FaultManagement' })"
-        >
-          故障管理
-        </el-button>
+      <div>
+        <h2>设备列表</h2>
+        <!-- REQ-FUNC-030 / AC-017-01 -->
+        <p class="page-subtitle">查看和管理所有设备的运行状态</p>
       </div>
     </div>
 

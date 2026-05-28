@@ -50,6 +50,7 @@
               <span>设备管理</span>
             </template>
             <el-menu-item index="/device-management/device-list">设备列表</el-menu-item>
+            <el-menu-item index="/device-management/faults">故障管理</el-menu-item>
           </el-sub-menu>
 
           <el-menu-item index="/owner-management" v-if="userRole === 'admin'">

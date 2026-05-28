@@ -9,28 +9,30 @@
       </p>
     </div>
 
-    <!-- 只看未恢复 Toggle -->
-    <div class="active-only-toggle">
-      <el-switch
-        v-model="filters.is_active_only"
-        active-text="只看未恢复"
-        inactive-text="显示全部"
-        @change="handleSearch"
-      />
-    </div>
-
     <!-- 过滤条件区 -->
     <el-form :inline="true" class="filter-bar" @submit.prevent="handleSearch">
-      <!-- 房号模糊搜索 -->
+      <!-- 状态三态筛选（FR-FM-UX-04，替换原 el-switch，AQ-03：重置回'true'）-->
+      <el-form-item label="状态">
+        <el-radio-group v-model="filterIsActive" @change="handleSearch">
+          <el-radio-button value="true">未恢复</el-radio-button>
+          <el-radio-button value="false">已恢复</el-radio-button>
+          <el-radio-button value="all">全部</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+
+      <!-- 房号级联选择器（FR-FM-UX-02，替换原 el-input，AQ-02：getElementById 模式）-->
       <el-form-item label="房号">
-        <el-input
-          v-model="filters.specific_part"
-          placeholder="输入房号模糊搜索"
-          clearable
-          style="width: 160px"
-          @clear="handleSearch"
-          @keyup.enter="handleSearch"
-        />
+        <div style="display: inline-block; vertical-align: middle; width: 180px;">
+          <CascadingSelector
+            building-input-id="fmBuilding"
+            building-input-name="fmBuilding"
+            unit-input-id="fmUnit"
+            unit-input-name="fmUnit"
+            room-input-id="fmRoom"
+            room-input-name="fmRoom"
+            ref="fmCascadingSelectorRef"
+          />
+        </div>
       </el-form-item>
 
       <!-- 时间段选择器（默认最近 7 天） -->
@@ -104,7 +106,17 @@
       :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
     >
       <el-table-column prop="specific_part" label="房号" min-width="110" fixed />
-      <el-table-column prop="device_sn" label="设备SN" min-width="100" />
+      <!-- 设备名称列（FR-FM-UX-03，三级降级渲染：device_name → device_type_label → device_sn+未识别）-->
+      <el-table-column label="设备名称" min-width="120">
+        <template #default="{ row }">
+          <span v-if="row.device_name">{{ row.device_name }}</span>
+          <span v-else-if="row.device_type_label">{{ row.device_type_label }}</span>
+          <span v-else>
+            {{ row.device_sn }}
+            <el-tag size="small" type="info" style="margin-left: 4px;">未识别</el-tag>
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column prop="fault_code" label="故障码" min-width="200" show-overflow-tooltip />
       <el-table-column prop="fault_message" label="故障描述" min-width="180" show-overflow-tooltip />
       <el-table-column prop="fault_type" label="故障类型" min-width="100">
@@ -171,11 +183,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
+import CascadingSelector from '@/components/CascadingSelector.vue'
 
 const router = useRouter()
+const route = useRoute()  // FR-FM-UX-04：URL 参数优先（AQ-02 补充 useRoute import）
+
+// ---------------------------------------------------------------------------
+// 房号级联选择器 ref（AQ-02：getElementById 模式，ref 仅用于 clearSelection）
+// ---------------------------------------------------------------------------
+
+const fmCascadingSelectorRef = ref(null)
 
 // ---------------------------------------------------------------------------
 // 过滤状态
@@ -190,12 +210,15 @@ const defaultDateRange = [
 ]
 
 const filters = reactive({
-  specific_part: '',
   fault_types: [],
   sub_types: [],
-  is_active_only: false,
   dateRange: [...defaultDateRange],
 })
+
+// FR-FM-UX-04：三态筛选变量（替换原 is_active_only bool）
+// 取值：'true'（未恢复，默认）/ 'false'（已恢复）/ 'all'（全部）
+// AQ-03 裁决：重置时恢复为 'true'，与首次进入行为一致
+const filterIsActive = ref('true')
 
 // ---------------------------------------------------------------------------
 // 表格状态
@@ -244,6 +267,32 @@ function severityTagType(severity, isActive) {
   return severity === 'error' ? 'danger' : 'warning'
 }
 
+/**
+ * 从 CascadingSelector 的 hidden input 读取选中值，组装 specific_part 参数。
+ * ADR-UX-02：icontains 容错方案，3 段 room_no 直接作为 icontains 查询参数。
+ * AQ-02：使用 document.getElementById 模式（与 DeviceManagementDeviceListView 第310-319行一致）。
+ *
+ * 组装规则：
+ *   building + unit + room → "{building}-{unit}-{room}"（如 "3-1-702"，icontains 命中 "3-1-7-702"）
+ *   building + unit        → "{building}-{unit}"（如 "3-1"，命中 3栋1单元全部房间）
+ *   building only          → "{building}"（如 "3"，命中 3栋全部）
+ *   均空                   → ''（不传 specific_part 参数）
+ */
+function getSelectedSpecificPart() {
+  const building = document.getElementById('fmBuilding')?.value || ''
+  const unit = document.getElementById('fmUnit')?.value || ''
+  const room = document.getElementById('fmRoom')?.value || ''
+
+  if (building && unit && room) {
+    return `${building}-${unit}-${room}`
+  } else if (building && unit) {
+    return `${building}-${unit}`
+  } else if (building) {
+    return building
+  }
+  return ''
+}
+
 // ---------------------------------------------------------------------------
 // API 调用
 // ---------------------------------------------------------------------------
@@ -266,8 +315,10 @@ async function fetchFaultEvents() {
       page_size: pageSize.value,
     }
 
-    if (filters.specific_part.trim()) {
-      params.specific_part = filters.specific_part.trim()
+    // FR-FM-UX-02：房号过滤（CascadingSelector → specific_part，icontains 容错）
+    const sp = getSelectedSpecificPart()
+    if (sp) {
+      params.specific_part = sp
     }
 
     if (filters.fault_types.length > 0) {
@@ -279,9 +330,13 @@ async function fetchFaultEvents() {
       params.sub_type = filters.sub_types
     }
 
-    if (filters.is_active_only) {
+    // FR-FM-UX-04：三态 is_active 传参（ADR-UX-04）
+    if (filterIsActive.value === 'true') {
       params.is_active = 'true'
+    } else if (filterIsActive.value === 'false') {
+      params.is_active = 'false'
     }
+    // filterIsActive === 'all' 时不传 is_active 参数，后端返回全部记录
 
     // 时间范围
     if (filters.dateRange && filters.dateRange.length === 2) {
@@ -314,11 +369,15 @@ function handleSearch() {
 }
 
 function handleReset() {
-  filters.specific_part = ''
+  // FR-FM-UX-02：清空 CascadingSelector（通过 ref 调用 clearSelection）
+  if (fmCascadingSelectorRef.value) {
+    fmCascadingSelectorRef.value.clearSelection()
+  }
   filters.fault_types = []
   filters.sub_types = []
-  filters.is_active_only = false
   filters.dateRange = [...defaultDateRange]
+  // FR-FM-UX-04 + AQ-03：重置回默认"未恢复"（与首次进入行为一致）
+  filterIsActive.value = 'true'
   currentPage.value = 1
   pageSize.value = 20
   fetchFaultEvents()
@@ -340,11 +399,11 @@ function handlePageSizeChange(size) {
  * OQ-12 裁决：不附加子设备高亮参数。
  */
 function handleViewDevicePanel(row) {
-  const route = router.resolve({
+  const route_resolved = router.resolve({
     name: 'DeviceCards',
     query: { specific_part: row.specific_part },
   })
-  window.open(route.href, '_blank')
+  window.open(route_resolved.href, '_blank')
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +411,14 @@ function handleViewDevicePanel(row) {
 // ---------------------------------------------------------------------------
 
 onMounted(async () => {
+  // FR-FM-UX-04：URL 参数优先于前端默认值（ADR-UX-04）
+  const urlIsActive = route.query.is_active
+  if (urlIsActive === 'true' || urlIsActive === 'false') {
+    filterIsActive.value = urlIsActive
+  } else {
+    filterIsActive.value = 'true'  // 默认"未恢复"
+  }
+
   await fetchCategories()
   await fetchFaultEvents()
 })
@@ -387,10 +454,6 @@ onMounted(async () => {
   border-radius: 4px;
   padding: 6px 10px;
   display: inline-block;
-}
-
-.active-only-toggle {
-  margin-bottom: 16px;
 }
 
 .filter-bar {
