@@ -1,5 +1,5 @@
 """
-views_fault.py — 故障管理 REST API 视图（MOD-BE-FM-08，v0.6.0-FM）
+views_fault.py — 故障管理 REST API 视图（MOD-BE-FM-08，v0.6.2-FM）
 
 提供两个 API 端点：
   GET /api/devices/fault-events/           — 故障事件分页查询（FR-FM-05）
@@ -27,6 +27,7 @@ from .fault_consumer.constants import (
     FAULT_TYPE_LABELS,
     SUB_TYPE_LABELS,
     SUB_TYPE_TO_FAULT_CODES,
+    SUB_TYPE_TO_PRODUCT_CODES,
     _FRESH_AIR_BIT_PATTERN,
 )
 from .models import FaultEvent
@@ -74,11 +75,30 @@ def fault_event_list(request):
     """
     qs = FaultEvent.objects.all()
 
-    # --- specific_part 模糊匹配 ---
+    # --- specific_part 匹配（BUG-FM-004 修复，v0.6.2-FM）---
+    # 背景：前端 building_data.js 房号格式为 3 段（栋-单元-房号，如 "9-1-604"），
+    #       而生产 DB 的 specific_part 为 4 段（栋-单元-楼层-房号，如 "9-1-6-604"）。
+    #       旧逻辑用 icontains 子串匹配，"9-1-604" 不是 "9-1-6-604" 的连续子串，导致全量失效。
+    # 修复：对 3 段格式做"前缀=栋-单元- + 后缀=-房号"的组合匹配，兼容 4 段精确匹配及遗留格式。
+    # 边界说明：startswith('9-1-') 不会错误匹配 '9-10-...'，因为 '9-10-' 不以 '9-1-' 开头
+    #           （'9-10-'[3] == '0'，而 '9-1-' 要求第 4 个字符为段分隔符后的下一内容，
+    #            startswith 精确匹配前缀字节，不存在误匹配）。
     sp = request.query_params.get('specific_part', '').strip()
     if sp:
-        # icontains 等价 LIKE '%value%'，ORM 自动转义特殊字符，防 SQL 注入
-        qs = qs.filter(specific_part__icontains=sp)
+        parts = sp.split('-')
+        if len(parts) == 3:
+            # 3 段格式：栋-单元-房号（如 "9-1-604"）
+            # 匹配 4 段 DB 值：specific_part 以 "栋-单元-" 开头，且以 "-房号" 结尾
+            prefix = f"{parts[0]}-{parts[1]}-"   # "9-1-"
+            suffix = f"-{parts[2]}"               # "-604"
+            qs = qs.filter(
+                specific_part__startswith=prefix,
+                specific_part__endswith=suffix,
+            )
+        else:
+            # 4 段格式或其他格式：icontains 保持兼容（4 段精确匹配 + 遗留子串匹配）
+            # ORM 自动转义特殊字符，防 SQL 注入
+            qs = qs.filter(specific_part__icontains=sp)
 
     # --- fault_type 多值过滤 ---
     fault_types = request.query_params.getlist('fault_type')
@@ -88,25 +108,38 @@ def fault_event_list(request):
         if valid_fault_types:
             qs = qs.filter(fault_type__in=valid_fault_types)
 
-    # --- sub_type 过滤（翻译为 fault_code__in + fresh_air_fault_bit_* 前缀）---
+    # --- sub_type 过滤（BUG-FM-005 修复，v0.6.2-FM）---
+    # 旧逻辑：仅用 fault_code__in 精确匹配命名型 fault_code（如 study_room_*），
+    #         但生产 DB 中几乎所有故障码均为通用 error_N 格式，导致过滤 100% 失效。
+    # 新逻辑：fault_code__in（命名型，向后兼容）OR product_code__in（通用型，BUG-FM-005 修复）
+    #         两个条件用 Q OR 联合，命中任意一个即可纳入结果集。
+    # 设计权衡：error_N 通用码不携带房间维度，温控类 sub_type 过滤结果按 product_code 命中，
+    #           无法区分客厅/书房/主卧——这是数据模型限制，不是 BUG。
+    #           参见：docs/troubleshooting/BUG-FM-005_sub_type_filter_breaks_on_generic_error_codes.md
     sub_types = request.query_params.getlist('sub_type')
     if sub_types:
         fault_codes = []
+        product_codes = []
         include_fresh_air_bits = False
         for st in sub_types:
             if st not in SUB_TYPE_LABELS:
                 # 忽略非法 sub_type 值（防止注入无效查询条件）
                 continue
             fault_codes.extend(SUB_TYPE_TO_FAULT_CODES.get(st, []))
+            product_codes.extend(SUB_TYPE_TO_PRODUCT_CODES.get(st, []))
             if st == 'fresh_air_unit':
                 include_fresh_air_bits = True
 
-        if fault_codes or include_fresh_air_bits:
+        if fault_codes or product_codes or include_fresh_air_bits:
             q = Q()
             if fault_codes:
+                # 命名型 fault_code 精确匹配（兼容旧数据/未来数据）
                 q |= Q(fault_code__in=fault_codes)
+            if product_codes:
+                # product_code 匹配（用于生产中通用 error_N 故障码的设备类型识别）
+                q |= Q(product_code__in=product_codes)
             if include_fresh_air_bits:
-                # fresh_air_fault_bit_* 前缀匹配（ADR-FM-05-SUBTYPE）
+                # fresh_air_fault_bit_* 前缀匹配（ADR-FM-05-SUBTYPE，保持原有逻辑）
                 q |= Q(fault_code__startswith='fresh_air_fault_bit_')
             qs = qs.filter(q)
 

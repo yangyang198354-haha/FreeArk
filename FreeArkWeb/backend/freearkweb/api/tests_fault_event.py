@@ -1584,3 +1584,404 @@ class TestFaultFilterParamFormatCompat(FaultViewTestBase):
         self.assertEqual(resp.status_code, 200)
         # 非法 sub_type 全部被过滤 → fault_codes 为空 → 不过滤，返回全量 6 条
         self.assertEqual(resp.json()['count'], 6)
+
+
+# ===========================================================================
+# BUG-FM-004 回归测试：房号筛选段数不匹配
+# ===========================================================================
+
+class TestBugFM004RoomNumberSegments(FaultViewTestBase):
+    """BUG-FM-004 回归：前端 3 段房号（栋-单元-房号）能正确匹配 DB 4 段格式（栋-单元-楼层-房号）。
+
+    修复点：views_fault.py specific_part 过滤分支：
+      - 3 段输入 → startswith(栋-单元-) AND endswith(-房号)
+      - 其他段数 → icontains 兼容原逻辑
+    """
+
+    def setUp(self):
+        super().setUp()
+        now = timezone.now()
+        # 4 段 DB 格式：9-1-6-604（9栋1单元6楼604室）
+        self.fe_9_1_6_604 = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-A',
+            fault_code='error_265', fault_type='other_error', severity='error',
+            product_code='100007',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        # 同单元同房号，不同楼层：9-1-5-604（9栋1单元5楼604室）
+        self.fe_9_1_5_604 = _make_fault_event(
+            specific_part='9-1-5-604', device_sn='SN-B',
+            fault_code='error_679', fault_type='other_error', severity='error',
+            product_code='260001',
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        # 不同单元（同栋同房号）：9-2-6-604，不应被 9-1-604 筛出
+        self.fe_9_2_6_604 = _make_fault_event(
+            specific_part='9-2-6-604', device_sn='SN-C',
+            fault_code='error_194', fault_type='other_error', severity='error',
+            product_code='130004',
+            first_seen_at=now - timedelta(hours=3),
+            last_seen_at=now - timedelta(hours=2),
+            is_active=True,
+        )
+        # 不同栋：10-1-6-604，不应被 9-1-604 筛出
+        self.fe_10_1_6_604 = _make_fault_event(
+            specific_part='10-1-6-604', device_sn='SN-D',
+            fault_code='error_496', fault_type='other_error', severity='error',
+            product_code='120003',
+            first_seen_at=now - timedelta(hours=4),
+            last_seen_at=now - timedelta(hours=3),
+            is_active=True,
+        )
+
+    # FM4-01：3 段输入匹配 4 段 DB 数据（核心修复验证）
+    def test_3_segment_input_matches_4_segment_db(self):
+        """3 段 "9-1-604" 应能命中 DB 中的 "9-1-6-604"。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_9_1_6_604.id, ids)
+
+    # FM4-02：多楼层同房号全量返回
+    def test_3_segment_returns_all_floors_with_same_room(self):
+        """多个楼层 9-1-5-604 + 9-1-6-604 都应被 9-1-604 命中。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_9_1_6_604.id, ids)
+        self.assertIn(self.fe_9_1_5_604.id, ids)
+
+    # FM4-03：3 段筛选不跨单元误匹配
+    def test_3_segment_does_not_match_different_unit(self):
+        """9-1-604 不应命中 9-2-6-604（不同单元）。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertNotIn(self.fe_9_2_6_604.id, ids)
+
+    # FM4-04：3 段筛选不跨栋误匹配
+    def test_3_segment_does_not_match_different_building(self):
+        """9-1-604 不应命中 10-1-6-604（不同栋）。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertNotIn(self.fe_10_1_6_604.id, ids)
+
+    # FM4-05：4 段输入精确匹配（向后兼容）
+    def test_4_segment_input_exact_match(self):
+        """4 段 "9-1-6-604" 走 icontains，精确命中同字符串，不命中 9-1-5-604。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-6-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_9_1_6_604.id, ids)
+        self.assertNotIn(self.fe_9_1_5_604.id, ids)
+
+    # FM4-06：1 段输入安全降级（不抛异常，走 icontains）
+    def test_1_segment_input_safe_fallback(self):
+        """单段输入（如 "604"）走 icontains，不抛异常。"""
+        resp = self.client.get(self.list_url, {'specific_part': '604'})
+        self.assertEqual(resp.status_code, 200)
+        # icontains "604" 会命中所有包含 "604" 的 specific_part（本测试中有 4 条）
+        data = resp.json()
+        self.assertGreaterEqual(data['count'], 1)
+
+    # FM4-07：2 段输入安全降级（不抛异常，走 icontains）
+    def test_2_segment_input_safe_fallback(self):
+        """2 段输入走 icontains，不抛异常。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1'})
+        self.assertEqual(resp.status_code, 200)
+        # "9-1" 作为 icontains 子串，会命中含 "9-1" 的所有记录
+        self.assertGreaterEqual(resp.json()['count'], 1)
+
+    # FM4-08：5 段输入安全降级（不抛异常，走 icontains）
+    def test_5_segment_input_safe_fallback(self):
+        """5 段输入走 icontains，不抛异常，DB 中无此格式则返回空。"""
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-6-604-extra'})
+        self.assertEqual(resp.status_code, 200)
+
+    # FM4-09：栋号含多位数时 3 段格式正确匹配
+    def test_3_segment_with_multi_digit_building_number(self):
+        """栋号为 10（多位数）时，10-1-604 应能命中 10-1-6-604。"""
+        resp = self.client.get(self.list_url, {'specific_part': '10-1-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_10_1_6_604.id, ids)
+        # 不应命中 9-1-6-604（不同栋）
+        self.assertNotIn(self.fe_9_1_6_604.id, ids)
+
+    # FM4-10：startswith 不误匹配相邻单元（9-1- vs 9-10-）
+    def test_startswith_does_not_match_adjacent_unit_with_longer_number(self):
+        """9-1-604 的 startswith('9-1-') 不应匹配 9-10-6-604（单元号 10 vs 1）。"""
+        now = timezone.now()
+        fe_9_10_6_604 = _make_fault_event(
+            specific_part='9-10-6-604', device_sn='SN-E',
+            fault_code='error_82', fault_type='other_error', severity='error',
+            product_code='260001',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        resp = self.client.get(self.list_url, {'specific_part': '9-1-604'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # 9-10-6-604 的开头是 "9-10-"，不以 "9-1-" 开头，不应命中
+        self.assertNotIn(fe_9_10_6_604.id, ids)
+        # 9-1-6-604 和 9-1-5-604 仍应命中
+        self.assertIn(self.fe_9_1_6_604.id, ids)
+        self.assertIn(self.fe_9_1_5_604.id, ids)
+
+
+# ===========================================================================
+# BUG-FM-005 回归测试：设备类型筛选对通用 error_N 故障失效
+# ===========================================================================
+
+class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
+    """BUG-FM-005 回归：sub_type 过滤通过 fault_code OR product_code 联合查询，
+    使 error_N 通用故障码也能被设备类型筛选命中。
+
+    修复点：views_fault.py sub_type 过滤分支新增 product_code__in 条件。
+    设计权衡：error_N 不携带房间维度，多温控 sub_type 返回相同结果集（数据模型限制，非 BUG）。
+    """
+
+    def setUp(self):
+        super().setUp()
+        now = timezone.now()
+
+        # 温控类 error_N 故障（product_code=260001 主温控）
+        self.fe_thermostat_main = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-T1',
+            fault_code='error_265', fault_type='other_error', severity='error',
+            product_code='260001',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        # 温控类 error_N 故障（product_code=120003 温控面板）
+        self.fe_thermostat_panel = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-T2',
+            fault_code='error_679', fault_type='other_error', severity='error',
+            product_code='120003',
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        # 命名型 fault_code（旧有机制）：study_room_temp_sensor_error
+        self.fe_study_room_named = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-T3',
+            fault_code='study_room_temp_sensor_error', fault_type='sensor', severity='error',
+            product_code='260001',
+            first_seen_at=now - timedelta(hours=3),
+            last_seen_at=now - timedelta(hours=2),
+            is_active=True,
+        )
+        # 新风机 error_N（product_code=130004）
+        self.fe_fresh_air_error_n = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-F1',
+            fault_code='error_496', fault_type='other_error', severity='error',
+            product_code='130004',
+            first_seen_at=now - timedelta(hours=4),
+            last_seen_at=now - timedelta(hours=3),
+            is_active=True,
+        )
+        # 新风机精确 fault_code
+        self.fe_fresh_air_named = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-F2',
+            fault_code='fresh_air_unit_stop_error', fault_type='fresh_air', severity='error',
+            product_code='130004',
+            first_seen_at=now - timedelta(hours=5),
+            last_seen_at=now - timedelta(hours=4),
+            is_active=True,
+        )
+        # 新风机位域故障（前缀匹配）
+        self.fe_fresh_air_bit = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-F3',
+            fault_code='fresh_air_fault_bit_7', fault_type='fresh_air', severity='warning',
+            product_code='130004',
+            first_seen_at=now - timedelta(hours=6),
+            last_seen_at=now - timedelta(hours=5),
+            is_active=True,
+        )
+        # 水力模块（product_code=270001）
+        self.fe_hydraulic = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-H1',
+            fault_code='error_194', fault_type='other_error', severity='error',
+            product_code='270001',
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        # 能耗表（product_code=250001）
+        self.fe_energy_meter = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-E1',
+            fault_code='error_709', fault_type='other_error', severity='error',
+            product_code='250001',
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        # 空气品质传感器（product_code=100007）
+        self.fe_air_quality = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-A1',
+            fault_code='error_739', fault_type='other_error', severity='error',
+            product_code='100007',
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        # 无关设备（product_code=10016，主机，不在任何温控/新风 sub_type 中）
+        self.fe_unrelated = _make_fault_event(
+            specific_part='9-1-6-604', device_sn='SN-U1',
+            fault_code='error_82', fault_type='other_error', severity='error',
+            product_code='10016',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+
+    # FM5-01：study_room_thermostat 能匹配 product_code=260001 的 error_N 故障（核心修复）
+    def test_study_room_thermostat_matches_product_code_260001_error_n(self):
+        """sub_type=study_room_thermostat 应能命中 product_code=260001 的 error_265。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_thermostat_main.id, ids)
+
+    # FM5-02：study_room_thermostat 能匹配 product_code=120003 的 error_N 故障
+    def test_study_room_thermostat_matches_product_code_120003_error_n(self):
+        """sub_type=study_room_thermostat 应能命中 product_code=120003 的 error_679。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_thermostat_panel.id, ids)
+
+    # FM5-03：living_room_thermostat 也匹配相同 product_code 集合（房间维度丢失，设计权衡）
+    def test_living_room_thermostat_same_result_as_study_room(self):
+        """living_room 和 study_room 温控因 product_code 相同，返回相同结果集（设计权衡）。"""
+        resp_lr = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+        resp_sr = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp_lr.status_code, 200)
+        self.assertEqual(resp_sr.status_code, 200)
+        ids_lr = set(r['id'] for r in resp_lr.json()['results'])
+        ids_sr = set(r['id'] for r in resp_sr.json()['results'])
+        # 两者命中集合相同（均为 260001+120003 的故障）
+        self.assertEqual(ids_lr, ids_sr)
+        # 均命中温控设备的故障
+        self.assertIn(self.fe_thermostat_main.id, ids_lr)
+        self.assertIn(self.fe_thermostat_panel.id, ids_lr)
+
+    # FM5-04：OR 联合：命名型 fault_code 与 product_code 共存，均能命中
+    def test_or_union_named_fault_code_and_product_code_both_hit(self):
+        """study_room_thermostat 的 OR 联合：命名型 fault_code 和 product_code 均可命中。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # product_code 路径命中
+        self.assertIn(self.fe_thermostat_main.id, ids)   # product_code=260001
+        self.assertIn(self.fe_thermostat_panel.id, ids)  # product_code=120003
+        # 命名型 fault_code 路径命中（study_room_temp_sensor_error）
+        self.assertIn(self.fe_study_room_named.id, ids)
+
+    # FM5-05：study_room_thermostat 不命中无关设备（product_code=10016 主机）
+    def test_sub_type_thermostat_does_not_hit_unrelated_product(self):
+        """温控 sub_type 不应命中 product_code=10016（主机）的故障。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertNotIn(self.fe_unrelated.id, ids)
+
+    # FM5-06：fresh_air_unit 三类全覆盖：精确 fault_code、前缀、product_code
+    def test_fresh_air_unit_covers_named_fault_code(self):
+        """fresh_air_unit 命中精确 fault_code=fresh_air_unit_stop_error。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_fresh_air_named.id, ids)
+
+    def test_fresh_air_unit_covers_bit_prefix(self):
+        """fresh_air_unit 命中前缀 fault_code=fresh_air_fault_bit_7。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_fresh_air_bit.id, ids)
+
+    def test_fresh_air_unit_covers_product_code_130004_error_n(self):
+        """fresh_air_unit 命中 product_code=130004 的 error_496（error_N 通用码）。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_fresh_air_error_n.id, ids)
+
+    def test_fresh_air_unit_does_not_hit_unrelated(self):
+        """fresh_air_unit 不命中无关设备（product_code=10016）。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertNotIn(self.fe_unrelated.id, ids)
+
+    # FM5-07：hydraulic_module 匹配 product_code=270001
+    def test_hydraulic_module_matches_product_code_270001(self):
+        """sub_type=hydraulic_module 命中 product_code=270001 的 error_194。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'hydraulic_module'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_hydraulic.id, ids)
+        # 不命中温控设备（不同 product_code）
+        self.assertNotIn(self.fe_thermostat_main.id, ids)
+
+    # FM5-08：energy_meter 匹配 product_code=250001
+    def test_energy_meter_matches_product_code_250001(self):
+        """sub_type=energy_meter 命中 product_code=250001 的 error_709。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'energy_meter'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_energy_meter.id, ids)
+        self.assertNotIn(self.fe_thermostat_main.id, ids)
+
+    # FM5-09：air_quality_sensor 匹配 product_code=100007
+    def test_air_quality_sensor_matches_product_code_100007(self):
+        """sub_type=air_quality_sensor 命中 product_code=100007 的 error_739。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'air_quality_sensor'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_air_quality.id, ids)
+        self.assertNotIn(self.fe_thermostat_main.id, ids)
+
+    # FM5-10：BUG-FM-003 向后兼容——所有 11 个 TestFaultFilterParamFormatCompat 测试不受影响
+    # 本测试验证 fresh_air_unit 原有的精确 fault_code 和前缀匹配逻辑（BF-05）在修复后仍正确
+    def test_bm003_regression_fresh_air_named_and_bit_still_work(self):
+        """BUG-FM-003 回归：fresh_air_unit 精确 fault_code + 前缀匹配在 BUG-FM-005 修复后仍正确。"""
+        now = timezone.now()
+        fe_stop = _make_fault_event(
+            specific_part='BM3-REG-1', device_sn='SN-BM3A',
+            fault_code='fresh_air_unit_stop_error', fault_type='fresh_air', severity='error',
+            product_code='130004',
+            first_seen_at=now - timedelta(hours=1),
+            last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        fe_bit = _make_fault_event(
+            specific_part='BM3-REG-2', device_sn='SN-BM3B',
+            fault_code='fresh_air_fault_bit_3', fault_type='fresh_air', severity='warning',
+            product_code='130004',
+            first_seen_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(fe_stop.id, ids)
+        self.assertIn(fe_bit.id, ids)
+
+    # FM5-11：无效 sub_type 静默忽略（BUG-FM-005 修复不破坏原有 invalid 忽略逻辑）
+    def test_invalid_sub_type_still_silently_ignored(self):
+        """非法 sub_type 仍应静默忽略，返回 7 天内全量记录（修复后行为不变）。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'INVALID_DEVICE_TYPE'})
+        self.assertEqual(resp.status_code, 200)
+        # 非法 sub_type 被过滤 → fault_codes/product_codes 均空 → 不过滤，返回全部 7 天内数据
+        # （本 setUp 创建了 10 条在 7 天内的记录）
+        self.assertEqual(resp.json()['count'], 10)
