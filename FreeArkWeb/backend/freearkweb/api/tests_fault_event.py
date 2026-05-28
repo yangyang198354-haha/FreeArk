@@ -1397,3 +1397,190 @@ class TestFaultEventAPIIntegration(FaultViewTestBase):
                 specific_part='DUP', device_sn='SN-DUP', fault_code='comm_fault_timeout',
                 fault_type='comm', first_seen_at=ts, last_seen_at=ts, is_active=True,
             )
+
+
+# ===========================================================================
+# BUG-FM-003 回归测试：故障类型和设备类型过滤器参数格式兼容性
+# ===========================================================================
+
+class TestFaultFilterParamFormatCompat(FaultViewTestBase):
+    """BUG-FM-003 回归：验证后端能正确处理重复参数名（无方括号）格式的多值过滤。
+
+    场景：
+      - 单选故障类型
+      - 多选故障类型（URL 中重复 fault_type=comm&fault_type=sensor）
+      - 单选设备类型
+      - 多选设备类型
+      - 组合：故障类型 + 设备类型 + is_active
+      - 清除筛选（不传相关参数，返回全量 7 天内数据）
+      - 非法参数值静默忽略
+
+    这些测试直接使用 DRF APIClient 发起 HTTP 请求，模拟前端修复后的
+    URLSearchParams append 格式（重复参数名，无方括号）。
+    """
+
+    def setUp(self):
+        super().setUp()
+        now = timezone.now()
+
+        # 四类故障数据，均在最近 7 天内
+        self.fe_comm = _make_fault_event(
+            specific_part='FM3-1', device_sn='SN-C1',
+            fault_code='comm_fault_timeout', fault_type='comm', severity='error',
+            first_seen_at=now - timedelta(hours=1), last_seen_at=now - timedelta(minutes=30),
+            is_active=True,
+        )
+        self.fe_sensor = _make_fault_event(
+            specific_part='FM3-2', device_sn='SN-S1',
+            fault_code='living_room_temp_sensor_error', fault_type='sensor', severity='error',
+            first_seen_at=now - timedelta(hours=2), last_seen_at=now - timedelta(hours=1),
+            is_active=True,
+        )
+        self.fe_fresh_air = _make_fault_event(
+            specific_part='FM3-3', device_sn='SN-F1',
+            fault_code='fresh_air_unit_stop_error', fault_type='fresh_air', severity='error',
+            first_seen_at=now - timedelta(hours=3), last_seen_at=now - timedelta(hours=2),
+            is_active=False,
+            recovered_at=now - timedelta(hours=1),
+        )
+        self.fe_other = _make_fault_event(
+            specific_part='FM3-4', device_sn='SN-O1',
+            fault_code='hydraulic_module_low_temp_error', fault_type='other_error', severity='error',
+            first_seen_at=now - timedelta(hours=4), last_seen_at=now - timedelta(hours=3),
+            is_active=True,
+        )
+        # 用于 sub_type 过滤的客厅温控传感器故障
+        self.fe_lr_sensor = _make_fault_event(
+            specific_part='FM3-5', device_sn='SN-LR1',
+            fault_code='living_room_humidity_sensor_error', fault_type='sensor', severity='error',
+            first_seen_at=now - timedelta(hours=5), last_seen_at=now - timedelta(hours=4),
+            is_active=True,
+        )
+        # 用于 sub_type=fresh_air_unit 前缀匹配的位域故障
+        self.fe_fresh_bit = _make_fault_event(
+            specific_part='FM3-6', device_sn='SN-FB1',
+            fault_code='fresh_air_fault_bit_2', fault_type='fresh_air', severity='warning',
+            first_seen_at=now - timedelta(hours=6), last_seen_at=now - timedelta(hours=5),
+            is_active=True,
+        )
+
+    # BF-01：单选故障类型（fault_type=comm）
+    def test_single_fault_type_filter(self):
+        resp = self.client.get(self.list_url, {'fault_type': 'comm'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_comm.id, ids)
+        self.assertNotIn(self.fe_sensor.id, ids)
+        self.assertNotIn(self.fe_fresh_air.id, ids)
+        self.assertNotIn(self.fe_other.id, ids)
+
+    # BF-02：多选故障类型（fault_type=comm&fault_type=sensor，重复参数名格式）
+    def test_multi_fault_type_repeated_param_format(self):
+        """BUG-FM-003 核心回归：使用重复参数名（无方括号）传递多值。"""
+        resp = self.client.get(
+            self.list_url + '?fault_type=comm&fault_type=sensor'
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_comm.id, ids)
+        self.assertIn(self.fe_sensor.id, ids)
+        self.assertIn(self.fe_lr_sensor.id, ids)
+        self.assertNotIn(self.fe_fresh_air.id, ids)
+        self.assertNotIn(self.fe_other.id, ids)
+
+    # BF-03：四个类型全选（fault_type=comm&fault_type=sensor&fault_type=fresh_air&fault_type=other_error）
+    def test_all_four_fault_types_selected(self):
+        resp = self.client.get(
+            self.list_url + '?fault_type=comm&fault_type=sensor'
+                           + '&fault_type=fresh_air&fault_type=other_error'
+        )
+        self.assertEqual(resp.status_code, 200)
+        # 所有故障类型均被选中，返回全量 7 天内 6 条
+        self.assertEqual(resp.json()['count'], 6)
+
+    # BF-04：单选设备类型（sub_type=living_room_thermostat）
+    def test_single_sub_type_filter_living_room(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # living_room_temp_sensor_error 和 living_room_humidity_sensor_error 均应命中
+        self.assertIn(self.fe_sensor.id, ids)
+        self.assertIn(self.fe_lr_sensor.id, ids)
+        self.assertNotIn(self.fe_comm.id, ids)
+        self.assertNotIn(self.fe_fresh_air.id, ids)
+
+    # BF-05：设备类型=fresh_air_unit（包含精确匹配和前缀匹配两种 fault_code）
+    def test_sub_type_fresh_air_unit_includes_bit_pattern(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'fresh_air_unit'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # fresh_air_unit_stop_error（精确）和 fresh_air_fault_bit_2（前缀）均命中
+        self.assertIn(self.fe_fresh_air.id, ids)
+        self.assertIn(self.fe_fresh_bit.id, ids)
+        self.assertNotIn(self.fe_comm.id, ids)
+        self.assertNotIn(self.fe_sensor.id, ids)
+
+    # BF-06：多选设备类型（sub_type=living_room_thermostat&sub_type=fresh_air_unit）
+    def test_multi_sub_type_repeated_param_format(self):
+        """BUG-FM-003 核心回归：sub_type 也使用重复参数名格式。"""
+        resp = self.client.get(
+            self.list_url + '?sub_type=living_room_thermostat&sub_type=fresh_air_unit'
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_sensor.id, ids)
+        self.assertIn(self.fe_lr_sensor.id, ids)
+        self.assertIn(self.fe_fresh_air.id, ids)
+        self.assertIn(self.fe_fresh_bit.id, ids)
+        self.assertNotIn(self.fe_comm.id, ids)
+        self.assertNotIn(self.fe_other.id, ids)
+
+    # BF-07：组合过滤——故障类型 + is_active
+    def test_fault_type_and_is_active_combination(self):
+        resp = self.client.get(
+            self.list_url + '?fault_type=comm&fault_type=sensor&is_active=true'
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_comm.id, ids)      # comm + active
+        self.assertIn(self.fe_sensor.id, ids)    # sensor + active
+        self.assertIn(self.fe_lr_sensor.id, ids) # sensor + active
+        # fresh_air 已恢复（is_active=False），应被排除
+        self.assertNotIn(self.fe_fresh_air.id, ids)
+        self.assertNotIn(self.fe_other.id, ids)
+
+    # BF-08：组合过滤——设备类型 + is_active（fresh_air_unit，只要活跃）
+    def test_sub_type_and_is_active_combination(self):
+        resp = self.client.get(
+            self.list_url + '?sub_type=fresh_air_unit&is_active=true'
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # fe_fresh_bit active=True 应命中；fe_fresh_air active=False 应排除
+        self.assertIn(self.fe_fresh_bit.id, ids)
+        self.assertNotIn(self.fe_fresh_air.id, ids)
+
+    # BF-09：清除筛选——不传 fault_type / sub_type，返回全量 7 天内记录
+    def test_clear_filters_returns_all_within_7_days(self):
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['count'], 6)
+
+    # BF-10：非法 fault_type 静默忽略，与其他合法值共存时合法值仍生效
+    def test_invalid_fault_type_mixed_with_valid(self):
+        resp = self.client.get(
+            self.list_url + '?fault_type=comm&fault_type=INVALID_TYPE'
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        # valid_fault_types = ['comm']（INVALID_TYPE 被过滤掉），只返回 comm 类故障
+        self.assertIn(self.fe_comm.id, ids)
+        self.assertNotIn(self.fe_sensor.id, ids)
+        self.assertNotIn(self.fe_other.id, ids)
+
+    # BF-11：非法 sub_type 静默忽略
+    def test_invalid_sub_type_ignored(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'INVALID_SUB_TYPE'})
+        self.assertEqual(resp.status_code, 200)
+        # 非法 sub_type 全部被过滤 → fault_codes 为空 → 不过滤，返回全量 6 条
+        self.assertEqual(resp.json()['count'], 6)

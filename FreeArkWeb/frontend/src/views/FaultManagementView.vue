@@ -310,44 +310,49 @@ async function fetchCategories() {
 async function fetchFaultEvents() {
   loading.value = true
   try {
-    const params = {
-      page: currentPage.value,
-      page_size: pageSize.value,
-    }
+    // BUG-FM-003 修复：axios 1.x 默认将数组序列化为 fault_type[]=comm&fault_type[]=sensor
+    // （带方括号），后端 getlist('fault_type') 无法识别，导致过滤器无效。
+    // 修复方案：改用 URLSearchParams 手动 append，保证生成
+    // fault_type=comm&fault_type=sensor（无方括号）的重复参数形式。
+    const qs = new URLSearchParams()
+
+    qs.append('page', currentPage.value)
+    qs.append('page_size', pageSize.value)
 
     // FR-FM-UX-02：房号过滤（CascadingSelector → specific_part，icontains 容错）
     const sp = getSelectedSpecificPart()
     if (sp) {
-      params.specific_part = sp
+      qs.append('specific_part', sp)
     }
 
-    if (filters.fault_types.length > 0) {
-      // axios 会将数组自动序列化为重复参数：fault_type=comm&fault_type=sensor
-      params.fault_type = filters.fault_types
+    // 故障类型多值过滤（BUG-FM-003 修复：逐一 append，生成重复参数名）
+    for (const ft of filters.fault_types) {
+      qs.append('fault_type', ft)
     }
 
-    if (filters.sub_types.length > 0) {
-      params.sub_type = filters.sub_types
+    // 设备类型多值过滤（BUG-FM-003 修复：同上）
+    for (const st of filters.sub_types) {
+      qs.append('sub_type', st)
     }
 
     // FR-FM-UX-04：三态 is_active 传参（ADR-UX-04）
     if (filterIsActive.value === 'true') {
-      params.is_active = 'true'
+      qs.append('is_active', 'true')
     } else if (filterIsActive.value === 'false') {
-      params.is_active = 'false'
+      qs.append('is_active', 'false')
     }
     // filterIsActive === 'all' 时不传 is_active 参数，后端返回全部记录
 
     // 时间范围
     if (filters.dateRange && filters.dateRange.length === 2) {
-      params.first_seen_after = filters.dateRange[0] + 'T00:00:00'
-      params.first_seen_before = filters.dateRange[1] + 'T23:59:59'
+      qs.append('first_seen_after', filters.dateRange[0] + 'T00:00:00')
+      qs.append('first_seen_before', filters.dateRange[1] + 'T23:59:59')
     } else {
       // 默认最近 7 天
-      params.first_seen_after = sevenDaysAgo.toISOString().slice(0, 10) + 'T00:00:00'
+      qs.append('first_seen_after', sevenDaysAgo.toISOString().slice(0, 10) + 'T00:00:00')
     }
 
-    const resp = await axios.get('/api/devices/fault-events/', { params })
+    const resp = await axios.get('/api/devices/fault-events/?' + qs.toString())
     tableData.value = resp.data.results || []
     total.value = resp.data.count || 0
   } catch (err) {
