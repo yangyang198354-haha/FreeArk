@@ -29,6 +29,7 @@ from .fault_consumer.constants import (
     SUB_TYPE_LABELS,
     SUB_TYPE_TO_FAULT_CODES,
     SUB_TYPE_ROOM_FILTER,
+    VALID_ROOM_NAMES,
     _FRESH_AIR_BIT_PATTERN,
 )
 from .models import FaultEvent, DeviceNode
@@ -62,6 +63,7 @@ def fault_event_list(request):
       fault_type        string/多值   故障大类，可重复传递（逗号分隔不支持，请重复参数）
       sub_type          string/多值   设备子类型，翻译为 fault_code__in
       is_active         "true"/"false" 是否活跃（不传则不过滤）
+      room_name         string/多值   按房间名过滤，可重复传递（白名单：客厅/主卧/次卧/儿童房/书房）
       first_seen_after  ISO8601       首次时间下限（默认 now()-7d）
       first_seen_before ISO8601       首次时间上限
       page              int           页码（默认 1）
@@ -168,6 +170,15 @@ def fault_event_list(request):
                 # fresh_air_fault_bit_* 前缀匹配（ADR-FM-05-SUBTYPE，保持原有逻辑）
                 q |= Q(fault_code__startswith='fresh_air_fault_bit_')
             qs = qs.filter(q)
+
+    # --- room_name 过滤（FR-FM-009-filter，v0.6.4-FM-ROOM）---
+    # 直接过滤 fault_event.room_name 冗余列，无需 JOIN。
+    # VALID_ROOM_NAMES 白名单防止注入无效查询条件。
+    room_names = request.query_params.getlist('room_name')
+    if room_names:
+        valid_room_names = [r for r in room_names if r in VALID_ROOM_NAMES]
+        if valid_room_names:
+            qs = qs.filter(room_name__in=valid_room_names)
 
     # --- is_active 过滤 ---
     is_active_param = request.query_params.get('is_active')

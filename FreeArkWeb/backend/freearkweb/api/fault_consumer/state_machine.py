@@ -19,6 +19,8 @@ from datetime import datetime
 
 from django.db import close_old_connections, IntegrityError, OperationalError
 
+from .room_lookup import get_room_for_device
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -154,6 +156,7 @@ def _t1_insert(
     close_old_connections()
     try:
         from api.models import FaultEvent
+        room_name, room_id = get_room_for_device(device_sn)
         fe = FaultEvent.objects.create(
             specific_part=specific_part,
             device_sn=device_sn,
@@ -166,6 +169,8 @@ def _t1_insert(
             last_seen_at=received_at,
             recovered_at=None,
             is_active=True,
+            room_name=room_name,
+            room_id_id=room_id,
         )
         _state_machine[key] = FaultState(
             event_id=fe.id,

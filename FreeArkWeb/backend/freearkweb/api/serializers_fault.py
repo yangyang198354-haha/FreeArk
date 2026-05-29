@@ -32,11 +32,18 @@ class FaultEventSerializer(serializers.ModelSerializer):
     v0.6.1-FM-UX 新增字段：
       device_name      — 主路径：进程内缓存 dict 查表，O(1)，无 ORM JOIN
       device_type_label — 兜底一：PRODUCT_CODE_LABELS[product_code]
+
+    v0.6.4-FM-ROOM 新增字段：
+      room_name        — 冗余列，FaultEvent.room_name，null 可
+      room_id          — FK 外键 id，FaultEvent.room_id_id，null 可
     """
 
     # 新增（v0.6.1-FM-UX，MOD-BE-UX-03）
     device_name = serializers.SerializerMethodField()
     device_type_label = serializers.SerializerMethodField()
+
+    # 新增（v0.6.4-FM-ROOM，MOD-v0.6.4-08）
+    room_id = serializers.IntegerField(source='room_id_id', allow_null=True, read_only=True)
 
     def get_device_name(self, obj):
         """主路径：device_sn（str）→ int → dict 查表 → device_name。
@@ -86,5 +93,7 @@ class FaultEventSerializer(serializers.ModelSerializer):
             'updated_at',
             'device_name',        # 新增（v0.6.1-FM-UX）主路径，可 null
             'device_type_label',  # 新增（v0.6.1-FM-UX）兜底一，可 null
+            'room_name',          # 新增（v0.6.4-FM-ROOM）冗余房间名，可 null
+            'room_id',            # 新增（v0.6.4-FM-ROOM）房间 FK id，可 null
         ]
         read_only_fields = fields

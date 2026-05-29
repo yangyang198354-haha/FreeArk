@@ -709,6 +709,20 @@ class FaultEvent(models.Model):
     last_seen_at = models.DateTimeField(verbose_name='最后活跃时间')
     recovered_at = models.DateTimeField(null=True, blank=True, verbose_name='恢复时间')
     is_active = models.BooleanField(default=True, verbose_name='是否活跃')
+    # v0.6.4-FM-ROOM: 冗余房间字段，fault_consumer T1 写入时填充，历史数据由 migration 0028 回填
+    room_name = models.CharField(
+        max_length=50, null=True, blank=True,
+        verbose_name='房间名称',
+        help_text='冗余字段，存储 device_room.ori_room_name，fault_consumer T1 写入时填充',
+    )
+    room_id = models.ForeignKey(
+        'DeviceRoom',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='fault_events',
+        verbose_name='所属房间',
+        db_column='room_id',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 

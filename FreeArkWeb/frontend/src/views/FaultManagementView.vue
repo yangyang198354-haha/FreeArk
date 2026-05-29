@@ -89,6 +89,27 @@
         </el-select>
       </el-form-item>
 
+      <!-- 房间多选（v0.6.4-FM-ROOM，FR-FM-009-filter）-->
+      <el-form-item label="房间">
+        <el-select
+          v-model="filters.room_names"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          clearable
+          placeholder="全部房间"
+          style="width: 160px"
+          @change="handleSearch"
+        >
+          <el-option
+            v-for="room in ROOM_OPTIONS"
+            :key="room"
+            :label="room"
+            :value="room"
+          />
+        </el-select>
+      </el-form-item>
+
       <!-- 操作按钮 -->
       <el-form-item>
         <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -115,6 +136,12 @@
             {{ row.device_sn }}
             <el-tag size="small" type="info" style="margin-left: 4px;">未识别</el-tag>
           </span>
+        </template>
+      </el-table-column>
+      <!-- 房间列（v0.6.4-FM-ROOM，FR-FM-009-display）-->
+      <el-table-column prop="room_name" label="房间" width="100" align="center">
+        <template #default="scope">
+          {{ scope.row.room_name || '-' }}
         </template>
       </el-table-column>
       <el-table-column prop="fault_code" label="故障码" min-width="200" show-overflow-tooltip />
@@ -198,6 +225,13 @@ const route = useRoute()  // FR-FM-UX-04：URL 参数优先（AQ-02 补充 useRo
 const fmCascadingSelectorRef = ref(null)
 
 // ---------------------------------------------------------------------------
+// 常量
+// ---------------------------------------------------------------------------
+
+// 房间过滤器选项（v0.6.4-FM-ROOM，静态写死，与后端 VALID_ROOM_NAMES 保持一致）
+const ROOM_OPTIONS = ['客厅', '主卧', '次卧', '儿童房', '书房']
+
+// ---------------------------------------------------------------------------
 // 过滤状态
 // ---------------------------------------------------------------------------
 
@@ -212,6 +246,7 @@ const defaultDateRange = [
 const filters = reactive({
   fault_types: [],
   sub_types: [],
+  room_names: [],   // 新增（v0.6.4-FM-ROOM）
   dateRange: [...defaultDateRange],
 })
 
@@ -335,6 +370,11 @@ async function fetchFaultEvents() {
       qs.append('sub_type', st)
     }
 
+    // 房间多值过滤（v0.6.4-FM-ROOM）
+    for (const rn of filters.room_names) {
+      qs.append('room_name', rn)
+    }
+
     // FR-FM-UX-04：三态 is_active 传参（ADR-UX-04）
     if (filterIsActive.value === 'true') {
       qs.append('is_active', 'true')
@@ -380,6 +420,7 @@ function handleReset() {
   }
   filters.fault_types = []
   filters.sub_types = []
+  filters.room_names = []   // 新增（v0.6.4-FM-ROOM）
   filters.dateRange = [...defaultDateRange]
   // FR-FM-UX-04 + AQ-03：重置回默认"未恢复"（与首次进入行为一致）
   filterIsActive.value = 'true'
