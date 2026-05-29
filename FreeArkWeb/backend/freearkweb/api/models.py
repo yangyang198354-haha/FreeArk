@@ -750,3 +750,64 @@ class FaultEvent(models.Model):
     def __str__(self):
         status = 'ACTIVE' if self.is_active else 'RECOVERED'
         return f"{self.specific_part} / {self.fault_code} [{status}] @ {self.first_seen_at}"
+
+
+class CondensationWarningEvent(models.Model):
+    """结露预警事件表（v0.7.0-CW，MOD-BE-CW-05）。
+
+    由 freeark-condensation-consumer 服务写入，记录结露报警事件生命周期。
+    写入模式与 FaultEvent 相同（T1/T2/T3 状态机）。
+
+    system_switch 字段来源（ADR-CW-01，ARCH-PENDING-01 选定方案 A，RISK-CW-ARCH-01 已闭环）：
+      优先取触发报文同 deviceSn 的 system_switch attrTag（MQTT 直取，已是 on/off 字符串）；
+      不存在时查 PLCLatestData(specific_part, param_name='system_switch')（整数 0→off/非0→on）；
+      均无则写 'unknown'。
+    """
+    specific_part  = models.CharField(max_length=64, verbose_name='房号', db_index=True)
+    device_sn      = models.CharField(max_length=64, verbose_name='设备序列号')
+    product_code   = models.CharField(max_length=32, verbose_name='产品编码')
+    room_name      = models.CharField(max_length=50, null=True, blank=True, verbose_name='房间名')
+    room_id        = models.ForeignKey(
+        'DeviceRoom',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        db_column='room_id',
+        related_name='condensation_warning_events',
+        verbose_name='房间外键',
+    )
+    warning_type    = models.CharField(max_length=32, default='结露预警', verbose_name='预警类型')
+    warning_message = models.CharField(max_length=255, default='结露报警', verbose_name='预警内容')
+    condensation_alarm_value = models.CharField(
+        max_length=16, null=True, blank=True, verbose_name='触发时 condensation_alarm 原始值'
+    )
+    dew_point_temp = models.CharField(max_length=16, null=True, blank=True, verbose_name='露点温度快照')
+    ntc_temp       = models.CharField(max_length=16, null=True, blank=True, verbose_name='NTC温度快照')
+    humidity       = models.CharField(max_length=16, null=True, blank=True, verbose_name='湿度快照')
+    system_switch  = models.CharField(
+        max_length=8, null=True, blank=True,
+        verbose_name='系统开关状态快照（on/off/unknown）'
+    )
+    first_seen_at  = models.DateTimeField(verbose_name='预警首次出现时间', db_index=True)
+    last_seen_at   = models.DateTimeField(verbose_name='最近活跃时间（进程内维护）')
+    recovered_at   = models.DateTimeField(null=True, blank=True, verbose_name='恢复时间')
+    is_active      = models.BooleanField(default=True, verbose_name='是否活跃', db_index=True)
+    created_at     = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at     = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'condensation_warning_event'
+        verbose_name = '结露预警事件'
+        verbose_name_plural = '结露预警事件'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['specific_part', 'device_sn', 'first_seen_at'],
+                name='uniq_cw_sp_sn_first_seen',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['specific_part', 'is_active'], name='idx_cw_sp_active'),
+            models.Index(fields=['first_seen_at', 'is_active'], name='idx_cw_time_active'),
+        ]
+
+    def __str__(self):
+        return f"{self.specific_part} device={self.device_sn} active={self.is_active}"

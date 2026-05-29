@@ -4,6 +4,7 @@ from . import views_device_settings
 from . import views_heartbeat_config
 from . import memory_views
 from . import views_fault
+from . import views_condensation
 
 urlpatterns = [
     # CSRF token获取
@@ -102,4 +103,7 @@ urlpatterns = [
     # 故障管理接口（v0.6.0-FM，FR-FM-05）
     path('devices/fault-events/', views_fault.fault_event_list, name='fault-event-list'),
     path('devices/fault-event-categories/', views_fault.fault_event_categories, name='fault-event-categories'),
+
+    # 结露预警接口（v0.7.0-CW，MOD-BE-CW-06）
+    path('devices/condensation-warning-events/', views_condensation.condensation_warning_event_list, name='condensation-warning-event-list'),
 ]

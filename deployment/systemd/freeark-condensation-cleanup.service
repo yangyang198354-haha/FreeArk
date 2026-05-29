@@ -1,0 +1,27 @@
+# freeark-condensation-cleanup.service — 结露预警清理（one-shot，v0.7.0-CW，MOD-INFRA-CW-02）
+#
+# 由 freeark-condensation-cleanup.timer 每天 03:30 触发。
+# 部署步骤（在生产服务器 192.168.31.51 执行）：
+#   sudo cp deployment/systemd/freeark-condensation-cleanup.service /etc/systemd/system/
+#   sudo cp deployment/systemd/freeark-condensation-cleanup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now freeark-condensation-cleanup.timer
+#
+# 验证：
+#   journalctl -u freeark-condensation-cleanup -n 30
+#   systemctl list-timers freeark-condensation-cleanup.timer
+
+[Unit]
+Description=FreeArk Condensation Warning Cleanup (one-shot, v0.7.0-CW)
+After=network.target
+
+[Service]
+Type=oneshot
+User=yangyang
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python manage.py condensation_cleanup --days=90 --batch-size=1000
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-condensation-cleanup
+Environment=DJANGO_SETTINGS_MODULE=freearkweb.settings

@@ -1,0 +1,17 @@
+# freeark-condensation-cleanup.timer — 结露预警清理定时器（v0.7.0-CW，MOD-INFRA-CW-03）
+#
+# 每天 03:30 触发 freeark-condensation-cleanup.service（one-shot）。
+# 选择 03:30 而非 03:00 的原因：故障清理 (freeark-fault-cleanup) 在 03:00 执行，
+# 错开 30 分钟减少 MySQL 同时写入压力（ADR-CW-05 说明）。
+
+[Unit]
+Description=FreeArk Condensation Warning Cleanup Timer
+Requires=freeark-condensation-cleanup.service
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=freeark-condensation-cleanup.service
+
+[Install]
+WantedBy=timers.target

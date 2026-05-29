@@ -135,6 +135,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 结露预警页面（v0.7.0-CW，MOD-FE-CW-02）
+    path: '/device-management/condensation-warnings',
+    name: 'CondensationWarnings',
+    component: () => import('../views/CondensationWarningView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')
