@@ -165,6 +165,14 @@
           >{{ row.fault_count }}</span>
         </template>
       </el-table-column>
+      <!-- REQ-FUNC-CL-01: 凝露提醒列（v1.0.0，故障数量列之后，操作列之前）-->
+      <el-table-column label="凝露提醒" width="100" align="center">
+        <template #default="{ row }">
+          <span :style="{ color: row.has_active_condensation ? '#E6A23C' : '#909399', fontWeight: 600 }">
+            {{ row.has_active_condensation ? '有' : '无' }}
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="220" align="center" fixed="right">
         <template #default="{ row }">
           <el-button

@@ -1406,6 +1406,84 @@ def dashboard_activities(request):
 
 
 # ===========================================================================
+# 看板 — 故障汇总 API（v1.0.0-DASHBOARD-REDESIGN）
+# ===========================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_fault_summary(request):
+    """GET /api/dashboard/fault-summary/
+    返回当前未恢复故障总数及影响户数（specific_part 去重计数）。
+    REQ-FUNC-DC-01 / US-DC-01
+    """
+    try:
+        from .models import FaultEvent
+        active_qs = FaultEvent.objects.filter(is_active=True)
+        active_fault_count = active_qs.count()
+        affected_unit_count = active_qs.values('specific_part').distinct().count()
+        return Response({
+            'success': True,
+            'data': {
+                'active_fault_count': active_fault_count,
+                'affected_unit_count': affected_unit_count,
+            }
+        })
+    except Exception as e:
+        logger.error('dashboard_fault_summary error: %s', str(e))
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dashboard_device_fault_summary(request):
+    """GET /api/dashboard/device-fault-summary/
+    一次返回四类子设备的 total（DeviceNode 按 product_code）
+    和 fault_count（FaultEvent is_active=True 且 product_code 匹配的记录条数）。
+
+    注意：FaultEvent 无 sub_type 字段；通过 product_code 过滤与 DeviceNode.total 口径一致。
+    温控面板含 product_code=120003（各房间温控面板）和 product_code=260001（客厅主温控）。
+
+    REQ-FUNC-DC-02~06 / REQ-FUNC-DC-06
+    """
+    try:
+        from .models import FaultEvent, DeviceNode
+
+        data = {
+            'air_quality_sensor': {
+                'total': DeviceNode.objects.filter(product_code='100007').count(),
+                'fault_count': FaultEvent.objects.filter(
+                    product_code='100007', is_active=True
+                ).count(),
+            },
+            'thermostat_panels': {
+                'total': DeviceNode.objects.filter(
+                    product_code__in=['120003', '260001']
+                ).count(),
+                'fault_count': FaultEvent.objects.filter(
+                    product_code__in=['120003', '260001'], is_active=True
+                ).count(),
+            },
+            'fresh_air_unit': {
+                'total': DeviceNode.objects.filter(product_code='130004').count(),
+                'fault_count': FaultEvent.objects.filter(
+                    product_code='130004', is_active=True
+                ).count(),
+            },
+            'hydraulic_module': {
+                'total': DeviceNode.objects.filter(product_code='270001').count(),
+                'fault_count': FaultEvent.objects.filter(
+                    product_code='270001', is_active=True
+                ).count(),
+            },
+        }
+
+        return Response({'success': True, 'data': data})
+    except Exception as e:
+        logger.error('dashboard_device_fault_summary error: %s', str(e))
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===========================================================================
 # 业主信息管理 API
 # ===========================================================================
 
@@ -2045,6 +2123,16 @@ def device_management_device_list(request):
         page_specific_parts = [owner.specific_part for owner in page_rows]
         fault_counts = get_fault_count_batch_cached(page_specific_parts)
 
+    # ---- 9b. 批量获取凝露提醒状态（REQ-FUNC-CL-01, REQ-NFR-PERF-02）----
+    from .models import CondensationWarningEvent
+    page_specific_parts_for_cond = [owner.specific_part for owner in page_rows]
+    active_condensation_set = set(
+        CondensationWarningEvent.objects.filter(
+            specific_part__in=page_specific_parts_for_cond,
+            is_active=True,
+        ).values_list('specific_part', flat=True).distinct()
+    )
+
     results = []
     for owner in page_rows:
         last_seen_at = owner._screen_last_seen_at   # datetime | None
@@ -2088,6 +2176,8 @@ def device_management_device_list(request):
             # v0.5.3-FCC: 故障数量（REQ-FUNC-FC-02）
             # None = PLCLatestData 中无该 specific_part 记录（前端显示 —）
             'fault_count': fault_counts.get(owner.specific_part),
+            # REQ-FUNC-CL-01: 凝露提醒（v1.0.0）
+            'has_active_condensation': owner.specific_part in active_condensation_set,
         })
 
     return Response({

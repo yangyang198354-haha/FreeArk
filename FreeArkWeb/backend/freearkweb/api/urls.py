@@ -53,6 +53,9 @@ urlpatterns = [
     path('dashboard/services/', views.dashboard_services, name='dashboard-services'),
     path('dashboard/activities/', views.dashboard_activities, name='dashboard-activities'),
     path('dashboard/power-status/', views.dashboard_power_status, name='dashboard-power-status'),
+    # v1.0.0: 故障与子设备汇总接口（REQ-FUNC-DC-01, REQ-FUNC-DC-06）
+    path('dashboard/fault-summary/', views.dashboard_fault_summary, name='dashboard-fault-summary'),
+    path('dashboard/device-fault-summary/', views.dashboard_device_fault_summary, name='dashboard-device-fault-summary'),
 
     # 业主信息管理接口
     path('owners/', views.OwnerListCreateView.as_view(), name='owner-list-create'),

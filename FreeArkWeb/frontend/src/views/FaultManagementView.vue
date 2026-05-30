@@ -467,6 +467,14 @@ onMounted(async () => {
     filterIsActive.value = 'true'  // 默认"未恢复"
   }
 
+  // REQ-NFR-COMPAT-01: 读取 URL sub_type 参数（支持单值字符串或多值数组）
+  // 用于看板卡片点击跳转时预选设备类型过滤
+  const urlSubType = route.query.sub_type
+  if (urlSubType) {
+    filters.sub_types = Array.isArray(urlSubType) ? [...urlSubType] : [urlSubType]
+  }
+  // 无 URL sub_type 时保持默认空数组，不覆盖
+
   await fetchCategories()
   await fetchFaultEvents()
 })

@@ -6,9 +6,11 @@
       <p class="page-subtitle">实时监控系统运行状态和能耗数据</p>
     </div>
 
-    <!-- 顶部卡片行：总电量查询 + 系统开机状况（并排，OQ-004） -->
+    <!-- 分组 1：能耗概览（US-UX-01）-->
+    <div class="group-title">能耗概览</div>
+
+    <!-- 总电量查询（宽卡片，保留原有日期选择器布局）-->
     <div class="top-cards-row">
-      <!-- 总电量查询（原有） -->
       <div class="total-energy-wrapper">
         <el-card>
           <template #header>
@@ -45,55 +47,9 @@
           </div>
         </el-card>
       </div>
-
-      <!-- 系统开机状况（新增，v0.5.3；重设计 v0.5.3-r1） -->
-      <div class="power-status-wrapper">
-        <el-card class="power-status-card">
-          <template #header>
-            <div class="card-header">
-              <span>开机情况</span>
-            </div>
-          </template>
-          <div class="power-status-content" v-loading="loading.powerStatus">
-            <!-- 主信息行：图标圆圈 + 开机率大数字 + 标签 -->
-            <div class="ps-main-row">
-              <div class="ps-icon-circle">
-                <el-icon style="font-size: 24px; color: #67c23a;"><Cpu /></el-icon>
-              </div>
-              <div class="ps-rate-info">
-                <div class="ps-rate-value">{{ powerStatus.power_on_rate.toFixed(1) }}%</div>
-                <div class="ps-rate-label">开机率</div>
-              </div>
-            </div>
-            <!-- 模式合计行：4 个 chip 水平排布 -->
-            <div class="ps-mode-chips">
-              <div class="ps-chip">
-                <div class="ps-chip-num" style="color: var(--color-cooling);">{{ powerStatus.mode_distribution.cooling }}</div>
-                <div class="ps-chip-name">制冷</div>
-              </div>
-              <div class="ps-chip">
-                <div class="ps-chip-num" style="color: var(--color-heating);">{{ powerStatus.mode_distribution.heating }}</div>
-                <div class="ps-chip-name">制热</div>
-              </div>
-              <div class="ps-chip">
-                <div class="ps-chip-num" style="color: #e6a23c;">{{ powerStatus.mode_distribution.ventilation }}</div>
-                <div class="ps-chip-name">通风</div>
-              </div>
-              <div class="ps-chip">
-                <div class="ps-chip-num" style="color: #13c2c2;">{{ powerStatus.mode_distribution.dehumidification }}</div>
-                <div class="ps-chip-name">除湿</div>
-              </div>
-              <div class="ps-chip" v-if="powerStatus.mode_distribution.unknown > 0">
-                <div class="ps-chip-num" style="color: #909399;">{{ powerStatus.mode_distribution.unknown }}</div>
-                <div class="ps-chip-name">未知</div>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </div>
     </div>
 
-    <!-- 统计卡片区域 -->
+    <!-- 今日/本月用电量 stat-cards（能耗概览组）-->
     <div class="stats-cards">
       <el-card class="stat-card" v-loading="loading.summary">
         <div class="stat-content">
@@ -118,7 +74,11 @@
           </div>
         </div>
       </el-card>
+    </div>
 
+    <!-- 分组 2：设备状态（US-UX-01）-->
+    <div class="group-title">设备状态</div>
+    <div class="stats-cards">
       <el-card class="stat-card" v-loading="loading.plcRate">
         <div class="stat-content">
           <div class="stat-info">
@@ -156,7 +116,125 @@
           </div>
         </div>
       </el-card>
+
+      <!-- 系统开机状况（v0.5.3，归入设备状态组）-->
+      <el-card class="stat-card power-status-card" v-loading="loading.powerStatus">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="ps-rate-value">{{ powerStatus.power_on_rate.toFixed(1) }}%</div>
+            <div class="stat-label">系统开机率</div>
+            <div class="ps-mode-chips-inline">
+              <span style="color: var(--color-cooling);">制冷 {{ powerStatus.mode_distribution.cooling }}</span>
+              <span style="color: var(--color-heating);">制热 {{ powerStatus.mode_distribution.heating }}</span>
+              <span style="color: #e6a23c;">通风 {{ powerStatus.mode_distribution.ventilation }}</span>
+            </div>
+          </div>
+          <div class="stat-icon plc-online">
+            <el-icon><Cpu /></el-icon>
+          </div>
+        </div>
+      </el-card>
     </div>
+
+    <!-- 分组 3：故障与子设备 (US-UX-01, US-DC-01~05) -->
+    <div class="group-title">故障与子设备</div>
+    <div class="stats-cards">
+      <!-- 当前故障总数卡片（US-DC-01）-->
+      <el-card class="stat-card" v-loading="loading.faultSummary"
+               style="cursor: pointer" @click="goToFaults([], true)">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value" style="color: var(--color-danger)">
+              {{ faultSummary.active_fault_count }}
+            </div>
+            <div class="stat-label">当前故障总数</div>
+            <div class="stat-sub">影响 {{ faultSummary.affected_unit_count }} 户</div>
+          </div>
+          <div class="stat-icon fault-total">
+            <el-icon><Warning /></el-icon>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 空气品质传感器卡片（US-DC-02）-->
+      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
+               style="cursor: pointer" @click="goToFaults(['air_quality_sensor'], true)">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value">{{ deviceFaultSummary.air_quality_sensor.total }}</div>
+            <div class="stat-label">空气品质传感器</div>
+            <div class="stat-sub"
+                 :style="{ color: deviceFaultSummary.air_quality_sensor.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+              故障 {{ deviceFaultSummary.air_quality_sensor.fault_count }} 台
+            </div>
+          </div>
+          <div class="stat-icon device-aq">
+            <el-icon><Odometer /></el-icon>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 温控面板卡片（US-DC-03，5 个 sub_type 含 living_room_main）-->
+      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
+               style="cursor: pointer"
+               @click="goToFaults([
+                 'master_bedroom_panel','secondary_bedroom_panel',
+                 'children_room_panel','study_room_panel','living_room_main'
+               ], true)">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value">{{ deviceFaultSummary.thermostat_panels.total }}</div>
+            <div class="stat-label">温控面板</div>
+            <div class="stat-sub"
+                 :style="{ color: deviceFaultSummary.thermostat_panels.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+              故障 {{ deviceFaultSummary.thermostat_panels.fault_count }} 台
+            </div>
+          </div>
+          <div class="stat-icon device-thermostat">
+            <el-icon><SetUp /></el-icon>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 新风卡片（US-DC-04）-->
+      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
+               style="cursor: pointer" @click="goToFaults(['fresh_air_unit'], true)">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value">{{ deviceFaultSummary.fresh_air_unit.total }}</div>
+            <div class="stat-label">新风</div>
+            <div class="stat-sub"
+                 :style="{ color: deviceFaultSummary.fresh_air_unit.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+              故障 {{ deviceFaultSummary.fresh_air_unit.fault_count }} 台
+            </div>
+          </div>
+          <div class="stat-icon device-fresh-air">
+            <el-icon><WindPower /></el-icon>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 水力模块卡片（US-DC-05）-->
+      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
+               style="cursor: pointer" @click="goToFaults(['hydraulic_module'], true)">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value">{{ deviceFaultSummary.hydraulic_module.total }}</div>
+            <div class="stat-label">水力模块</div>
+            <div class="stat-sub"
+                 :style="{ color: deviceFaultSummary.hydraulic_module.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+              故障 {{ deviceFaultSummary.hydraulic_module.fault_count }} 台
+            </div>
+          </div>
+          <div class="stat-icon device-hydraulic">
+            <el-icon><Cpu /></el-icon>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 分组 4：趋势与日志（标题行，图表与活动区域保持原有 class） -->
+    <div class="group-title">趋势与日志</div>
 
     <!-- 图表区域 -->
     <div class="charts-section">
@@ -239,9 +317,10 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import Chart from 'chart.js/auto'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
-import { CircleCheck, CircleClose, Cpu, Calendar, Document, Monitor } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Cpu, Calendar, Document, Monitor, Warning, Odometer, WindPower, SetUp } from '@element-plus/icons-vue'
 import api from '../utils/api.js'
 
 // AC-UI-002-01/02/03: 注册 chartjs-plugin-datalabels 插件
@@ -255,9 +334,14 @@ export default {
     Cpu,
     Calendar,
     Document,
-    Monitor
+    Monitor,
+    Warning,
+    Odometer,
+    WindPower,
+    SetUp,
   },
   setup() {
+    const router = useRouter()
     const usageChart = ref(null)
     let chartInstance = null
 
@@ -338,7 +422,21 @@ export default {
       trend: false,
       services: false,
       activities: false,
-      powerStatus: false
+      powerStatus: false,
+      // v1.0.0: 故障与子设备卡片
+      faultSummary: false,
+      deviceFaultSummary: false,
+    })
+
+    // v1.0.0: 当前故障总数卡片数据（US-DC-01）
+    const faultSummary = reactive({ active_fault_count: 0, affected_unit_count: 0 })
+
+    // v1.0.0: 子设备故障数据（US-DC-02~05）
+    const deviceFaultSummary = reactive({
+      air_quality_sensor:  { total: 0, fault_count: 0 },
+      thermostat_panels:   { total: 0, fault_count: 0 },
+      fresh_air_unit:      { total: 0, fault_count: 0 },
+      hydraulic_module:    { total: 0, fault_count: 0 },
     })
 
     // API 调用
@@ -605,6 +703,51 @@ export default {
       }
     }
 
+    // v1.0.0: 故障总数汇总（US-DC-01）
+    async function fetchFaultSummary() {
+      loading.faultSummary = true
+      try {
+        const res = await api.get('/api/dashboard/fault-summary/')
+        if (res?.success) {
+          faultSummary.active_fault_count = res.data.active_fault_count
+          faultSummary.affected_unit_count = res.data.affected_unit_count
+        }
+      } catch (e) {
+        console.error('故障汇总查询失败:', e?.message || e)
+      } finally {
+        loading.faultSummary = false
+      }
+    }
+
+    // v1.0.0: 子设备故障汇总（US-DC-02~05）
+    async function fetchDeviceFaultSummary() {
+      loading.deviceFaultSummary = true
+      try {
+        const res = await api.get('/api/dashboard/device-fault-summary/')
+        if (res?.success) {
+          Object.assign(deviceFaultSummary.air_quality_sensor, res.data.air_quality_sensor)
+          Object.assign(deviceFaultSummary.thermostat_panels, res.data.thermostat_panels)
+          Object.assign(deviceFaultSummary.fresh_air_unit, res.data.fresh_air_unit)
+          Object.assign(deviceFaultSummary.hydraulic_module, res.data.hydraulic_module)
+        }
+      } catch (e) {
+        console.error('子设备故障汇总查询失败:', e?.message || e)
+      } finally {
+        loading.deviceFaultSummary = false
+      }
+    }
+
+    // v1.0.0: 跳转到故障管理并预设过滤参数（US-DC-01~05）
+    function goToFaults(subTypes = [], isActive = true) {
+      const query = { is_active: String(isActive) }
+      if (subTypes.length === 1) {
+        query.sub_type = subTypes[0]
+      } else if (subTypes.length > 1) {
+        query.sub_type = subTypes
+      }
+      router.push({ name: 'FaultManagement', query })
+    }
+
     onMounted(() => {
       fetchTotalEnergy()
       fetchSummary()
@@ -614,6 +757,9 @@ export default {
       fetchServices()
       fetchActivities()
       fetchPowerStatus()
+      // v1.0.0: 新增故障与子设备汇总
+      fetchFaultSummary()
+      fetchDeviceFaultSummary()
     })
 
     return {
@@ -633,7 +779,11 @@ export default {
       powerStatus,
       // REQ-FUNC-027/028: legend checkbox
       checkedSeries,
-      toggleSeries
+      toggleSeries,
+      // v1.0.0: 故障与子设备汇总
+      faultSummary,
+      deviceFaultSummary,
+      goToFaults,
     }
   }
 }
@@ -874,6 +1024,53 @@ export default {
 .stat-icon.screen-online {
   background-color: rgba(103, 194, 58, 0.1);
   color: #67c23a;
+}
+
+/* v1.0.0: 开机情况内联模式行 */
+.ps-mode-chips-inline {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+}
+
+/* v1.0.0: 分组标题行（US-UX-01）*/
+.group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #909399);
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--border-color-lighter, #ebeef5);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+  width: 100%;
+}
+
+/* v1.0.0: 故障与子设备卡片图标颜色 */
+.stat-icon.fault-total {
+  background-color: rgba(245, 108, 108, 0.1);
+  color: var(--color-danger, #f56c6c);
+}
+
+.stat-icon.device-aq {
+  background-color: rgba(230, 162, 60, 0.1);
+  color: var(--color-warning, #e6a23c);
+}
+
+.stat-icon.device-thermostat {
+  background-color: rgba(64, 158, 255, 0.1);
+  color: var(--color-primary, #409eff);
+}
+
+.stat-icon.device-fresh-air {
+  background-color: rgba(19, 206, 102, 0.1);
+  color: var(--color-success, #67c23a);
+}
+
+.stat-icon.device-hydraulic {
+  background-color: rgba(144, 147, 153, 0.1);
+  color: #909399;
 }
 
 .stat-icon.plc-offline {
