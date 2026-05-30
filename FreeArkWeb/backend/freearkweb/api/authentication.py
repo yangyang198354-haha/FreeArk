@@ -8,7 +8,6 @@ ADR-v090-003: 进程内节流字典 _activity_cache 避免每请求写 DB。
 单 worker (--workers 1) 场景下 Python GIL 保证 dict 读写原子性。
 """
 
-from datetime import datetime
 from django.conf import settings
 from django.utils.timezone import now as django_now
 from rest_framework.authentication import TokenAuthentication

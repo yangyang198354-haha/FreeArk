@@ -822,6 +822,7 @@ def dashboard_total_energy(request):
     看板 API 1：总电量查询（支持自定义时间段）
     GET /api/dashboard/total-energy/?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
     若未传参数，默认返回当年数据。
+    返回 start_date, end_date, cooling_kwh, heating_kwh, total_kwh
     """
     today = date.today()
     start_date_str = request.GET.get('start_date')
@@ -1170,6 +1171,7 @@ def dashboard_services(request):
     看板 API 5：系统服务状态
     GET /api/dashboard/services/
     通过 subprocess 调用 systemctl is-active 查询各服务状态。
+    返回 services 数组，每项含 name, status, is_active
     """
     services = []
     for name in MONITORED_SERVICES:
@@ -1443,7 +1445,7 @@ def dashboard_device_fault_summary(request):
     注意：FaultEvent 无 sub_type 字段；通过 product_code 过滤与 DeviceNode.total 口径一致。
     温控面板含 product_code=120003（各房间温控面板）和 product_code=260001（客厅主温控）。
 
-    REQ-FUNC-DC-02~06 / REQ-FUNC-DC-06
+    REQ-FUNC-DC-02~06
     """
     try:
         from .models import FaultEvent, DeviceNode
