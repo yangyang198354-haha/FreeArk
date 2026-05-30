@@ -262,10 +262,24 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+        # REQ-AUTH-001 (v0.9.0): 替换为滑动窗口超时认证类
+        'api.authentication.SlidingWindowTokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
+
+# ===========================================================================
+# 会话超时配置（v0.9.0, REQ-AUTH-001, REQ-NFR-AUTH-001）
+# ===========================================================================
+# 会话不活动超时阈值（秒）。默认 30 分钟 = 1800 秒。
+# 通过环境变量 SESSION_INACTIVITY_TIMEOUT 可覆盖（整数，秒）。
+SESSION_INACTIVITY_TIMEOUT = int(os.environ.get('SESSION_INACTIVITY_TIMEOUT', 1800))
+
+# 活动时间写入 DB 的节流阈值（秒）。默认 5 分钟 = 300 秒。
+# 同一 token 在此时间内的多次请求只触发一次 DB UPDATE。
+# 须满足：ACTIVITY_THROTTLE_SECONDS < SESSION_INACTIVITY_TIMEOUT
+# 通过环境变量 ACTIVITY_THROTTLE_SECONDS 可覆盖（整数，秒）。
+ACTIVITY_THROTTLE_SECONDS = int(os.environ.get('ACTIVITY_THROTTLE_SECONDS', 300))
 
 # 静态文件配置
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')

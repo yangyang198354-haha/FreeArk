@@ -811,3 +811,40 @@ class CondensationWarningEvent(models.Model):
 
     def __str__(self):
         return f"{self.specific_part} device={self.device_sn} active={self.is_active}"
+
+
+# ---------------------------------------------------------------------------
+# 会话滑动窗口超时（v0.9.0, REQ-AUTH-001, ADR-v090-002）
+# ---------------------------------------------------------------------------
+
+
+class TokenActivity(models.Model):
+    """记录 DRF Token 的最后有效活动时间，用于滑动窗口超时判断。
+
+    表名：api_token_activity
+    与 authtoken_token 为 OneToOne 关系（token_id 作为 PK），
+    Token 删除时级联删除（on_delete=CASCADE）。
+
+    写入策略（满足 REQ-NFR-AUTH-001）：
+      - 登录/注册时：views.py 强制 update_or_create（绕过节流）
+      - 认证时：authentication.py 节流写入（ACTIVITY_THROTTLE_SECONDS 内最多 1 次）
+    """
+    token = models.OneToOneField(
+        'authtoken.Token',
+        on_delete=models.CASCADE,
+        related_name='activity',
+        primary_key=True,
+        verbose_name='关联 Token',
+    )
+    last_active_at = models.DateTimeField(
+        verbose_name='最后活动时间',
+        db_index=True,
+    )
+
+    class Meta:
+        db_table = 'api_token_activity'
+        verbose_name = 'Token 活动记录'
+        verbose_name_plural = 'Token 活动记录'
+
+    def __str__(self):
+        return f"TokenActivity(token={self.token_id[:8]}..., last_active={self.last_active_at})"

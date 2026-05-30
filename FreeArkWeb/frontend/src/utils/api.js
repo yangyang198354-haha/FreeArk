@@ -1,5 +1,19 @@
 // API调用辅助函数
 
+// REQ-AUTH-003 (v0.9.0): router 实例，用于 authenticatedFetch 中 401 统一跳转。
+// router/index.js 不 import api.js（已确认），无循环依赖，可直接顶层 import。
+// 使用懒加载 getter 是保险措施：若某些 HMR 热更新场景中模块还未就绪，
+// 延迟到函数调用时再读取，确保 router 已初始化完成。
+import _routerModule from '../router/index.js';
+function getRouter() {
+  return _routerModule;
+}
+
+// 清除认证 cookie（与 clearCSRFToken 对称；v0.9.0 新增）
+function clearAuthCookie() {
+  document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+}
+
 // 获取API基础URL
 function getApiUrl(endpoint) {
   // 优先使用环境变量；生产环境留空时取当前页面 origin，
@@ -132,7 +146,46 @@ async function authenticatedFetch(endpoint, options = {}) {
     }
   };
   
-  return fetch(getApiUrl(endpoint), mergedOptions);
+  const response = await fetch(getApiUrl(endpoint), mergedOptions);
+
+  // REQ-AUTH-003 (v0.9.0): 统一拦截 401，清理本地凭证并跳转登录页
+  if (response.status === 401) {
+    // 防止循环重定向：已在登录页时跳过弹窗和路由跳转
+    let isOnLoginPage = false;
+    try {
+      const router = getRouter();
+      isOnLoginPage = router.currentRoute.value.name === 'Login';
+    } catch (_) {
+      // router 不可用时降级
+    }
+
+    // 清理本地凭证
+    localStorage.removeItem('userToken');
+    clearAuthCookie();
+    clearCSRFToken();
+
+    if (!isOnLoginPage) {
+      // 展示过期提示（动态导入，避免 api.js 对 element-plus 产生静态依赖）
+      try {
+        const { ElMessage } = await import('element-plus');
+        ElMessage.warning('会话已过期，请重新登录');
+      } catch (_) {
+        // ElMessage 不可用时静默继续，不阻断跳转
+      }
+      try {
+        const router = getRouter();
+        router.replace({ name: 'Login' });
+      } catch (_) {
+        // router 不可用时降级为原生跳转
+        window.location.href = '/login';
+      }
+    }
+
+    // 抛出特定错误，使调用方 catch 块可识别（无需各自再处理 401 跳转）
+    throw new Error('SESSION_EXPIRED');
+  }
+
+  return response;
 }
 
 // 封装常用的API请求方法
@@ -262,6 +315,7 @@ const api = {
 
   // 登出：调用后端销毁 session/Token，并清除本地 CSRF 缓存
   // BUG-CSRF-001 修复：统一由此方法处理登出，调用方无需关心缓存细节
+  // v0.9.0 追加：finally 块中同步清理 userToken 和 auth_token cookie
   async logout() {
     try {
       // 通知后端销毁 session 和 Token
@@ -272,11 +326,16 @@ const api = {
     } finally {
       // 清除内存中缓存的 CSRF token
       clearCSRFToken();
+      // v0.9.0: 清除认证凭证（与 401 拦截逻辑对称）
+      localStorage.removeItem('userToken');
+      clearAuthCookie();
     }
   },
 
   // 暴露 clearCSRFToken，供特殊场景手动清除（如强制刷新 token）
-  clearCSRFToken
+  clearCSRFToken,
+  // v0.9.0: 暴露 clearAuthCookie，供特殊场景使用
+  clearAuthCookie
 };
 
 export default api;

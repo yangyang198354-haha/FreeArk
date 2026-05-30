@@ -13,7 +13,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
-from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory, ScreenConnectivityStatus
+from .models import CustomUser, UsageQuantityDaily, UsageQuantityMonthly, PLCConnectionStatus, PLCStatusChangeHistory, OwnerInfo, PLCLatestData, DeviceConfig, DeviceParamHistory, ScreenConnectivityStatus, TokenActivity
 from .utils_room_filter import (  # v0.5.7: 房型过滤工具
     get_available_sub_types,
     get_allowed_param_names,
@@ -88,7 +88,13 @@ def user_login(request):
         
         # 创建或获取Token
         token, created = Token.objects.get_or_create(user=user)
-        
+
+        # REQ-AUTH-001 (v0.9.0): 登录时强制初始化/重置活动时间戳（绕过节流）
+        TokenActivity.objects.update_or_create(
+            token=token,
+            defaults={'last_active_at': django_now()},
+        )
+
         return Response({
             'success': True,
             'token': token.key,
@@ -143,6 +149,13 @@ def user_register(request):
         login(request, user)
         # 创建Token
         token, created = Token.objects.get_or_create(user=user)
+
+        # REQ-AUTH-001 (v0.9.0): 注册时同步初始化活动时间戳（绕过节流）
+        TokenActivity.objects.update_or_create(
+            token=token,
+            defaults={'last_active_at': django_now()},
+        )
+
         return Response({
             'success': True,
             'token': token.key,

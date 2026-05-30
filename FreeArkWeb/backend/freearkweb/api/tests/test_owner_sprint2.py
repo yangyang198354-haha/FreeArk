@@ -346,12 +346,14 @@ class OwnerDeviceTreeAPITest(TestCase):
             resp = self.client.get(f'/api/owners/{owner.id}/device-tree/')
         self.assertEqual(resp.status_code, 200)
 
-        # prefetch 方案：1(get_object) + 3(prefetch floors/rooms/devices) + 1(auth) = ~5
-        # N+1 方案：1 + floors*rooms*devices 量级
+        # prefetch 方案：1(get_object) + 3(prefetch floors/rooms/devices) + auth = ~6
+        #   auth 自 v0.9.0 起为滑动窗口认证：token SELECT + TokenActivity SELECT(+节流 UPDATE)，
+        #   为 O(1) 常量开销，不随设备数增长，故阈值由 8 上调至 9（N+1 防护意图不变）。
+        # N+1 方案：1 + floors*rooms*devices 量级（本例 3*4*3=36+，远超阈值）
         query_count = len(ctx.captured_queries)
         self.assertLessEqual(
-            query_count, 8,
-            f'期望 ≤8 条 SQL（prefetch_related 无 N+1），实际 {query_count} 条'
+            query_count, 9,
+            f'期望 ≤9 条 SQL（prefetch_related 无 N+1），实际 {query_count} 条'
         )
 
     def test_tc_us03_009_device_system_flag_values(self):
