@@ -180,7 +180,8 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" min-width="120" fixed="right">
+      <!-- REQ-UI-003：文案"查看设备面板" → "设备面板" -->
+      <el-table-column label="操作" min-width="100" fixed="right">
         <template #default="{ row }">
           <el-button
             link
@@ -188,7 +189,7 @@
             size="small"
             @click="handleViewDevicePanel(row)"
           >
-            查看设备面板
+            设备面板
           </el-button>
         </template>
       </el-table-column>
@@ -441,15 +442,16 @@ function handlePageSizeChange(size) {
 }
 
 /**
- * 在新标签页打开指定房号的设备面板（AC-FM-05-02）。
- * OQ-12 裁决：不附加子设备高亮参数。
+ * REQ-UI-003 / REQ-UI-004：同标签页内跳转到设备面板（用户方案2，2026-05-30）。
+ * 通过 router.push 携带 from=fault-management，设备面板"返回"按钮
+ * 读取该参数后跳回故障管理页。
+ * 原 window.open('_blank') 方式已废弃。
  */
 function handleViewDevicePanel(row) {
-  const route_resolved = router.resolve({
+  router.push({
     name: 'DeviceCards',
-    query: { specific_part: row.specific_part },
+    query: { specific_part: row.specific_part, from: 'fault-management' },
   })
-  window.open(route_resolved.href, '_blank')
 }
 
 // ---------------------------------------------------------------------------

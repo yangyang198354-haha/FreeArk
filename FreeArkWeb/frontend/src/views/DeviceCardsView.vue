@@ -23,25 +23,42 @@
         </div>
       </div>
 
-      <!-- 顶部导航栏：每个子系统一个标签 + 历史数据链接 + 按需采集加载指示 -->
+      <!-- REQ-UI-005-B: 顶部导航栏分两行：第一行温控面板，第二行系统设备 -->
       <div class="panel-nav-bar">
-        <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
-          <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
-            <!-- 在第一个房间子面板前插入"温控面板"历史入口 -->
-            <template v-if="subKey === 'panel_study_room'">
-              <div class="nav-item">
-                <span class="nav-label">温控面板</span>
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  class="nav-history-btn"
-                  @click="goToRoomHistory"
-                >历史数据 ›</el-button>
-              </div>
-              <div class="nav-divider" />
-            </template>
 
+        <!-- 第一行：温控面板组 -->
+        <div class="nav-row nav-row--thermostat">
+          <!-- 行首：分类标题 + 温控历史数据链接 -->
+          <div class="nav-item nav-row-header">
+            <span class="nav-label nav-category-label">温控面板</span>
+            <el-button
+              type="primary"
+              link
+              size="small"
+              class="nav-history-btn"
+              @click="goToRoomHistory"
+            >历史数据 ›</el-button>
+          </div>
+          <div class="nav-divider" />
+          <!-- 温控 Tab：按白名单顺序，仅渲染 deviceData 中实际存在的 -->
+          <template v-for="{ subKey, subTypeData } in thermostatTabs" :key="subKey">
+            <div class="nav-item">
+              <span class="nav-label">{{ subTypeData.display }}</span>
+            </div>
+            <div class="nav-divider" />
+          </template>
+        </div>
+
+        <!-- 行间分隔 -->
+        <div class="nav-row-separator" />
+
+        <!-- 第二行：系统设备组（固定 4 个：新风/能耗/水力/空气） -->
+        <div class="nav-row nav-row--system">
+          <div class="nav-item nav-row-header">
+            <span class="nav-label nav-category-label">系统设备</span>
+          </div>
+          <div class="nav-divider" />
+          <template v-for="{ subKey, subTypeData } in systemTabs" :key="subKey">
             <div class="nav-item">
               <span class="nav-label">{{ subTypeData.display }}</span>
               <el-button
@@ -55,7 +72,7 @@
             </div>
             <div class="nav-divider" />
           </template>
-        </template>
+        </div>
 
         <!-- v0.5.6: 按需采集进行中显示小圆形加载指示，替代原刷新按钮 -->
         <div v-if="ondemandInFlight" class="nav-loading-indicator">
@@ -188,6 +205,52 @@ export default {
     hasData() {
       return Object.keys(this.deviceData).length > 0
     },
+
+    // REQ-UI-005-B: 温控面板 Tab 白名单（按展示顺序排列）
+    // subKey 以 panel_ 开头的子类型，5 房有 5 个，4 房有 4 个
+    thermostatTabOrder() {
+      return [
+        'panel_living_room',
+        'panel_study_room',
+        'panel_bedroom',
+        'panel_children_room',
+        'panel_fourth_children_room',
+      ]
+    },
+
+    // REQ-UI-005-B: 系统设备 Tab 白名单（固定 4 个，按展示顺序排列）
+    systemTabOrder() {
+      return ['fresh_air', 'energy_meter', 'hydraulic_module', 'air_quality']
+    },
+
+    // REQ-UI-005-B: 从 deviceData 中提取温控面板 Tab 列表（按白名单顺序）
+    thermostatTabs() {
+      const result = []
+      for (const subKey of this.thermostatTabOrder) {
+        for (const groupData of Object.values(this.deviceData)) {
+          if (groupData.sub_types && groupData.sub_types[subKey]) {
+            result.push({ subKey, subTypeData: groupData.sub_types[subKey] })
+            break
+          }
+        }
+      }
+      return result
+    },
+
+    // REQ-UI-005-B: 从 deviceData 中提取系统设备 Tab 列表（按白名单顺序）
+    systemTabs() {
+      const result = []
+      for (const subKey of this.systemTabOrder) {
+        for (const groupData of Object.values(this.deviceData)) {
+          if (groupData.sub_types && groupData.sub_types[subKey]) {
+            result.push({ subKey, subTypeData: groupData.sub_types[subKey] })
+            break
+          }
+        }
+      }
+      return result
+    },
+
     // v0.5.6: 统一时间戳（REQ-FUNC-004，取所有参数 collected_at 最大值）
     lastUpdatedAt() {
       let maxTs = null
@@ -233,12 +296,20 @@ export default {
     this._clearOndemandTimeout()
   },
   methods: {
-    // REQ-FUNC-033 / AC-019-02/03: 返回按钮
+    // REQ-UI-004: 返回按钮 — 读取 from query 参数，按来源页动态跳转
     goBack() {
-      if (window.history.length > 1) {
-        this.$router.back()
+      const from = this.$route.query.from
+      if (from === 'fault-management') {
+        this.$router.push('/device-management/faults')
+      } else if (from === 'condensation-warnings') {
+        this.$router.push('/device-management/condensation-warnings')
       } else {
-        this.$router.push('/device-management/device-list')
+        // from=device-list、无值或未知值：保持原有逻辑（同页跳转时 history > 1）
+        if (window.history.length > 1) {
+          this.$router.back()
+        } else {
+          this.$router.push('/device-management/device-list')
+        }
       }
     },
 
@@ -534,12 +605,13 @@ export default {
   box-sizing: border-box;
 }
 
-/* REQ-FUNC-033/034: 页面头部（返回按钮 + 标题 + 设置入口） */
+/* REQ-FUNC-033/034 / REQ-UI-005-A: 页面头部（返回按钮 + 标题 + 设置入口） */
+/* REQ-UI-005-A: padding 加入左右 16px，防止按钮贴边 */
 .panel-page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 12px 0 12px 0;
+  padding: 12px 16px;
   margin-bottom: 4px;
 }
 
@@ -551,6 +623,12 @@ export default {
 
 .panel-header-left .el-button {
   align-self: flex-start;
+}
+
+/* REQ-UI-005-A: 返回与参数设置按钮统一最小宽度 80px */
+.panel-header-left .el-button,
+.panel-header-right .el-button {
+  min-width: 80px;
 }
 
 .panel-title {
@@ -572,18 +650,36 @@ export default {
   padding-top: 2px;
 }
 
-/* 顶部导航栏 */
-/* REQ-FUNC-004: padding 从 6px 12px 增大至 8px 16px（MODULE-UI-001 间距规范） */
+/* REQ-UI-005-B: 顶部导航栏改为两行布局，每行 flex-wrap: wrap */
 .panel-nav-bar {
   display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
+  flex-direction: column;
   gap: 0;
   background: var(--color-bg-card);
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-2) var(--space-4);
-  overflow-x: auto;
-  white-space: nowrap;
+}
+
+/* REQ-UI-005-B: 每行导航（温控行 / 系统设备行）*/
+.nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  padding: 4px 0;
+}
+
+/* REQ-UI-005-B: 行间分隔线（明确区分两类设备）*/
+.nav-row-separator {
+  height: 1px;
+  background: var(--color-border);
+  margin: 2px 0;
+}
+
+/* REQ-UI-005-B: 分类标题标签（加粗，区分普通 nav-label）*/
+.nav-category-label {
+  font-weight: 700;
+  color: var(--color-primary-dark, #1d4ed8);
 }
 
 .nav-item {

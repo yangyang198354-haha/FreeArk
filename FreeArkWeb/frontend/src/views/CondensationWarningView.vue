@@ -11,11 +11,11 @@
 
     <!-- 过滤条件区 -->
     <el-form :inline="true" class="filter-bar" @submit.prevent="handleSearch">
-      <!-- 状态三态筛选（镜像故障管理，默认"未回复"） -->
+      <!-- 状态三态筛选（REQ-UI-001：文案统一为"未恢复/已恢复"，与故障管理一致） -->
       <el-form-item label="状态">
         <el-radio-group v-model="filterIsActive" @change="handleSearch">
-          <el-radio-button value="true">未回复</el-radio-button>
-          <el-radio-button value="false">已回复</el-radio-button>
+          <el-radio-button value="true">未恢复</el-radio-button>
+          <el-radio-button value="false">已恢复</el-radio-button>
           <el-radio-button value="all">全部</el-radio-button>
         </el-radio-group>
       </el-form-item>
@@ -140,6 +140,20 @@
           {{ row.recovered_at ? formatDatetime(row.recovered_at) : '-' }}
         </template>
       </el-table-column>
+
+      <!-- 列13：操作（REQ-UI-002：新增"设备面板"按钮，同标签页跳转，REQ-UI-004） -->
+      <el-table-column label="操作" min-width="120" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="handleViewDevicePanel(row)"
+          >
+            设备面板
+          </el-button>
+        </template>
+      </el-table-column>
     </el-table>
 
     <!-- 分页（与 FaultManagementView 完全一致） -->
@@ -159,11 +173,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import CascadingSelector from '@/components/CascadingSelector.vue'
 
 const route = useRoute()
+const router = useRouter()
 
 // ---------------------------------------------------------------------------
 // 房号级联选择器 ref（AQ-02 模式：getElementById 读值，ref 仅用于 clearSelection）
@@ -187,7 +202,7 @@ const filters = reactive({
   dateRange: [...defaultDateRange],
 })
 
-// 状态三态筛选（默认"未回复"，与故障管理对齐但 label 用"回复"而非"恢复"）
+// 状态三态筛选（REQ-UI-001：文案已统一为"未恢复/已恢复"，与故障管理一致）
 const filterIsActive = ref('true')
 
 // ---------------------------------------------------------------------------
@@ -313,6 +328,18 @@ function handlePageSizeChange(size) {
   pageSize.value = size
   currentPage.value = 1
   fetchWarnings()
+}
+
+/**
+ * REQ-UI-002 / REQ-UI-004：同标签页内跳转到设备面板（用户方案2，2026-05-30）。
+ * 通过 router.push 携带 from=condensation-warnings，设备面板"返回"按钮
+ * 读取该参数后跳回结露预警页。
+ */
+function handleViewDevicePanel(row) {
+  router.push({
+    name: 'DeviceCards',
+    query: { specific_part: row.specific_part, from: 'condensation-warnings' },
+  })
 }
 
 // ---------------------------------------------------------------------------
