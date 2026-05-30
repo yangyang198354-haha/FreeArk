@@ -847,7 +847,12 @@ class TestFaultEventCategories(FaultViewTestBase):
         self.assertIn('sub_types', data)
         values = [x['value'] for x in data['sub_types']]
         self.assertIn('fresh_air_unit', values)
-        self.assertIn('living_room_thermostat', values)
+        # v0.6.4-FM-ROOM：sub_type 已从 *_thermostat 旧命名重组为物理房间命名
+        self.assertIn('living_room_main', values)
+        self.assertIn('master_bedroom_panel', values)
+        self.assertIn('secondary_bedroom_panel', values)
+        self.assertIn('children_room_panel', values)
+        self.assertIn('study_room_panel', values)
 
     def test_no_db_query_needed(self):
         # categories 接口不依赖 DB，即使 FaultEvent 表为空也应正常
@@ -1353,7 +1358,7 @@ class TestFaultEventAPIIntegration(FaultViewTestBase):
             first_seen_at=now - timedelta(hours=3), last_seen_at=now - timedelta(hours=2),
             is_active=True,
         )
-        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_main'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertIn(fe_sensor.id, ids)
@@ -1498,9 +1503,9 @@ class TestFaultFilterParamFormatCompat(FaultViewTestBase):
         # 所有故障类型均被选中，返回全量 7 天内 6 条
         self.assertEqual(resp.json()['count'], 6)
 
-    # BF-04：单选设备类型（sub_type=living_room_thermostat）
+    # BF-04：单选设备类型（sub_type=living_room_main）
     def test_single_sub_type_filter_living_room(self):
-        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_main'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         # living_room_temp_sensor_error 和 living_room_humidity_sensor_error 均应命中
@@ -1520,11 +1525,11 @@ class TestFaultFilterParamFormatCompat(FaultViewTestBase):
         self.assertNotIn(self.fe_comm.id, ids)
         self.assertNotIn(self.fe_sensor.id, ids)
 
-    # BF-06：多选设备类型（sub_type=living_room_thermostat&sub_type=fresh_air_unit）
+    # BF-06：多选设备类型（sub_type=living_room_main&sub_type=fresh_air_unit）
     def test_multi_sub_type_repeated_param_format(self):
         """BUG-FM-003 核心回归：sub_type 也使用重复参数名格式。"""
         resp = self.client.get(
-            self.list_url + '?sub_type=living_room_thermostat&sub_type=fresh_air_unit'
+            self.list_url + '?sub_type=living_room_main&sub_type=fresh_air_unit'
         )
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
@@ -1842,44 +1847,44 @@ class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
             is_active=True,
         )
 
-    # FM5-01：v0.6.3 更新：study_room_thermostat 通过 device_sn 子查询（需 DeviceNode 数据）
+    # FM5-01：study_room_panel 通过 device_sn 子查询（需 DeviceNode 数据）
     # 无 DeviceNode 时，error_N 故障不被 study_room 命中（设计预期：精确房间过滤）
-    # 本测试验证 living_room_thermostat（直接 product_code=260001）能命中 error_265
-    def test_living_room_thermostat_matches_product_code_260001_error_n(self):
-        """v0.6.3：living_room_thermostat 通过 product_code=260001 直接过滤，命中 error_265。"""
-        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+    # 本测试验证 living_room_main（直接 product_code=260001）能命中 error_265
+    def test_living_room_main_matches_product_code_260001_error_n(self):
+        """v0.6.3：living_room_main 通过 product_code=260001 直接过滤，命中 error_265。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_main'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertIn(self.fe_thermostat_main.id, ids)
 
     # FM5-02：v0.6.3 更新：study_room 不再通过 product_code 直接命中，需 DeviceNode 数据
-    # 本测试改为验证 living_room_thermostat 不命中 product_code=120003 的故障（120003 不在其范围）
-    def test_living_room_thermostat_does_not_match_product_code_120003(self):
-        """v0.6.3：living_room_thermostat 只映射 product_code=260001，不命中 120003。"""
-        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+    # 本测试改为验证 living_room_main 不命中 product_code=120003 的故障（120003 不在其范围）
+    def test_living_room_main_does_not_match_product_code_120003(self):
+        """v0.6.3：living_room_main 只映射 product_code=260001，不命中 120003。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_main'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         # fe_thermostat_panel 是 product_code=120003、error_679，无命名型 fault_code → 不命中
         self.assertNotIn(self.fe_thermostat_panel.id, ids)
 
-    # FM5-03：living_room_thermostat 匹配 product_code=260001（无房间过滤）
+    # FM5-03：living_room_main 匹配 product_code=260001（无房间过滤）
     # v0.6.3 更新：living_room 用直接 product_code 过滤，study_room 用 device_sn 子查询
     # 因本测试无 DeviceNode 数据，study_room 只能命中命名型 fault_code
-    def test_living_room_thermostat_matches_product_code_260001(self):
-        """v0.6.3：living_room_thermostat 通过 product_code=260001 直接过滤（无房间过滤）。"""
-        resp_lr = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+    def test_living_room_main_matches_product_code_260001(self):
+        """v0.6.3：living_room_main 通过 product_code=260001 直接过滤（无房间过滤）。"""
+        resp_lr = self.client.get(self.list_url, {'sub_type': 'living_room_main'})
         self.assertEqual(resp_lr.status_code, 200)
         ids_lr = set(r['id'] for r in resp_lr.json()['results'])
         # 命中 product_code=260001 的故障
         self.assertIn(self.fe_thermostat_main.id, ids_lr)
-        # product_code=120003 不在 living_room_thermostat 的 product_codes 中 → 不命中
+        # product_code=120003 不在 living_room_main 的 product_codes 中 → 不命中
         # （除非有命名型 fault_code 路径）
         self.assertNotIn(self.fe_thermostat_panel.id, ids_lr)
 
     # FM5-04：OR 联合：命名型 fault_code 仍能命中（向后兼容路径）
     def test_or_union_named_fault_code_still_hits(self):
-        """v0.6.3：study_room_thermostat 的命名型 fault_code OR 路径仍可命中（向后兼容）。"""
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        """study_room_panel 的命名型 fault_code OR 路径仍可命中（向后兼容）。"""
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         # 命名型 fault_code 路径命中（study_room_temp_sensor_error）
@@ -1887,10 +1892,10 @@ class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
         # 无 DeviceNode 数据时，error_N 通用故障不被房间过滤路径命中（设计预期）
         # 不断言 fe_thermostat_main/panel 在结果中（依赖 DeviceNode 数据，本 setUp 无）
 
-    # FM5-05：study_room_thermostat 不命中无关设备（product_code=10016 主机）
+    # FM5-05：study_room_panel 不命中无关设备（product_code=10016 主机）
     def test_sub_type_thermostat_does_not_hit_unrelated_product(self):
         """温控 sub_type 不应命中 product_code=10016（主机）的故障。"""
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertNotIn(self.fe_unrelated.id, ids)
@@ -1998,7 +2003,7 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
     ori_room_name 关键词，区分不同房间的温控面板 sub_type。
 
     修复点：views_fault.py SUB_TYPE_ROOM_FILTER + DeviceNode Subquery。
-    设计：living_room_thermostat 用 product_code=260001（不过滤房间）；
+    设计：living_room_main 用 product_code=260001（不过滤房间）；
          study_room/bedroom/children_room/fourth_children_room 用 device_sn 集合
          从 device_node JOIN device_room（ori_room_name regex）取得。
     """
@@ -2056,30 +2061,32 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
         self.fe_master    = _fe(60004, '120003')
         self.fe_children  = _fe(60005, '120003')
 
-    # FM6-01：living_room_thermostat 只匹配 product_code=260001（不过滤房间）
+    # FM6-01：living_room_main 只匹配 product_code=260001（不过滤房间）
     def test_living_room_matches_product_code_260001_no_room_filter(self):
-        resp = self.client.get(self.list_url, {'sub_type': 'living_room_thermostat'})
+        resp = self.client.get(self.list_url, {'sub_type': 'living_room_main'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertIn(self.fe_living.id, ids)
-        # 温控面板（120003）不应命中（living_room_thermostat 只映射 260001）
+        # 温控面板（120003）不应命中（living_room_main 只映射 260001）
         self.assertNotIn(self.fe_study.id, ids)
         self.assertNotIn(self.fe_master.id, ids)
 
-    # FM6-02：study_room_thermostat 同时匹配书房和次卧
-    def test_study_room_matches_study_and_secondary_bedroom(self):
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+    # FM6-02（v0.6.4 语义）：study_room_panel 仅匹配书房（ori_room_name='书房'）
+    # v0.6.4 前 study_room_thermostat 同时匹配书房+次卧；v0.6.4 拆分为
+    # study_room_panel(书房) 与 secondary_bedroom_panel(次卧) 两个独立 sub_type。
+    def test_study_room_panel_matches_study_only(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
-        self.assertIn(self.fe_study.id, ids)      # 书房
-        self.assertIn(self.fe_secondary.id, ids)  # 次卧
+        self.assertIn(self.fe_study.id, ids)          # 书房
+        self.assertNotIn(self.fe_secondary.id, ids)   # 次卧由 secondary_bedroom_panel 覆盖
         self.assertNotIn(self.fe_master.id, ids)
         self.assertNotIn(self.fe_children.id, ids)
         self.assertNotIn(self.fe_living.id, ids)
 
-    # FM6-03：bedroom_thermostat 只匹配主卧
-    def test_bedroom_thermostat_matches_master_bedroom_only(self):
-        resp = self.client.get(self.list_url, {'sub_type': 'bedroom_thermostat'})
+    # FM6-03：master_bedroom_panel 只匹配主卧
+    def test_master_bedroom_panel_matches_master_bedroom_only(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'master_bedroom_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertIn(self.fe_master.id, ids)
@@ -2088,9 +2095,9 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
         self.assertNotIn(self.fe_children.id, ids)
         self.assertNotIn(self.fe_living.id, ids)
 
-    # FM6-04：children_room_thermostat 只匹配儿童房
-    def test_children_room_thermostat_matches_children_room_only(self):
-        resp = self.client.get(self.list_url, {'sub_type': 'children_room_thermostat'})
+    # FM6-04：children_room_panel 只匹配儿童房
+    def test_children_room_panel_matches_children_room_only(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'children_room_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         self.assertIn(self.fe_children.id, ids)
@@ -2098,17 +2105,18 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
         self.assertNotIn(self.fe_study.id, ids)
         self.assertNotIn(self.fe_living.id, ids)
 
-    # FM6-05：fourth_children_room_thermostat 行为与 children_room_thermostat 等价
-    def test_fourth_children_room_equivalent_to_children_room(self):
-        resp_cr  = self.client.get(self.list_url, {'sub_type': 'children_room_thermostat'})
-        resp_fcr = self.client.get(self.list_url, {'sub_type': 'fourth_children_room_thermostat'})
-        self.assertEqual(resp_cr.status_code,  200)
-        self.assertEqual(resp_fcr.status_code, 200)
-        ids_cr  = set(r['id'] for r in resp_cr.json()['results'])
-        ids_fcr = set(r['id'] for r in resp_fcr.json()['results'])
-        # 两者命中相同的 device_sn 集合（均映射到"儿童房"关键词）
-        self.assertEqual(ids_cr, ids_fcr)
-        self.assertIn(self.fe_children.id, ids_fcr)
+    # FM6-05（v0.6.4 语义）：secondary_bedroom_panel 仅匹配次卧
+    # 旧 fourth_children_room_thermostat 在 v0.6.4 已废弃（按物理房间命名后不再存在），
+    # 原"四房儿童房等价于儿童房"的语义不复存在；改为覆盖新增的 secondary_bedroom_panel。
+    def test_secondary_bedroom_panel_matches_secondary_only(self):
+        resp = self.client.get(self.list_url, {'sub_type': 'secondary_bedroom_panel'})
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.fe_secondary.id, ids)      # 次卧
+        self.assertNotIn(self.fe_study.id, ids)
+        self.assertNotIn(self.fe_master.id, ids)
+        self.assertNotIn(self.fe_children.id, ids)
+        self.assertNotIn(self.fe_living.id, ids)
 
     # FM6-06：fault_event 有 device_sn 但 device_node 无对应记录时，
     #         room_keywords 路径不命中，但若有 fault_code__in 命中则仍返回
@@ -2125,7 +2133,7 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
             last_seen_at=now - timedelta(minutes=30),
             is_active=True,
         )
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         # 命名型 fault_code OR 路径仍应命中
@@ -2144,22 +2152,23 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
             last_seen_at=now - timedelta(minutes=30),
             is_active=True,
         )
-        resp = self.client.get(self.list_url, {'sub_type': 'study_room_thermostat'})
+        resp = self.client.get(self.list_url, {'sub_type': 'study_room_panel'})
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
         # 既不在 device_node（房间路径 miss），也无命名型 fault_code → 不命中
         self.assertNotIn(fe_orphan_error.id, ids)
 
-    # FM6-07：多 sub_type 同时选合并 device_sn 列表
+    # FM6-07：多 sub_type 同时选合并 device_sn 列表（v0.6.4 语义）
     def test_multi_sub_type_merges_device_sns(self):
         resp = self.client.get(
-            self.list_url + '?sub_type=bedroom_thermostat&sub_type=study_room_thermostat'
+            self.list_url + '?sub_type=master_bedroom_panel&sub_type=study_room_panel'
         )
         self.assertEqual(resp.status_code, 200)
         ids = [r['id'] for r in resp.json()['results']]
-        self.assertIn(self.fe_master.id, ids)     # bedroom
-        self.assertIn(self.fe_study.id, ids)      # study_room（书房）
-        self.assertIn(self.fe_secondary.id, ids)  # study_room（次卧）
+        self.assertIn(self.fe_master.id, ids)     # 主卧
+        self.assertIn(self.fe_study.id, ids)      # 书房
+        # v0.6.4：study_room_panel 仅含书房，次卧需单独选 secondary_bedroom_panel
+        self.assertNotIn(self.fe_secondary.id, ids)
         self.assertNotIn(self.fe_children.id, ids)
         self.assertNotIn(self.fe_living.id, ids)
 
