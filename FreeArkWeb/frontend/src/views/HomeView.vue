@@ -127,6 +127,7 @@
               <span style="color: var(--color-cooling);">制冷 {{ powerStatus.mode_distribution.cooling }}</span>
               <span style="color: var(--color-heating);">制热 {{ powerStatus.mode_distribution.heating }}</span>
               <span style="color: #e6a23c;">通风 {{ powerStatus.mode_distribution.ventilation }}</span>
+              <span style="color: #13c2c2;">除湿 {{ powerStatus.mode_distribution.dehumidification }}</span>
             </div>
           </div>
           <div class="stat-icon plc-online">
