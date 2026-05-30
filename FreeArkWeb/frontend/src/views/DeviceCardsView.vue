@@ -23,42 +23,22 @@
         </div>
       </div>
 
-      <!-- REQ-UI-005-B: 顶部导航栏分两行：第一行温控面板，第二行系统设备 -->
+      <!-- REQ-UI-006: 顶部导航栏恢复单行形态（撤销 v0.8.0 REQ-UI-005-B 两行改动） -->
       <div class="panel-nav-bar">
-
-        <!-- 第一行：温控面板组 -->
-        <div class="nav-row nav-row--thermostat">
-          <!-- 行首：分类标题 + 温控历史数据链接 -->
-          <div class="nav-item nav-row-header">
-            <span class="nav-label nav-category-label">温控面板</span>
-            <el-button
-              type="primary"
-              link
-              size="small"
-              class="nav-history-btn"
-              @click="goToRoomHistory"
-            >历史数据 ›</el-button>
-          </div>
-          <div class="nav-divider" />
-          <!-- 温控 Tab：按白名单顺序，仅渲染 deviceData 中实际存在的 -->
-          <template v-for="{ subKey, subTypeData } in thermostatTabs" :key="subKey">
-            <div class="nav-item">
-              <span class="nav-label">{{ subTypeData.display }}</span>
-            </div>
-            <div class="nav-divider" />
-          </template>
+        <!-- 历史数据链接（温控）-->
+        <div class="nav-item">
+          <el-button
+            type="primary"
+            link
+            size="small"
+            class="nav-history-btn"
+            @click="goToRoomHistory"
+          >历史数据 ›</el-button>
         </div>
-
-        <!-- 行间分隔 -->
-        <div class="nav-row-separator" />
-
-        <!-- 第二行：系统设备组（固定 4 个：新风/能耗/水力/空气） -->
-        <div class="nav-row nav-row--system">
-          <div class="nav-item nav-row-header">
-            <span class="nav-label nav-category-label">系统设备</span>
-          </div>
-          <div class="nav-divider" />
-          <template v-for="{ subKey, subTypeData } in systemTabs" :key="subKey">
+        <div class="nav-divider" />
+        <!-- 单行遍历 deviceData 所有子类型 Tab -->
+        <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
+          <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
             <div class="nav-item">
               <span class="nav-label">{{ subTypeData.display }}</span>
               <el-button
@@ -72,7 +52,7 @@
             </div>
             <div class="nav-divider" />
           </template>
-        </div>
+        </template>
 
         <!-- v0.5.6: 按需采集进行中显示小圆形加载指示，替代原刷新按钮 -->
         <div v-if="ondemandInFlight" class="nav-loading-indicator">
@@ -89,34 +69,83 @@
       <!-- 无数据 -->
       <el-empty description="暂无设备参数数据" v-else-if="!loading && !hasData" />
 
-      <!-- AC-UI-003-01/02: CSS Grid 布局，移除横向滚动与折叠控件（§10.1）-->
-      <div v-else class="cards-grid">
-        <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
-          <div
-            v-for="(subTypeData, subKey) in groupData.sub_types"
-            :key="subKey"
-            class="subtype-col"
-          >
-            <!-- AC-UI-003-01: 列标题区 — 移除折叠按钮，仅保留标题与历史数据按钮（§10.1）-->
-            <div class="col-header">
-              <span class="col-title">{{ subTypeData.display }}</span>
-            </div>
-            <!-- AC-UI-003-02: params-list 始终展开，无 v-show 隐藏逻辑（§10.1）-->
-            <div class="params-list">
-              <div
-                v-for="param in expandParams(subTypeData.params)"
-                :key="param.param_name"
-                class="param-row"
-              >
-                <span class="param-label">{{ param.display_name }}</span>
-                <span
-                  class="param-value"
-                  :class="getValueClass(param.param_name, param.value)"
-                >{{ formatValue(param.param_name, param.value) }}</span>
-              </div>
-            </div>
+      <!-- REQ-UI-007/008: 详细数据面板卡片区 — 分两行（温控面板行 + 系统设备行），各自可折叠 -->
+      <div v-else class="cards-section">
+
+        <!-- 温控面板行 -->
+        <div class="cards-row">
+          <div class="cards-row-header" @click="thermostatRowCollapsed = !thermostatRowCollapsed">
+            <span class="cards-row-title">温控面板</span>
+            <el-icon class="cards-row-toggle" :class="{ 'is-collapsed': thermostatRowCollapsed }">
+              <ArrowDown />
+            </el-icon>
           </div>
-        </template>
+          <div v-show="!thermostatRowCollapsed" class="cards-grid">
+            <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
+              <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
+                <div
+                  v-if="subKey.startsWith('panel_')"
+                  class="subtype-col"
+                >
+                  <div class="col-header">
+                    <span class="col-title">{{ subTypeData.display }}</span>
+                  </div>
+                  <div class="params-list">
+                    <div
+                      v-for="param in expandParams(subTypeData.params)"
+                      :key="param.param_name"
+                      class="param-row"
+                    >
+                      <span class="param-label">{{ param.display_name }}</span>
+                      <span
+                        class="param-value"
+                        :class="getValueClass(param.param_name, param.value)"
+                      >{{ formatValue(param.param_name, param.value) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </div>
+        </div>
+
+        <!-- 系统设备行 -->
+        <div class="cards-row">
+          <div class="cards-row-header" @click="systemRowCollapsed = !systemRowCollapsed">
+            <span class="cards-row-title">系统设备</span>
+            <el-icon class="cards-row-toggle" :class="{ 'is-collapsed': systemRowCollapsed }">
+              <ArrowDown />
+            </el-icon>
+          </div>
+          <div v-show="!systemRowCollapsed" class="cards-grid">
+            <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
+              <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
+                <div
+                  v-if="systemSubKeys.includes(subKey)"
+                  class="subtype-col"
+                >
+                  <div class="col-header">
+                    <span class="col-title">{{ subTypeData.display }}</span>
+                  </div>
+                  <div class="params-list">
+                    <div
+                      v-for="param in expandParams(subTypeData.params)"
+                      :key="param.param_name"
+                      class="param-row"
+                    >
+                      <span class="param-label">{{ param.display_name }}</span>
+                      <span
+                        class="param-value"
+                        :class="getValueClass(param.param_name, param.value)"
+                      >{{ formatValue(param.param_name, param.value) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </div>
+        </div>
+
       </div>
 
       <!-- v0.5.6: 统一时间戳 — REQ-FUNC-002: 左对齐（AC-002-1） -->
@@ -130,7 +159,7 @@
 </template>
 
 <script>
-import { Loading, ArrowLeft } from '@element-plus/icons-vue'
+import { Loading, ArrowLeft, ArrowDown } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
 import mqtt from 'mqtt'
 
@@ -183,9 +212,12 @@ const FAULT_PARAMS = new Set([
   'air_quality_sensor_communication_error',
 ])
 
+// REQ-UI-007: 系统设备子类型白名单（固定 4 个）
+const SYSTEM_SUB_KEYS = ['fresh_air', 'energy_meter', 'hydraulic_module', 'air_quality']
+
 export default {
   name: 'DeviceCardsView',
-  components: { Loading, ArrowLeft },
+  components: { Loading, ArrowLeft, ArrowDown },
   data() {
     return {
       loading: false,
@@ -195,7 +227,9 @@ export default {
       ondemandInFlight: false,
       ondemandTimeoutTimer: null,
       _mqttDisconnect: null,
-      // AC-UI-003-01/02: collapsedCols 已移除（折叠功能取消，§10.1）
+      // REQ-UI-008: 折叠状态，默认展开（false = 展开）
+      thermostatRowCollapsed: false,
+      systemRowCollapsed: false,
     }
   },
   computed: {
@@ -206,49 +240,9 @@ export default {
       return Object.keys(this.deviceData).length > 0
     },
 
-    // REQ-UI-005-B: 温控面板 Tab 白名单（按展示顺序排列）
-    // subKey 以 panel_ 开头的子类型，5 房有 5 个，4 房有 4 个
-    thermostatTabOrder() {
-      return [
-        'panel_living_room',
-        'panel_study_room',
-        'panel_bedroom',
-        'panel_children_room',
-        'panel_fourth_children_room',
-      ]
-    },
-
-    // REQ-UI-005-B: 系统设备 Tab 白名单（固定 4 个，按展示顺序排列）
-    systemTabOrder() {
-      return ['fresh_air', 'energy_meter', 'hydraulic_module', 'air_quality']
-    },
-
-    // REQ-UI-005-B: 从 deviceData 中提取温控面板 Tab 列表（按白名单顺序）
-    thermostatTabs() {
-      const result = []
-      for (const subKey of this.thermostatTabOrder) {
-        for (const groupData of Object.values(this.deviceData)) {
-          if (groupData.sub_types && groupData.sub_types[subKey]) {
-            result.push({ subKey, subTypeData: groupData.sub_types[subKey] })
-            break
-          }
-        }
-      }
-      return result
-    },
-
-    // REQ-UI-005-B: 从 deviceData 中提取系统设备 Tab 列表（按白名单顺序）
-    systemTabs() {
-      const result = []
-      for (const subKey of this.systemTabOrder) {
-        for (const groupData of Object.values(this.deviceData)) {
-          if (groupData.sub_types && groupData.sub_types[subKey]) {
-            result.push({ subKey, subTypeData: groupData.sub_types[subKey] })
-            break
-          }
-        }
-      }
-      return result
+    // REQ-UI-007: 系统设备子类型白名单（暴露给模板）
+    systemSubKeys() {
+      return SYSTEM_SUB_KEYS
     },
 
     // v0.5.6: 统一时间戳（REQ-FUNC-004，取所有参数 collected_at 最大值）
@@ -277,7 +271,9 @@ export default {
   watch: {
     specificPart(newVal) {
       this.deviceData = {}
-      // collapsedCols 已移除（AC-UI-003-01/02）
+      // REQ-UI-008: 切换 specificPart 时重置折叠状态为展开
+      this.thermostatRowCollapsed = false
+      this.systemRowCollapsed = false
       this.stopAutoRefresh()
       this.disconnectMqttDone()
       this._clearOndemandTimeout()
@@ -474,14 +470,19 @@ export default {
     },
 
     // REQ-FUNC-005: 返回动态 CSS class（AC-005-4/6，ADR-001）
-    // 故障（非零） → 'status-fault'（红色）；正常（零） → 'status-ok'（绿色）；普通参数 → ''
+    // 故障（非零） → 'status-fault'（红底白字徽章）；正常（零） → 'status-ok'（绿色）；普通参数 → ''
+    // REQ-UI-010: 凝露提醒字段 → v=1 → 'status-condensation-alert'（黄底深色）；v=0 → 'status-ok'
     getValueClass(paramName, rawValue) {
+      // REQ-UI-010: 凝露提醒字段优先判断（不在 FAULT_PARAMS 中，独立处理）
+      if (paramName === 'living_room_condensation_alert' ||
+          paramName.endsWith('_condensation_alert')) {
+        const v = rawValue === null || rawValue === undefined ? 0 : Number(rawValue)
+        return v === 1 ? 'status-condensation-alert' : 'status-ok'
+      }
       if (!this.isStatusParam(paramName)) return ''
       const v = rawValue === null || rawValue === undefined ? 0 : Number(rawValue)
       return v === 0 ? 'status-ok' : 'status-fault'
     },
-
-    // AC-UI-003-01: toggleCollapse 已移除（折叠功能取消，§10.1）
 
     formatValue(paramName, rawValue) {
       if (rawValue === null || rawValue === undefined) return '-'
@@ -558,9 +559,10 @@ export default {
         return v === 0 ? '关闭' : '开启'
       }
 
+      // REQ-UI-010: 凝露提醒字段值映射（0→"无", 1→"告警"）
       if (paramName === 'living_room_condensation_alert' ||
           paramName.endsWith('_condensation_alert')) {
-        return String(v)
+        return v === 0 ? '无' : '告警'
       }
 
       return String(rawValue)
@@ -650,36 +652,16 @@ export default {
   padding-top: 2px;
 }
 
-/* REQ-UI-005-B: 顶部导航栏改为两行布局，每行 flex-wrap: wrap */
+/* REQ-UI-006: 顶部导航栏恢复单行布局（撤销 v0.8.0 flex-direction: column 改动） */
 .panel-nav-bar {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0;
   background: var(--color-bg-card);
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-2) var(--space-4);
-}
-
-/* REQ-UI-005-B: 每行导航（温控行 / 系统设备行）*/
-.nav-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0;
-  padding: 4px 0;
-}
-
-/* REQ-UI-005-B: 行间分隔线（明确区分两类设备）*/
-.nav-row-separator {
-  height: 1px;
-  background: var(--color-border);
-  margin: 2px 0;
-}
-
-/* REQ-UI-005-B: 分类标题标签（加粗，区分普通 nav-label）*/
-.nav-category-label {
-  font-weight: 700;
-  color: var(--color-primary-dark, #1d4ed8);
 }
 
 .nav-item {
@@ -726,7 +708,53 @@ export default {
   color: var(--color-primary);
 }
 
-/* AC-UI-003-01/02/03: CSS Grid 自适应多列（§8.3，§10.1）
+/* REQ-UI-007/008: 详细数据面板卡片区外层容器 */
+.cards-section {
+  padding: var(--space-4);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* REQ-UI-007: 分行容器（温控面板行 / 系统设备行） */
+.cards-row {
+  margin-bottom: var(--space-4);
+}
+
+/* REQ-UI-007/008: 行标题区 — 含折叠控件，可点击 */
+.cards-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--color-primary-bg, #ecf5ff);
+  border-left: 4px solid var(--color-primary, #409eff);
+  border-radius: var(--radius-base, 4px) var(--radius-base, 4px) 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cards-row-header:hover {
+  background: var(--color-primary-light-9, #d9ecff);
+}
+
+.cards-row-title {
+  font-size: var(--font-size-sm, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-primary-dark, #1d4ed8);
+}
+
+/* REQ-UI-008: 折叠箭头图标，展开时朝下，收折时朝右（旋转 -90deg） */
+.cards-row-toggle {
+  font-size: 14px;
+  color: var(--color-primary, #409eff);
+  transition: transform 0.2s ease;
+}
+
+.cards-row-toggle.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+/* AC-UI-003-01/02/03: CSS Grid 自适应多列
    取消横向滚动，auto-fill minmax(280px,1fr) 自适应列数 */
 .cards-grid {
   display: grid;
@@ -734,6 +762,11 @@ export default {
   gap: var(--space-4);
   padding: var(--space-4);
   width: 100%;
+  box-sizing: border-box;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-base, 4px) var(--radius-base, 4px);
 }
 
 /* AC-UI-003-03: 宽屏最多5列（§8.3）*/
@@ -773,8 +806,6 @@ export default {
   color: var(--color-primary-dark);
   white-space: nowrap;
 }
-
-/* AC-UI-003-01: .col-collapse-btn 和 .collapse-arrow 已移除（折叠功能取消，§10.1）*/
 
 .params-list {
   padding: 4px 0;
@@ -821,16 +852,28 @@ export default {
   white-space: nowrap;
 }
 
-/* REQ-FUNC-005: 故障状态——红色加粗（AC-005-1/3，ADR-001，OQ-003 定稿：静态颜色，无闪烁） */
+/* REQ-UI-009: 故障状态 — 红底白字徽章（撤销纯红色字体，改为背景标签形态） */
 .status-fault {
-  color: var(--color-status-fault);
-  font-weight: 600;
+  background-color: var(--color-status-fault);
+  color: #ffffff;
+  font-weight: normal;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 /* REQ-FUNC-005: 正常状态——淡绿色（AC-005-2/4，ADR-001） */
 .status-ok {
   color: var(--color-status-ok);
   font-weight: 500;
+}
+
+/* REQ-UI-010: 凝露告警状态 — 黄底深色字徽章 */
+.status-condensation-alert {
+  background-color: #faad14;
+  color: #7d4e00;
+  font-weight: normal;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 /* REQ-FUNC-002/004: 底部时间戳——左对齐，与卡片区 padding 对齐（AC-002-1/2，MODULE-UI-002） */
