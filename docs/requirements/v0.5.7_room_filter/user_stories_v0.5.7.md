@@ -20,7 +20,7 @@ file_header:
     - US-v0.5.7-01 新增两条 AC 验证生产实测用例（1001 四房激活/1002 三房不激活）
   base_document: docs/user_stories.md (v1.0.0)
   references:
-    - docs/requirements_spec_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/requirements_spec_v0.5.7.md
     - FR-v0.5.7-01 ~ FR-v0.5.7-06
 ```
 

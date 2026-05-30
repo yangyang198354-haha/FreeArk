@@ -13,7 +13,7 @@ file_header:
   references:
     - docs/architecture/module_design_v0.5.7.md
     - docs/architecture/architecture_design_v0.5.7.md
-    - docs/requirements_spec_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/requirements_spec_v0.5.7.md
   fix2_note: |
     fix2（2026-05-23）：单文件修改，仅变更 utils_room_filter.py 中
     _match_panel_sub_types() 的 panel_fourth_children 判定逻辑。

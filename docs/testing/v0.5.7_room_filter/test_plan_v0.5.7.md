@@ -10,10 +10,10 @@ file_header:
   created_at: 2026-05-23
   status: APPROVED
   references:
-    - docs/requirements_spec_v0.5.7.md
-    - docs/user_stories_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/requirements_spec_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/user_stories_v0.5.7.md
     - docs/architecture/module_design_v0.5.7.md
-    - docs/code_review_report_v0.5.7.md
+    - docs/development/v0.5.7_room_filter/code_review_report_v0.5.7.md
 ```
 
 ---

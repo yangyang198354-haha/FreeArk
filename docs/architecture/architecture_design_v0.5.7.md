@@ -20,8 +20,8 @@ file_header:
     - ADR-v0.5.7-02 补充 panel_fourth_children 四房识别设计校正（见下方注释）
     - 生产全量 40 专有部分扫描结果确认：书房存在 = 四房，100% 吻合，无例外
   references:
-    - docs/requirements_spec_v0.5.7.md
-    - docs/user_stories_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/requirements_spec_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/user_stories_v0.5.7.md
     - docs/architecture/architecture_design.md (v0.4.0-APPROVED)
     - FreeArkWeb/backend/freearkweb/api/models.py
     - FreeArkWeb/backend/freearkweb/api/views.py

@@ -24,8 +24,8 @@ file_header:
     - 更新模块 M1 测试要点：UT-M1-04 场景更新，新增四房/三房生产用例专项测试要点
   references:
     - docs/architecture/architecture_design_v0.5.7.md
-    - docs/requirements_spec_v0.5.7.md
-    - docs/user_stories_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/requirements_spec_v0.5.7.md
+    - docs/requirements/v0.5.7_room_filter/user_stories_v0.5.7.md
     - FreeArkWeb/backend/freearkweb/api/models.py
     - FreeArkWeb/backend/freearkweb/api/views.py (get_device_realtime_params, L1595)
     - FreeArkWeb/backend/freearkweb/api/views_device_settings.py (device_settings_params, L132)

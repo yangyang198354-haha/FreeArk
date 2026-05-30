@@ -11,7 +11,7 @@ file_header:
   revised_at: 2026-05-23
   status: APPROVED
   references:
-    - docs/implementation_plan_v0.5.7.md
+    - docs/development/v0.5.7_room_filter/implementation_plan_v0.5.7.md
     - docs/architecture/module_design_v0.5.7.md
 ```
 

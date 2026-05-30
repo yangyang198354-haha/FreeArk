@@ -11,7 +11,7 @@ file_header:
   last_updated: 2026-05-23 (v0.5.7-fix2 — fix2 逻辑分析完成，待 PM 真实运行确认)
   status: APPROVED
   references:
-    - docs/test_plan_v0.5.7.md
+    - docs/testing/v0.5.7_room_filter/test_plan_v0.5.7.md
     - FreeArkWeb/backend/freearkweb/api/tests/test_room_filter_v057.py
 ```
 
