@@ -21,8 +21,11 @@ BUG-CSRF-001 回归测试套件 — CSRF Token Missing on Re-login
 
 from django.test import TestCase, Client
 from django.urls import reverse
+from rest_framework import exceptions
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.test import APIClient
+from rest_framework.request import Request
+from rest_framework.test import APIClient, APIRequestFactory
 
 from api.models import CustomUser
 
@@ -313,3 +316,89 @@ class TokenRotationAfterLoginTest(TestCase):
         token2 = self._login()
         self.assertTrue(Token.objects.filter(key=token2).exists(),
                         msg='再次登录后应创建新 Token')
+
+
+class SessionAuthCSRFRegressionTest(TestCase):
+    """
+    BUG-CSRF（根因回归）: "CSRF failed: CSRF cookie not set"
+
+    精确复现真因——当请求携带 Django session cookie（例如 login() 调用后浏览器
+    持有 sessionid）但**不携带 csrftoken cookie**、且**无 Authorization Token 头**
+    时，DRF 的 SessionAuthentication 会用 session 认证出用户并调用 enforce_csrf()，
+    在缺少 csrftoken 时抛出 403 "CSRF Failed: CSRF cookie not set"。
+
+    注意：DRF 的 SessionAuthentication.enforce_csrf() 是**无条件**执行的，
+    与测试 Client 的 enforce_csrf_checks 标志无关——只要 session 认证成功，
+    就会校验 CSRF。这正是会话超时重登录后偶发该错误的根因。
+
+    本测试分两层证明：
+      1. test_reproduce_*：在 SessionAuthentication 这一机制层面直接复现根因——
+         给它一个「已由 session 认证出用户、但无 csrftoken」的请求，必抛
+         PermissionDenied("CSRF Failed: CSRF cookie not set")。
+      2. test_fix_* / test_settings_*：在真实端点与真实配置层面验证修复——
+         当前 settings.py 已移除 SessionAuthentication，同样请求不再 CSRF 403，
+         且实际生效的认证类清单中不再包含 SessionAuthentication。
+
+    说明（为何不用 override_settings 注入 SessionAuthentication 来复现）：
+      DRF 在**导入时**就把 settings 的 DEFAULT_AUTHENTICATION_CLASSES 绑定到
+      APIView.authentication_classes，@api_view 又在模块加载时把该引用拷贝到每个
+      视图。因此 override_settings 无法回溯改写已装饰视图的认证类——复现必须在
+      SessionAuthentication 机制层直接进行。
+    """
+
+    def setUp(self):
+        self.user, _ = _make_user(username='sess_csrf_user', password='SessPass!1')
+
+    def test_reproduce_session_auth_enforces_csrf_without_cookie(self):
+        """
+        复现根因：SessionAuthentication 拿到「session 已认证用户 + 无 csrftoken」的
+        请求时，enforce_csrf() 抛 PermissionDenied('CSRF Failed: CSRF cookie not set')。
+        """
+        factory = APIRequestFactory(enforce_csrf_checks=True)
+        raw_request = factory.post(reverse('user-logout'))
+        # 模拟浏览器持有有效 session（login() 之后）：直接挂上已认证用户，
+        # 但请求里没有 csrftoken cookie。
+        raw_request.user = self.user
+        drf_request = Request(raw_request)
+
+        auth = SessionAuthentication()
+        with self.assertRaises(exceptions.PermissionDenied) as ctx:
+            auth.authenticate(drf_request)
+        self.assertIn(
+            'CSRF', str(ctx.exception),
+            msg='SessionAuthentication 在无 csrftoken 时应抛 CSRF Failed'
+        )
+        self.assertIn(
+            'CSRF cookie not set', str(ctx.exception),
+            msg='应精确复现线上报错文案：CSRF cookie not set'
+        )
+
+    def test_settings_no_longer_register_session_authentication(self):
+        """验证（配置层）：实际生效的默认认证类已不含 SessionAuthentication。"""
+        from rest_framework.settings import api_settings
+        names = [c.__name__ for c in api_settings.DEFAULT_AUTHENTICATION_CLASSES]
+        self.assertNotIn(
+            'SessionAuthentication', names,
+            msg='修复后：DEFAULT_AUTHENTICATION_CLASSES 不应再包含 SessionAuthentication'
+        )
+        self.assertIn(
+            'SlidingWindowTokenAuthentication', names,
+            msg='Token 认证（滑动窗口）应保留'
+        )
+
+    def test_fix_no_csrf_failure_on_real_endpoint(self):
+        """
+        验证（端点层）：当前配置下，带 session cookie、无 csrftoken、无 Token 头的
+        POST 真实端点，不再因 CSRF 被 403；因 Token 认证缺失而返回 401。
+        """
+        client = APIClient(enforce_csrf_checks=True)
+        client.force_login(self.user)  # 仅写入 sessionid cookie，无 csrftoken
+        resp = client.post(reverse('user-logout'))
+        self.assertNotIn(
+            b'CSRF', resp.content,
+            msg='修复后：响应体不应再包含 CSRF 失败信息'
+        )
+        self.assertEqual(
+            resp.status_code, 401,
+            msg='修复后：无 Token 的请求应返回 401（认证缺失），而非 CSRF 403'
+        )

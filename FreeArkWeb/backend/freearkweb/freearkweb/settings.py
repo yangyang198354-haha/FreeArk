@@ -264,7 +264,12 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         # REQ-AUTH-001 (v0.9.0): 替换为滑动窗口超时认证类
         'api.authentication.SlidingWindowTokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        # BUG-CSRF: 移除 SessionAuthentication。本项目 API 走 Token 认证，
+        # SessionAuthentication 仅在请求携带 session cookie 且无 Token 头时生效，
+        # 其 enforce_csrf() 会强制校验 csrftoken cookie；会话超时重登录后该 cookie
+        # 缺失即抛 "CSRF failed: CSRF cookie not set"。Django admin (/admin/) 由
+        # Django 自身 SessionMiddleware+CsrfViewMiddleware 处理，不受此项影响。
+        # 'rest_framework.authentication.SessionAuthentication',
     ],
 }
 
