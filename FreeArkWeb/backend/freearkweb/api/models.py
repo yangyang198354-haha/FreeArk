@@ -395,7 +395,10 @@ class DeviceConfig(models.Model):
 class DeviceParamHistory(models.Model):
     """设备参数历史记录表（追加写入，时序数据）"""
     # 专有部分标识，格式如 9-1-31-3104，来自前端上下文
-    specific_part = models.CharField(max_length=50, verbose_name='专有部分', db_index=True)
+    # 注：不再单独建 db_index——该单列索引是 dev_hist_sp_cat_idx(specific_part, collected_at)
+    # 与 dev_hist_sp_pn_cat_idx(specific_part, param_name, collected_at) 的最左前缀，冗余。
+    # 删除以节省索引空间（见 migration 0031，2026-05-31 索引虚胖治理）。
+    specific_part = models.CharField(max_length=50, verbose_name='专有部分')
     # 参数名称，与 PLCLatestData.param_name 对应
     param_name = models.CharField(max_length=100, verbose_name='参数名称')
     # 参数值（TextField 兼容整数和字符串，如 "正常"、"关闭"、"26.0"）
