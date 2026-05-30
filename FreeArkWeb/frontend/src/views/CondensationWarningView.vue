@@ -174,7 +174,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
+import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
 
 const route = useRoute()
@@ -287,9 +287,9 @@ async function fetchWarnings() {
       qs.append('first_seen_after', sevenDaysAgo.toISOString().slice(0, 10) + 'T00:00:00')
     }
 
-    const resp = await axios.get('/api/devices/condensation-warning-events/?' + qs.toString())
-    warningList.value = resp.data.results || []
-    totalCount.value = resp.data.count || 0
+    const data = await api.get('/api/devices/condensation-warning-events/?' + qs.toString())
+    warningList.value = data.results || []
+    totalCount.value = data.count || 0
   } catch (err) {
     console.error('fetchWarnings 失败:', err)
     warningList.value = []

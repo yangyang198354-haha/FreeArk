@@ -213,7 +213,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from 'axios'
+import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
 
 const router = useRouter()
@@ -335,9 +335,9 @@ function getSelectedSpecificPart() {
 
 async function fetchCategories() {
   try {
-    const resp = await axios.get('/api/devices/fault-event-categories/')
-    faultTypeOptions.value = resp.data.fault_types || []
-    subTypeOptions.value = resp.data.sub_types || []
+    const data = await api.get('/api/devices/fault-event-categories/')
+    faultTypeOptions.value = data.fault_types || []
+    subTypeOptions.value = data.sub_types || []
   } catch (err) {
     console.error('fetchCategories 失败:', err)
   }
@@ -393,9 +393,9 @@ async function fetchFaultEvents() {
       qs.append('first_seen_after', sevenDaysAgo.toISOString().slice(0, 10) + 'T00:00:00')
     }
 
-    const resp = await axios.get('/api/devices/fault-events/?' + qs.toString())
-    tableData.value = resp.data.results || []
-    total.value = resp.data.count || 0
+    const data = await api.get('/api/devices/fault-events/?' + qs.toString())
+    tableData.value = data.results || []
+    total.value = data.count || 0
   } catch (err) {
     console.error('fetchFaultEvents 失败:', err)
     tableData.value = []
