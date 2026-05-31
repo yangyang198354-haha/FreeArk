@@ -9,7 +9,7 @@
     <!-- 分组 1：能耗概览（US-UX-01）-->
     <div class="group-title">能耗概览</div>
 
-    <!-- 总电量查询（宽卡片，保留原有日期选择器布局）-->
+    <!-- 总电量查询 + 今日/本月用电量（同一行，能耗概览组）-->
     <div class="top-cards-row">
       <div class="total-energy-wrapper">
         <el-card>
@@ -47,37 +47,37 @@
           </div>
         </el-card>
       </div>
+
+      <!-- 今日/本月用电量（与总电量查询同行）-->
+      <div class="summary-stat-wrapper">
+        <el-card class="stat-card" v-loading="loading.summary">
+          <div class="stat-content">
+            <div class="stat-info">
+              <div class="stat-value">{{ summary.today_kwh.toLocaleString() }}</div>
+              <div class="stat-label">今日用电量 (kWh)</div>
+            </div>
+            <div class="stat-icon today">
+              <el-icon><Calendar /></el-icon>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card class="stat-card" v-loading="loading.summary">
+          <div class="stat-content">
+            <div class="stat-info">
+              <div class="stat-value">{{ summary.month_kwh.toLocaleString() }}</div>
+              <div class="stat-label">本月用电量 (kWh)</div>
+            </div>
+            <div class="stat-icon month">
+              <el-icon><Document /></el-icon>
+            </div>
+          </div>
+        </el-card>
+      </div>
     </div>
 
-    <!-- 今日/本月用电量 stat-cards（能耗概览组）-->
-    <div class="stats-cards">
-      <el-card class="stat-card" v-loading="loading.summary">
-        <div class="stat-content">
-          <div class="stat-info">
-            <div class="stat-value">{{ summary.today_kwh.toLocaleString() }}</div>
-            <div class="stat-label">今日用电量 (kWh)</div>
-          </div>
-          <div class="stat-icon today">
-            <el-icon><Calendar /></el-icon>
-          </div>
-        </div>
-      </el-card>
-
-      <el-card class="stat-card" v-loading="loading.summary">
-        <div class="stat-content">
-          <div class="stat-info">
-            <div class="stat-value">{{ summary.month_kwh.toLocaleString() }}</div>
-            <div class="stat-label">本月用电量 (kWh)</div>
-          </div>
-          <div class="stat-icon month">
-            <el-icon><Document /></el-icon>
-          </div>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 分组 2：设备状态（US-UX-01）-->
-    <div class="group-title">设备状态</div>
+    <!-- 分组 2+3：设备状态与故障（US-UX-01, US-DC-01~05）-->
+    <div class="group-title">设备状态与故障</div>
     <div class="stats-cards">
       <el-card class="stat-card" v-loading="loading.plcRate">
         <div class="stat-content">
@@ -117,7 +117,7 @@
         </div>
       </el-card>
 
-      <!-- 系统开机状况（v0.5.3，归入设备状态组）-->
+      <!-- 系统开机状况（v0.5.3，归入设备状态与故障组）-->
       <el-card class="stat-card power-status-card" v-loading="loading.powerStatus">
         <div class="stat-content">
           <div class="stat-info">
@@ -135,11 +135,6 @@
           </div>
         </div>
       </el-card>
-    </div>
-
-    <!-- 分组 3：故障与子设备 (US-UX-01, US-DC-01~05) -->
-    <div class="group-title">故障与子设备</div>
-    <div class="stats-cards">
       <!-- 当前故障总数卡片（US-DC-01）-->
       <el-card class="stat-card" v-loading="loading.faultSummary"
                style="cursor: pointer" @click="goToFaults([], true)">
@@ -669,7 +664,8 @@ export default {
               ticks: { font: { size: 12 }, color: '#475569' }
             },
             y: {
-              // REQ-FUNC-029: 移除 beginAtZero，支持负值（Y 轴由 Chart.js 自动计算 min）
+              // UI-FIX: 强制 y 轴从 0 开始，确保 0 刻度始终可见
+              beginAtZero: true,
               grid: { color: '#F1F5F9' },
               ticks: {
                 font: { size: 12 },
@@ -826,6 +822,15 @@ export default {
   flex: 2;
   display: flex;
   flex-direction: column;
+}
+
+/* 今日/本月用电量纵向并排，与总电量查询在同一行 */
+.summary-stat-wrapper {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .power-status-wrapper {
@@ -1220,6 +1225,15 @@ export default {
   .total-energy-values {
     flex-wrap: wrap;
     gap: 20px;
+  }
+
+  .top-cards-row {
+    flex-wrap: wrap;
+  }
+
+  .summary-stat-wrapper {
+    flex-direction: row;
+    flex: 1 1 100%;
   }
 }
 
