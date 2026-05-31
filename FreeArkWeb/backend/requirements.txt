@@ -28,3 +28,8 @@ channels>=4.0.0
 
 # 异步 HTTP / WebSocket 客户端（OpenClaw Gateway WS RPC v4 调用；见 ADR-002 v1.2）
 aiohttp>=3.9.0
+
+# Redis Channel Layer（perf-P1a：多 worker 跨进程 Channel Layer；见 ADR-P1A-001/008）
+# channels_redis 4.x 对应 channels 4.x；依赖 redis>=4.0.0（纯 Python，ARM64 可用）
+# hiredis（C 加速）不强制列出：channels_redis 自动探测，不可用时回退纯 Python 客户端
+channels_redis>=4.1.0

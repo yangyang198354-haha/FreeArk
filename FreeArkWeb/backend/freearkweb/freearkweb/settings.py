@@ -147,7 +147,10 @@ DATABASES = {
 }
 
 # 缓存配置（perf-P0：看板接口短期缓存）
-# 生产：LocMemCache 进程内缓存，与单 worker(--workers 1) 契合，无需 Redis。
+# 生产：LocMemCache 进程内缓存（per-worker）。
+#   perf-P1a 后升为 --workers 2，每个 worker 各自维护独立 LocMemCache 实例。
+#   多 worker 下各 worker 缓存各自命中，功能正确；命中率与单 worker 稳态相同
+#   （见 ADR-P1A-003）。此处不切 django-redis，避免引入额外故障点。
 # 测试：DummyCache（无操作），避免 30s 缓存导致用例间数据陈旧/串扰。
 if _RUNNING_TESTS:
     CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}}
@@ -303,15 +306,40 @@ ACTIVITY_THROTTLE_SECONDS = int(os.environ.get('ACTIVITY_THROTTLE_SECONDS', 300)
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # ---------------------------------------------------------------------------
-# Django Channels 配置（WebSocket 支持，见 ADR-001）
+# Django Channels 配置（WebSocket 支持，见 ADR-001 / perf-P1a ADR-P1A-001）
 # ---------------------------------------------------------------------------
-# 使用 InMemoryChannelLayer：单进程场景，无需 Redis
-# 注意：Uvicorn 必须以 --workers 1 启动（InMemoryChannelLayer 不支持多进程）
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
+# perf-P1a：换用 RedisChannelLayer，解锁多 worker（--workers 2）。
+#
+# 说明：ChatConsumer 是 AsyncWebsocketConsumer（长连接），每个 WebSocket 连接
+# 由建立它的 worker 独占处理，不做跨 worker 的 group_send，故 Channel Layer
+# 类型对聊天功能无实质影响——只要能 import + 初始化即可。
+# 换成 RedisChannelLayer 的核心目的是满足 channels 框架在多进程下的合法性要求
+# （InMemoryChannelLayer 不支持多进程，在多 worker 下各进程内存隔离会导致潜在问题）。
+#
+# Redis 连接：loopback 127.0.0.1:6379，生产用 apt redis-server（bind 127.0.0.1）。
+# 建议 maxmemory 128mb + maxmemory-policy allkeys-lru（Channel 数据量极小）。
+#
+# 回滚路径：将 BACKEND 改回 "channels.layers.InMemoryChannelLayer"
+#           并将 systemd unit 的 --workers 改回 1，无需其他改动。
+if _RUNNING_TESTS:
+    # 测试环境：保留 InMemoryChannelLayer，不依赖 Redis 服务
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
     }
-}
+else:
+    # 生产环境：RedisChannelLayer（多 worker 安全；见 ADR-P1A-001）
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [("127.0.0.1", 6379)],
+                # capacity: 单 channel 最大积压消息数（默认 100，够用）
+                # expiry: channel 消息过期时间（秒），防止积压（默认 60）
+            },
+        }
+    }
 
 # ---------------------------------------------------------------------------
 # OpenClaw Gateway 集成配置（见 ADR-002 v1.2，REQ-FUNC-005，REQ-NFR-004）
