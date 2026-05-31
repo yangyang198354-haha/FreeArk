@@ -1,6 +1,10 @@
 [Unit]
 Description=FreeArk backend Service
-After=network.target
+# Redis 启动依赖（perf-P2）：settings.py CACHES 用 Redis db=1 作看板/故障数量缓存后端。
+# After 保证 Redis 先就绪，避免启动顺序问题下首批请求命中缓存异常路径；
+# Wants 为弱依赖（Redis 不可用时 backend 仍启动，由 cache_dashboard / _safe_cache_* 降级兜底）。
+After=network.target redis-server.service
+Wants=redis-server.service
 
 [Service]
 Type=simple

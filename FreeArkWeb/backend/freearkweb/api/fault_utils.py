@@ -1,6 +1,7 @@
-# TODO(AB-001) Redis: 当部署扩展为多进程或出现第二个跨进程共享缓存需求时，
-#              将 settings.py CACHES 迁移至 Redis；本模块所有 cache.get/set/delete 调用无需修改。
-#              详见 architecture_design_v0.5.3_fault_count_column.md §12 AB-001。
+# DONE(AB-001) Redis（perf-P2，2026-05-31 commit d02d38a）: settings.py CACHES 已从
+#              LocMemCache 迁移至 Django 内置 RedisCache（db=1）；本模块所有 cache.get/set/delete
+#              透明走该后端无需改动，并已加 _safe_cache_* 降级兜底（Redis 不可用时降级直查 DB）。
+#              详见 architecture_design_v0.5.3_fault_count_column.md §12 AB-001 与 ADR-P2-001。
 # TODO(AB-002) MQTT 驱动失效: 未来如需更低延迟可在 PLCLatestDataHandler._bulk_upsert()
 #              末尾追加 invalidate_fault_count_cache(specific_part)；本期保留钩子不调用。
 #              详见 architecture_design_v0.5.3_fault_count_column.md §12 AB-002。
@@ -14,7 +15,7 @@ fault_utils.py — 故障数量计算与缓存（v0.5.3-FCC）
 严禁：查询 device_param_history 表（3766 万行 / 11.3 GB）
 
 设计依据：
-  - ADR-FC-001  缓存选型（LocMemCache，TTL=60s）
+  - ADR-FC-001  缓存选型（TTL=60s；后端 perf-P2 已由 LocMemCache 迁移至 Redis db=1，见 ADR-P2-001）
   - ADR-FC-002  后端 Python 集中定义故障判定规则
   - ADR-FC-003  fresh_air_fault_status 位域 popcount 处理
   - ADR-FC-005  短 TTL 定时刷新策略
@@ -85,6 +86,42 @@ _ERROR_N_PATTERN = re.compile(r'^error_\d+$')
 _FAULT_CACHE_PREFIX: str = 'fault_count:'
 #: 缓存 TTL = 60 秒（ADR-FC-005 修订值；满足 US-FC-05 AC-FC-05-01 的 ≤60s 延迟要求）
 _FAULT_CACHE_TTL: int = 60
+
+
+# ---------------------------------------------------------------------------
+# Redis 降级兜底（perf-P2）
+# ---------------------------------------------------------------------------
+# 缓存后端为 Django 内置 RedisCache（settings.py CACHES，db=1），其不支持
+# IGNORE_EXCEPTIONS，Redis 不可用时 cache.get/set/delete 会抛 redis.exceptions.*。
+# 本模块的缓存被设备列表/故障数量等接口调用，且不在 views.cache_dashboard 装饰器
+# 保护范围内，故在此对所有缓存读写加 try/except，口径与 cache_dashboard 一致：
+#   - 读失败：视为缓存未命中（返回 None），调用方降级为直查 DB。
+#   - 写/删失败：静默忽略，不影响响应。
+# 任何一种失败都只记 WARNING 日志，不向上抛出，确保 Redis 故障不导致 HTTP 500。
+
+def _safe_cache_get(key):
+    """Redis 降级兜底：读失败视为缓存未命中（返回 None），不中断请求。"""
+    try:
+        return cache.get(key)
+    except Exception as exc:
+        logger.warning('fault_utils: Redis get 失败（降级为直查）: %s', exc)
+        return None
+
+
+def _safe_cache_set(key, value, ttl) -> None:
+    """Redis 降级兜底：写失败静默忽略，不影响调用方。"""
+    try:
+        cache.set(key, value, ttl)
+    except Exception as exc:
+        logger.warning('fault_utils: Redis set 失败（降级为无缓存）: %s', exc)
+
+
+def _safe_cache_delete(key) -> None:
+    """Redis 降级兜底：删除失败静默忽略。"""
+    try:
+        cache.delete(key)
+    except Exception as exc:
+        logger.warning('fault_utils: Redis delete 失败（忽略）: %s', exc)
 
 
 # ---------------------------------------------------------------------------
@@ -183,13 +220,13 @@ def get_fault_count_cached(specific_part: str) -> Optional[int]:
         int（≥0）：故障数量，或 None（PLCLatestData 无该 specific_part 记录）
     """
     key = f'{_FAULT_CACHE_PREFIX}{specific_part}'
-    cached = cache.get(key)
+    cached = _safe_cache_get(key)
     if cached is not None:
         return cached
     result = _compute_from_db_batch([specific_part])
     count = result.get(specific_part)
     if count is not None:
-        cache.set(key, count, _FAULT_CACHE_TTL)
+        _safe_cache_set(key, count, _FAULT_CACHE_TTL)
     return count
 
 
@@ -209,7 +246,7 @@ def get_fault_count_batch_cached(specific_parts: list) -> dict:
 
     for sp in specific_parts:
         key = f'{_FAULT_CACHE_PREFIX}{sp}'
-        val = cache.get(key)
+        val = _safe_cache_get(key)
         if val is not None:
             result[sp] = val
         else:
@@ -220,7 +257,7 @@ def get_fault_count_batch_cached(specific_parts: list) -> dict:
         for sp, count in db_counts.items():
             result[sp] = count
             if count is not None:
-                cache.set(f'{_FAULT_CACHE_PREFIX}{sp}', count, _FAULT_CACHE_TTL)
+                _safe_cache_set(f'{_FAULT_CACHE_PREFIX}{sp}', count, _FAULT_CACHE_TTL)
 
     return result
 
@@ -231,7 +268,7 @@ def invalidate_fault_count_cache(specific_part: str) -> None:
     OQ-01 裁决后，mqtt_handlers.py 不调用此函数（缓存由 TTL=60s 自动过期）。
     保留供未来切换至写入端钩子（ADR-FC-005 方案 B / AB-002）时直接启用，无需修改接口。
     """
-    cache.delete(f'{_FAULT_CACHE_PREFIX}{specific_part}')
+    _safe_cache_delete(f'{_FAULT_CACHE_PREFIX}{specific_part}')
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +352,7 @@ def _get_param_to_subtypes() -> dict:
 
     缓存 60s（与故障数缓存对齐），DeviceConfig 极少变更。
     """
-    cached = cache.get(_PARAM_SUBTYPE_CACHE_KEY)
+    cached = _safe_cache_get(_PARAM_SUBTYPE_CACHE_KEY)
     if cached is not None:
         return cached
 
@@ -324,7 +361,7 @@ def _get_param_to_subtypes() -> dict:
     for pn, st in DeviceConfig.objects.filter(is_active=True).values_list('param_name', 'sub_type'):
         mapping[pn].add(st)
     result = {k: frozenset(v) for k, v in mapping.items()}
-    cache.set(_PARAM_SUBTYPE_CACHE_KEY, result, _PARAM_SUBTYPE_CACHE_TTL)
+    _safe_cache_set(_PARAM_SUBTYPE_CACHE_KEY, result, _PARAM_SUBTYPE_CACHE_TTL)
     return result
 
 
