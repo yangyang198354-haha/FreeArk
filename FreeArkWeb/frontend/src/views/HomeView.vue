@@ -671,17 +671,24 @@ export default {
             y: {
               // UI-FIX: 强制 y 轴从 0 开始，确保 0 刻度始终可见
               beginAtZero: true,
+              // UI-FIX-2: 显式 min:0 双保险，防止数据全为正时轴底被抬起
+              min: 0,
+              // UI-FIX-2: grace 在最大值上方留 10% 余量，柱子不顶天花板，
+              // 0 刻度不再被压缩到 x 轴标签旁边而难以辨认
+              grace: '10%',
               grid: { color: '#F1F5F9' },
               ticks: {
                 font: { size: 12 },
                 color: '#475569',
-                callback: v => v.toFixed(0)
+                callback: v => v.toFixed(0),
+                // 限制刻度数量，防止 0 与第一个非零刻度贴得过近
+                maxTicksLimit: 6
               }
             }
           },
-          // §9.5: 顶部留白给数据标签
+          // §9.5: 顶部留白给数据标签；从 24 加大到 40 以容纳大数值标签
           layout: {
-            padding: { top: 24 }
+            padding: { top: 40 }
           }
         }
       })
