@@ -445,6 +445,88 @@ class StateMachineT1T2T3Test(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# UT-SM-T2P-*: T2 节流落库（修复"活跃预警 发生=最后活跃 恒相同"缺陷）
+# ---------------------------------------------------------------------------
+
+class StateMachineT2ThrottledPersistTest(TestCase):
+    """T2 节流落库：活跃预警的 last_seen_at 按阈值低频写回 DB，
+    修复"未恢复预警 first_seen_at 与 last_seen_at 永远相同"的缺陷
+    （镜像 fault_consumer 方案1）。"""
+
+    def setUp(self):
+        import api.condensation_consumer.state_machine as sm_module
+        sm_module._cw_state_machine.clear()
+        self.sm = sm_module
+        self.key = ('3-1-7-702', '22554')
+        self.now = timezone.now()
+        self._orig_threshold = sm_module._CW_T2_PERSIST_THROTTLE_SECONDS
+
+    def tearDown(self):
+        self.sm._CW_T2_PERSIST_THROTTLE_SECONDS = self._orig_threshold
+        self.sm._cw_state_machine.clear()
+
+    def _alarm(self, active, ts):
+        self.sm.process_condensation_alarm(
+            specific_part='3-1-7-702', device_sn='22554', product_code='260001',
+            is_active_now=active, received_at=ts,
+            condensation_alarm_value='1', system_switch='on',
+        )
+
+    def _get(self):
+        from api.models import CondensationWarningEvent
+        return CondensationWarningEvent.objects.get()
+
+    def test_t2_within_window_does_not_persist(self):
+        """T2 间隔 < 阈值：DB 的 last_seen_at 不变（仍等于 first_seen_at），内存已前进。"""
+        self.sm._CW_T2_PERSIST_THROTTLE_SECONDS = 300
+        self._alarm(True, self.now)                            # T1
+        self._alarm(True, self.now + timedelta(seconds=120))   # T2 < 300s
+        cwe = self._get()
+        self.assertEqual(cwe.last_seen_at, cwe.first_seen_at)
+        self.assertEqual(self.sm.get_state(self.key).last_seen_at,
+                         self.now + timedelta(seconds=120))
+
+    def test_t2_beyond_window_persists(self):
+        """T2 间隔 >= 阈值：last_seen_at 落库，且与 first_seen_at 不再相同。"""
+        self.sm._CW_T2_PERSIST_THROTTLE_SECONDS = 300
+        self._alarm(True, self.now)                            # T1
+        later = self.now + timedelta(seconds=600)
+        self._alarm(True, later)                               # T2 >= 300s → 落库
+        cwe = self._get()
+        self.assertEqual(cwe.last_seen_at, later)
+        self.assertNotEqual(cwe.last_seen_at, cwe.first_seen_at)
+        self.assertEqual(self.sm.get_state(self.key).last_persisted_at, later)
+
+    def test_t2_persist_adds_no_new_rows(self):
+        """节流落库是 UPDATE，不应新增 DB 行。"""
+        from api.models import CondensationWarningEvent
+        self.sm._CW_T2_PERSIST_THROTTLE_SECONDS = 300
+        self._alarm(True, self.now)
+        self._alarm(True, self.now + timedelta(seconds=600))
+        self.assertEqual(CondensationWarningEvent.objects.count(), 1)
+
+    def test_persist_resets_throttle_window(self):
+        """一次落库后重置节流窗口：紧随其后的近间隔 T2 不再落库，但内存继续前进。"""
+        self.sm._CW_T2_PERSIST_THROTTLE_SECONDS = 300
+        self._alarm(True, self.now)                            # T1，persisted=now
+        t1 = self.now + timedelta(seconds=600)
+        self._alarm(True, t1)                                  # 落库，persisted=t1
+        self._alarm(True, t1 + timedelta(seconds=120))         # < 300s，不落库
+        cwe = self._get()
+        self.assertEqual(cwe.last_seen_at, t1)
+        self.assertEqual(self.sm.get_state(self.key).last_seen_at,
+                         t1 + timedelta(seconds=120))
+
+    def test_threshold_zero_persists_every_t2(self):
+        """阈值=0：每次 T2 都落库（不节流）。"""
+        self.sm._CW_T2_PERSIST_THROTTLE_SECONDS = 0
+        self._alarm(True, self.now)
+        t = self.now + timedelta(seconds=1)
+        self._alarm(True, t)
+        self.assertEqual(self._get().last_seen_at, t)
+
+
+# ---------------------------------------------------------------------------
 # UT-SS-*: system_switch 双源逻辑
 # ---------------------------------------------------------------------------
 

@@ -36,11 +36,20 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
+from django.conf import settings
 from django.db import close_old_connections, IntegrityError, OperationalError
 
 from api.fault_consumer.room_lookup import get_room_for_device
 
 logger = logging.getLogger(__name__)
+
+# T2 节流落库阈值（秒）：预警持续期间，last_seen_at 默认只在内存维护，
+# 距离上次落库超过该阈值才写一次 DB，避免每条上报都写库。
+# 设为 0 表示每次 T2 都落库（不节流）；可经 settings.CW_T2_PERSIST_THROTTLE_SECONDS 调整。
+# 镜像 fault_consumer 的 FAULT_T2_PERSIST_THROTTLE_SECONDS。
+_CW_T2_PERSIST_THROTTLE_SECONDS: int = int(
+    getattr(settings, 'CW_T2_PERSIST_THROTTLE_SECONDS', 300)
+)
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +62,8 @@ class CondensationState:
     event_id: int        # condensation_warning_event.id，用于 UPDATE 定位行
     is_active: bool      # True=活跃，False=已恢复
     last_seen_at: datetime  # 最近一次 MQTT 上报（内存中维护）
+    # 已落库的 last_seen_at 值，用于 T2 节流判断；初始等于 INSERT/重建时的 last_seen_at
+    last_persisted_at: datetime = None
 
 
 # 进程内状态机（模块级单例字典）
@@ -91,6 +102,7 @@ def rebuild_from_db() -> int:
                 event_id=cwe.id,
                 is_active=True,
                 last_seen_at=cwe.last_seen_at,
+                last_persisted_at=cwe.last_seen_at,  # DB 当前值即已落库值
             )
             count += 1
         logger.info('结露预警状态机重建完成，共加载 %d 条活跃预警', count)
@@ -141,8 +153,14 @@ def process_condensation_alarm(
                 condensation_alarm_value, dew_point_temp, ntc_temp, humidity, system_switch,
             )
         else:
-            # T2: 预警持续，仅更新内存（不写 DB）
-            _cw_state_machine[key].last_seen_at = received_at
+            # T2: 预警持续。先更新内存 last_seen_at；再按节流策略低频写回 DB，
+            # 使活跃预警的 last_seen_at 不至于长期停留在 first_seen_at（修复"发生=最后活跃"）。
+            st = _cw_state_machine[key]
+            st.last_seen_at = received_at
+            last_persisted = st.last_persisted_at
+            if (last_persisted is None
+                    or (received_at - last_persisted).total_seconds() >= _CW_T2_PERSIST_THROTTLE_SECONDS):
+                _t2_persist_last_seen(key, st, received_at)
     else:
         if state is not None and state.is_active:
             # T3: 预警恢复，UPDATE DB
@@ -215,6 +233,7 @@ def _t1_insert(
             event_id=cwe.id,
             is_active=True,
             last_seen_at=received_at,
+            last_persisted_at=received_at,  # INSERT 已写入 last_seen_at=received_at
         )
         logger.debug('T1 INSERT condensation_warning_event id=%d key=%s system_switch=%s',
                      cwe.id, key, system_switch)
@@ -249,9 +268,30 @@ def _t1_fallback_update(
                 event_id=cwe.id,
                 is_active=True,
                 last_seen_at=received_at,
+                last_persisted_at=received_at,  # 兜底 UPDATE 已写入 last_seen_at=received_at
             )
     except Exception as exc:
         logger.error('T1 fallback UPDATE 失败: %s', exc)
+
+
+def _t2_persist_last_seen(key: tuple, state: CondensationState, received_at: datetime) -> None:
+    """T2 节流落库：低频 UPDATE condensation_warning_event.last_seen_at。
+
+    仅在距上次落库超过 _CW_T2_PERSIST_THROTTLE_SECONDS 时调用，避免每条上报都写库。
+    只更新仍活跃的行；失败不更新 state.last_persisted_at，下次 T2 越阈值会重试。
+    """
+    close_old_connections()
+    try:
+        from api.models import CondensationWarningEvent
+        CondensationWarningEvent.objects.filter(id=state.event_id, is_active=True).update(
+            last_seen_at=received_at,
+        )
+        state.last_persisted_at = received_at
+        logger.debug('T2 PERSIST last_seen_at id=%d key=%s', state.event_id, key)
+    except OperationalError as exc:
+        logger.error('T2 PERSIST OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except Exception as exc:
+        logger.exception('T2 PERSIST 未预期异常: %s key=%s', exc, key)
 
 
 def _t3_recover(key: tuple, state: CondensationState, received_at: datetime) -> None:
