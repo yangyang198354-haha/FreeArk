@@ -1120,7 +1120,9 @@ export default {
 }
 
 .chart-card {
-  height: 320px;
+  /* UI-FIX-3: 卡片需容下 header(≈56px)+body内边距(≈40px)+chart-container，
+     原 320px 装不下 300px 容器，el-card overflow:hidden 把图表底部(x轴/0刻度)裁掉了 */
+  height: 400px;
 }
 
 .card-header {
@@ -1184,8 +1186,10 @@ export default {
 }
 
 /* §9.5: 固定高度，给数据标签充分空间 */
+/* UI-FIX-3: 与 .chart-card(400px) 匹配——400 -(header≈56 + body padding≈40 + 余量)≈290，
+   确保整张图(含底部 x 轴与 0 刻度)完整落在卡片内，不被 overflow:hidden 裁切 */
 .chart-container {
-  height: 300px;
+  height: 290px;
   width: 100%;
 }
 
