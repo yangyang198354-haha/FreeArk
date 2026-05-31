@@ -17,11 +17,19 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
+from django.conf import settings
 from django.db import close_old_connections, IntegrityError, OperationalError
 
 from .room_lookup import get_room_for_device
 
 logger = logging.getLogger(__name__)
+
+# T2 节流落库阈值（秒）：故障持续期间，last_seen_at 默认只在内存维护，
+# 距离上次落库超过该阈值才写一次 DB，避免每条上报都写库。
+# 设为 0 表示每次 T2 都落库（不节流）；可经 settings.FAULT_T2_PERSIST_THROTTLE_SECONDS 调整。
+_T2_PERSIST_THROTTLE_SECONDS: int = int(
+    getattr(settings, 'FAULT_T2_PERSIST_THROTTLE_SECONDS', 300)
+)
 
 # ---------------------------------------------------------------------------
 # 数据结构
@@ -33,6 +41,8 @@ class FaultState:
     event_id: int       # fault_event.id，用于 UPDATE 定位行
     is_active: bool     # True=活跃，False=已恢复
     last_seen_at: datetime  # 最近一次 MQTT 上报（内存中维护）
+    # 已落库的 last_seen_at 值，用于 T2 节流判断；初始等于 INSERT/重建时的 last_seen_at
+    last_persisted_at: datetime = None
 
 
 # 进程内状态机（模块级单例字典）
@@ -70,6 +80,7 @@ def rebuild_from_db() -> int:
                 event_id=fe.id,
                 is_active=True,
                 last_seen_at=fe.last_seen_at,
+                last_persisted_at=fe.last_seen_at,  # DB 当前值即已落库值
             )
             count += 1
         logger.info('状态机重建完成，共加载 %d 条活跃故障', count)
@@ -115,8 +126,14 @@ def process_fault_field(
             _t1_insert(key, specific_part, device_sn, product_code,
                        fault_code, fault_type, severity, fault_message, received_at)
         else:
-            # T2: 故障持续，仅更新内存（不写 DB）
-            _state_machine[key].last_seen_at = received_at
+            # T2: 故障持续。先更新内存 last_seen_at；再按节流策略低频写回 DB，
+            # 使活跃故障的 last_seen_at 不至于长期停留在 first_seen_at（修复"首次=最后活跃"）。
+            st = _state_machine[key]
+            st.last_seen_at = received_at
+            last_persisted = st.last_persisted_at
+            if (last_persisted is None
+                    or (received_at - last_persisted).total_seconds() >= _T2_PERSIST_THROTTLE_SECONDS):
+                _t2_persist_last_seen(key, st, received_at)
     else:
         if state is not None and state.is_active:
             # T3: 故障恢复，UPDATE DB
@@ -176,6 +193,7 @@ def _t1_insert(
             event_id=fe.id,
             is_active=True,
             last_seen_at=received_at,
+            last_persisted_at=received_at,  # INSERT 已写入 last_seen_at=received_at
         )
         logger.debug('T1 INSERT fault_event id=%d key=%s', fe.id, key)
     except IntegrityError:
@@ -211,9 +229,30 @@ def _t1_fallback_update(
                 event_id=updated.id,
                 is_active=True,
                 last_seen_at=received_at,
+                last_persisted_at=received_at,  # 兜底 UPDATE 已写入 last_seen_at=received_at
             )
     except Exception as exc:
         logger.error('T1 fallback UPDATE 失败: %s', exc)
+
+
+def _t2_persist_last_seen(key: tuple, state: FaultState, received_at: datetime) -> None:
+    """T2 节流落库：低频 UPDATE fault_event.last_seen_at。
+
+    仅在距上次落库超过 _T2_PERSIST_THROTTLE_SECONDS 时调用，避免每条上报都写库。
+    只更新仍活跃的行；失败不更新 state.last_persisted_at，下次 T2 越阈值会重试。
+    """
+    close_old_connections()
+    try:
+        from api.models import FaultEvent
+        FaultEvent.objects.filter(id=state.event_id, is_active=True).update(
+            last_seen_at=received_at,
+        )
+        state.last_persisted_at = received_at
+        logger.debug('T2 PERSIST last_seen_at id=%d key=%s', state.event_id, key)
+    except OperationalError as exc:
+        logger.error('T2 PERSIST OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except Exception as exc:
+        logger.exception('T2 PERSIST 未预期异常: %s key=%s', exc, key)
 
 
 def _t3_recover(key: tuple, state: FaultState, received_at: datetime) -> None:

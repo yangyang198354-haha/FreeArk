@@ -468,6 +468,77 @@ class TestStateMachineTransitions(TestCase):
         self.assertEqual(get_state_machine_size(), 2)
 
 
+class TestT2ThrottledPersist(TestCase):
+    """方案1：T2 节流落库——活跃故障的 last_seen_at 按阈值低频写回 DB，
+    修复"未恢复故障 first_seen_at 与 last_seen_at 永远相同"的缺陷。"""
+
+    def setUp(self):
+        _reset_state_machine()
+        self.now = timezone.now()
+        self.key = ('3-1-7-702', 'SN001', 'comm_fault_timeout')
+        self._orig_threshold = sm_module._T2_PERSIST_THROTTLE_SECONDS
+
+    def tearDown(self):
+        sm_module._T2_PERSIST_THROTTLE_SECONDS = self._orig_threshold
+        _reset_state_machine()
+
+    def _fault(self, active, ts):
+        process_fault_field(
+            specific_part='3-1-7-702', device_sn='SN001', product_code='PROD-A',
+            fault_code='comm_fault_timeout', fault_type='comm', severity='error',
+            fault_message='msg', is_active_now=active, received_at=ts,
+        )
+
+    def test_t2_within_window_does_not_persist(self):
+        """T2 间隔 < 阈值：DB 的 last_seen_at 不变（仍等于 first_seen_at），内存已前进"""
+        sm_module._T2_PERSIST_THROTTLE_SECONDS = 300
+        self._fault(True, self.now)                            # T1
+        self._fault(True, self.now + timedelta(seconds=120))   # T2 < 300s
+        fe = FaultEvent.objects.get()
+        self.assertEqual(fe.last_seen_at, fe.first_seen_at)
+        self.assertEqual(get_state(self.key).last_seen_at,
+                         self.now + timedelta(seconds=120))
+
+    def test_t2_beyond_window_persists(self):
+        """T2 间隔 >= 阈值：last_seen_at 落库，且与 first_seen_at 不再相同"""
+        sm_module._T2_PERSIST_THROTTLE_SECONDS = 300
+        self._fault(True, self.now)                            # T1
+        later = self.now + timedelta(seconds=600)
+        self._fault(True, later)                               # T2 >= 300s → 落库
+        fe = FaultEvent.objects.get()
+        self.assertEqual(fe.last_seen_at, later)
+        self.assertNotEqual(fe.last_seen_at, fe.first_seen_at)
+        self.assertEqual(get_state(self.key).last_persisted_at, later)
+
+    def test_t2_persist_adds_no_new_rows(self):
+        """节流落库是 UPDATE，不应新增 DB 行"""
+        sm_module._T2_PERSIST_THROTTLE_SECONDS = 300
+        self._fault(True, self.now)
+        self._fault(True, self.now + timedelta(seconds=600))
+        self.assertEqual(FaultEvent.objects.count(), 1)
+
+    def test_persist_resets_throttle_window(self):
+        """一次落库后重置节流窗口：紧随其后的近间隔 T2 不再落库，但内存继续前进"""
+        sm_module._T2_PERSIST_THROTTLE_SECONDS = 300
+        self._fault(True, self.now)                            # T1，persisted=now
+        t1 = self.now + timedelta(seconds=600)
+        self._fault(True, t1)                                  # 落库，persisted=t1
+        self._fault(True, t1 + timedelta(seconds=120))         # < 300s，不落库
+        fe = FaultEvent.objects.get()
+        self.assertEqual(fe.last_seen_at, t1)
+        self.assertEqual(get_state(self.key).last_seen_at,
+                         t1 + timedelta(seconds=120))
+
+    def test_threshold_zero_persists_every_t2(self):
+        """阈值=0：每次 T2 都落库（不节流）"""
+        sm_module._T2_PERSIST_THROTTLE_SECONDS = 0
+        self._fault(True, self.now)
+        t = self.now + timedelta(seconds=1)
+        self._fault(True, t)
+        fe = FaultEvent.objects.get()
+        self.assertEqual(fe.last_seen_at, t)
+
+
 class TestRebuildFromDb(TestCase):
     """P0-6: rebuild_from_db LIMIT 保护 + 空库启动"""
 
