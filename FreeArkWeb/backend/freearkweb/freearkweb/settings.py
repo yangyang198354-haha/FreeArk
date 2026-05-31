@@ -146,16 +146,38 @@ DATABASES = {
     'default': SQLITE_DATABASE if (USE_SQLITE or _RUNNING_TESTS) else MYSQL_DATABASE
 }
 
-# 缓存配置（perf-P0：看板接口短期缓存）
-# 生产：LocMemCache 进程内缓存，与单 worker(--workers 1) 契合，无需 Redis。
+# 缓存配置（perf-P0：看板接口短期缓存；perf-P2：切换至 Redis 后端，见 ADR-P2-001）
+#
 # 测试：DummyCache（无操作），避免 30s 缓存导致用例间数据陈旧/串扰。
+#   _RUNNING_TESTS 分支不能动 Redis，确保 manage.py test 无需 redis-server。
+#
+# 生产：Django 内置 RedisCache（django.core.cache.backends.redis.RedisCache）。
+#   - LOCATION db=1：与 channels_redis（db=0）隔离，避免键冲突。
+#   - socket_connect_timeout/socket_timeout=1（OPTIONS 中传给 ConnectionPool）：
+#     防止 Redis 慢响应（或未启动）拖垮 uvicorn worker 线程，最多 1s 放弃并触发
+#     异常，由 cache_dashboard 装饰器的 try/except 兜底降级（非 500）。
+#   - KEY_PREFIX='fa_cache'：键隔离前缀，便于 redis-cli 手工排查。
+#   - TIMEOUT=30：默认 TTL 30s，与 P0 LocMemCache 策略一致。
+#   - 降级策略：Django 内置 RedisCache 无 IGNORE_EXCEPTIONS，降级兜底在
+#     cache_dashboard 装饰器的 try/except 层实现（见 api/views.py）。
+#
+# 回滚：将生产分支改回 LocMemCache（LOCATION='freeark-dashboard-cache'）即可，
+#   Redis 服务和 channels_redis 不受影响，无需重启其他服务。
 if _RUNNING_TESTS:
     CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}}
 else:
     CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'freeark-dashboard-cache',
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': 'redis://127.0.0.1:6379/1',
+            'OPTIONS': {
+                # socket_connect_timeout/socket_timeout 由 redis-py ConnectionPool 解析
+                # （ConnectionPool.from_url() 支持此参数，5.x/6.x 均有效）
+                'socket_connect_timeout': 1,
+                'socket_timeout': 1,
+            },
+            'KEY_PREFIX': 'fa_cache',
+            'TIMEOUT': 30,
         }
     }
 

@@ -33,3 +33,10 @@ aiohttp>=3.9.0
 # channels_redis 4.x 对应 channels 4.x；依赖 redis>=4.0.0（纯 Python，ARM64 可用）
 # hiredis（C 加速）不强制列出：channels_redis 自动探测，不可用时回退纯 Python 客户端
 channels_redis>=4.1.0
+
+# Redis 客户端（Django 缓存后端 + Channel Layer 共用；见 ADR-P2-001）
+# 固定 5.x：兼容 channels_redis 4.x（P1-a 雷区：redis-py 8.0.0 引入 RESP3 变更，
+# 与 channels_redis 4.x 的 RedisChannelLayer 不兼容，WS receive 循环抛 TimeoutError）。
+# Django 5.2 内置 RedisCache（django.core.cache.backends.redis）在 redis 5.x 下完全支持。
+# 此约束同时为将来 P1 多 worker 重试扫清依赖障碍。
+redis>=5.0,<6.0

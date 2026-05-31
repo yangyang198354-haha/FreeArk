@@ -33,18 +33,25 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 看板接口短期缓存装饰器（perf-P0）
+# 看板接口短期缓存装饰器（perf-P0；perf-P2：增加 Redis 降级兜底）
 # ---------------------------------------------------------------------------
 # 背景：树莓派经 wlan0 → 远程 MySQL(192.168.31.98)，单次 DB 往返实测 ~24ms 且会
 #   间歇尖刺；看板多数接口需多次往返，叠加单 worker(--workers 1) 串行，慢接口会
 #   占住 worker 致其余请求排队（实测 401 排队 10~60s）。看板数据非强实时，
 #   对慢接口加 30s 进程内缓存可大幅削减重复往返与排队。
-# 实现：用 Django 默认 LocMemCache（进程内、线程安全，无需 Redis；与单 worker 契合）。
+# 实现（perf-P2 更新）：后端换为 Redis（django.core.cache.backends.redis.RedisCache），
+#   settings.py 的 CACHES 生产分支改 Redis；测试分支仍 DummyCache，行为不变。
 #   鉴权在 @api_view/@permission_classes 层完成，早于本装饰器，故 401 不会命中缓存。
 #   仅缓存 HTTP 200 成功响应；带查询参数的接口需 vary_params=True 以参数入键。
+# 降级兜底（perf-P2 新增）：Django 内置 RedisCache 不支持 IGNORE_EXCEPTIONS，
+#   因此在装饰器层对 cache.get/set 加 try/except 捕获所有 Redis 异常。
+#   Redis 不可用时：get 返回 None（缓存未命中），set 静默忽略，接口正常返回。
+#   不会因 Redis 故障导致 HTTP 500，看板退化为无缓存直查模式。
 import functools
 from urllib.parse import urlencode
 from django.core.cache import cache
+
+_cache_logger = logging.getLogger(__name__)  # logging 已在文件顶部导入
 
 
 def cache_dashboard(ttl=30, prefix=None, vary_params=False):
@@ -54,12 +61,25 @@ def cache_dashboard(ttl=30, prefix=None, vary_params=False):
             key = 'dash:' + (prefix or view_fn.__name__)
             if vary_params:
                 key += ':' + urlencode(sorted(request.query_params.items()))
-            cached = cache.get(key)
+            # perf-P2：Redis 降级兜底 — get 失败视为缓存未命中，不中断请求
+            try:
+                cached = cache.get(key)
+            except Exception as _cache_exc:
+                _cache_logger.warning(
+                    'cache_dashboard: Redis get 失败（降级为直查）: %s', _cache_exc
+                )
+                cached = None
             if cached is not None:
                 return Response(cached)
             resp = view_fn(request, *args, **kwargs)
             if getattr(resp, 'status_code', None) == 200:
-                cache.set(key, resp.data, ttl)
+                # perf-P2：Redis 降级兜底 — set 失败静默忽略，不影响响应
+                try:
+                    cache.set(key, resp.data, ttl)
+                except Exception as _cache_exc:
+                    _cache_logger.warning(
+                        'cache_dashboard: Redis set 失败（降级为无缓存）: %s', _cache_exc
+                    )
             return resp
         return wrapper
     return decorator
