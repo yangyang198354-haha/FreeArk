@@ -146,6 +146,19 @@ DATABASES = {
     'default': SQLITE_DATABASE if (USE_SQLITE or _RUNNING_TESTS) else MYSQL_DATABASE
 }
 
+# 缓存配置（perf-P0：看板接口短期缓存）
+# 生产：LocMemCache 进程内缓存，与单 worker(--workers 1) 契合，无需 Redis。
+# 测试：DummyCache（无操作），避免 30s 缓存导致用例间数据陈旧/串扰。
+if _RUNNING_TESTS:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'freeark-dashboard-cache',
+        }
+    }
+
 # 输出数据库配置信息用于调试
 # 使用日志系统记录配置信息，避免直接print导致重复输出
 

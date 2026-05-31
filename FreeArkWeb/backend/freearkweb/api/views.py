@@ -32,6 +32,38 @@ from .serializers import (
 # 获取logger实例
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# 看板接口短期缓存装饰器（perf-P0）
+# ---------------------------------------------------------------------------
+# 背景：树莓派经 wlan0 → 远程 MySQL(192.168.31.98)，单次 DB 往返实测 ~24ms 且会
+#   间歇尖刺；看板多数接口需多次往返，叠加单 worker(--workers 1) 串行，慢接口会
+#   占住 worker 致其余请求排队（实测 401 排队 10~60s）。看板数据非强实时，
+#   对慢接口加 30s 进程内缓存可大幅削减重复往返与排队。
+# 实现：用 Django 默认 LocMemCache（进程内、线程安全，无需 Redis；与单 worker 契合）。
+#   鉴权在 @api_view/@permission_classes 层完成，早于本装饰器，故 401 不会命中缓存。
+#   仅缓存 HTTP 200 成功响应；带查询参数的接口需 vary_params=True 以参数入键。
+import functools
+from urllib.parse import urlencode
+from django.core.cache import cache
+
+
+def cache_dashboard(ttl=30, prefix=None, vary_params=False):
+    def decorator(view_fn):
+        @functools.wraps(view_fn)
+        def wrapper(request, *args, **kwargs):
+            key = 'dash:' + (prefix or view_fn.__name__)
+            if vary_params:
+                key += ':' + urlencode(sorted(request.query_params.items()))
+            cached = cache.get(key)
+            if cached is not None:
+                return Response(cached)
+            resp = view_fn(request, *args, **kwargs)
+            if getattr(resp, 'status_code', None) == 200:
+                cache.set(key, resp.data, ttl)
+            return resp
+        return wrapper
+    return decorator
+
 # 获取CSRF token的视图函数
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -817,6 +849,7 @@ def _parse_date_param(date_str, param_name):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@cache_dashboard(ttl=30, vary_params=True)
 def dashboard_total_energy(request):
     """
     看板 API 1：总电量查询（支持自定义时间段）
@@ -928,6 +961,7 @@ def dashboard_plc_online_rate(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@cache_dashboard(ttl=30)
 def dashboard_power_status(request):
     """
     看板 API：系统开机状况统计
@@ -1166,6 +1200,7 @@ def _get_service_detail(service_name):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@cache_dashboard(ttl=30)
 def dashboard_services(request):
     """
     看板 API 5：系统服务状态
@@ -1413,6 +1448,7 @@ def dashboard_activities(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@cache_dashboard(ttl=30)
 def dashboard_fault_summary(request):
     """GET /api/dashboard/fault-summary/
     返回当前未恢复故障总数及影响户数（specific_part 去重计数）。
@@ -1420,14 +1456,16 @@ def dashboard_fault_summary(request):
     """
     try:
         from .models import FaultEvent
-        active_qs = FaultEvent.objects.filter(is_active=True)
-        active_fault_count = active_qs.count()
-        affected_unit_count = active_qs.values('specific_part').distinct().count()
+        # perf-P0：单次聚合（COUNT(*) + COUNT(DISTINCT specific_part)）替代 2 次 DB 往返
+        agg = FaultEvent.objects.filter(is_active=True).aggregate(
+            active_fault_count=Count('id'),
+            affected_unit_count=Count('specific_part', distinct=True),
+        )
         return Response({
             'success': True,
             'data': {
-                'active_fault_count': active_fault_count,
-                'affected_unit_count': affected_unit_count,
+                'active_fault_count': agg['active_fault_count'],
+                'affected_unit_count': agg['affected_unit_count'],
             }
         })
     except Exception as e:
@@ -1437,6 +1475,7 @@ def dashboard_fault_summary(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@cache_dashboard(ttl=30)
 def dashboard_device_fault_summary(request):
     """GET /api/dashboard/device-fault-summary/
     一次返回四类子设备的 total（DeviceNode 按 product_code）
@@ -1450,33 +1489,31 @@ def dashboard_device_fault_summary(request):
     try:
         from .models import FaultEvent, DeviceNode
 
+        # perf-P0：用 2 次 GROUP BY 聚合替代原 8 次独立 COUNT，削减 DB 往返
+        #（树莓派 wlan0→远程 MySQL 单次往返 ~24ms，8 次往返是该接口慢的主因）。
+        GROUPS = {
+            'air_quality_sensor': ['100007'],
+            'thermostat_panels':  ['120003', '260001'],
+            'fresh_air_unit':     ['130004'],
+            'hydraulic_module':   ['270001'],
+        }
+        all_codes = [c for codes in GROUPS.values() for c in codes]
+
+        node_counts = dict(
+            DeviceNode.objects.filter(product_code__in=all_codes)
+            .values_list('product_code').annotate(n=Count('id'))
+        )
+        fault_counts = dict(
+            FaultEvent.objects.filter(product_code__in=all_codes, is_active=True)
+            .values_list('product_code').annotate(n=Count('id'))
+        )
+
         data = {
-            'air_quality_sensor': {
-                'total': DeviceNode.objects.filter(product_code='100007').count(),
-                'fault_count': FaultEvent.objects.filter(
-                    product_code='100007', is_active=True
-                ).count(),
-            },
-            'thermostat_panels': {
-                'total': DeviceNode.objects.filter(
-                    product_code__in=['120003', '260001']
-                ).count(),
-                'fault_count': FaultEvent.objects.filter(
-                    product_code__in=['120003', '260001'], is_active=True
-                ).count(),
-            },
-            'fresh_air_unit': {
-                'total': DeviceNode.objects.filter(product_code='130004').count(),
-                'fault_count': FaultEvent.objects.filter(
-                    product_code='130004', is_active=True
-                ).count(),
-            },
-            'hydraulic_module': {
-                'total': DeviceNode.objects.filter(product_code='270001').count(),
-                'fault_count': FaultEvent.objects.filter(
-                    product_code='270001', is_active=True
-                ).count(),
-            },
+            group: {
+                'total': sum(node_counts.get(c, 0) for c in codes),
+                'fault_count': sum(fault_counts.get(c, 0) for c in codes),
+            }
+            for group, codes in GROUPS.items()
         }
 
         return Response({'success': True, 'data': data})

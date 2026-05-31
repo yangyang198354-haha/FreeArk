@@ -145,8 +145,29 @@ async function authenticatedFetch(endpoint, options = {}) {
       ...options.headers
     }
   };
-  
-  const response = await fetch(getApiUrl(endpoint), mergedOptions);
+
+  // perf-P0：请求超时保护。后端单 worker 下若某接口 hang 住，原生 fetch 无超时会
+  // 让调用方的 loading 永不结束（页面"一直转圈"）。此处加 15s AbortController 兜底，
+  // 超时后 fetch 抛错 → 调用方 catch 能正常关闭 loading。调用方自带 signal 时不覆盖。
+  const DEFAULT_TIMEOUT_MS = 15000;
+  let _timeoutId = null;
+  if (!mergedOptions.signal) {
+    const controller = new AbortController();
+    mergedOptions.signal = controller.signal;
+    _timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  }
+
+  let response;
+  try {
+    response = await fetch(getApiUrl(endpoint), mergedOptions);
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error('请求超时，请稍后重试');
+    }
+    throw err;
+  } finally {
+    if (_timeoutId) clearTimeout(_timeoutId);
+  }
 
   // REQ-AUTH-003 (v0.9.0): 统一拦截 401，清理本地凭证并跳转登录页
   if (response.status === 401) {
