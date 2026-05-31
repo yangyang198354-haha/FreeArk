@@ -48,37 +48,38 @@
         </el-card>
       </div>
 
-      <!-- 今日/本月用电量（与总电量查询同行）-->
-      <div class="summary-stat-wrapper">
-        <el-card class="stat-card" v-loading="loading.summary">
-          <div class="stat-content">
-            <div class="stat-info">
-              <div class="stat-value">{{ summary.today_kwh.toLocaleString() }}</div>
-              <div class="stat-label">今日用电量 (kWh)</div>
-            </div>
-            <div class="stat-icon today">
-              <el-icon><Calendar /></el-icon>
-            </div>
+      <!-- 今日用电量（与总电量查询同行，独立 flex item）-->
+      <el-card class="stat-card summary-stat-card" v-loading="loading.summary">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value">{{ summary.today_kwh.toLocaleString() }}</div>
+            <div class="stat-label">今日用电量 (kWh)</div>
           </div>
-        </el-card>
+          <div class="stat-icon today">
+            <el-icon><Calendar /></el-icon>
+          </div>
+        </div>
+      </el-card>
 
-        <el-card class="stat-card" v-loading="loading.summary">
-          <div class="stat-content">
-            <div class="stat-info">
-              <div class="stat-value">{{ summary.month_kwh.toLocaleString() }}</div>
-              <div class="stat-label">本月用电量 (kWh)</div>
-            </div>
-            <div class="stat-icon month">
-              <el-icon><Document /></el-icon>
-            </div>
+      <!-- 本月用电量（与总电量查询同行，独立 flex item）-->
+      <el-card class="stat-card summary-stat-card" v-loading="loading.summary">
+        <div class="stat-content">
+          <div class="stat-info">
+            <div class="stat-value">{{ summary.month_kwh.toLocaleString() }}</div>
+            <div class="stat-label">本月用电量 (kWh)</div>
           </div>
-        </el-card>
-      </div>
+          <div class="stat-icon month">
+            <el-icon><Document /></el-icon>
+          </div>
+        </div>
+      </el-card>
     </div>
 
     <!-- 分组 2+3：设备状态与故障（US-UX-01, US-DC-01~05）-->
     <div class="group-title">设备状态与故障</div>
-    <div class="stats-cards">
+
+    <!-- 第一行：4 张（PLC在线、大屏在线、总设备数、系统开机率）-->
+    <div class="stats-row stats-row-4">
       <el-card class="stat-card" v-loading="loading.plcRate">
         <div class="stat-content">
           <div class="stat-info">
@@ -135,6 +136,10 @@
           </div>
         </div>
       </el-card>
+    </div>
+
+    <!-- 第二行：5 张（故障总数 + 4 个子设备卡片）-->
+    <div class="stats-row stats-row-5">
       <!-- 当前故障总数卡片（US-DC-01）-->
       <el-card class="stat-card" v-loading="loading.faultSummary"
                style="cursor: pointer" @click="goToFaults([], true)">
@@ -824,13 +829,10 @@ export default {
   flex-direction: column;
 }
 
-/* 今日/本月用电量纵向并排，与总电量查询在同一行 */
-.summary-stat-wrapper {
+/* 今日/本月用电量：直接作为 top-cards-row 的 flex item，横向排列 */
+.summary-stat-card {
   flex: 1;
-  min-width: 200px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  min-width: 160px;
 }
 
 .power-status-wrapper {
@@ -957,12 +959,19 @@ export default {
   margin-top: 4px;
 }
 
-/* 统计卡片样式 */
-.stats-cards {
+/* 统计卡片行：固定列数，保证第一行 4 张、第二行 5 张 */
+.stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 20px;
   margin-bottom: 20px;
+}
+
+.stats-row-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.stats-row-5 {
+  grid-template-columns: repeat(5, 1fr);
 }
 
 /* AC-UI-001-06: 统计卡片 hover（§5.4）*/
@@ -1213,11 +1222,18 @@ export default {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
-  .stats-cards {
-    grid-template-columns: 1fr 1fr;
+@media (max-width: 900px) {
+  /* 第一行从 4 列降为 2 列，第二行从 5 列降为 2 列（保持换行可读） */
+  .stats-row-4 {
+    grid-template-columns: repeat(2, 1fr);
   }
 
+  .stats-row-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
   .charts-section {
     grid-template-columns: 1fr;
   }
@@ -1227,18 +1243,24 @@ export default {
     gap: 20px;
   }
 
+  /* 能耗概览三张卡片在窄屏下允许换行，不溢出 */
   .top-cards-row {
     flex-wrap: wrap;
   }
 
-  .summary-stat-wrapper {
-    flex-direction: row;
+  .total-energy-wrapper {
     flex: 1 1 100%;
+  }
+
+  .summary-stat-card {
+    flex: 1 1 calc(50% - 10px);
+    min-width: 140px;
   }
 }
 
 @media (max-width: 480px) {
-  .stats-cards {
+  .stats-row-4,
+  .stats-row-5 {
     grid-template-columns: 1fr;
   }
 }
