@@ -374,7 +374,11 @@ class FrontendColumnCheckE2ETest(TestCase):
       房号、房间、大屏是否在线、系统开关、预警类型、预警内容、
       露点温度、NTC温度、湿度、预警发生时间、最后活跃、恢复时间
 
-    开发汇报为 12 列；本测试静态解析 Vue 文件，验证 el-table-column 数量和标签文字。
+    合理扩展列（ALLOWED_EXTRA_LABELS）：
+      操作 —— fixed="right" 的操作列，含"设备面板"跳转按钮（与 FaultManagementView 一致的交互），
+              属需求外的 UI 扩展，故前端实际为 13 列。
+
+    本测试静态解析 Vue 文件，验证 el-table-column 数量和标签文字。
     """
 
     VUE_FILE = (
@@ -387,8 +391,11 @@ class FrontendColumnCheckE2ETest(TestCase):
         '湿度', '预警发生时间', '最后活跃', '恢复时间',
     ]
 
+    # 需求外但已说明来源的合理扩展列
+    ALLOWED_EXTRA_LABELS = ['操作']
+
     def test_frontend_001_column_count_and_labels(self):
-        """E2E-FRONTEND-001: Vue 组件包含 12 个 el-table-column，标签与需求一致。"""
+        """E2E-FRONTEND-001: Vue 组件包含 需求12列 + 操作列 = 13 个 el-table-column。"""
         try:
             with open(self.VUE_FILE, encoding='utf-8') as f:
                 content = f.read()
@@ -400,9 +407,11 @@ class FrontendColumnCheckE2ETest(TestCase):
         col_labels = re.findall(r'<el-table-column[^>]+label=["\']([^"\']+)["\']', content)
 
         actual_count = len(col_labels)
+        expected_count = len(self.EXPECTED_LABELS) + len(self.ALLOWED_EXTRA_LABELS)
         self.assertEqual(
-            actual_count, 12,
-            f'前端列数为 {actual_count}，需求要求 12 列。实际列标签: {col_labels}'
+            actual_count, expected_count,
+            f'前端列数为 {actual_count}，期望 {expected_count} 列'
+            f'（需求 {len(self.EXPECTED_LABELS)} 列 + 操作扩展列）。实际列标签: {col_labels}'
         )
 
         # 验证需求要求的列标签均存在
@@ -413,12 +422,11 @@ class FrontendColumnCheckE2ETest(TestCase):
             )
 
     def test_frontend_002_extra_columns_explained(self):
-        """E2E-FRONTEND-002: 验证前端无超出需求的额外列（多余列需说明来源）。
+        """E2E-FRONTEND-002: 验证前端无"未说明来源"的额外列。
 
         需求 12 列 = 房号/房间/大屏在线/系统开关/预警类型/预警内容/
                     露点温度/NTC温度/湿度/预警发生时间/最后活跃/恢复时间
-
-        注：AC-CW-02-03 原文列了 12 列（含"房间"列），Vue 实现亦为 12 列。
+        允许扩展列 = 操作（设备面板跳转按钮，见类 docstring）
         """
         try:
             with open(self.VUE_FILE, encoding='utf-8') as f:
@@ -427,9 +435,10 @@ class FrontendColumnCheckE2ETest(TestCase):
             self.skipTest(f'Vue 文件不存在: {self.VUE_FILE}')
 
         col_labels = re.findall(r'<el-table-column[^>]+label=["\']([^"\']+)["\']', content)
-        extra = [lbl for lbl in col_labels if lbl not in self.EXPECTED_LABELS]
+        known = set(self.EXPECTED_LABELS) | set(self.ALLOWED_EXTRA_LABELS)
+        extra = [lbl for lbl in col_labels if lbl not in known]
 
         self.assertEqual(
             len(extra), 0,
-            f'前端存在需求中未定义的列: {extra}。若为合理扩展请在测试文档中说明来源。'
+            f'前端存在未说明来源的额外列: {extra}。若为合理扩展请加入 ALLOWED_EXTRA_LABELS 并在 docstring 说明。'
         )
