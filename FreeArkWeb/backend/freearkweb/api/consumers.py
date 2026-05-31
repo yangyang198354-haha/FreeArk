@@ -48,6 +48,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """握手鉴权：验证 FreeArk token，通过后建立连接并创建 DB 会话记录。"""
+        # 提前初始化实例属性：connect 在无/无效 token 时会 close()+return，但 Channels
+        # 仍会调用 disconnect()，其中访问 self.chat_session / self._pending_assistant_content。
+        # 若不先置默认值，早期拒绝路径会抛 AttributeError（'ChatConsumer' object has no
+        # attribute 'chat_session'）。在任何 early-return 之前先兜底。
+        self.chat_session = None
+        self._pending_assistant_content = ''
+
         query_string = self.scope.get('query_string', b'')
         params = parse_qs(query_string)
         token_bytes = params.get(b'token', [None])[0]
@@ -68,8 +75,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.user = user
         self.session_key = str(uuid.uuid4())
         self._is_streaming = False
-        self.chat_session = None
-        self._pending_assistant_content = ''
+        # self.chat_session / self._pending_assistant_content 已在 connect 顶部初始化
 
         # v1.3: 创建 DB 会话记录（失败则降级，WS 仍正常建立）
         try:
