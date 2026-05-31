@@ -1,5 +1,13 @@
 # P1-a 架构设计：Redis Channel Layer + 多 Worker 解除串行瓶颈
 
+> ⚠️ **状态：已回滚（2026-05-31）。** 生产部署后发现 **`channels_redis 4.3.0` 与
+> `redis-py 8.0.0` 不兼容**：RedisChannelLayer 在 WS consumer 的 receive 循环中触发
+> `redis.exceptions.TimeoutError: Timeout reading from 127.0.0.1:6379`（RESP3 读取超时），
+> 导致聊天连接报错。已按本文回滚方案退回 `InMemoryChannelLayer` + `--workers 1`（已恢复正常）。
+> **重试前置条件**：在 requirements 固定兼容的 redis-py 版本（channels_redis 4.x 实测需
+> redis-py 5.x；redis-py 8.x 不兼容），并在装好 Redis 的环境本地验证 WS 收发后再上生产。
+> Redis 服务本身已装好可保留。chat_session 修复（commit 独立）不受影响、已保留。
+
 > **版本**: 1.0.0  
 > **日期**: 2026-05-31  
 > **作者**: claude-sonnet-4-6 (PM Orchestrator / Architect)  
