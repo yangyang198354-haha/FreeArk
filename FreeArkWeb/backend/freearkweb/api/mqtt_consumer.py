@@ -54,6 +54,38 @@ ONDEMAND_DONE_TOPIC_PREFIX = '/datacollection/plc/ondemand/done/'
 # 每个 worker 每处理 N 条消息才调用一次 close_old_connections，避免频繁 MySQL 握手
 _CLOSE_CONN_EVERY_N = 50
 
+# 连接类 / 事务中毒类错误标记：worker 遇到这些错误必须强制重建连接。
+# 背景（2026-06-01 PLC 在线率暴跌 RCA）：energy worker 的连接若在
+# ConnectionStatusHandler 的 transaction.atomic() 块内因 2006/2013 断连，会被遗留成
+# connection=None 且 in_atomic_block 卡死的脏状态，此后每条消息在
+# ensure_connection() 抛 ProgrammingError("Cannot open a new connection in an
+# atomic block")，该 worker 永久失败、不再刷新 last_online_time，直到进程重启。
+_DB_CONN_ERROR_MARKERS = (
+    'cannot open a new connection in an atomic block',
+    'server has gone away',
+    'lost connection',
+    'connection reset',
+    'broken pipe',
+    'connection aborted',
+    '(2006',
+    '(2013',
+)
+
+
+def _is_db_connection_error(exc):
+    """判断异常是否为数据库连接/事务中毒类错误（需强制重建连接才能恢复）。
+
+    既覆盖 OperationalError(2006/2013) 等连接断开，也覆盖中毒后 ensure_connection()
+    抛出的 ProgrammingError("Cannot open a new connection in an atomic block")——
+    后者类型不是 OperationalError，故必须按消息文本兜底识别。
+    """
+    if isinstance(exc, (DjangoOperationalError, MySQLdb.OperationalError,
+                        MySQLdb.InterfaceError, ConnectionResetError,
+                        ConnectionAbortedError, BrokenPipeError)):
+        return True
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _DB_CONN_ERROR_MARKERS)
+
 
 class MQTTConsumer:
     def __init__(self, num_energy_workers=NUM_ENERGY_WORKERS,
@@ -382,6 +414,23 @@ class MQTTConsumer:
                     f"[{thread_name}] 处理消息异常: topic={topic}, error={e}",
                     exc_info=True
                 )
+                # [2026-06-01 修复] 若异常源于连接断开 / atomic 块内中毒，必须强制重建
+                # 连接，否则中毒连接会让本 worker 在 ensure_connection() 处对后续每条消息
+                # 都抛 "Cannot open a new connection in an atomic block"，永久失败直到进程
+                # 重启（PLC 在线率误判暴跌真因）。_check_and_reconnect_db 内部的
+                # connection.connect() 会重置 in_atomic_block/needs_rollback/
+                # closed_in_transaction，把"需人工重启"降级为"丢 1 条消息后自愈"。
+                if _is_db_connection_error(e):
+                    logger.warning(
+                        f"[{thread_name}] 检测到数据库连接/事务中毒错误，强制重建连接以恢复 worker"
+                    )
+                    try:
+                        self._check_and_reconnect_db(with_diagnostic=False)
+                    except Exception as rc_err:
+                        logger.error(
+                            f"[{thread_name}] 强制重建数据库连接失败: {rc_err}",
+                            exc_info=True
+                        )
             finally:
                 msg_queue.task_done()
                 elapsed_ms = (time.monotonic() - t_start) * 1000
