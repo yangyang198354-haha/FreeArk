@@ -29,6 +29,20 @@ function getApiUrl(endpoint) {
 // 产生的新 token 与此缓存不一致，导致后续请求 CSRF 验证失败。
 let cachedCSRFToken = null;
 
+// 会话过期提示去重标志（v1.0.x 修复：超时弹窗重复）
+// 会话超时时页面上常有多个并发请求同时收到 401，每个 authenticatedFetch
+// 实例若各自 ElMessage.warning 会弹出 N 条相同提示。此模块级标志保证
+// 一次过期周期内只弹一次。登录成功后须调用 resetSessionExpiredFlag() 复位，
+// 使下一次会话过期能再次提示。
+// 注意：不可在 clearCSRFToken() 中复位——该函数在 401 处理内部即被调用，
+// 复位会让并发请求各自重新弹窗，反而破坏去重。
+let _sessionExpiredShown = false;
+
+// 复位会话过期提示标志（登录成功时调用）
+function resetSessionExpiredFlag() {
+  _sessionExpiredShown = false;
+}
+
 // 清除 CSRF token 缓存（供 logout 时调用）
 // BUG-CSRF-001 修复：登出后重置缓存，防止下次登录携带过期 token
 function clearCSRFToken() {
@@ -187,11 +201,15 @@ async function authenticatedFetch(endpoint, options = {}) {
 
     if (!isOnLoginPage) {
       // 展示过期提示（动态导入，避免 api.js 对 element-plus 产生静态依赖）
-      try {
-        const { ElMessage } = await import('element-plus');
-        ElMessage.warning('会话已过期，请重新登录');
-      } catch (_) {
-        // ElMessage 不可用时静默继续，不阻断跳转
+      // 去重：并发请求同时收到 401 时，仅首个触发弹窗，其余跳过
+      if (!_sessionExpiredShown) {
+        _sessionExpiredShown = true;
+        try {
+          const { ElMessage } = await import('element-plus');
+          ElMessage.warning('会话已过期，请重新登录');
+        } catch (_) {
+          // ElMessage 不可用时静默继续，不阻断跳转
+        }
       }
       try {
         const router = getRouter();
@@ -356,7 +374,9 @@ const api = {
   // 暴露 clearCSRFToken，供特殊场景手动清除（如强制刷新 token）
   clearCSRFToken,
   // v0.9.0: 暴露 clearAuthCookie，供特殊场景使用
-  clearAuthCookie
+  clearAuthCookie,
+  // v1.0.x: 暴露会话过期提示复位，供登录成功后调用
+  resetSessionExpiredFlag
 };
 
 export default api;

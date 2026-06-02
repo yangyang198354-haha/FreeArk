@@ -272,7 +272,6 @@
       <div class="lp-meta-row">
         <div class="lp-meta-item">服务条款</div>
         <div class="lp-meta-item">隐私政策</div>
-        <div class="lp-meta-item">沪 ICP 备 2025-08812 号</div>
       </div>
     </div>
   </div>
@@ -281,6 +280,7 @@
 <script>
 import { ref, markRaw, onMounted, onUnmounted } from 'vue'
 import { Warning } from '@element-plus/icons-vue'
+import api from '../utils/api'
 
 export default {
   name: 'LoginView',
@@ -485,7 +485,8 @@ export default {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',            // CSRF/cookie 行为零回退
-              body: JSON.stringify(this.loginForm)
+              // remember_me 传给后端，决定滑动窗口超时阈值（7天 vs 30分钟）
+              body: JSON.stringify({ ...this.loginForm, remember_me: this.rememberMe })
             })
 
             if (!resp.ok) {
@@ -499,9 +500,14 @@ export default {
               localStorage.setItem('userToken', data.token)
               localStorage.setItem('isAuthenticated', 'true')
               const secure = window.location.protocol === 'https:'
-              let cookieString = `auth_token=${encodeURIComponent(data.token)}; path=/; max-age=86400; SameSite=Lax`
+              // 勾选"7天内保持登录"时 cookie 存 7 天，否则 1 天；
+              // 真正的会话有效期由后端滑动窗口超时控制（见 remember_me）
+              const maxAge = this.rememberMe ? 604800 : 86400
+              let cookieString = `auth_token=${encodeURIComponent(data.token)}; path=/; max-age=${maxAge}; SameSite=Lax`
               if (secure) cookieString += '; Secure'
               document.cookie = cookieString
+              // 登录成功：复位会话过期提示去重标志，使下次过期能再次提示
+              api.resetSessionExpiredFlag()
               this.$router.push('/')
             }
           } catch (error) {

@@ -11,7 +11,8 @@ function copyStaticFilesPlugin(buildDir) {
       // 定义需要复制的文件列表
       const filesToCopy = [
         { src: join(__dirname, 'src', 'data', 'building_data.js'), dest: join(__dirname, buildDir, 'building_data.js') },
-        { src: join(__dirname, 'favicon.png'), dest: join(__dirname, buildDir, 'favicon.png') }
+        { src: join(__dirname, 'favicon.png'), dest: join(__dirname, buildDir, 'favicon.png') },
+        { src: join(__dirname, 'favicon.svg'), dest: join(__dirname, buildDir, 'favicon.svg') }
       ]
       
       // 确保构建目录存在

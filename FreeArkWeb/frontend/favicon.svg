@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="fav-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <!-- 深色圆角底：浅色 / 深色浏览器标签页均清晰 -->
+  <rect x="1" y="1" width="46" height="46" rx="10" fill="#050a14" stroke="#1c2740" stroke-width="1.5"/>
+  <!-- 六角形轮廓（自由方舟品牌） -->
+  <path d="M24 7 L39 15.5 V32.5 L24 41 L9 32.5 V15.5 Z"
+        stroke="url(#fav-g)" stroke-width="2" fill="rgba(59,130,246,0.08)"
+        stroke-linejoin="round"/>
+  <!-- 上升折线（能耗曲线） -->
+  <path d="M15 30 L24 18 L33 30"
+        stroke="url(#fav-g)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24" cy="24" r="2.4" fill="#3b82f6"/>
+</svg>

@@ -315,6 +315,12 @@ REST_FRAMEWORK = {
 # 通过环境变量 SESSION_INACTIVITY_TIMEOUT 可覆盖（整数，秒）。
 SESSION_INACTIVITY_TIMEOUT = int(os.environ.get('SESSION_INACTIVITY_TIMEOUT', 1800))
 
+# "7天内保持登录"勾选后的延长超时阈值（秒）。默认 7 天 = 604800 秒。
+# 登录时 remember_me=True 会在 TokenActivity.extended_session 标记，
+# 认证时改用此阈值替代 SESSION_INACTIVITY_TIMEOUT。
+# 通过环境变量 SESSION_EXTENDED_TIMEOUT 可覆盖（整数，秒）。
+SESSION_EXTENDED_TIMEOUT = int(os.environ.get('SESSION_EXTENDED_TIMEOUT', 604800))
+
 # 活动时间写入 DB 的节流阈值（秒）。默认 5 分钟 = 300 秒。
 # 同一 token 在此时间内的多次请求只触发一次 DB UPDATE。
 # 须满足：ACTIVITY_THROTTLE_SECONDS < SESSION_INACTIVITY_TIMEOUT

@@ -357,6 +357,92 @@ class LoginAPITests(TestCase):
         self.assertEqual(settings.ACTIVITY_THROTTLE_SECONDS, TEST_THROTTLE)
 
 
+# 延长会话阈值：远大于 TEST_TIMEOUT，用于区分"7天保持登录"与默认超时
+TEST_EXTENDED = 100000
+
+
+@override_settings(
+    SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
+    SESSION_EXTENDED_TIMEOUT=TEST_EXTENDED,
+    ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
+)
+class RememberMeTests(TestCase):
+    """测试"7天内保持登录"(remember_me / extended_session) 功能。"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = CustomUser.objects.create_user(
+            username='remembertest',
+            password='testpass789',
+        )
+        _activity_cache.clear()
+
+    def _login(self, remember_me):
+        return self.client.post(
+            '/api/auth/login/',
+            {'username': 'remembertest', 'password': 'testpass789',
+             'remember_me': remember_me},
+            format='json',
+        )
+
+    # TC-RM-01: remember_me=True 登录后 extended_session 被置 True
+    def test_tc_rm_01_remember_me_true_sets_extended_session(self):
+        response = self._login(remember_me=True)
+        self.assertEqual(response.status_code, 200)
+        token = Token.objects.get(key=response.data['token'])
+        activity = TokenActivity.objects.get(token=token)
+        self.assertTrue(activity.extended_session)
+
+    # TC-RM-02: remember_me=False（或缺省）登录后 extended_session 为 False
+    def test_tc_rm_02_remember_me_false_keeps_default(self):
+        response = self._login(remember_me=False)
+        self.assertEqual(response.status_code, 200)
+        token = Token.objects.get(key=response.data['token'])
+        activity = TokenActivity.objects.get(token=token)
+        self.assertFalse(activity.extended_session)
+
+    # TC-RM-03: 默认会话超过 SESSION_INACTIVITY_TIMEOUT 即 401
+    def test_tc_rm_03_default_session_expires_at_short_timeout(self):
+        from django.utils.timezone import now as django_now
+        response = self._login(remember_me=False)
+        token = Token.objects.get(key=response.data['token'])
+        # 年龄 = TEST_TIMEOUT+10：超过默认 10s 阈值
+        TokenActivity.objects.filter(token=token).update(
+            last_active_at=django_now() - timedelta(seconds=TEST_TIMEOUT + 10)
+        )
+        _activity_cache.clear()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {response.data["token"]}')
+        resp = self.client.get('/api/auth/me/')
+        self.assertEqual(resp.status_code, 401)
+
+    # TC-RM-04: 延长会话在同样年龄下仍放行（核心收益）
+    def test_tc_rm_04_extended_session_survives_short_timeout(self):
+        from django.utils.timezone import now as django_now
+        response = self._login(remember_me=True)
+        token = Token.objects.get(key=response.data['token'])
+        # 同样年龄 TEST_TIMEOUT+10：超过默认阈值但远小于 TEST_EXTENDED
+        TokenActivity.objects.filter(token=token).update(
+            last_active_at=django_now() - timedelta(seconds=TEST_TIMEOUT + 10)
+        )
+        _activity_cache.clear()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {response.data["token"]}')
+        resp = self.client.get('/api/auth/me/')
+        self.assertEqual(resp.status_code, 200)
+
+    # TC-RM-05: 重新登录依当前勾选状态覆盖 extended_session（True → False）
+    def test_tc_rm_05_relogin_overrides_extended_session(self):
+        r1 = self._login(remember_me=True)
+        token = Token.objects.get(key=r1.data['token'])
+        self.assertTrue(TokenActivity.objects.get(token=token).extended_session)
+
+        # 同一用户复用同一 token（get_or_create），再次以 False 登录应覆盖回 False
+        self.client.credentials()
+        r2 = self._login(remember_me=False)
+        self.assertEqual(r2.status_code, 200)
+        token2 = Token.objects.get(key=r2.data['token'])
+        self.assertFalse(TokenActivity.objects.get(token=token2).extended_session)
+
+
 @override_settings(
     SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,

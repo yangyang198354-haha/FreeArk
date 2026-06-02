@@ -141,10 +141,17 @@ def user_login(request):
         # 创建或获取Token
         token, created = Token.objects.get_or_create(user=user)
 
+        # "7天内保持登录"：前端勾选时传 remember_me=True，决定会话超时阈值
+        remember_me = bool(request.data.get('remember_me', False))
+
         # REQ-AUTH-001 (v0.9.0): 登录时强制初始化/重置活动时间戳（绕过节流）
+        # 同步按 remember_me 重置 extended_session（每次登录依当前勾选状态覆盖）
         TokenActivity.objects.update_or_create(
             token=token,
-            defaults={'last_active_at': django_now()},
+            defaults={
+                'last_active_at': django_now(),
+                'extended_session': remember_me,
+            },
         )
 
         return Response({

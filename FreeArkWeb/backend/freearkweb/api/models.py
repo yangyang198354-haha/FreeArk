@@ -843,6 +843,13 @@ class TokenActivity(models.Model):
         verbose_name='最后活动时间',
         db_index=True,
     )
+    # "7天内保持登录"：登录时按勾选状态写入，决定滑动窗口超时阈值
+    #   False → SESSION_INACTIVITY_TIMEOUT（默认 30 分钟）
+    #   True  → SESSION_EXTENDED_TIMEOUT（默认 7 天）
+    extended_session = models.BooleanField(
+        default=False,
+        verbose_name='延长会话（7天保持登录）',
+    )
 
     class Meta:
         db_table = 'api_token_activity'

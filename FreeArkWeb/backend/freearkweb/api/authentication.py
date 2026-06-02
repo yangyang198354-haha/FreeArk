@@ -27,6 +27,11 @@ def _get_timeout() -> int:
     return getattr(settings, 'SESSION_INACTIVITY_TIMEOUT', 1800)
 
 
+def _get_extended_timeout() -> int:
+    """从 settings 读取"7天保持登录"延长超时阈值（秒），默认 604800（7天）。"""
+    return getattr(settings, 'SESSION_EXTENDED_TIMEOUT', 604800)
+
+
 def _get_throttle() -> int:
     """从 settings 读取节流阈值（秒），默认 300。"""
     return getattr(settings, 'ACTIVITY_THROTTLE_SECONDS', 300)
@@ -39,12 +44,16 @@ class SlidingWindowTokenAuthentication(TokenAuthentication):
     认证流程：
       1. 调用 super().authenticate_credentials(key) 验证 token 存在性
       2. 获取或创建 TokenActivity 记录（旧 token 首次访问时自动创建并放行）
-      3. 检查 now - last_active_at >= SESSION_INACTIVITY_TIMEOUT → AuthenticationFailed
+      3. 检查 now - last_active_at >= 超时阈值 → AuthenticationFailed
+         阈值按 TokenActivity.extended_session 选择：
+           False → SESSION_INACTIVITY_TIMEOUT（默认 30 分钟）
+           True  → SESSION_EXTENDED_TIMEOUT（"7天保持登录"，默认 7 天）
       4. 节流更新：距上次 DB 写入 >= ACTIVITY_THROTTLE_SECONDS 才触发 UPDATE
          否则仅在进程内缓存中记录（不写 DB）
 
     配置项（settings.py）：
-      SESSION_INACTIVITY_TIMEOUT  - 超时阈值（秒，默认 1800 = 30 分钟）
+      SESSION_INACTIVITY_TIMEOUT  - 默认超时阈值（秒，默认 1800 = 30 分钟）
+      SESSION_EXTENDED_TIMEOUT    - 延长会话超时阈值（秒，默认 604800 = 7 天）
       ACTIVITY_THROTTLE_SECONDS   - 节流阈值（秒，默认 300 = 5 分钟）
     """
 
@@ -56,7 +65,6 @@ class SlidingWindowTokenAuthentication(TokenAuthentication):
         from .models import TokenActivity
 
         now = django_now()
-        timeout_seconds = _get_timeout()
         throttle_seconds = _get_throttle()
 
         # Step 2: 获取或创建 TokenActivity 记录
@@ -70,6 +78,10 @@ class SlidingWindowTokenAuthentication(TokenAuthentication):
             return (user, token)
 
         # Step 3: 超时检查（基于 DB 值，保证 worker 重启后正确判定）
+        # "7天保持登录"会话使用延长阈值，否则使用默认不活动超时
+        timeout_seconds = (
+            _get_extended_timeout() if activity.extended_session else _get_timeout()
+        )
         elapsed = (now - activity.last_active_at).total_seconds()
         if elapsed >= timeout_seconds:
             raise AuthenticationFailed("会话已超时，请重新登录")

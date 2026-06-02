@@ -517,7 +517,7 @@ export default {
   padding-left: 44px !important;
   height: 38px;
   line-height: 38px;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--ink-2) !important;
   background: transparent !important;
   border-radius: 8px;
