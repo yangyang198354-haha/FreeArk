@@ -49,20 +49,32 @@ def _agents_dir() -> Path:
 
 
 def load_expert_prompts() -> dict:
-    """装载专家提示；任何文件缺失/读失败均退回内置兜底（不抛错）。"""
+    """装载专家提示；任何文件缺失/读失败均退回内置兜底（不抛错）。
+
+    装载优先级（阶段 C）：
+      1. SYSTEM_PROMPT.langgraph.md —— LangGraph 适配版（原生工具调用 + 面向用户的
+         自然语言输出，去掉了 OpenClaw 的 exec-CLI / orchestrator-JSON / 路由协议）。
+      2. SYSTEM_PROMPT.md —— OpenClaw 原版（兜底；其 orchestrator 协议化措辞不适合
+         LangGraph，但有总比无好）。
+      3. 内置精简兜底。
+    sanheng-knowledge 无论用哪版，都追加 KNOWLEDGE.md 作为知识库。
+    """
     base = _agents_dir()
     prompts = dict(_FALLBACK_PROMPTS)
     for name in _EXPERTS:
+        lg = base / name / "SYSTEM_PROMPT.langgraph.md"
         sp = base / name / "SYSTEM_PROMPT.md"
+        chosen = lg if lg.is_file() else sp
         try:
-            text = sp.read_text(encoding="utf-8").strip()
+            text = chosen.read_text(encoding="utf-8").strip()
             if not text:
-                raise ValueError("empty SYSTEM_PROMPT.md")
+                raise ValueError(f"empty {chosen.name}")
             if name == "sanheng-knowledge":
                 kp = base / name / "KNOWLEDGE.md"
                 if kp.is_file():
                     text += "\n\n# 参考知识\n" + kp.read_text(encoding="utf-8").strip()
             prompts[name] = text
+            logger.info("load_expert_prompts: %s ← %s（%d 字符）", name, chosen.name, len(text))
         except Exception as exc:
             logger.warning(
                 "load_expert_prompts: %s 装载失败，使用内置兜底提示: %s", name, exc)
