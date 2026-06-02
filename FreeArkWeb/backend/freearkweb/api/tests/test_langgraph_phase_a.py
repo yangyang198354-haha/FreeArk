@@ -89,6 +89,51 @@ class OrchestratorRoutingTests(SimpleTestCase):
         self.assertEqual(len(parallel["experts"]), 3)
 
 
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+class FaDirectRoutingTests(SimpleTestCase):
+    """阶段 B：DirectClient 的 URL 解析路由机制（离线，不需 DB）。"""
+
+    def test_resolve_maps_tool_paths_to_views(self):
+        # 用 url_name 断言（稳定，不受 @cache_dashboard 等装饰器改写 func.__name__ 影响）；
+        # DirectClient 用 match.func 直接调用，不依赖名字。
+        from django.urls import resolve
+        cases = {
+            "/api/dashboard/summary/": "dashboard-summary",
+            "/api/usage/quantity/": "get-usage-quantity",
+            "/api/devices/realtime-params/": "device-realtime-params",
+            "/api/plc/connection-status/": "get-plc-connection-status",
+            "/api/devices/fault-summary/": "device-fault-summary",
+        }
+        for path, uname in cases.items():
+            m = resolve(path)
+            self.assertEqual(m.url_name, uname, path)
+            self.assertTrue(callable(m.func), path)
+
+    def test_directclient_unknown_path_returns_404_envelope(self):
+        # Resolver404 先于鉴权/DB 触发，无需数据库
+        from api.langgraph_chat.fa_direct import DirectClient
+        r = DirectClient().get("/api/__definitely_nonexistent__/")
+        self.assertFalse(r["success"])
+        self.assertEqual(r["http_status"], 404)
+
+    @override_settings(FA_TOOLS_MODE="http")
+    def test_default_mode_resolves_http(self):
+        # 默认 http（现状零风险）；env 未设时取 settings 值
+        import os
+        from api.langgraph_chat.fa_tools import _resolve_mode
+        if "FA_TOOLS_MODE" in os.environ:
+            self.skipTest("env FA_TOOLS_MODE 已设，跳过 settings 默认值断言")
+        self.assertEqual(_resolve_mode(), "http")
+
+    @override_settings(FA_TOOLS_MODE="direct")
+    def test_settings_direct_resolves(self):
+        import os
+        from api.langgraph_chat.fa_tools import _resolve_mode
+        if "FA_TOOLS_MODE" in os.environ:
+            self.skipTest("env FA_TOOLS_MODE 已设，跳过 settings 断言")
+        self.assertEqual(_resolve_mode(), "direct")
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
 class LangGraphAdapterTests(SimpleTestCase):
