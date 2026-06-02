@@ -84,7 +84,7 @@
             <template v-for="(groupData, groupKey) in deviceData" :key="groupKey">
               <template v-for="(subTypeData, subKey) in groupData.sub_types" :key="subKey">
                 <div
-                  v-if="subKey.startsWith('panel_')"
+                  v-if="subKey === 'main_thermostat' || subKey.startsWith('panel_')"
                   class="subtype-col"
                 >
                   <div class="col-header">
