@@ -31,7 +31,10 @@ from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 
-from api.openclaw_adapter import OpenClawAdapter, OpenClawUnavailableError
+# OpenClawUnavailableError 仍作为统一降级异常（LangGraphAdapter 失败时也抛它）；
+# 具体适配器（OpenClaw / LangGraph）由 chat_backend 工厂按 settings.CHAT_BACKEND 选择。
+from api.openclaw_adapter import OpenClawUnavailableError
+from api.chat_backend import get_chat_adapter
 from api import chat_memory
 
 logger = logging.getLogger('api.consumers')
@@ -192,7 +195,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # v1.3: 累积 assistant content
             accumulated_content = ''
 
-            async for kind, text in OpenClawAdapter.stream_chat(
+            adapter = get_chat_adapter()  # 按 CHAT_BACKEND 选 OpenClaw / LangGraph
+            async for kind, text in adapter.stream_chat(
                 message=augmented_message,
                 session_key=self.session_key,
             ):
