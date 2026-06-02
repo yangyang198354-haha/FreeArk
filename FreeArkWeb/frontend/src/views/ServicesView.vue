@@ -1,16 +1,17 @@
 <template>
   <div class="services-view">
-    <div class="page-header">
-      <!-- REQ-FUNC-030 / AC-017-03: 标题+副标题包裹在 title-group，使副标题不与刷新按钮并排 -->
-      <div class="page-title-group">
-        <h2>服务管理</h2>
-        <p class="page-subtitle">查看和管理系统后台服务运行状态</p>
+    <div class="sv-page-head">
+      <div class="sv-head-accent"></div>
+      <div class="sv-head-text">
+        <h2 class="sv-head-title">服务管理</h2>
+        <p class="sv-head-sub">查看和管理系统后台服务运行状态</p>
       </div>
       <el-button
         v-if="activeTab === 'services'"
         :icon="Refresh"
         :loading="listLoading"
         @click="fetchList"
+        style="margin-left: auto; align-self: center;"
       >
         刷新
       </el-button>
@@ -26,7 +27,7 @@
           :data="serviceList"
           stripe
           border
-          style="width: 100%; margin-top: 16px"
+          style="width: 100%; margin-top: 16px;"
         >
           <el-table-column prop="name" label="服务名称" min-width="200" />
 
@@ -570,31 +571,38 @@ export default {
   padding: 0;
 }
 
-.page-header {
+/* 页面标题区 */
+.sv-page-head {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 
-/* REQ-FUNC-030: title-group 让 h2+副标题纵向排列，与右侧刷新按钮分离 */
-.page-title-group {
-  display: flex;
-  flex-direction: column;
+.sv-head-accent {
+  width: 3px;
+  min-height: 38px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--violet), var(--acc));
+  flex-shrink: 0;
+  margin-top: 2px;
+  box-shadow: 0 0 8px rgba(167,139,250,0.45);
 }
 
-.page-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
+.sv-head-title {
+  margin: 0 0 4px 0;
+  color: var(--ink-0);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+.sv-head-sub {
   margin: 0;
-}
-
-/* REQ-FUNC-030: 副标题 */
-.page-subtitle {
-  margin: 5px 0 0 0;
-  color: #909399;
-  font-size: 13px;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
 }
 
 .services-tabs {
@@ -605,7 +613,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #909399;
+  color: var(--ink-2);
   padding: 20px 0;
   justify-content: center;
 }
@@ -614,17 +622,18 @@ export default {
   margin-top: 16px;
   margin-bottom: 6px;
   font-size: 13px;
-  color: #606266;
+  color: var(--ink-2);
   font-weight: 500;
 }
 
 .raw-output {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: rgba(5,10,20,0.8);
+  color: #c7d4ea;
   padding: 12px 16px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
+  border: 1px solid var(--line);
   font-size: 12px;
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: var(--font-family-mono);
   line-height: 1.6;
   overflow-x: auto;
   white-space: pre-wrap;

@@ -3,8 +3,11 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <div class="page-title-group">
-        <h2>和方舟龙虾聊天</h2>
-        <p class="page-subtitle">由 OpenClaw 驱动的 AI 助手，流式回复体验</p>
+        <div class="ph-accent-inline"></div>
+        <div>
+          <h2>和方舟龙虾聊天</h2>
+          <p class="page-subtitle">由 OpenClaw 驱动的 AI 助手，流式回复体验</p>
+        </div>
       </div>
       <!-- 连接状态指示 -->
       <div class="conn-status">
@@ -412,17 +415,32 @@ export default {
   flex-shrink: 0;
 }
 
+.page-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ph-accent-inline {
+  width: 4px;
+  height: 44px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--acc), var(--acc-2));
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .page-title-group h2 {
   margin: 0 0 4px 0;
-  font-size: var(--font-size-lg, 18px);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-text-primary, #E2E8F0);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink-0);
 }
 
 .page-subtitle {
   margin: 0;
-  font-size: var(--font-size-sm, 12px);
-  color: var(--color-text-secondary, #94A3B8);
+  font-size: var(--font-size-sm);
+  color: var(--ink-2);
 }
 
 /* 连接状态 */

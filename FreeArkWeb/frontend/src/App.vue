@@ -24,12 +24,9 @@ export default {
 </script>
 
 <style>
-/* App.vue 全局样式 — 基础覆盖，Detail 由 global.css Design Token 提供 */
-/* AC-UI-001-01: 使用 Design Token 替代硬编码颜色 */
-
-/* 应用容器 */
+/* App.vue 全局样式 — 深色科技风基础 */
 .app-container {
   min-height: 100vh;
-  background-color: var(--color-bg-page);
+  background-color: var(--bg-0, #050a14);
 }
 </style>

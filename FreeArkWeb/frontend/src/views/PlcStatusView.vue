@@ -1,41 +1,48 @@
 <template>
   <div class="plc-status-container">
-    <div class="page-header">
-      <h2>PLC在线离线监控</h2>
-      <p class="page-subtitle">实时监控PLC设备连接状态</p>
+    <div class="plc-page-head">
+      <div class="plc-head-accent"></div>
+      <div class="plc-head-text">
+        <h2 class="plc-head-title">PLC在线离线监控</h2>
+        <p class="plc-head-sub">实时监控PLC设备连接状态</p>
+      </div>
     </div>
-    
+
     <!-- 统计卡片 -->
     <div class="statistics-cards">
-      <el-card class="stat-card online-card">
+      <div class="panel stat-card online-card">
+        <div class="stat-accent" style="background: var(--ok);"></div>
         <div class="stat-content">
           <div class="stat-value">{{ statistics.online_count }}</div>
           <div class="stat-label">当前在线</div>
         </div>
-      </el-card>
-      
-      <el-card class="stat-card offline-card">
+      </div>
+
+      <div class="panel stat-card offline-card">
+        <div class="stat-accent" style="background: var(--danger);"></div>
         <div class="stat-content">
           <div class="stat-value">{{ statistics.offline_count }}</div>
           <div class="stat-label">当前离线</div>
         </div>
-      </el-card>
-      
-      <el-card class="stat-card total-card">
+      </div>
+
+      <div class="panel stat-card total-card">
+        <div class="stat-accent" style="background: var(--acc);"></div>
         <div class="stat-content">
           <div class="stat-value">{{ statistics.total_devices }}</div>
           <div class="stat-label">设备总数</div>
         </div>
-      </el-card>
-      
-      <el-card class="stat-card rate-card">
+      </div>
+
+      <div class="panel stat-card rate-card">
+        <div class="stat-accent" style="background: var(--warn);"></div>
         <div class="stat-content">
           <div class="stat-value">{{ statistics.online_rate }}%</div>
           <div class="stat-label">在线率</div>
         </div>
-      </el-card>
+      </div>
     </div>
-    
+
     <!-- 筛选条件表单 -->
     <el-card class="filter-form-card">
       <el-form :model="filterForm" label-position="top" size="small">
@@ -134,7 +141,6 @@
         style="width: 100%"
         border
         stripe
-        :header-cell-style="{ backgroundColor: '#f5f7fa' }"
         @row-click="handleRowClick"
         row-key="specific_part"
       >
@@ -320,31 +326,42 @@ export default {
 <style scoped>
 .plc-status-container {
   width: 100%;
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
+  padding: 0;
   box-sizing: border-box;
 }
 
-.page-header {
-  margin-bottom: 25px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #e4e7ed;
+/* 页面标题区 */
+.plc-page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 
-.page-header h2 {
+.plc-head-accent {
+  width: 3px;
+  min-height: 38px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--ok), var(--acc));
+  flex-shrink: 0;
+  margin-top: 2px;
+  box-shadow: 0 0 8px rgba(52,211,153,0.45);
+}
+
+.plc-head-title {
+  margin: 0 0 4px 0;
+  color: var(--ink-0);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+.plc-head-sub {
   margin: 0;
-  color: #303133;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.page-subtitle {
-  margin: 8px 0 0 0;
-  color: #909399;
-  font-size: 14px;
-  line-height: 1.5;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
 }
 
 /* 统计卡片样式 */
@@ -356,62 +373,57 @@ export default {
 }
 
 .stat-card {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
   cursor: pointer;
 }
 
 .stat-card:hover {
-  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-base);
   transform: translateY(-2px);
 }
 
 .stat-content {
   text-align: center;
-  padding: 20px 0;
+  padding: 18px 18px 18px 26px;
 }
 
 .stat-value {
+  font-family: var(--font-family-mono);
   font-size: 32px;
   font-weight: 600;
   margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--ink-2);
 }
 
 /* 不同状态卡片的颜色 */
 .online-card .stat-value {
-  color: #67c23a;
+  color: var(--ok);
+  text-shadow: 0 0 16px rgba(52,211,153,0.55);
 }
 
 .offline-card .stat-value {
-  color: #f56c6c;
+  color: var(--danger);
+  text-shadow: 0 0 16px rgba(248,113,113,0.55);
 }
 
 .total-card .stat-value {
-  color: #409eff;
+  color: var(--acc);
+  text-shadow: 0 0 16px rgba(59,130,246,0.55);
 }
 
 .rate-card .stat-value {
-  color: #e6a23c;
+  color: var(--warn);
+  text-shadow: 0 0 16px rgba(251,191,36,0.55);
 }
 
 /* 筛选表单样式 */
 .filter-form-card {
   margin-bottom: 25px;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-  background-color: #fff;
-}
-
-.filter-form-card:hover {
-  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.08);
 }
 
 .filter-form-card .el-form {
@@ -420,12 +432,6 @@ export default {
 
 .filter-form-card .el-form-item {
   margin-bottom: 5px;
-}
-
-.filter-form-card .el-form-item__label {
-  margin-bottom: 2px;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .refresh-button-wrapper {
@@ -438,14 +444,6 @@ export default {
 /* 数据表格样式 */
 .data-table-card {
   margin-bottom: 20px;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-  background-color: #fff;
-}
-
-.data-table-card:hover {
-  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.08);
 }
 
 .card-header {
@@ -455,37 +453,12 @@ export default {
   padding: 0 10px;
   font-weight: 500;
   font-size: 15px;
+  color: var(--ink-0);
 }
 
-/* 表格样式 */
-.data-table-card .el-table {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.data-table-card .el-table__row {
-  transition: background-color 0.2s ease;
+/* 表格行点击光标 */
+.data-table-card :deep(.el-table__row) {
   cursor: pointer;
-}
-
-.data-table-card .el-table__row:hover {
-  background-color: #f5f7fa;
-}
-
-.data-table-card .el-table__header-wrapper .el-table__header {
-  background-color: #f5f7fa;
-}
-
-.data-table-card .el-table__header-wrapper th {
-  font-weight: 500;
-  color: #303133;
-  background-color: #f5f7fa;
-}
-
-.data-table-card .el-table__body-wrapper td {
-  color: #606266;
-  border-bottom: 1px solid #ebeef5;
 }
 
 /* 分页样式 */
@@ -494,7 +467,7 @@ export default {
   display: flex;
   justify-content: flex-end;
   padding-top: 15px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--line);
 }
 
 /* 响应式设计 */

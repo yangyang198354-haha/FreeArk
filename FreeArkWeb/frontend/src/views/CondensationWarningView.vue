@@ -1,12 +1,15 @@
 <template>
   <div class="condensation-warning">
-    <div class="page-header">
-      <h2>结露预警</h2>
-      <p class="page-subtitle">查看 MQTT 上报的结露报警历史记录，支持状态/房号/时间段过滤与分页浏览</p>
-      <p class="page-notice">
-        结露预警数据来自 MQTT 驱动写入（freeark-condensation-consumer），与设备列表页实时数据独立；
-        大屏在线状态为查询时实时计算（15 分钟内活跃即为在线）。
-      </p>
+    <div class="cw-page-head">
+      <div class="cw-head-accent"></div>
+      <div class="cw-head-text">
+        <h2 class="cw-head-title">结露预警</h2>
+        <p class="cw-head-sub">查看 MQTT 上报的结露报警历史记录，支持状态/房号/时间段过滤与分页浏览</p>
+        <p class="cw-notice">
+          结露预警数据来自 MQTT 驱动写入（freeark-condensation-consumer），与设备列表页实时数据独立；
+          大屏在线状态为查询时实时计算（15 分钟内活跃即为在线）。
+        </p>
+      </div>
     </div>
 
     <!-- 过滤条件区 -->
@@ -63,7 +66,6 @@
       stripe
       border
       style="width: 100%"
-      :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
     >
       <!-- 列1：房号 -->
       <el-table-column prop="specific_part" label="房号" min-width="120" fixed />
@@ -78,7 +80,8 @@
       <!-- 列3：大屏是否在线（ADR-CW-05，实时计算注入） -->
       <el-table-column label="大屏在线" width="90" align="center">
         <template #default="{ row }">
-          <span :style="{ color: row.is_screen_online ? '#67C23A' : '#909399' }">
+          <span :class="['badge', row.is_screen_online ? 'on' : 'off']">
+            <span class="bd"></span>
             {{ row.is_screen_online ? '在线' : '离线' }}
           </span>
         </template>
@@ -87,9 +90,9 @@
       <!-- 列4：系统开关（ADR-CW-04：on/off/unknown，RISK-CW-ARCH-01 双源处理后归一） -->
       <el-table-column label="系统开关" width="90" align="center">
         <template #default="{ row }">
-          <span v-if="row.system_switch === 'on'" style="color: #67C23A;">开启</span>
-          <span v-else-if="row.system_switch === 'off'" style="color: #909399;">关闭</span>
-          <span v-else style="color: #C0C4CC;">-</span>
+          <span v-if="row.system_switch === 'on'" :class="['badge', 'on']"><span class="bd"></span>开启</span>
+          <span v-else-if="row.system_switch === 'off'" :class="['badge', 'off']"><span class="bd"></span>关闭</span>
+          <span v-else style="color: var(--ink-3);">-</span>
         </template>
       </el-table-column>
 
@@ -361,42 +364,60 @@ onMounted(async () => {
 
 <style scoped>
 .condensation-warning {
-  padding: 20px;
+  padding: 0;
 }
 
-.page-header {
-  margin-bottom: 20px;
+/* 页面标题区 */
+.cw-page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 
-.page-header h2 {
-  margin: 0 0 6px 0;
-  font-size: 20px;
-  color: #303133;
+.cw-head-accent {
+  width: 3px;
+  min-height: 38px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--acc-2), var(--acc));
+  flex-shrink: 0;
+  margin-top: 2px;
+  box-shadow: 0 0 8px rgba(34,211,238,0.45);
 }
 
-.page-subtitle {
+.cw-head-title {
   margin: 0 0 4px 0;
-  font-size: 13px;
-  color: #909399;
+  color: var(--ink-0);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
 }
 
-.page-notice {
+.cw-head-sub {
+  margin: 0 0 6px 0;
+  font-size: var(--font-size-sm);
+  color: var(--ink-2);
+}
+
+.cw-notice {
   margin: 0;
-  font-size: 12px;
-  color: #e6a23c;
-  background: #fdf6ec;
-  border: 1px solid #faecd8;
-  border-radius: 4px;
-  padding: 6px 10px;
+  font-size: var(--font-size-xs);
+  color: var(--warn);
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.22);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
   display: inline-block;
 }
 
 .filter-bar {
-  background: #f9fafc;
+  background: rgba(15,29,53,0.45);
   padding: 16px 16px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-base);
   margin-bottom: 16px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--line);
 }
 
 .pagination-wrapper {

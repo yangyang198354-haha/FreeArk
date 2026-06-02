@@ -1,12 +1,15 @@
 <template>
   <div class="fault-management">
-    <div class="page-header">
-      <h2>故障管理</h2>
-      <p class="page-subtitle">查看 MQTT 上报的设备故障历史记录，支持多维过滤与分页浏览</p>
-      <p class="page-notice">
-        故障历史数据来自 MQTT 驱动写入，与设备列表页的实时故障数量统计独立；
-        如需实时快照，请查看设备面板。
-      </p>
+    <div class="fm-page-head">
+      <div class="fm-head-accent"></div>
+      <div class="fm-head-text">
+        <h2 class="fm-head-title">故障管理</h2>
+        <p class="fm-head-sub">查看 MQTT 上报的设备故障历史记录，支持多维过滤与分页浏览</p>
+        <p class="fm-notice">
+          故障历史数据来自 MQTT 驱动写入，与设备列表页的实时故障数量统计独立；
+          如需实时快照，请查看设备面板。
+        </p>
+      </div>
     </div>
 
     <!-- 过滤条件区 -->
@@ -124,7 +127,6 @@
       stripe
       border
       style="width: 100%"
-      :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
     >
       <el-table-column prop="specific_part" label="房号" min-width="110" fixed />
       <!-- 设备名称列（FR-FM-UX-03，三级降级渲染：device_name → device_type_label → device_sn+未识别）-->
@@ -482,42 +484,60 @@ onMounted(async () => {
 
 <style scoped>
 .fault-management {
-  padding: 20px;
+  padding: 0;
 }
 
-.page-header {
-  margin-bottom: 20px;
+/* 页面标题区 */
+.fm-page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 
-.page-header h2 {
-  margin: 0 0 6px 0;
-  font-size: 20px;
-  color: #303133;
+.fm-head-accent {
+  width: 3px;
+  min-height: 38px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--danger), var(--warn));
+  flex-shrink: 0;
+  margin-top: 2px;
+  box-shadow: 0 0 8px rgba(248,113,113,0.45);
 }
 
-.page-subtitle {
+.fm-head-title {
   margin: 0 0 4px 0;
-  font-size: 13px;
-  color: #909399;
+  color: var(--ink-0);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
 }
 
-.page-notice {
+.fm-head-sub {
+  margin: 0 0 6px 0;
+  font-size: var(--font-size-sm);
+  color: var(--ink-2);
+}
+
+.fm-notice {
   margin: 0;
-  font-size: 12px;
-  color: #e6a23c;
-  background: #fdf6ec;
-  border: 1px solid #faecd8;
-  border-radius: 4px;
-  padding: 6px 10px;
+  font-size: var(--font-size-xs);
+  color: var(--warn);
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.22);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
   display: inline-block;
 }
 
 .filter-bar {
-  background: #f9fafc;
+  background: rgba(15,29,53,0.45);
   padding: 16px 16px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-base);
   margin-bottom: 16px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--line);
 }
 
 .pagination-wrapper {

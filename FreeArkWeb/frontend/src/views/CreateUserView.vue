@@ -1,13 +1,13 @@
 <template>
-  <!-- MOD-UI-001-D: 根容器改为 .create-user-view，无 background/shadow（由 Layout .content-wrapper 提供） -->
   <div class="create-user-view">
-    <div class="page-header">
-      <h2>创建用户</h2>
-      <!-- REQ-FUNC-030 / AC-017-04 -->
-      <p class="page-subtitle">为员工创建系统登录账号</p>
+    <div class="page-head">
+      <div class="ph-accent"></div>
+      <div class="ph-text">
+        <h2 class="ph-title">创建用户</h2>
+        <p class="ph-sub">为员工创建系统登录账号</p>
+      </div>
     </div>
 
-    <!-- MOD-UI-001-D: .card > .card-body 替换为 el-card；原生表单控件替换为 Element Plus 组件 -->
     <el-card>
       <el-form
         ref="createFormRef"
@@ -29,7 +29,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="名字" prop="firstName">
@@ -42,32 +41,18 @@
             </el-form-item>
           </el-col>
         </el-row>
-
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="密码" prop="password">
-              <el-input
-                v-model="userForm.password"
-                type="password"
-                placeholder="至少8位，包含字母和数字"
-                show-password
-                autocomplete="new-password"
-              />
+              <el-input v-model="userForm.password" type="password" placeholder="至少8位，包含字母和数字" show-password autocomplete="new-password" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="确认密码" prop="confirmPassword">
-              <el-input
-                v-model="userForm.confirmPassword"
-                type="password"
-                placeholder="请再次输入密码"
-                show-password
-                autocomplete="new-password"
-              />
+              <el-input v-model="userForm.confirmPassword" type="password" placeholder="请再次输入密码" show-password autocomplete="new-password" />
             </el-form-item>
           </el-col>
         </el-row>
-
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="角色" prop="role">
@@ -78,7 +63,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="部门" prop="department">
@@ -91,7 +75,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-
         <el-form-item>
           <el-button type="primary" :loading="loading" @click="handleSubmit">创建用户</el-button>
           <el-button @click="resetForm">重置</el-button>
@@ -111,52 +94,22 @@ export default {
   setup() {
     const createFormRef = ref(null)
     const loading = ref(false)
+    const userForm = reactive({ username: '', email: '', firstName: '', lastName: '', password: '', confirmPassword: '', role: 'user', department: '', position: '' })
 
-    const userForm = reactive({
-      username: '',
-      email: '',
-      firstName: '',
-      lastName: '',
-      password: '',
-      confirmPassword: '',
-      role: 'user',
-      department: '',
-      position: ''
-    })
-
-    // 密码复杂度校验（业务逻辑与原版一致：至少8位，包含字母和数字）
     function validatePassword(rule, value, callback) {
-      if (!value) {
-        callback(new Error('请输入密码'))
-        return
-      }
-      const hasLetter = /[A-Za-z]/.test(value)
-      const hasNumber = /[0-9]/.test(value)
-      if (value.length < 8 || !hasLetter || !hasNumber) {
-        callback(new Error('密码必须至少8位，包含字母和数字'))
-      } else {
-        callback()
-      }
+      if (!value) { callback(new Error('请输入密码')); return }
+      if (value.length < 8 || !/[A-Za-z]/.test(value) || !/[0-9]/.test(value)) callback(new Error('密码必须至少8位，包含字母和数字'))
+      else callback()
     }
-
     function validateConfirmPassword(rule, value, callback) {
-      if (!value) {
-        callback(new Error('请确认密码'))
-        return
-      }
-      if (value !== userForm.password) {
-        callback(new Error('密码和确认密码不一致'))
-      } else {
-        callback()
-      }
+      if (!value) { callback(new Error('请确认密码')); return }
+      if (value !== userForm.password) callback(new Error('密码和确认密码不一致'))
+      else callback()
     }
 
     const formRules = {
       username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-      email: [
-        { required: true, message: '请输入电子邮箱', trigger: 'blur' },
-        { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
-      ],
+      email: [{ required: true, message: '请输入电子邮箱', trigger: 'blur' }, { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }],
       firstName: [{ required: true, message: '请输入名字', trigger: 'blur' }],
       lastName: [{ required: true, message: '请输入姓氏', trigger: 'blur' }],
       password: [{ required: true, validator: validatePassword, trigger: 'blur' }],
@@ -167,80 +120,32 @@ export default {
       if (!createFormRef.value) return
       await createFormRef.value.validate(async (valid) => {
         if (!valid) return
-
         loading.value = true
         try {
-          // 转换请求体字段名（与原版保持一致）
-          const userData = {
-            username: userForm.username,
-            email: userForm.email,
-            first_name: userForm.firstName,
-            last_name: userForm.lastName,
-            password: userForm.password,
-            role: userForm.role,
-            department: userForm.department,
-            position: userForm.position
-          }
-
+          const userData = { username: userForm.username, email: userForm.email, first_name: userForm.firstName, last_name: userForm.lastName, password: userForm.password, role: userForm.role, department: userForm.department, position: userForm.position }
           const response = await api.post('/api/users/create/', userData)
-
-          if (response) {
-            ElMessage.success('用户创建成功')
-            resetForm()
-          } else {
-            ElMessage.error('用户创建失败')
-          }
+          if (response) { ElMessage.success('用户创建成功'); resetForm() } else { ElMessage.error('用户创建失败') }
         } catch (error) {
           console.error('创建用户失败:', error)
-          const errorMessage = error.response?.data?.error || error.response?.data?.message || '用户创建失败，请检查输入信息'
-          ElMessage.error(errorMessage)
-        } finally {
-          loading.value = false
-        }
+          ElMessage.error(error.response?.data?.error || error.response?.data?.message || '用户创建失败，请检查输入信息')
+        } finally { loading.value = false }
       })
     }
 
     function resetForm() {
-      userForm.username = ''
-      userForm.email = ''
-      userForm.firstName = ''
-      userForm.lastName = ''
-      userForm.password = ''
-      userForm.confirmPassword = ''
-      userForm.role = 'user'
-      userForm.department = ''
-      userForm.position = ''
-      if (createFormRef.value) {
-        createFormRef.value.clearValidate()
-      }
+      Object.assign(userForm, { username: '', email: '', firstName: '', lastName: '', password: '', confirmPassword: '', role: 'user', department: '', position: '' })
+      if (createFormRef.value) createFormRef.value.clearValidate()
     }
 
-    return {
-      createFormRef,
-      userForm,
-      formRules,
-      loading,
-      handleSubmit,
-      resetForm
-    }
+    return { createFormRef, userForm, formRules, loading, handleSubmit, resetForm }
   }
 }
 </script>
 
 <style scoped>
-/* MOD-UI-001-D: 根容器无 background/shadow/padding，由 Layout .content-wrapper 提供 */
-.create-user-view {
-  padding: 0;
-}
-
-.page-header {
-  margin-bottom: 16px;
-}
-
-/* REQ-FUNC-030: 副标题 */
-.page-subtitle {
-  margin: 5px 0 0 0;
-  color: #909399;
-  font-size: 13px;
-}
+.create-user-view { padding: 0; }
+.page-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; }
+.ph-accent { width: 4px; height: 44px; border-radius: 2px; background: linear-gradient(180deg, var(--acc), var(--acc-2)); flex-shrink: 0; margin-top: 2px; }
+.ph-title { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--ink-0); line-height: 1.3; }
+.ph-sub { margin: 4px 0 0 0; font-size: var(--font-size-sm); color: var(--ink-2); }
 </style>

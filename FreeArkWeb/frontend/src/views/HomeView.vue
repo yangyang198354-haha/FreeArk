@@ -1,13 +1,16 @@
 <template>
   <div class="home-view">
     <!-- 页面标题 -->
-    <div class="page-header">
-      <h2>系统看板</h2>
-      <p class="page-subtitle">实时监控系统运行状态和能耗数据</p>
+    <div class="hv-page-head">
+      <div class="hv-head-accent"></div>
+      <div class="hv-head-text">
+        <h2 class="hv-head-title">系统看板</h2>
+        <p class="hv-head-sub">实时监控系统运行状态和能耗数据</p>
+      </div>
     </div>
 
     <!-- 分组 1：能耗概览（US-UX-01）-->
-    <div class="group-title">能耗概览</div>
+    <div class="section-label">能耗概览</div>
 
     <!-- 总电量查询 + 今日/本月用电量（同一行，能耗概览组）-->
     <div class="top-cards-row">
@@ -33,15 +36,15 @@
           </template>
           <div class="total-energy-values" v-loading="loading.totalEnergy">
             <div class="energy-item">
-              <div class="energy-value">{{ totalEnergy.total_kwh.toLocaleString() }}</div>
+              <div class="energy-value" style="text-shadow: 0 0 18px rgba(96,165,250,0.55);">{{ totalEnergy.total_kwh.toLocaleString() }}</div>
               <div class="energy-label">总电量 (kWh)</div>
             </div>
             <div class="energy-item cooling">
-              <div class="energy-value">{{ totalEnergy.cooling_kwh.toLocaleString() }}</div>
+              <div class="energy-value" style="text-shadow: 0 0 18px rgba(59,130,246,0.6);">{{ totalEnergy.cooling_kwh.toLocaleString() }}</div>
               <div class="energy-label">制冷 (kWh)</div>
             </div>
             <div class="energy-item heating">
-              <div class="energy-value">{{ totalEnergy.heating_kwh.toLocaleString() }}</div>
+              <div class="energy-value" style="text-shadow: 0 0 18px rgba(240,80,110,0.6);">{{ totalEnergy.heating_kwh.toLocaleString() }}</div>
               <div class="energy-label">制热 (kWh)</div>
             </div>
           </div>
@@ -49,41 +52,44 @@
       </div>
 
       <!-- 今日用电量（与总电量查询同行，独立 flex item）-->
-      <el-card class="stat-card summary-stat-card" v-loading="loading.summary">
+      <div class="panel stat-card summary-stat-card" v-loading="loading.summary">
+        <div class="stat-accent" style="background: var(--ok);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ summary.today_kwh.toLocaleString() }}</div>
+            <div class="stat-value" style="color: var(--ok); text-shadow: 0 0 16px rgba(52,211,153,0.55);">{{ summary.today_kwh.toLocaleString() }}</div>
             <div class="stat-label">今日用电量 (kWh)</div>
           </div>
           <div class="stat-icon today">
             <el-icon><Calendar /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 本月用电量（与总电量查询同行，独立 flex item）-->
-      <el-card class="stat-card summary-stat-card" v-loading="loading.summary">
+      <div class="panel stat-card summary-stat-card" v-loading="loading.summary">
+        <div class="stat-accent" style="background: var(--violet);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ summary.month_kwh.toLocaleString() }}</div>
+            <div class="stat-value" style="color: var(--violet); text-shadow: 0 0 16px rgba(167,139,250,0.55);">{{ summary.month_kwh.toLocaleString() }}</div>
             <div class="stat-label">本月用电量 (kWh)</div>
           </div>
           <div class="stat-icon month">
             <el-icon><Document /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
     </div>
 
     <!-- 分组 2+3：设备状态与故障（US-UX-01, US-DC-01~05）-->
-    <div class="group-title">设备状态与故障</div>
+    <div class="section-label">设备状态与故障</div>
 
     <!-- 第一行：4 张（PLC在线、大屏在线、总设备数、系统开机率）-->
     <div class="stats-row stats-row-4">
-      <el-card class="stat-card" v-loading="loading.plcRate">
+      <div class="panel stat-card" v-loading="loading.plcRate">
+        <div class="stat-accent" style="background: var(--ok);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: var(--color-success)">{{ plcRate.online_count }}</div>
+            <div class="stat-value" style="color: var(--ok); text-shadow: 0 0 16px rgba(52,211,153,0.55);">{{ plcRate.online_count }}</div>
             <div class="stat-label">PLC 在线</div>
             <div class="stat-sub">在线率 {{ plcRate.rate }}%</div>
           </div>
@@ -91,12 +97,13 @@
             <el-icon><CircleCheck /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
-      <el-card class="stat-card" v-loading="loading.screenRate">
+      <div class="panel stat-card" v-loading="loading.screenRate">
+        <div class="stat-accent" style="background: var(--acc-2);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: var(--color-success)">{{ screenRate.online_count }}</div>
+            <div class="stat-value" style="color: var(--acc-2); text-shadow: 0 0 16px rgba(34,211,238,0.55);">{{ screenRate.online_count }}</div>
             <div class="stat-label">大屏在线</div>
             <div class="stat-sub">在线率 {{ screenRate.rate }}%</div>
           </div>
@@ -104,48 +111,51 @@
             <el-icon><Monitor /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
-      <el-card class="stat-card" v-loading="loading.plcRate">
+      <div class="panel stat-card" v-loading="loading.plcRate">
+        <div class="stat-accent" style="background: var(--acc);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: var(--color-primary)">{{ plcRate.total_count }}</div>
+            <div class="stat-value" style="color: var(--acc); text-shadow: 0 0 16px rgba(59,130,246,0.55);">{{ plcRate.total_count }}</div>
             <div class="stat-label">总设备数</div>
           </div>
           <div class="stat-icon plc-total">
             <el-icon><Cpu /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 系统开机状况（v0.5.3，归入设备状态与故障组）-->
-      <el-card class="stat-card power-status-card" v-loading="loading.powerStatus">
+      <div class="panel stat-card power-status-card" v-loading="loading.powerStatus">
+        <div class="stat-accent" style="background: var(--warn);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="ps-rate-value">{{ powerStatus.power_on_rate.toFixed(1) }}%</div>
+            <div class="ps-rate-value" style="text-shadow: 0 0 16px rgba(251,191,36,0.55);">{{ powerStatus.power_on_rate.toFixed(1) }}%</div>
             <div class="stat-label">系统开机率</div>
             <div class="ps-mode-chips-inline">
-              <span style="color: var(--color-cooling);">制冷 {{ powerStatus.mode_distribution.cooling }}</span>
-              <span style="color: var(--color-heating);">制热 {{ powerStatus.mode_distribution.heating }}</span>
-              <span style="color: #e6a23c;">通风 {{ powerStatus.mode_distribution.ventilation }}</span>
-              <span style="color: #13c2c2;">除湿 {{ powerStatus.mode_distribution.dehumidification }}</span>
+              <span style="color: var(--cool);">制冷 {{ powerStatus.mode_distribution.cooling }}</span>
+              <span style="color: var(--heat);">制热 {{ powerStatus.mode_distribution.heating }}</span>
+              <span style="color: var(--warn);">通风 {{ powerStatus.mode_distribution.ventilation }}</span>
+              <span style="color: var(--acc-2);">除湿 {{ powerStatus.mode_distribution.dehumidification }}</span>
             </div>
           </div>
           <div class="stat-icon plc-online">
             <el-icon><Cpu /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
     </div>
 
     <!-- 第二行：5 张（故障总数 + 4 个子设备卡片）-->
     <div class="stats-row stats-row-5">
       <!-- 当前故障总数卡片（US-DC-01）-->
-      <el-card class="stat-card" v-loading="loading.faultSummary"
-               style="cursor: pointer" @click="goToFaults([], true)">
+      <div class="panel stat-card" v-loading="loading.faultSummary"
+           style="cursor: pointer" @click="goToFaults([], true)">
+        <div class="stat-accent" style="background: var(--danger);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value" style="color: var(--color-danger)">
+            <div class="stat-value" style="color: var(--danger); text-shadow: 0 0 16px rgba(248,113,113,0.55);">
               {{ faultSummary.active_fault_count }}
             </div>
             <div class="stat-label">当前故障总数</div>
@@ -155,17 +165,18 @@
             <el-icon><Warning /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 空气品质传感器卡片（US-DC-02）-->
-      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
-               style="cursor: pointer" @click="goToFaults(['air_quality_sensor'], true)">
+      <div class="panel stat-card" v-loading="loading.deviceFaultSummary"
+           style="cursor: pointer" @click="goToFaults(['air_quality_sensor'], true)">
+        <div class="stat-accent" style="background: var(--warn);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ deviceFaultSummary.air_quality_sensor.total }}</div>
+            <div class="stat-value" style="color: var(--ink-0); text-shadow: 0 0 12px rgba(96,165,250,0.3);">{{ deviceFaultSummary.air_quality_sensor.total }}</div>
             <div class="stat-label">空气品质传感器</div>
             <div class="stat-sub"
-                 :style="{ color: deviceFaultSummary.air_quality_sensor.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+                 :style="{ color: deviceFaultSummary.air_quality_sensor.fault_count > 0 ? 'var(--warn)' : 'var(--ok)' }">
               故障 {{ deviceFaultSummary.air_quality_sensor.fault_count }} 台
             </div>
           </div>
@@ -173,21 +184,22 @@
             <el-icon><Odometer /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 温控面板卡片（US-DC-03，5 个 sub_type 含 living_room_main）-->
-      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
-               style="cursor: pointer"
-               @click="goToFaults([
-                 'master_bedroom_panel','secondary_bedroom_panel',
-                 'children_room_panel','study_room_panel','living_room_main'
-               ], true)">
+      <div class="panel stat-card" v-loading="loading.deviceFaultSummary"
+           style="cursor: pointer"
+           @click="goToFaults([
+             'master_bedroom_panel','secondary_bedroom_panel',
+             'children_room_panel','study_room_panel','living_room_main'
+           ], true)">
+        <div class="stat-accent" style="background: var(--acc);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ deviceFaultSummary.thermostat_panels.total }}</div>
+            <div class="stat-value" style="color: var(--ink-0); text-shadow: 0 0 12px rgba(96,165,250,0.3);">{{ deviceFaultSummary.thermostat_panels.total }}</div>
             <div class="stat-label">温控面板</div>
             <div class="stat-sub"
-                 :style="{ color: deviceFaultSummary.thermostat_panels.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+                 :style="{ color: deviceFaultSummary.thermostat_panels.fault_count > 0 ? 'var(--warn)' : 'var(--ok)' }">
               故障 {{ deviceFaultSummary.thermostat_panels.fault_count }} 台
             </div>
           </div>
@@ -195,17 +207,18 @@
             <el-icon><SetUp /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 新风卡片（US-DC-04）-->
-      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
-               style="cursor: pointer" @click="goToFaults(['fresh_air_unit'], true)">
+      <div class="panel stat-card" v-loading="loading.deviceFaultSummary"
+           style="cursor: pointer" @click="goToFaults(['fresh_air_unit'], true)">
+        <div class="stat-accent" style="background: var(--ok);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ deviceFaultSummary.fresh_air_unit.total }}</div>
+            <div class="stat-value" style="color: var(--ink-0); text-shadow: 0 0 12px rgba(96,165,250,0.3);">{{ deviceFaultSummary.fresh_air_unit.total }}</div>
             <div class="stat-label">新风</div>
             <div class="stat-sub"
-                 :style="{ color: deviceFaultSummary.fresh_air_unit.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+                 :style="{ color: deviceFaultSummary.fresh_air_unit.fault_count > 0 ? 'var(--warn)' : 'var(--ok)' }">
               故障 {{ deviceFaultSummary.fresh_air_unit.fault_count }} 台
             </div>
           </div>
@@ -213,17 +226,18 @@
             <el-icon><WindPower /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 水力模块卡片（US-DC-05）-->
-      <el-card class="stat-card" v-loading="loading.deviceFaultSummary"
-               style="cursor: pointer" @click="goToFaults(['hydraulic_module'], true)">
+      <div class="panel stat-card" v-loading="loading.deviceFaultSummary"
+           style="cursor: pointer" @click="goToFaults(['hydraulic_module'], true)">
+        <div class="stat-accent" style="background: var(--ink-2);"></div>
         <div class="stat-content">
           <div class="stat-info">
-            <div class="stat-value">{{ deviceFaultSummary.hydraulic_module.total }}</div>
+            <div class="stat-value" style="color: var(--ink-0); text-shadow: 0 0 12px rgba(96,165,250,0.3);">{{ deviceFaultSummary.hydraulic_module.total }}</div>
             <div class="stat-label">水力模块</div>
             <div class="stat-sub"
-                 :style="{ color: deviceFaultSummary.hydraulic_module.fault_count > 0 ? 'var(--color-warning)' : 'var(--color-success)' }">
+                 :style="{ color: deviceFaultSummary.hydraulic_module.fault_count > 0 ? 'var(--warn)' : 'var(--ok)' }">
               故障 {{ deviceFaultSummary.hydraulic_module.fault_count }} 台
             </div>
           </div>
@@ -231,11 +245,11 @@
             <el-icon><Cpu /></el-icon>
           </div>
         </div>
-      </el-card>
+      </div>
     </div>
 
     <!-- 分组 4：趋势与日志（标题行，图表与活动区域保持原有 class） -->
-    <div class="group-title">趋势与日志</div>
+    <div class="section-label">趋势与日志</div>
 
     <!-- 图表区域 -->
     <div class="charts-section">
@@ -278,13 +292,10 @@
             :key="svc.name"
             class="status-item"
           >
-            <el-tag
-              :type="svc.is_active ? 'success' : 'danger'"
-              size="small"
-              class="status-badge"
-            >
+            <span :class="['badge', svc.is_active ? 'on' : 'off']" class="status-badge">
+              <span class="bd"></span>
               {{ svc.is_active ? '运行中' : '已停止' }}
-            </el-tag>
+            </span>
             <span class="status-label">{{ svc.name }}</span>
           </div>
           <div v-if="services.length === 0" class="no-data">暂无服务状态数据</div>
@@ -572,19 +583,19 @@ export default {
           labels,
           datasets: [
             {
-              // AC-UI-002-01(c): 总用电量 — 折线，深灰（#1E293B）；REQ-FUNC-028: 默认隐藏
+              // AC-UI-002-01(c): 总用电量 — 折线，深色主题浅灰青；REQ-FUNC-028: 默认隐藏
               type: 'line',
               label: '总用电量 (kWh)',
               data: totalValues,
               hidden: !checkedSeries.total,
-              borderColor: '#1E293B',
-              backgroundColor: 'rgba(30, 41, 59, 0.05)',
+              borderColor: '#60a5fa',
+              backgroundColor: 'rgba(96,165,250,0.06)',
               borderWidth: 2,
               tension: 0.35,
               fill: false,
               pointRadius: 4,
               pointHoverRadius: 6,
-              pointBackgroundColor: '#1E293B',
+              pointBackgroundColor: '#60a5fa',
               order: 0,
               // AC-UI-002-03: 折线数据标签
               datalabels: {
@@ -592,22 +603,22 @@ export default {
                 align: 'top',
                 formatter: v => v.toFixed(1),
                 font: { size: 11, weight: '500' },
-                color: '#1E293B',
+                color: '#93c5fd',
                 offset: 4,
                 clamp: true,
                 clip: false
               }
             },
             {
-              // AC-UI-002-01(a): 制冷 — 柱状，蓝色（#2563EB）；REQ-FUNC-028: 默认显示
+              // AC-UI-002-01(a): 制冷 — 柱状，蓝色；REQ-FUNC-028: 默认显示
               type: 'bar',
               label: '制冷 (kWh)',
               data: coolingValues,
               hidden: !checkedSeries.cooling,
-              backgroundColor: 'rgba(37, 99, 235, 0.75)',
-              borderColor: '#2563EB',
+              backgroundColor: 'rgba(59,130,246,0.65)',
+              borderColor: '#3b82f6',
               borderWidth: 1,
-              borderRadius: 3,
+              borderRadius: 4,
               order: 1,
               // AC-UI-002-02: 柱状数据标签（零值不显示，AC-UI-002-04）
               datalabels: {
@@ -615,21 +626,21 @@ export default {
                 align: 'top',
                 formatter: v => v > 0 ? v.toFixed(1) : '',
                 font: { size: 11, weight: '500' },
-                color: '#2563EB',
+                color: '#93c5fd',
                 clamp: true,
                 clip: false
               }
             },
             {
-              // AC-UI-002-01(b): 制热 — 柱状，红色（#EF4444）；REQ-FUNC-028: 默认显示
+              // AC-UI-002-01(b): 制热 — 柱状，红色；REQ-FUNC-028: 默认显示
               type: 'bar',
               label: '制热 (kWh)',
               data: heatingValues,
               hidden: !checkedSeries.heating,
-              backgroundColor: 'rgba(239, 68, 68, 0.75)',
-              borderColor: '#EF4444',
+              backgroundColor: 'rgba(240,80,110,0.65)',
+              borderColor: '#f0506e',
               borderWidth: 1,
-              borderRadius: 3,
+              borderRadius: 4,
               order: 2,
               // AC-UI-002-02: 柱状数据标签（零值不显示，AC-UI-002-04）
               datalabels: {
@@ -637,7 +648,7 @@ export default {
                 align: 'top',
                 formatter: v => v > 0 ? v.toFixed(1) : '',
                 font: { size: 11, weight: '500' },
-                color: '#EF4444',
+                color: '#fca5a5',
                 clamp: true,
                 clip: false
               }
@@ -656,6 +667,11 @@ export default {
             tooltip: {
               mode: 'index',
               intersect: false,
+              backgroundColor: 'rgba(10,20,36,0.95)',
+              borderColor: 'rgba(120,160,220,0.22)',
+              borderWidth: 1,
+              titleColor: '#c7d4ea',
+              bodyColor: '#7a8bab',
               callbacks: {
                 label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} kWh`
               }
@@ -666,7 +682,7 @@ export default {
           scales: {
             x: {
               grid: { display: false },
-              ticks: { font: { size: 12 }, color: '#475569' }
+              ticks: { font: { size: 12 }, color: '#7a8bab' }
             },
             y: {
               // UI-FIX: 强制 y 轴从 0 开始，确保 0 刻度始终可见
@@ -676,10 +692,10 @@ export default {
               // UI-FIX-2: grace 在最大值上方留 10% 余量，柱子不顶天花板，
               // 0 刻度不再被压缩到 x 轴标签旁边而难以辨认
               grace: '10%',
-              grid: { color: '#F1F5F9' },
+              grid: { color: 'rgba(120,160,220,0.1)' },
               ticks: {
                 font: { size: 12 },
-                color: '#475569',
+                color: '#7a8bab',
                 callback: v => v.toFixed(0),
                 // 限制刻度数量，防止 0 与第一个非零刻度贴得过近
                 maxTicksLimit: 6
@@ -804,21 +820,37 @@ export default {
   width: 100%;
 }
 
-.page-header {
-  margin-bottom: 20px;
+/* 页面标题区：竖色条 + 主标题 + 副标题 */
+.hv-page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 
-/* 页面标题对齐 Design Token（§11.5）*/
-.page-header h2 {
+.hv-head-accent {
+  width: 3px;
+  height: 38px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--acc), var(--acc-2));
+  flex-shrink: 0;
+  margin-top: 2px;
+  box-shadow: 0 0 8px rgba(59,130,246,0.5);
+}
+
+.hv-head-title {
   margin: 0;
-  color: var(--color-text-primary);
+  color: var(--ink-0);
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-lg);
+  line-height: 1.2;
 }
 
-.page-subtitle {
+.hv-head-sub {
   margin: var(--space-1) 0 0 0;
-  color: var(--color-text-placeholder);
+  color: var(--ink-2);
   font-size: var(--font-size-sm);
 }
 
@@ -897,15 +929,17 @@ export default {
 }
 
 .ps-rate-value {
+  font-family: var(--font-family-mono);
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--warn);
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .ps-rate-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--ink-2);
   margin-top: 2px;
 }
 
@@ -931,7 +965,7 @@ export default {
 
 .ps-chip-name {
   font-size: 12px;
-  color: #909399;
+  color: var(--ink-2);
   margin-top: 4px;
 }
 
@@ -946,23 +980,25 @@ export default {
 }
 
 .energy-value {
+  font-family: var(--font-family-mono);
   font-size: 28px;
   font-weight: 700;
-  color: #303133;
+  color: var(--acc-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 对齐 Design Token（§2.3）*/
 .energy-item.cooling .energy-value {
-  color: var(--color-cooling);
+  color: var(--cool);
 }
 
 .energy-item.heating .energy-value {
-  color: var(--color-heating);
+  color: var(--heat);
 }
 
 .energy-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--ink-2);
   margin-top: 4px;
 }
 
@@ -981,14 +1017,15 @@ export default {
   grid-template-columns: repeat(5, 1fr);
 }
 
-/* AC-UI-001-06: 统计卡片 hover（§5.4）*/
+/* AC-UI-001-06: 统计卡片 hover */
 .stat-card {
   transition: transform 250ms ease-out, box-shadow 250ms ease-out;
+  padding: 18px;
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-base);
 }
 
 .stat-content {
@@ -1002,112 +1039,104 @@ export default {
 }
 
 .stat-value {
+  font-family: var(--font-family-mono);
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+  color: var(--ink-0);
   margin-bottom: var(--space-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
   font-size: var(--font-size-base);
-  color: var(--color-text-placeholder);
+  color: var(--ink-2);
 }
 
 .stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 24px;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
 .stat-icon.today {
-  background-color: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
+  background-color: rgba(52,211,153,0.12);
+  color: var(--ok);
 }
 
 .stat-icon.month {
-  background-color: rgba(144, 147, 153, 0.1);
-  color: #909399;
+  background-color: rgba(167,139,250,0.12);
+  color: var(--violet);
 }
 
 .stat-icon.system {
-  background-color: rgba(102, 126, 234, 0.1);
-  color: #667eea;
+  background-color: rgba(59,130,246,0.12);
+  color: var(--acc);
 }
 
 .stat-icon.plc-online {
-  background-color: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
+  background-color: rgba(52,211,153,0.12);
+  color: var(--ok);
 }
 
 .stat-icon.screen-online {
-  background-color: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
+  background-color: rgba(34,211,238,0.12);
+  color: var(--acc-2);
 }
 
 /* v1.0.0: 开机情况内联模式行 */
 .ps-mode-chips-inline {
   font-size: 12px;
-  color: #909399;
+  color: var(--ink-2);
   margin-top: 4px;
   display: flex;
   gap: 8px;
-}
-
-/* v1.0.0: 分组标题行（US-UX-01）*/
-.group-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-secondary, #909399);
-  padding: 16px 0 8px;
-  border-bottom: 1px solid var(--border-color-lighter, #ebeef5);
-  margin-bottom: 12px;
-  letter-spacing: 0.5px;
-  width: 100%;
+  flex-wrap: wrap;
 }
 
 /* v1.0.0: 故障与子设备卡片图标颜色 */
 .stat-icon.fault-total {
-  background-color: rgba(245, 108, 108, 0.1);
-  color: var(--color-danger, #f56c6c);
+  background-color: rgba(248,113,113,0.12);
+  color: var(--danger);
 }
 
 .stat-icon.device-aq {
-  background-color: rgba(230, 162, 60, 0.1);
-  color: var(--color-warning, #e6a23c);
+  background-color: rgba(251,191,36,0.12);
+  color: var(--warn);
 }
 
 .stat-icon.device-thermostat {
-  background-color: rgba(64, 158, 255, 0.1);
-  color: var(--color-primary, #409eff);
+  background-color: rgba(59,130,246,0.12);
+  color: var(--acc);
 }
 
 .stat-icon.device-fresh-air {
-  background-color: rgba(19, 206, 102, 0.1);
-  color: var(--color-success, #67c23a);
+  background-color: rgba(52,211,153,0.12);
+  color: var(--ok);
 }
 
 .stat-icon.device-hydraulic {
-  background-color: rgba(144, 147, 153, 0.1);
-  color: #909399;
+  background-color: rgba(120,160,220,0.08);
+  color: var(--ink-2);
 }
 
 .stat-icon.plc-offline {
-  background-color: rgba(245, 108, 108, 0.1);
-  color: #f56c6c;
+  background-color: rgba(248,113,113,0.12);
+  color: var(--danger);
 }
 
 .stat-icon.plc-total {
-  background-color: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+  background-color: rgba(59,130,246,0.12);
+  color: var(--acc);
 }
 
 .stat-sub {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--ink-3);
   margin-top: 2px;
 }
 
@@ -1150,14 +1179,14 @@ export default {
   gap: 5px;
   cursor: pointer;
   font-size: 13px;
-  color: var(--color-text-regular, #606266);
+  color: var(--ink-2);
   user-select: none;
   white-space: nowrap;
 }
 
 .legend-checkbox-item input[type="checkbox"] {
   cursor: pointer;
-  accent-color: var(--color-primary, #409eff);
+  accent-color: var(--acc);
 }
 
 .legend-dot {
@@ -1169,15 +1198,15 @@ export default {
 }
 
 .legend-dot.cooling-dot {
-  background-color: #2563EB;
+  background-color: #3b82f6;
 }
 
 .legend-dot.heating-dot {
-  background-color: #EF4444;
+  background-color: #f0506e;
 }
 
 .legend-dot.total-dot {
-  background-color: #1E293B;
+  background-color: #60a5fa;
   border-radius: 50%;
 }
 
@@ -1217,7 +1246,7 @@ export default {
 /* MOD-UI-003: 删除 font-family: monospace，通过继承获得全局字体族 */
 .status-label {
   font-size: 13px;
-  color: #303133;
+  color: var(--ink-1);
 }
 
 /* 最近活动样式 */
@@ -1227,7 +1256,7 @@ export default {
 
 .no-data {
   text-align: center;
-  color: #c0c4cc;
+  color: var(--ink-3);
   padding: 30px 0;
   font-size: 14px;
 }

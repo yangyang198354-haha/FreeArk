@@ -635,14 +635,14 @@ export default {
 
 .panel-title {
   margin: 4px 0 0 0;
-  font-size: var(--font-size-lg, 20px);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-text-primary, #303133);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink-0);
 }
 
 .page-subtitle {
   margin: 2px 0 0 0;
-  color: #909399;
+  color: var(--ink-2);
   font-size: 13px;
 }
 
@@ -659,8 +659,8 @@ export default {
   flex-wrap: wrap;
   align-items: center;
   gap: 0;
-  background: var(--color-bg-card);
-  border-bottom: 1px solid var(--color-border);
+  background: rgba(10,20,36,0.5);
+  border-bottom: 1px solid var(--line);
   padding: var(--space-2) var(--space-4);
 }
 
@@ -675,7 +675,7 @@ export default {
 .nav-label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--ink-1);
   /* REQ-FUNC-001: 导航栏子系统名称不截断（AC-001-3） */
   white-space: nowrap;
   overflow: visible;
@@ -689,7 +689,7 @@ export default {
 .nav-divider {
   width: 1px;
   height: 16px;
-  background: var(--color-border);
+  background: var(--line);
   flex-shrink: 0;
 }
 
@@ -726,27 +726,27 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: var(--color-primary-bg, #ecf5ff);
-  border-left: 4px solid var(--color-primary, #409eff);
-  border-radius: var(--radius-base, 4px) var(--radius-base, 4px) 0 0;
+  background: rgba(59,130,246,0.08);
+  border-left: 4px solid var(--acc);
+  border-radius: var(--radius-base) var(--radius-base) 0 0;
   cursor: pointer;
   user-select: none;
 }
 
 .cards-row-header:hover {
-  background: var(--color-primary-light-9, #d9ecff);
+  background: rgba(59,130,246,0.13);
 }
 
 .cards-row-title {
-  font-size: var(--font-size-sm, 14px);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-primary-dark, #1d4ed8);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--acc-3);
 }
 
 /* REQ-UI-008: 折叠箭头图标，展开时朝下，收折时朝右（旋转 -90deg） */
 .cards-row-toggle {
   font-size: 14px;
-  color: var(--color-primary, #409eff);
+  color: var(--acc);
   transition: transform 0.2s ease;
 }
 
@@ -763,10 +763,10 @@ export default {
   padding: var(--space-4);
   width: 100%;
   box-sizing: border-box;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
+  background: rgba(10,20,36,0.35);
+  border: 1px solid var(--line);
   border-top: none;
-  border-radius: 0 0 var(--radius-base, 4px) var(--radius-base, 4px);
+  border-radius: 0 0 var(--radius-base) var(--radius-base);
 }
 
 /* AC-UI-003-03: 宽屏最多5列（§8.3）*/
@@ -779,7 +779,8 @@ export default {
 /* AC-UI-003-01: Grid 单元格，宽度由栅格决定（§10.1）*/
 .subtype-col {
   width: 100%;
-  background: var(--color-bg-card);
+  background: linear-gradient(180deg, rgba(15,29,53,0.55), rgba(10,20,36,0.4));
+  border: 1px solid var(--line);
   border-radius: var(--radius-base);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -796,14 +797,14 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3) var(--space-4) var(--space-2);
-  border-bottom: 2px solid var(--color-primary);
-  background: var(--color-primary-bg);
+  border-bottom: 2px solid var(--acc);
+  background: rgba(59,130,246,0.08);
 }
 
 .col-title {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-primary-dark);
+  color: var(--acc-3);
   white-space: nowrap;
 }
 
@@ -818,7 +819,7 @@ export default {
   justify-content: space-between;
   padding: 5px 14px;
   font-size: var(--font-size-sm);
-  border-bottom: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--line);
 }
 
 .param-row:last-child {
@@ -827,17 +828,17 @@ export default {
 
 /* REQ-FUNC-004: 斑马纹（MODULE-UI-004，AC-004-3） */
 .param-row:nth-child(even) {
-  background-color: var(--color-bg-row-alt);
+  background-color: rgba(59,130,246,0.03);
 }
 
 .param-row:nth-child(odd) {
-  background-color: #ffffff;
+  background-color: transparent;
 }
 
 /* REQ-FUNC-001: 移除 overflow: hidden / text-overflow: ellipsis / max-width: 60%，
    改为 white-space: nowrap + overflow: visible，标签完整显示撑开列宽（AC-001-1，ADR-002） */
 .param-label {
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
   flex: 1;
   white-space: nowrap;
   overflow: visible;
@@ -845,7 +846,7 @@ export default {
 
 /* REQ-FUNC-001: margin-left 从 8px 增大至 12px（MODULE-UI-001，AC-001-1） */
 .param-value {
-  color: var(--color-text-primary);
+  color: var(--ink-1);
   font-weight: 500;
   flex-shrink: 0;
   margin-left: 12px;
@@ -879,8 +880,8 @@ export default {
 /* REQ-FUNC-002/004: 底部时间戳——左对齐，与卡片区 padding 对齐（AC-002-1/2，MODULE-UI-002） */
 .panel-footer {
   padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-card);
-  border-top: 1px solid var(--color-border);
+  background: rgba(7,14,28,0.4);
+  border-top: 1px solid var(--line);
   text-align: left;
 }
 </style>

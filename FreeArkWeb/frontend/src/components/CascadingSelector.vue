@@ -243,10 +243,10 @@ export default {
         menuEl.style.left = `${rect.left + window.scrollX}px`
         menuEl.style.width = `${rect.width}px`
         menuEl.style.zIndex = '9999'
-        menuEl.style.background = 'white'
-        menuEl.style.border = '1px solid #ddd'
-        menuEl.style.borderRadius = '4px'
-        menuEl.style.boxShadow = '0 2px 12px 0 rgba(0, 0, 0, 0.1)'
+        menuEl.style.background = 'rgba(10,20,36,0.97)'
+        menuEl.style.border = '1px solid rgba(120,160,220,0.22)'
+        menuEl.style.borderRadius = '9px'
+        menuEl.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)'
         menuEl.style.maxHeight = 'calc(100vh - 200px)'
         menuEl.style.overflowY = 'auto'
       }
@@ -659,25 +659,27 @@ export default {
 .cascading-selector-input {
   width: 100%;
   height: 32px;
-  padding: 0 10px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  padding: 0 30px 0 10px;
+  border: none;
+  border-radius: 9px;
   font-size: 13px;
   line-height: 32px;
-  color: #606266;
-  background-color: #fff;
+  color: var(--ink-0, #f0f6ff);
+  background-color: rgba(5,10,20,0.5);
+  box-shadow: 0 0 0 1px rgba(120,160,220,0.22) inset;
   box-sizing: border-box;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: box-shadow 0.15s;
   outline: none;
-  padding-right: 30px;
   vertical-align: middle;
-  font-family: Helvetica Neue, Helvetica, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif;
+  font-family: inherit;
+}
+
+.cascading-selector-input::placeholder {
+  color: rgba(74,90,120,0.9);
 }
 
 .cascading-selector-input:focus {
-  border-color: #409eff;
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.9) inset, 0 0 0 3px rgba(59,130,246,0.12);
 }
 
 .cascading-clear-btn {
@@ -689,17 +691,17 @@ export default {
   transform: translateY(-50%);
   background: none;
   border: none;
-  color: #999;
+  color: rgba(122,139,171,0.85);
   font-size: 16px;
 }
 
 .cascading-menu {
   position: fixed;
   z-index: 9999;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  background: rgba(10,20,36,0.97);
+  border: 1px solid rgba(120,160,220,0.22);
+  border-radius: 9px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   max-height: calc(100vh - 200px);
   overflow-y: auto;
   width: 100%;
@@ -708,12 +710,15 @@ export default {
 .cascading-menu-item {
   padding: 8px 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.15s;
   position: relative;
+  color: rgba(199,212,234,0.9);
+  font-size: 13px;
 }
 
 .cascading-menu-item:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(59,130,246,0.12);
+  color: #f0f6ff;
 }
 
 .cascading-menu-item.has-children::after {
@@ -721,6 +726,7 @@ export default {
   float: right;
   font-size: 10px;
   transition: transform 0.2s;
+  color: rgba(122,139,171,0.7);
 }
 
 .cascading-menu-item.has-children:hover::after {
@@ -734,7 +740,8 @@ export default {
 .cascading-search-header {
   padding: 8px 12px;
   font-weight: bold;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid rgba(120,160,220,0.12);
+  color: rgba(122,139,171,0.9);
 }
 
 .cascading-search-results {
