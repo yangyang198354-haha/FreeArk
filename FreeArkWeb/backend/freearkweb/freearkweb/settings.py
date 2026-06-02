@@ -381,6 +381,9 @@ LANGGRAPH_LLM_TIMEOUT = int(os.environ.get('LANGGRAPH_LLM_TIMEOUT', '60'))
 # freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')
+# 阶段 B：工具调用模式 http（默认，经自身 REST）| direct（进程内直调 view，去自打 HTTP 一跳）
+# 见 agents/langgraph-poc/PHASE3_ROLLOUT.md 阶段 B。改回 http 即回滚。
+FA_TOOLS_MODE = os.environ.get('FA_TOOLS_MODE', 'http')
 
 # 移除django-crontab配置，改用命令内置的定时功能
 # 这些服务将在start_services.bat中直接启动

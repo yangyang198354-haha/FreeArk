@@ -133,7 +133,7 @@ pydantic-core 是 Rust 扩展，确认 aarch64 wheel 可用；锁版本区间同
 - **单专家答复不逐 token 流式**：单专家时 aggregate 是 passthrough（不调 LLM），
   `stream_mode="messages"` 捕获不到 aggregate 的 token，适配器退回整段一次 yield。
   语义正确、用户拿到完整答复，但失去打字机效果。复合意图（aggregate 调 LLM）正常流式。
-  阶段 B 修：单专家时直接透传 expert 节点 token，或最终答复统一过 aggregate 流式。
+  待修（独立项，非阶段 B）：单专家时直接透传 expert 节点 token，或最终答复统一过 aggregate 流式。
 
 ### ✅ A 验收门 / 回滚
 - 验收：`CHAT_BACKEND=openclaw`（默认）时聊天行为与上线前**逐字节一致**；
@@ -142,20 +142,40 @@ pydantic-core 是 Rust 扩展，确认 aarch64 wheel 可用；锁版本区间同
 
 ---
 
-## 阶段 B —— 工具层去 HTTP 自打一跳（性能优化，可选但建议）
+## 阶段 B —— 工具层去 HTTP 自打一跳 ✅ 已实现（2026-06-03）
 
 现状 `fa_tools → TIER1_HANDLERS → FreeArkClient(urllib) → 打 127.0.0.1:8000 自己`。
-编排已在 ASGI 进程内，自己 HTTP 调自己是多余一跳 + 占 worker。
+编排已在 ASGI 进程内，自己 HTTP 调自己 = 多余一跳 + 序列化 + **占用自身一个 worker**
+（--workers 2 下自调用有 worker 争用风险——这是比延迟更重要的动机）。
 
-- **选项 B1（低风险，先上）**：保留 HTTP，但 urllib → httpx 连接池复用，超时收紧。
-- **选项 B2（更优，后续）**：Tier-1 handler 增加「进程内直调 ORM」分支，绕过 HTTP。
-  需确保 handler 里没有依赖 request/DRF 上下文的逻辑；同步 ORM 调用用
-  `asyncio.to_thread` 包裹，避免阻塞 event loop（README §6 风险点）。
-- 鉴权：进程内直调不走 token，但要保留 Tier-2 的 operator 追溯（`operator_override`）。
+**实现方式（最终选型，优于原计划的 B1/B2）**：`langgraph_chat/fa_direct.py` 的
+`DirectClient` 与 `FreeArkClient` **同接口**（`.get(path,params)→{success,data,http_status}`），
+内部用 `django.urls.resolve(path)` 定位 view + `RequestFactory`+`force_authenticate(openclaw-agent)`
+**进程内直接调用 DRF view 函数**，不走 HTTP/网络/uvicorn 路由。
+`FA_TOOLS_MODE=direct` 时把共享模块 `tier1_readonly._client` **monkeypatch** 成 DirectClient——
+16 个 handler **一行不改、输出字节级一致**（只换传输层）；OpenClaw 是独立子进程，patch
+仅在本 Django 进程生效，不影响 live OpenClaw 路径。装配失败自动退回 http。
+- 异步安全：tools 经 `await tool.ainvoke()`，langchain 把同步 tool 放线程池执行，不阻塞 event loop。
+- 鉴权：force_authenticate 以 openclaw-agent 身份，Tier-1 只读视图无 per-user 过滤；不走 token。
+- Tier-2 写仍走 HTTP（DirectClient.post 抛 NotImplementedError），保留 operator 追溯/二次确认，见阶段 E。
+
+### ✅ B 真机验证（2026-06-03，Pi，未碰生产 venv/repo——临时部署跑完即 checkout 还原）
+- 在仓单测 12/12 OK（含 4 个 direct 路由用例：url_name 解析 / 404 信封 / 模式解析）。
+- direct 模式工具 LIVE 5/5，数据与 http **逐项一致（parity OK）**。
+- 墙钟对比（best of 3，真实生产数据）：
+
+  | 工具 | http(现状) | direct | 提速 |
+  | --- | --- | --- | --- |
+  | dashboard | 50.7ms | **28.4ms** | ~44% |
+  | plc | 58.0ms | **18.3ms** | ~68% |
+  | fault（DB 重） | 142.9ms | **122.0ms** | ~15% |
+
+  读法：省掉 localhost HTTP 往返（~20–40ms/调用）；DB 重的查询里 HTTP 占比小、收益小。
+  **更大的价值是消除 worker 自调用争用**（架构正确性，非单看延迟）。
 
 ### ✅ B 验收门 / 回滚
-- 验收：`smoke` 仍 5/5；单专家墙钟应再降（省一跳 HTTP）。
-- 回滚：开关 `FA_TOOLS_MODE=http|orm`，默认 http。
+- 验收：单测 12/12；direct 模式 smoke 5/5 且与 http parity；单工具墙钟下降。✅ 全部满足。
+- 回滚：`FA_TOOLS_MODE=http`（默认）即恢复现状自打 REST；direct 装配失败也自动退回 http。
 
 ---
 
