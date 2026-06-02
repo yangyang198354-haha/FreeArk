@@ -40,3 +40,12 @@ channels_redis>=4.1.0
 # Django 5.2 内置 RedisCache（django.core.cache.backends.redis）在 redis 5.x 下完全支持。
 # 此约束同时为将来 P1 多 worker 重试扫清依赖障碍。
 redis>=5.0,<6.0
+
+# LangGraph 多 agent 编排（替换 OpenClaw —— 见 agents/langgraph-poc/PHASE3_ROLLOUT.md）
+# 仅当 CHAT_BACKEND=langgraph 时被 import；默认 openclaw 部署无需安装、缺失也不影响。
+# ⚠️ aarch64（树莓派）纪律：必须在 Pi 上真装真 import 真 smoke 后再启用——
+#    pydantic-core 是 Rust 扩展，确认 aarch64 wheel 可用（教训见 channels_redis 雷区）。
+#    与现有 channels_redis 4.x / redis-py 5.x 同环境装一次，跑 WS 真收发确认无依赖冲突。
+langgraph>=0.2.50,<0.4
+langchain-core>=0.3.20,<0.4
+langchain-openai>=0.2.10,<0.4

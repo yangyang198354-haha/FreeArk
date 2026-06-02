@@ -357,6 +357,25 @@ OPENCLAW_REASONING_EFFORT = os.environ.get('OPENCLAW_REASONING_EFFORT', '')
 # ADR-010 方案 10-A，N=20 轮（40 条消息）
 CHAT_HISTORY_INJECT_TURNS = int(os.environ.get('CHAT_HISTORY_INJECT_TURNS', 20))
 
+# ---------------------------------------------------------------------------
+# 聊天后端选择（LangGraph 替换 OpenClaw —— 阶段 A 影子接入开关）
+# 见 agents/langgraph-poc/PHASE3_ROLLOUT.md
+#   openclaw  （默认）—— 现状，经 OpenClaw Gateway WS RPC，零行为变化
+#   langgraph         —— 进程内 LangGraph 多 agent 编排（api.langgraph_chat）
+# 切换/回滚只需改本 env 并重启 worker；默认 openclaw 部署无需安装 langgraph 依赖。
+CHAT_BACKEND = os.environ.get('CHAT_BACKEND', 'openclaw')
+
+# LangGraph 编排配置（仅 CHAT_BACKEND=langgraph 时生效）
+# DEEPSEEK_API_KEY 必须在生产 .env 中设置，绝不提交 git、绝不写入任何 HTTP 响应。
+LANGGRAPH_USE_FAKE_LLM = os.environ.get('LANGGRAPH_USE_FAKE_LLM', 'False') == 'True'
+LANGGRAPH_MODEL = os.environ.get('LANGGRAPH_MODEL', 'deepseek-v4-flash')
+DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
+LANGGRAPH_LLM_TIMEOUT = int(os.environ.get('LANGGRAPH_LLM_TIMEOUT', '60'))
+# freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
+LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
+LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')
+
 # 移除django-crontab配置，改用命令内置的定时功能
 # 这些服务将在start_services.bat中直接启动
 
