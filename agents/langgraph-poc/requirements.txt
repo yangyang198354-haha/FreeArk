@@ -1,0 +1,7 @@
+# langgraph-poc 依赖（在树莓派 aarch64 上务必逐一 import 实测，参考 channels_redis 教训）
+# 版本区间保守锁定；上 Pi 前用 `pip install -r requirements.txt` 后跑 bench.py 与 live 冒烟
+langgraph>=0.2.50,<0.4
+langchain-core>=0.3.20,<0.4
+langchain-openai>=0.2.10,<0.4   # DeepSeek 走 OpenAI 兼容端点（ChatOpenAI base_url）
+# 可选：原生 deepseek 集成（二选一，与 langchain-openai 不冲突）
+# langchain-deepseek>=0.1.0
