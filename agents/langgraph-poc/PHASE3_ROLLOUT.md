@@ -179,19 +179,42 @@ pydantic-core 是 Rust 扩展，确认 aarch64 wheel 可用；锁版本区间同
 
 ---
 
-## 阶段 C —— 专家提示装载（用生产级 SYSTEM_PROMPT.md）
+## 阶段 C —— 专家提示装载 ✅ 已实现（2026-06-03）
 
-`prompts.py` 启动时读 3 个 `SYSTEM_PROMPT.md`（已就位，agent-builder 评分 98/94/91），
-替换 orchestrator 里的 PoC 精简版 `EXPERT_PROMPTS`：
-```python
-EXPERT_PROMPTS = {name: (AGENTS_DIR / name / "SYSTEM_PROMPT.md").read_text("utf-8")
-                  for name in ("energy-expert","inspection-expert","sanheng-knowledge")}
-```
-- sanheng-knowledge 还要装载 `KNOWLEDGE.md`（拼进 system 或做 RAG，先拼进 system）。
-- 文件缺失 fail-fast（启动即报，不要运行期静默空提示）。
+> ⚠️ 关键修正：原计划是「直接读 OpenClaw 的 `SYSTEM_PROMPT.md` 当 EXPERT_PROMPTS」（阶段 A
+> 的 prompts.py 已这么做）。但实读发现这 3 个 OpenClaw 提示**深度绑定 OpenClaw 协议**，
+> 直接用于 LangGraph 是**错的**：
+> - 指示「用 `exec python3 freeark_tool.py` 调工具」——LangGraph 是原生 `bind_tools`，照做会让
+>   LLM 输出文本而非 tool_call。
+> - 强制输出 orchestrator 机器 JSON（`{"status":...,"data":...}`）+ `[ROUTE_REQUIRED]` 路由标记，
+>   且「只面向 orchestrator、禁止面向用户」——但 LangGraph 单专家答复**直接给用户看**。
+> - inspection-expert 原版面向**另一个待开发 skill**（`inspect_tool.py` + journald 日志），与其在
+>   LangGraph 的实际工具（PLC/故障/实时参数 REST）**不符**。
+> （之前 live bench 能跑通，是因为 bind_tools 把真实工具喂给模型、模型忽略了 CLI 文本；但输出
+>  框架仍是错的。）
 
-### ✅ C 验收门
-- 三专家各跑一条代表性问题，答复风格/口径与 OpenClaw 下一致或更好（人工抽检）。
+**实现**：新增 3 个 **LangGraph 适配版** `agents/<expert>/SYSTEM_PROMPT.langgraph.md`（**不动**
+OpenClaw 原版 `SYSTEM_PROMPT.md`，live OpenClaw 不受影响），对齐各专家**实际绑定的工具** +
+面向用户的自然语言输出，并保留安全脚手架（注入防御 / 不杜撰 / 不泄密 / 通用-vs-FreeArk 标注）。
+`prompts.py` 装载优先级改为 `.langgraph.md` > `SYSTEM_PROMPT.md`（OpenClaw 兜底）> 内置兜底；
+sanheng 仍追加 `KNOWLEDGE.md`。
+
+### ✅ C 真机验收（2026-06-03，Pi 真 DeepSeek-v4-flash，三专家各一题，跑完 checkout 还原）
+- **三专家输出全为干净的用户向中文 prose，零协议/CLI 残留**（无 `{"status}`、无 `[ROUTE_REQUIRED]`、
+  无 `exec`/`freeark_tool.py`）。
+- inspection：plain-language 巡检结论「需关注」+ 真实数据（634 总 / 529 在线 / 105 离线 / 83.44%）+
+  故障接口超时时如实说明、不杜撰 + 处置建议。
+- sanheng（7.0s，无工具）：原理讲解清晰，正确标注「FreeArk 实际阈值以系统数据为准」，未伪造专属值。
+- energy：dashboard 工具超时 → 如实「数据获取失败，建议重试」、不编造（提示要求的诚实行为）。
+  （dashboard/fault 的 5s 超时是已知 http 路径冷查询瞬态，与提示无关；阶段 B 的 direct 模式可规避。）
+
+### 设计取舍：fail-fast vs 兜底
+原计划要求「文件缺失 fail-fast」。落地选择**保守兜底**（`.langgraph.md`→OpenClaw→内置），并对每个
+专家 INFO 日志记录实际装载来源——避免因提示文件缺失把聊天打挂（聊天路径优先可用性）。已偏离原计划，记录在此。
+
+### ✅ C 验收门 / 回滚
+- 验收：三专家代表性问题答复为用户向 prose、口径正确、无协议残留、不杜撰。✅ 满足。
+- 回滚：删 `.langgraph.md` 即自动退回 OpenClaw 原版（prompts.py 优先级链）。
 
 ---
 
