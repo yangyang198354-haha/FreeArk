@@ -5,7 +5,7 @@ api.langgraph_chat.orchestrator —— 编排图：supervisor 路由 + 专家并
 
   OpenClaw                              LangGraph 本图
   ─────────────────────────────────    ─────────────────────────────────
-  main agent 方舟龙虾                    route 节点 + aggregate 节点
+  main agent 方舟龙虾                    route 节点（阶段D LLM 分类器）+ aggregate 节点
   exec `openclaw agent --agent X`       Send(expert, payload)（进程内，无冷启动）
   串行委派 3 专家 ≈ 3×31s               Send fan-out 并行 ≈ max(单专家)
   freeark_tool.py 子进程                 fa_tools.@tool 进程内直调
@@ -18,12 +18,17 @@ api.langgraph_chat.orchestrator —— 编排图：supervisor 路由 + 专家并
 真机实测（树莓派 Pi 5 / deepseek-v4-flash，见 agents/langgraph-poc/README.md §3.1）：
 单专家 8.3s（OpenClaw ~31s，≈3.7×）、复合三专家并行 35.6s（OpenClaw ~93s，≈2.6×）。
 
-配置（settings.py，阶段 A）：
+配置（settings.py）：
   LANGGRAPH_USE_FAKE_LLM  - True 走离线假模型（CI/单测），默认 False
   LANGGRAPH_MODEL         - DeepSeek 模型名，默认 deepseek-v4-flash
+  LANGGRAPH_ROUTER_MODEL  - 阶段D 路由分类器模型，空=复用主模型；可设更轻模型控成本
   DEEPSEEK_BASE_URL       - OpenAI 兼容端点，默认 https://api.deepseek.com/v1
   DEEPSEEK_API_KEY        - 密钥（生产 .env 注入，绝不入 git）
   LANGGRAPH_LLM_TIMEOUT   - 单次调用超时秒，默认 60
+
+阶段D 路由：route 节点经 router.classify_experts() 用 LLM 分类器选专家，失败/空命中
+回退关键词路由、再回退 energy-expert（三级兜底，见 router.py）。fake 模式下分类器返回
+非 JSON → 自动回退关键词路由，故离线单测路由仍确定。
 
 文档引用：PHASE3_ROLLOUT.md 阶段 A/C/D, detailed_design.md §1.2/§1.3,
           [[openclaw-multiagent-capabilities]]
@@ -41,7 +46,7 @@ from langgraph.types import Send
 
 from .fa_tools import TOOLS_BY_EXPERT
 from .prompts import EXPERT_PROMPTS
-from .router import route_experts
+from .router import classify_experts
 
 
 class State(TypedDict, total=False):
@@ -73,20 +78,44 @@ def _make_llm(latency: float | None = None):
     )
 
 
+def _make_router_llm(main_llm, latency: float | None = None):
+    """路由分类器模型（决策2：可用更轻模型控成本）。
+    fake 模式或 LANGGRAPH_ROUTER_MODEL 为空 → 复用主模型实例；
+    配置了独立路由模型则单独构造（temperature 0，确定性分类）。"""
+    from django.conf import settings
+
+    if getattr(settings, "LANGGRAPH_USE_FAKE_LLM", False):
+        return main_llm
+    rm = (getattr(settings, "LANGGRAPH_ROUTER_MODEL", "") or "").strip()
+    if not rm:
+        return main_llm
+
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model=rm,
+        base_url=getattr(settings, "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+        api_key=getattr(settings, "DEEPSEEK_API_KEY", "") or "sk-noop",
+        temperature=0.0,
+        timeout=getattr(settings, "LANGGRAPH_LLM_TIMEOUT", 60),
+        max_retries=1,
+    )
+
+
 # 编排器：图编译一次、模型一次 → 进程常驻，零 per-request 冷启动
 class Orchestrator:
     def __init__(self, latency: float | None = None):
         self.llm = _make_llm(latency)
+        self.router_llm = _make_router_llm(self.llm, latency)
         self.graph = self._build()
 
-    # ── route：复合意图分流为多个并行 Send ──────────────────────────
-    def _route(self, state: State):
+    # ── route：LLM 分类器选专家，复合意图分流为多个并行 Send ──────────
+    async def _route(self, state: State):
         text = ""
         for m in reversed(state["messages"]):
             if isinstance(m, HumanMessage):
                 text = (m.content or "")
                 break
-        chosen = route_experts(text)
+        chosen = await classify_experts(self.router_llm, text)
         plan = [(name, text) for name in chosen]
         return {"plan": plan}
 
@@ -153,7 +182,7 @@ class Orchestrator:
     async def run_serial(self, message: str) -> dict:
         """同样的专家 + 聚合，但专家阶段强制串行——等价 OpenClaw 主 agent 顺序
         exec 委派。与 run() 做 apples-to-apples 对比：仅专家阶段并发度不同。"""
-        plan = self._route({"messages": [HumanMessage(content=message)]})["plan"]
+        plan = (await self._route({"messages": [HumanMessage(content=message)]}))["plan"]
         results = []
         for name, q in plan:  # 串行：逐个 await
             r = await self._expert({"name": name, "query": q, "messages": []})

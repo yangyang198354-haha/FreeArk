@@ -37,6 +37,169 @@ except Exception:  # pragma: no cover
     LANGGRAPH_AVAILABLE = False
 
 
+class PromptLoadingTests(SimpleTestCase):
+    """阶段 C：专家提示装载——优先 .langgraph.md、剥 HTML 注释、sanheng 拼 KNOWLEDGE。
+
+    纯 stdlib + django.conf，不依赖 langgraph，默认 openclaw 部署也能跑。"""
+
+    def test_strip_comments(self):
+        from api.langgraph_chat.prompts import _strip_comments
+        out = _strip_comments(
+            "<!--\nprovenance 注释\n-->\n\n# 标题\n正文 <!-- 行内 --> 结尾")
+        self.assertNotIn("provenance", out)
+        self.assertNotIn("<!--", out)
+        self.assertIn("# 标题", out)
+        self.assertIn("正文", out)
+        self.assertIn("结尾", out)
+
+    def test_prefers_langgraph_variant_and_strips_comment(self):
+        import tempfile
+        from pathlib import Path
+        from api.langgraph_chat import prompts as P
+        with tempfile.TemporaryDirectory() as d:
+            ed = Path(d) / "energy-expert"
+            ed.mkdir()
+            (ed / "SYSTEM_PROMPT.md").write_text(
+                "OPENCLAW_VER exec python3 freeark_tool.py", encoding="utf-8")
+            (ed / "SYSTEM_PROMPT.langgraph.md").write_text(
+                "<!-- prov -->\nLANGGRAPH_VER", encoding="utf-8")
+            text, fname = P._read_prompt_file(ed)
+        self.assertEqual(fname, "SYSTEM_PROMPT.langgraph.md")
+        self.assertIn("LANGGRAPH_VER", text)
+        self.assertNotIn("OPENCLAW_VER", text)
+        self.assertNotIn("<!--", text)
+
+    def test_falls_back_to_openclaw_md_when_no_variant(self):
+        import tempfile
+        from pathlib import Path
+        from api.langgraph_chat import prompts as P
+        with tempfile.TemporaryDirectory() as d:
+            ed = Path(d) / "energy-expert"
+            ed.mkdir()
+            (ed / "SYSTEM_PROMPT.md").write_text("ONLY_OPENCLAW", encoding="utf-8")
+            text, fname = P._read_prompt_file(ed)
+        self.assertEqual(fname, "SYSTEM_PROMPT.md")
+        self.assertIn("ONLY_OPENCLAW", text)
+
+    def test_missing_files_raise(self):
+        import tempfile
+        from pathlib import Path
+        from api.langgraph_chat import prompts as P
+        with tempfile.TemporaryDirectory() as d:
+            ed = Path(d) / "energy-expert"
+            ed.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                P._read_prompt_file(ed)
+
+    def test_load_real_repo_prompts_are_langgraph_native(self):
+        """对真实仓库 agents/ 装载：三专家均装载成功、注释已剥离、sanheng 拼 KNOWLEDGE.md。
+
+        注：不断言提示里不含 'freeark_tool.py'/'operator_override' 字面——LangGraph 版提示
+        常以**否定指令**提及这些（如「不要输出 freeark_tool.py 之类」），属合法内容。"""
+        from api.langgraph_chat.prompts import load_expert_prompts, _FALLBACK_PROMPTS
+        prompts = load_expert_prompts()
+        for name in ("energy-expert", "inspection-expert", "sanheng-knowledge"):
+            self.assertNotEqual(
+                prompts[name], _FALLBACK_PROMPTS[name],
+                f"{name} 退回了内置兜底（应装载 .langgraph.md）")
+            # provenance 注释块已剥离（不把 <!-- --> 喂给模型）
+            self.assertNotIn("<!--", prompts[name], name)
+        # sanheng 装载时拼接了参考知识区（KNOWLEDGE.md）
+        self.assertIn("参考知识", prompts["sanheng-knowledge"])
+
+
+class _StubLLM:
+    """最小异步 LLM 桩：ainvoke 返回带 .content 的对象，或抛异常。不依赖 langchain。"""
+
+    def __init__(self, content=None, exc=None):
+        self._content = content
+        self._exc = exc
+
+    async def ainvoke(self, messages, **kwargs):
+        if self._exc is not None:
+            raise self._exc
+
+        class _Msg:
+            pass
+        m = _Msg()
+        m.content = self._content
+        return m
+
+
+class RouterClassifierTests(SimpleTestCase):
+    """阶段 D：LLM 意图分类器解析 + 三级兜底链（纯逻辑，不依赖 langgraph）。"""
+
+    # ── parse_route_response 鲁棒性 ──────────────────────────────
+    def test_parse_clean_json(self):
+        from api.langgraph_chat.router import parse_route_response
+        self.assertEqual(parse_route_response('["energy-expert"]'), ["energy-expert"])
+
+    def test_parse_json_fenced(self):
+        from api.langgraph_chat.router import parse_route_response
+        raw = '```json\n["inspection-expert"]\n```'
+        self.assertEqual(parse_route_response(raw), ["inspection-expert"])
+
+    def test_parse_prose_wrapped(self):
+        from api.langgraph_chat.router import parse_route_response
+        raw = '我认为应当由 ["energy-expert","sanheng-knowledge"] 处理。'
+        self.assertEqual(parse_route_response(raw),
+                         ["energy-expert", "sanheng-knowledge"])
+
+    def test_parse_filters_invalid_names_and_dedupes(self):
+        from api.langgraph_chat.router import parse_route_response
+        raw = '["foo","energy-expert","energy-expert","bar"]'
+        self.assertEqual(parse_route_response(raw), ["energy-expert"])
+
+    def test_parse_skips_non_name_array_then_finds_valid(self):
+        from api.langgraph_chat.router import parse_route_response
+        # 第一个数组 [1,2] 无合法名 → 跳过；第二个数组命中
+        raw = '参考 [1,2] 后判断：["inspection-expert"]'
+        self.assertEqual(parse_route_response(raw), ["inspection-expert"])
+
+    def test_parse_empty_or_garbage_returns_none(self):
+        from api.langgraph_chat.router import parse_route_response
+        for raw in ("", None, "[]", "没有数组", '["foo"]', "[not json]"):
+            self.assertIsNone(parse_route_response(raw), repr(raw))
+
+    # ── classify_experts 三级兜底 ────────────────────────────────
+    def test_classify_llm_hit_wins(self):
+        from api.langgraph_chat.router import classify_experts
+        # LLM 明确命中 inspection，即便文本含能耗关键词也以 LLM 为准
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["inspection-expert"]'), "看一下能耗看板")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_classify_llm_composite(self):
+        from api.langgraph_chat.router import classify_experts
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["energy-expert","sanheng-knowledge"]'), "随便问")
+        self.assertEqual(set(out), {"energy-expert", "sanheng-knowledge"})
+
+    def test_classify_garbage_falls_back_to_keyword(self):
+        from api.langgraph_chat.router import classify_experts
+        # LLM 输出无法解析 → 关键词路由命中"三恒原理"
+        out = async_to_sync(classify_experts)(
+            _StubLLM("我不确定"), "请讲讲三恒原理")
+        self.assertEqual(out, ["sanheng-knowledge"])
+
+    def test_classify_exception_falls_back_to_keyword(self):
+        from api.langgraph_chat.router import classify_experts
+        out = async_to_sync(classify_experts)(
+            _StubLLM(exc=RuntimeError("boom")), "PLC 故障巡检")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_classify_empty_llm_falls_back_then_default(self):
+        from api.langgraph_chat.router import classify_experts
+        # LLM 返回 [] → 关键词路由；文本无关键词 → DEFAULT_EXPERT
+        out = async_to_sync(classify_experts)(_StubLLM("[]"), "你好啊")
+        self.assertEqual(out, ["energy-expert"])
+
+    def test_classify_none_llm_uses_keyword(self):
+        from api.langgraph_chat.router import classify_experts
+        out = async_to_sync(classify_experts)(None, "查一下用电量")
+        self.assertEqual(out, ["energy-expert"])
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 class ChatBackendFactoryTests(SimpleTestCase):
     """chat_backend 工厂选择逻辑。"""

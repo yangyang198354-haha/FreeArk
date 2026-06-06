@@ -2,23 +2,47 @@
 api.langgraph_chat.prompts —— 专家系统提示装载
 
 阶段 A：内置精简提示作为兜底，保证开关一开即可用。
-阶段 C：若 agents/<expert>/SYSTEM_PROMPT.md（agent-builder 产物，评分 98/94/91）
-可定位，则装载生产级提示替换兜底；sanheng-knowledge 额外拼接 KNOWLEDGE.md。
+阶段 C（已合并入 main，见 PR#4）：装载生产级提示替换兜底。每个专家**优先**读
+LangGraph 运行时版 `SYSTEM_PROMPT.langgraph.md`（原生工具 + 自然语言输出，已真机验证），
+缺失则退回 OpenClaw 版 `SYSTEM_PROMPT.md`，再缺失退回内置兜底。
+sanheng-knowledge 额外拼接 KNOWLEDGE.md。
+
+为什么分出 .langgraph.md：原 SYSTEM_PROMPT.md 是 OpenClaw 设计期产物，通篇围绕
+`exec python3 freeark_tool.py` + JSON 信封输出 + operator_override 写——这些在
+LangGraph 运行时（@tool 原生调用 + ai.content 自然语言）下是错配。
+.langgraph.md 是据实际绑定工具与运行时契约重写的版本，安全脊柱保留。
+
+本文件相对 main(PR#4) 的增强（PR#5/阶段D 顺带）：剥离提示头部 `<!-- -->` 注释块
+（不喂给模型）、`_read_prompt_file` 统一优先级读取、缺文件 FileNotFoundError 清晰化。
 
 装载目录优先级：env FREEARK_AGENTS_DIR > settings.LANGGRAPH_AGENTS_DIR >
-仓内相对 <repo>/agents。文件缺失时**不**抛错，退回内置兜底并记一条 warning，
-以保证阶段 A「影子接入零行为风险」——绝不因提示缺失把聊天打挂。
+仓内相对 <repo>/agents。文件缺失时**不**抛错，退回上一级来源并记一条 warning，
+以保证「影子接入零行为风险」——绝不因提示缺失把聊天打挂。
+
+提示文件头部的 `<!-- ... -->` HTML 注释块仅是 provenance/部署标注，装载时一律
+剥离，不作为系统提示喂给模型。
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 logger = logging.getLogger("api.langgraph_chat.prompts")
 
 _EXPERTS = ("energy-expert", "inspection-expert", "sanheng-knowledge")
+
+# 提示文件优先级：LangGraph 运行时版 > OpenClaw 版。
+_PROMPT_FILENAMES = ("SYSTEM_PROMPT.langgraph.md", "SYSTEM_PROMPT.md")
+
+# 剥离 HTML 注释块（provenance/部署标注，非提示正文）。
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _strip_comments(text: str) -> str:
+    return _HTML_COMMENT_RE.sub("", text).strip()
 
 # 内置兜底（PoC 精简版）。生产装载成功后会被覆盖。
 _FALLBACK_PROMPTS = {
@@ -48,33 +72,36 @@ def _agents_dir() -> Path:
     return here.parents[-1] / "agents"
 
 
-def load_expert_prompts() -> dict:
-    """装载专家提示；任何文件缺失/读失败均退回内置兜底（不抛错）。
+def _read_prompt_file(expert_dir: Path) -> tuple[str, str]:
+    """按 _PROMPT_FILENAMES 优先级读首个存在且非空的提示文件。
+    返回 (剥注释后的正文, 文件名)；都没有则抛 FileNotFoundError。"""
+    for fname in _PROMPT_FILENAMES:
+        sp = expert_dir / fname
+        if not sp.is_file():
+            continue
+        text = _strip_comments(sp.read_text(encoding="utf-8"))
+        if text:
+            return text, fname
+    raise FileNotFoundError(
+        f"未找到非空提示文件（尝试 {_PROMPT_FILENAMES}）于 {expert_dir}")
 
-    装载优先级（阶段 C）：
-      1. SYSTEM_PROMPT.langgraph.md —— LangGraph 适配版（原生工具调用 + 面向用户的
-         自然语言输出，去掉了 OpenClaw 的 exec-CLI / orchestrator-JSON / 路由协议）。
-      2. SYSTEM_PROMPT.md —— OpenClaw 原版（兜底；其 orchestrator 协议化措辞不适合
-         LangGraph，但有总比无好）。
-      3. 内置精简兜底。
-    sanheng-knowledge 无论用哪版，都追加 KNOWLEDGE.md 作为知识库。
-    """
+
+def load_expert_prompts() -> dict:
+    """装载专家提示；任何文件缺失/读失败均退回内置兜底（不抛错）。"""
     base = _agents_dir()
     prompts = dict(_FALLBACK_PROMPTS)
     for name in _EXPERTS:
-        lg = base / name / "SYSTEM_PROMPT.langgraph.md"
-        sp = base / name / "SYSTEM_PROMPT.md"
-        chosen = lg if lg.is_file() else sp
         try:
-            text = chosen.read_text(encoding="utf-8").strip()
-            if not text:
-                raise ValueError(f"empty {chosen.name}")
+            text, fname = _read_prompt_file(base / name)
             if name == "sanheng-knowledge":
                 kp = base / name / "KNOWLEDGE.md"
                 if kp.is_file():
-                    text += "\n\n# 参考知识\n" + kp.read_text(encoding="utf-8").strip()
+                    kb = _strip_comments(kp.read_text(encoding="utf-8"))
+                    if kb:
+                        text += "\n\n# 参考知识\n" + kb
             prompts[name] = text
-            logger.info("load_expert_prompts: %s ← %s（%d 字符）", name, chosen.name, len(text))
+            logger.info("load_expert_prompts: %s 装载自 %s（%d 字符）",
+                        name, fname, len(text))
         except Exception as exc:
             logger.warning(
                 "load_expert_prompts: %s 装载失败，使用内置兜底提示: %s", name, exc)
