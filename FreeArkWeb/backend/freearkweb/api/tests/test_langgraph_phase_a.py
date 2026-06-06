@@ -19,6 +19,7 @@
    `python -m api.langgraph_chat.fa_tools`（LIVE 5/5）+ 真 DeepSeek 端到端墙钟。
 """
 
+import json
 import os
 import unittest
 
@@ -332,6 +333,10 @@ class LangGraphAdapterTests(SimpleTestCase):
         import api.langgraph_chat.adapter as ad
 
         class _Boom:
+            @staticmethod
+            def _cfg(thread_id):
+                return {"configurable": {"thread_id": thread_id}}
+
             class graph:
                 @staticmethod
                 def astream(*a, **k):
@@ -345,3 +350,80 @@ class LangGraphAdapterTests(SimpleTestCase):
 
         with self.assertRaises(OpenClawUnavailableError):
             async_to_sync(_collect)()
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+class OrchestratorWriteGateTests(SimpleTestCase):
+    """阶段 E：Tier-2 写操作 interrupt 确认门 + resume（fake LLM + mock 写工具）。
+
+    fake LLM 见到 'TOOLCALL:<tool>' 即对该工具发起一次 tool_call；写工具被 expert
+    延迟、gate interrupt，验证：①触发 confirm_required ②批准→执行 ③拒绝→不执行
+    ④operator 由 [__freeark_user__:X] 前缀构造。"""
+
+    def _set_orch(self):
+        import api.langgraph_chat.adapter as ad
+        from api.langgraph_chat.orchestrator import Orchestrator
+        ad._ORCH = Orchestrator(latency=0.0)
+        return ad
+
+    def _stream(self, adapter_cls, msg, sess):
+        async def _go():
+            out = []
+            async for k, t in adapter_cls.stream_chat(msg, sess):
+                out.append((k, t))
+            return out
+        return async_to_sync(_go)()
+
+    def _resume(self, adapter_cls, sess, approved):
+        async def _go():
+            out = []
+            async for k, t in adapter_cls.resume_chat(sess, {"approved": approved}):
+                out.append((k, t))
+            return out
+        return async_to_sync(_go)()
+
+    def test_write_triggers_confirm_then_executes_on_approve(self):
+        from api.langgraph_chat.adapter import LangGraphAdapter
+        self._set_orch()
+        chunks = self._stream(LangGraphAdapter,
+                              "[__freeark_user__:alice] TOOLCALL:set_device_params", "wsess1")
+        confirms = [t for k, t in chunks if k == "confirm"]
+        self.assertTrue(confirms, "未触发 Tier-2 写确认门")
+        payload = json.loads(confirms[0])
+        self.assertEqual(payload["kind"], "confirm_required")
+        self.assertEqual(payload["actions"][0]["tool"], "set_device_params")
+        # 确认前不应有任何 content（写未执行）
+        self.assertFalse([t for k, t in chunks if k == "content"])
+        # 批准 → 执行（mock 成功）
+        out2 = self._resume(LangGraphAdapter, "wsess1", True)
+        content = "".join(t for k, t in out2 if k == "content")
+        self.assertIn("已执行", content)
+
+    def test_write_rejected_does_not_execute(self):
+        from unittest import mock
+        import api.langgraph_chat.orchestrator as orch_mod
+        from api.langgraph_chat.adapter import LangGraphAdapter
+        self._set_orch()
+        with mock.patch.object(orch_mod, "execute_write") as m:
+            self._stream(LangGraphAdapter,
+                         "[__freeark_user__:bob] TOOLCALL:trigger_refresh", "wsess2")
+            out2 = self._resume(LangGraphAdapter, "wsess2", False)
+            m.assert_not_called()   # 拒绝路径绝不执行写
+        content = "".join(t for k, t in out2 if k == "content")
+        self.assertIn("已取消", content)
+
+    def test_approve_executes_with_operator_from_prefix(self):
+        from unittest import mock
+        import api.langgraph_chat.orchestrator as orch_mod
+        from api.langgraph_chat.adapter import LangGraphAdapter
+        self._set_orch()
+        with mock.patch.object(orch_mod, "execute_write",
+                               return_value={"success": True, "summary": "ok"}) as m:
+            self._stream(LangGraphAdapter,
+                         "[__freeark_user__:alice] TOOLCALL:set_device_params", "wsess3")
+            self._resume(LangGraphAdapter, "wsess3", True)
+            m.assert_called_once()
+            call_args = m.call_args.args
+            self.assertEqual(call_args[0], "set_device_params")          # tool
+            self.assertEqual(call_args[2], "openclaw-agent::alice")      # operator 追溯

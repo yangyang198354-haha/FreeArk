@@ -71,6 +71,18 @@
               class="thinking-indicator"
             >正在思考...</span>
             <span v-if="msg.streaming && msg.content" class="stream-cursor">|</span>
+
+            <!-- 阶段 E：Tier-2 写操作确认卡片（需用户授权后才执行）-->
+            <div v-if="msg.confirm" class="confirm-card">
+              <div class="confirm-title">⚠️ 待确认的操作（授权后才会执行）</div>
+              <ul class="confirm-list">
+                <li v-for="(a, ai) in msg.confirm.actions" :key="ai">{{ a.preview }}</li>
+              </ul>
+              <div class="confirm-actions">
+                <el-button type="primary" size="small" @click="handleConfirm(true)">确认执行</el-button>
+                <el-button size="small" @click="handleConfirm(false)">取消</el-button>
+              </div>
+            </div>
           </div>
 
           <!-- 用户消息头像 -->
@@ -298,6 +310,18 @@ export default {
           break
         }
 
+        // 阶段 E：Tier-2 写操作确认门 —— 后端 interrupt，等用户授权
+        case 'confirm_required': {
+          const last = messages.value[messages.value.length - 1]
+          if (last && last.role === 'assistant') {
+            last.confirm = { actions: data.actions || [] }
+            last.streaming = false  // 暂停光标，渲染确认卡片
+          }
+          // isWaiting 维持 true：输入保持禁用，直到用户确认/取消并完成 resume
+          scrollToBottom()
+          break
+        }
+
         case 'error':
           // 如果有正在流式渲染的助手消息，用错误内容替换
           {
@@ -346,8 +370,25 @@ export default {
         reasoning: '',            // v1.1 新增：reasoning 文本（默认空）
         streaming: true,
         reasoningStreaming: false, // v1.1 新增：收到首个 reasoning_token 后置 true
+        confirm: null,             // 阶段 E：Tier-2 写确认门 { actions:[...] }，无则 null
       })
 
+      scrollToBottom()
+    }
+
+    // --- 阶段 E：用户对 Tier-2 写操作的确认/取消 ---
+    function handleConfirm(approved) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        errorMessage.value = '连接已断开，无法提交确认'
+        return
+      }
+      const last = messages.value[messages.value.length - 1]
+      if (last && last.role === 'assistant') {
+        last.confirm = null        // 移除确认卡片
+        last.streaming = true       // 恢复流式光标，等待 resume 的回复
+      }
+      // isWaiting 维持 true：等待后端执行/取消后的 stream_end
+      ws.send(JSON.stringify({ type: 'confirm_response', approved: !!approved }))
       scrollToBottom()
     }
 
@@ -392,6 +433,7 @@ export default {
       handleSend,
       handleShiftEnter,
       handleManualReconnect,
+      handleConfirm,
     }
   }
 }
@@ -604,6 +646,30 @@ export default {
 @keyframes cursor-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* 阶段 E：Tier-2 写操作确认卡片 */
+.confirm-card {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-warning, #F59E0B);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.08);
+}
+.confirm-title {
+  font-weight: 600;
+  color: var(--color-warning, #F59E0B);
+  margin-bottom: 6px;
+}
+.confirm-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.confirm-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* A2: 流式 chunk 渐入。OpenClaw Gateway 当前以 ~21 字/帧、170ms 间隔吐 delta，

@@ -90,6 +90,15 @@ except Exception as exc:  # pragma: no cover - 离线缺依赖时退化
             f"离线/单测请设 FREEARK_POC_MOCK=1"
         ) from exc
 
+# 阶段 E：Tier-2 写 handler。**始终走 HTTP**（tier2_write 自带 FreeArkClient，
+# 不受 direct 模式 monkeypatch 影响，见阶段 B 说明），保留 operator 追溯与服务端校验。
+try:
+    from tier2_write import TIER2_HANDLERS  # type: ignore
+except Exception as exc:  # pragma: no cover
+    TIER2_HANDLERS = {}
+    if not _MOCK:
+        logger.warning("fa_tools: 导入 tier2_write 失败，写工具不可用: %s", exc)
+
 
 # 阶段 B：direct 模式下把共享 handler 的 _client() monkeypatch 成进程内直调客户端。
 # handler 逻辑一行不改、输出字节级一致（只换传输层）；OpenClaw 子进程不受影响。
@@ -177,8 +186,65 @@ def get_fault_summary(building: Optional[str] = None, unit: Optional[str] = None
     return _call("freeark_get_fault_summary", {"building": building, "unit": unit})
 
 
+# ── Tier-2 写工具（阶段 E）────────────────────────────────────────────
+# 这些 @tool 仅供 LLM 绑定/取得调用 schema：专家请求写操作时**不直接执行**，
+# 由编排图 gate 节点 interrupt 确认、批准后经 execute_write() 注入 operator 真执行。
+# @tool 函数体（直调路径）保留可用作防御，但正常流程不经过它。
+_WRITE_TOOL_TO_HANDLER = {
+    "set_device_params": "freeark_write_device_params",
+    "trigger_refresh": "freeark_trigger_refresh",
+}
+WRITE_TOOL_NAMES = frozenset(_WRITE_TOOL_TO_HANDLER)
+
+_MOCK_WRITE_PAYLOADS = {
+    "freeark_write_device_params": {
+        "success": True, "summary": "设备参数写操作已下发(mock)，状态=pending",
+        "data": {"batch_request_id": "mock-batch-1", "item_count": 1, "status": "pending"},
+    },
+    "freeark_trigger_refresh": {
+        "success": True, "summary": "按需采集刷新已触发(mock)",
+        "data": {"status": "triggered"},
+    },
+}
+
+
+def execute_write(tool_name: str, args: dict, operator_override: str) -> dict:
+    """gate 节点批准后真执行写操作：注入 operator_override，调 TIER2_HANDLERS（恒走 HTTP）。
+    mock 模式返回 canned 数据。未知工具/handler 返回失败信封。"""
+    handler_name = _WRITE_TOOL_TO_HANDLER.get(tool_name)
+    if handler_name is None:
+        return {"success": False, "error": f"未知写工具: {tool_name}"}
+    params = dict(args or {})
+    params["operator_override"] = operator_override
+    if _MOCK:
+        return _MOCK_WRITE_PAYLOADS.get(
+            handler_name, {"success": True, "summary": f"{handler_name}(mock)", "data": {}})
+    handler = TIER2_HANDLERS.get(handler_name)
+    if handler is None:
+        return {"success": False, "error": f"写 handler 不可用: {handler_name}"}
+    return handler(params)
+
+
+@tool
+def set_device_params(specific_part: str, items: list) -> dict:
+    """[写操作·需用户确认] 修改三恒设备参数（如温度设定值下发到 PLC）。
+    specific_part 形如 '3-1-7-702'；items 形如 [{"param_name":"设定温度","new_value":"24"}]。
+    用户请求控制/设定类操作时调用本工具发起请求；系统会拦截进入用户确认门，确认后才真执行。"""
+    return execute_write("set_device_params",
+                         {"specific_part": specific_part, "items": items}, "")
+
+
+@tool
+def trigger_refresh(specific_part: str) -> dict:
+    """[写操作·需用户确认] 触发指定设备的按需数据采集刷新。specific_part 形如 '3-1-7-702'。
+    用户请求刷新/重新采集时调用；系统会拦截进入用户确认门，确认后才真执行。"""
+    return execute_write("trigger_refresh", {"specific_part": specific_part}, "")
+
+
 # ── 按专家分组的工具表（供 orchestrator 绑定到各 agent 节点）────────────
-ENERGY_TOOLS = [get_dashboard_summary, get_usage_daily, get_realtime_params]
+# 能耗专家=「操控和查询」：读工具 + Tier-2 写工具（写经 gate 确认门）。
+ENERGY_TOOLS = [get_dashboard_summary, get_usage_daily, get_realtime_params,
+                set_device_params, trigger_refresh]
 INSPECTION_TOOLS = [get_plc_status, get_fault_summary, get_realtime_params]
 SANHENG_TOOLS: list = []  # 三恒知识专家纯文本，不查 API
 
