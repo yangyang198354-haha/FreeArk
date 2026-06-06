@@ -309,28 +309,34 @@ route → fan-out(Send→expert) → expert → gate → aggregate → END
 
 ## 阶段 F —— 回归 + 灰度 + 退役 OpenClaw
 
-### F.1 回归
-跑 `docs/sdlc/multiagent-framework/detailed_design.md` §8.2 TC-01~08（两后端各跑一遍对拍）：
-- 单专家、复合意图、Tier-2 写确认、降级（DeepSeek 不可达）、会话记忆、并发。
-- 串行通过率门控（沿用 test-engineer 既有标准）。
+> **执行手册见 [`PHASE_F_RUNBOOK.md`](./PHASE_F_RUNBOOK.md)**（A–E 已全部入 main，本节为纲要）。
+> 这是**生产运维阶段**，在 Pi 上执行；**退役不可逆，须 PM CONFIRM + 灰度稳定双门**。
 
-### F.2 灰度
-- 先 `CHAT_BACKEND=langgraph` 切**一个** worker（--workers 2 里的一个），观察 1~3 天：
-  错误率、墙钟 P50/P95、DeepSeek RPM/并发是否触限（决策 2）。
-- 监控指标对照基线：单专家应 ≈8s 量级、复合 ≈35s 量级。
+**三条相对原计划的修正（runbook 详述）**：
+1. **生产是 `--workers 1`**（perf-P1a 已回滚）→ 原"切 --workers 2 里一个 worker 灰度"不成立；
+   单 worker 灰度改为：方案A 低峰全量+秒回滚 / 方案B 按会话百分比 canary（需小 PR）。
+2. **DeepSeek key 当前在 OpenClaw**→ LangGraph 路径须把 `DEEPSEEK_API_KEY` 写进 Django `.env`（灰度硬前置）。
+3. **会话记忆**走 consumer 的 `chat_memory` 注入（两后端通用）；MemorySaver 仅供 E 的 interrupt/resume，
+   决策3"checkpointer 接 DB"未实施且无需实施。
 
-### F.3 退役（确认稳定后，需 PM CONFIRM）
-1. 全量切 `CHAT_BACKEND=langgraph`，观察一个周期。
-2. 停 `openclaw-gateway.service`（systemd --user disable + stop）。
-3. 删 OpenClaw 多 agent 配置：`openclaw.json` skills 注册、freeark-skill 注册。
-4. 凭据迁移：FreeArk token / DeepSeek key 改由 Django `.env`（沿用现有机制），
-   不再依赖 `~/.openclaw/freeark.env`。**openclaw-agent 会话超时问题随之消失**
-   （不再走 SlidingWindowToken 那条机器人账号链路；或保留 token 但本地直调免会话窗口）。
-5. 卸载 OpenClaw 包、清 `~/.openclaw/`、删 systemd unit + daemon-reload。
-6. `OpenClawAdapter` / `openclaw_adapter.py` 可保留一版本周期作回滚锚，再删。
+### F.0 前置阻塞（runbook 表）
+拉 main 到 Pi → 依赖核验（含 MemorySaver）→ **DeepSeek key 进 .env** → 路由模型决策 → 前端 `npm run build` →
+在仓单测 32/32 → 工具 LIVE smoke 5/5。全 ✅ 才进灰度。
+
+### F.1 回归（10 个 LangGraph 化 TC）
+单专家读×2 / 知识问答 / 复合意图 / **路由准确率(D)** / **写确认-批准落库(E)** / **写确认-拒绝不落库(E)** /
+降级 / 会话记忆 / 并发。隔离实例 :8001 跑，串行通过率门控全绿才进 F.2。
+
+### F.2 灰度（单 worker）
+方案A（推荐）低峰全量 + 秒回滚；或方案B 百分比 canary。监控错误率/墙钟 P50,P95/DeepSeek RPM/
+worker 内存/写门正确性，对照 openclaw 基线，稳定 ≥1 周。
+
+### F.3 退役（PM CONFIRM + 双门）
+全量稳定一周期 → 停 `openclaw-gateway.service` → 凭据收尾（DeepSeek key 已在 .env）→ 卸载清理 →
+`OpenClawAdapter` 保留一周期回滚锚再删 → 更新 deploy skill。
 
 ### ✅ F 验收门 / 回滚
-- 灰度期任一指标劣化 → 改回 `openclaw` 重启即回滚（退役前 OpenClaw 全在）。
+- 灰度期任一指标劣化 → 改回 `openclaw` 重启即回滚（退役前 OpenClaw 全在，< 30s）。
 - 退役后回滚成本高（需重装），故退役必须在灰度稳定 + PM 明确 CONFIRM 后。
 
 ---
