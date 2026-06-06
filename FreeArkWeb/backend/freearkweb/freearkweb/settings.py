@@ -375,8 +375,9 @@ CHAT_BACKEND = os.environ.get('CHAT_BACKEND', 'openclaw')
 # DEEPSEEK_API_KEY 必须在生产 .env 中设置，绝不提交 git、绝不写入任何 HTTP 响应。
 LANGGRAPH_USE_FAKE_LLM = os.environ.get('LANGGRAPH_USE_FAKE_LLM', 'False') == 'True'
 LANGGRAPH_MODEL = os.environ.get('LANGGRAPH_MODEL', 'deepseek-v4-flash')
-# 阶段 D：意图路由分类器模型（决策2，可用更轻模型控成本）。空=复用 LANGGRAPH_MODEL；
-# 设为更轻的模型名（如 flash-mini）则路由单独走轻模型。见 router.py / orchestrator._make_router_llm。
+# 阶段 D：意图路由分类器模型（决策2，可用更轻模型控成本）。空=用 LANGGRAPH_MODEL；
+# 设为更轻的模型名（如 flash-mini）则路由单独走轻模型。**路由分类器始终 temperature 0**
+# （确定性分类，消除路由抖动，见 orchestrator._make_router_llm）。
 LANGGRAPH_ROUTER_MODEL = os.environ.get('LANGGRAPH_ROUTER_MODEL', '')
 DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
 DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')

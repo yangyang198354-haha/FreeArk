@@ -115,20 +115,24 @@ def _make_llm(latency: float | None = None):
 
 
 def _make_router_llm(main_llm, latency: float | None = None):
-    """路由分类器模型（决策2：可用更轻模型控成本）。
-    fake 模式或 LANGGRAPH_ROUTER_MODEL 为空 → 复用主模型实例；
-    配置了独立路由模型则单独构造（temperature 0，确定性分类）。"""
+    """路由分类器模型——**始终 temperature 0**（分类确定性，消除路由抖动）。
+
+    意图分类是确定性任务；复用主模型的 temperature 0.2 会导致同一问题偶发被路由到
+    不同专家（F.1 实测：偶发把三恒原理误路由 energy、把写请求过度分发致确认消息被
+    aggregate 融合稀释）。故路由单独用一个 temp 0 的 ChatOpenAI 实例：
+      - LANGGRAPH_ROUTER_MODEL 非空 → 用该（更轻）模型（决策2 控成本）；
+      - 为空 → 用 LANGGRAPH_MODEL（主模型同名）但 temperature 0。
+    fake 模式仍复用 main_llm（fake 忽略 temp；路由会自动回退关键词，离线确定）。"""
     from django.conf import settings
 
     if getattr(settings, "LANGGRAPH_USE_FAKE_LLM", False):
         return main_llm
     rm = (getattr(settings, "LANGGRAPH_ROUTER_MODEL", "") or "").strip()
-    if not rm:
-        return main_llm
+    model = rm or getattr(settings, "LANGGRAPH_MODEL", "deepseek-v4-flash")
 
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(
-        model=rm,
+        model=model,
         base_url=getattr(settings, "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
         api_key=getattr(settings, "DEEPSEEK_API_KEY", "") or "sk-noop",
         temperature=0.0,
