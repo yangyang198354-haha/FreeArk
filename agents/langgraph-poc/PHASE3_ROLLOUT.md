@@ -218,16 +218,41 @@ sanheng 仍追加 `KNOWLEDGE.md`。
 
 ---
 
-## 阶段 D —— 路由升级（关键词 → LLM 分类器）
+## 阶段 D —— 路由升级（关键词 → LLM 分类器）✅ 已实现（2026-06-06，PR#5）
 
-PoC 的 `_route` 是关键词命中（离线可测但易漏判）。生产换 `router.py`：
-- **LLM 分类器**：一次轻量调用返回命中专家集合（JSON）。用**更轻的模型**（决策 2）。
-- 或 **supervisor handoff**：main agent 第一轮 tool_calls 决定派发哪些专家。
-- 兜底：分类失败 → 关键词路由 → 仍空 → energy-expert（保留 PoC 兜底链）。
+PoC 的 `_route` 是关键词命中（离线可测但易漏判）。已升级为 LLM 分类器：
+
+### D.1 实现
+- **`router.py` 新增 `classify_experts(llm, text)`**：一次轻量 LLM 调用，从固定集合 `EXPERT_NAMES`
+  选专家（`ROUTER_SYSTEM_PROMPT`：单意图 1 个 / 复合多个 / 不沾边空 []，只输出 JSON 数组）。
+  签名仍 text→list[expert]，不影响下游并行 fan-out。
+- **三级兜底链**：LLM 命中非空 → 用之；失败/解析不出/空 → 关键词路由 `route_experts()`；
+  仍空 → `DEFAULT_EXPERT`（energy-expert）。保留 PoC 兜底语义。
+- **鲁棒解析 `parse_route_response()`**：扛 flash 脏输出（```json 围栏 / 散文 / 多数组片段 /
+  非法名 / 空数组）。**纯函数、不依赖 langchain**（tuple 消息 `[("system",..),("human",..)]` 调 LLM，
+  离线可单测）。
+- **路由模型可独立（决策2 控成本）**：`orchestrator._make_router_llm()` + `settings.LANGGRAPH_ROUTER_MODEL`
+  （空=复用主模型；设更轻模型名则路由单走轻模型 temperature 0）。fake 模式恒复用 fake。
+- **`_route` 改 async** 调 `classify_experts`；`run_serial` 改 await。fake 模式分类器返回非 JSON →
+  自动回退关键词路由，离线编排测试路由仍**确定**。
+- **prompts.py 顺带增强**（相对 PR#4）：剥离提示头部 `<!-- -->` 注释块、`_read_prompt_file` 统一
+  优先级读取、缺文件 FileNotFoundError 清晰化。提示正文仍以 main(PR#4) 的真机验证版 `.langgraph.md` 为准。
+
+> 说明：阶段 C 已由 PR#4 在 Pi 真机验证后并入 main（精简版 `.langgraph.md`）。PR#5 原含一份并行的
+> 详尽 agent-builder 提示，因与 PR#4 撞车且 PR#4 已真机验证，**采用 main 的阶段 C**，PR#5 重定基为
+> 仅含阶段 D + prompts.py loader 增强。
+
+### D.2 验证（2026-06-06，Windows，真 langgraph 0.3.34）
+- ✅ 新增 `RouterClassifierTests` **12/12**（解析器 6 + 三级兜底 6）+ `PromptLoadingTests` **5/5**。
+- ✅ 全套 **29/29 OK**（与 main 的精简 `.langgraph.md` 协同；之前 skip 的编排/适配用例真跑通过）。
+
+### D 仍待办
+- **真机准确率门**：Pi + 真 DeepSeek，用 detailed_design §8.2 TC 问题集跑分类器，命中正确率 ≥ 关键词基准。
+- 决策2：路由成本/延迟偏高则设 `LANGGRAPH_ROUTER_MODEL` 指向更轻模型对比。
 
 ### ✅ D 验收门
 - 路由准确率：用 detailed_design §8.2 的 TC 问题集 + 复合意图问题，命中专家集合正确率 ≥ 既有水平；
-  单意图不要误触发多专家（控成本/并发）。
+  单意图不要误触发多专家（控成本/并发）——**待真机**。
 
 ---
 
