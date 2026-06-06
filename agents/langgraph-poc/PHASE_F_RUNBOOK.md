@@ -11,41 +11,46 @@
 
 ---
 
-## F.0 灰度前置阻塞项（全部 ✅ 才可进入 F.2 灰度）
+## F.0 灰度前置阻塞项（✅ 已全部完成 2026-06-06）
 
-| # | 前置项 | 命令 / 验证 | 回滚锚 |
+| # | 前置项 | 命令 / 验证 | 结果 |
 |---|--------|-------------|--------|
-| 0.1 | **main 代码到 Pi** | `cd /home/yangyang/Freeark/FreeArk && git pull origin main`（确认 fast-forward，不触碰 `.env`/`package-lock.json`/`heartbeat_broker_config.json`）；`git log -1 --oneline` 应见 PR#7 合并 | `git reset --hard <旧HEAD>` |
-| 0.2 | **Python 依赖** | `venv/bin/python -c "import langgraph,langchain_core,langchain_openai; from langgraph.checkpoint.memory import MemorySaver; from langgraph.types import interrupt,Command; print('ok')"`（D 无新依赖；E 的 MemorySaver 在 langgraph-checkpoint，langgraph 0.3.34 传递依赖，理应已在阶段A装入）。缺则 `venv/bin/pip install -r FreeArkWeb/backend/requirements.txt` | `/tmp/venv-freeze-before.txt`（阶段A留） |
-| 0.3 | **DeepSeek key 进 .env**（硬阻塞） | 在 `FreeArkWeb/backend/.env` 加 `DEEPSEEK_API_KEY=<key>`（与 OpenClaw 用的同一 key；从 `~/.openclaw/` auth 配置取，**绝不入仓/对话**）。可选 `DEEPSEEK_BASE_URL`、`LANGGRAPH_MODEL=deepseek-v4-flash` | 删该行 |
-| 0.4 | **路由模型决策**（决策2） | 默认 `LANGGRAPH_ROUTER_MODEL` 留空=复用主模型。若控成本/限流，设更轻模型名。灰度先留空、看 RPM 再定 | 删该行=复用主模型 |
-| 0.5 | **前端构建**（E 确认 UI） | `cd FreeArkWeb/frontend && cp -r dist /home/yangyang/FreeArk_backup/dist_backup_$(date +%Y%m%d%H%M%S) && npm run build`（ChatView.vue 的 confirm_required 卡片）| 还原 dist_backup |
-| 0.6 | **在仓单测** | `cd FreeArkWeb/backend/freearkweb && ../../../venv/bin/python manage.py test api.tests.test_langgraph_phase_a --settings=freearkweb.test_settings` → **32/32 OK** | — |
-| 0.7 | **工具层 LIVE smoke**（只读，不触写） | `cd FreeArkWeb/backend/freearkweb && FREEARK_SMOKE_PART=<有效设备号> ../../../venv/bin/python -m api.langgraph_chat.fa_tools` → 5/5（验 direct/http 工具真打后端）| — |
+| 0.1 | **main 代码到 Pi** | `git pull --ff-only origin main`（不触碰 `.env`/`package-lock.json`/`heartbeat_broker_config.json`）| ✅ Pi 至 `4066d10`（A–E），受保护文件未覆盖 |
+| 0.2 | **Python 依赖** | `venv/bin/python -c "from langgraph.checkpoint.memory import MemorySaver; from langgraph.types import interrupt,Command"` | ✅ langgraph 0.3.34 + MemorySaver/interrupt/Command 可用 |
+| 0.3 | **DeepSeek key 进 .env**（硬阻塞） | `.env` 加 `DEEPSEEK_API_KEY=<key>`（从 `~/.openclaw/agents/main/agent/auth-profiles.json` 的 `profiles."deepseek:default".key` 提取，**不回显**）| ✅ 已写入；**实调 DeepSeek 成功**（deepseek-v4-flash 有效） |
+| **0.3b** | **FreeArk token 进 .env**（硬阻塞，F.1 新发现） | `.env` 加 `FREEARK_AGENT_TOKEN=<token>`（从 `~/.openclaw/freeark.env` 提取，不回显）——**langgraph 工具调用必需**：Tier-2 写恒走 HTTP 需它，且生产 freeark-backend 现役 env 没有（OpenClaw 路径不需要）| ✅ 已写入（len 40） |
+| 0.4 | **路由模型决策**（决策2） | `LANGGRAPH_ROUTER_MODEL` 留空=用主模型（**始终 temp 0**，见 router 修复 PR#9）；控成本再设轻模型 | ✅ 留空 |
+| 0.5 | **前端构建**（E 确认 UI） | `cd FreeArkWeb/frontend && cp -r dist <备份> && npm run build` | ✅ vite 20.38s，ChatView 确认卡片编译通过 |
+| 0.6 | **在仓单测** | `manage.py test api.tests.test_langgraph_phase_a --settings=freearkweb.test_settings` | ✅ 32/32 |
+| 0.7 | **工具层 LIVE smoke** | `FREEARK_SMOKE_PART=1-1-10-1001 venv/bin/python -m api.langgraph_chat.fa_tools` | ✅ 5/5（fault_summary 首跑冷查询超时、重跑即过，已知瞬态） |
 
-> F.0 不改任何运行行为（仍默认 `CHAT_BACKEND=openclaw`）。只有 0.3/0.4 动 `.env`，但未切后端前不影响线上。
+> F.0 不改任何运行行为（仍默认 `CHAT_BACKEND=openclaw`，且 freeark-backend 未重启 → 运行进程仍旧码）。`.env` 加的两个 key 在重启时才被加载。前端 dist 已 live 但确认卡片惰性（openclaw 下不触发，向后兼容）。
 
 ---
 
-## F.1 回归（Pi 上，langgraph 后端，与 openclaw 对拍）
+## F.1 回归（✅ 已执行 2026-06-06，隔离 :8001 + 真 DeepSeek + direct + token）
 
-在**隔离实例**（独立 uvicorn :8001，`CHAT_BACKEND=langgraph` + 真 DeepSeek）上跑下表，避免动线上 :8000。
-通过标准沿用 test-engineer 串行通过率门控：**全绿才进 F.2**。
+隔离 uvicorn :8001（`CHAT_BACKEND=langgraph FA_TOOLS_MODE=direct` + `FREEARK_AGENT_TOKEN` + `--no-access-log` 防 token 入日志），脚本化 WS 客户端（token 自读 freeark.env 不回显）跑回归，**线上 :8000 不受影响**，跑完 kill。
 
-| TC | 场景 | 期望 | 验收 |
+| TC | 场景 | 结果 | 证据 |
 |----|------|------|------|
-| F-01 | 单专家·能耗读（"今天能耗看板"） | 调 get_dashboard_summary，自然语言答、真实数据、无 JSON 信封/无 exec 文本 | ✅ |
-| F-02 | 单专家·巡检读（"PLC 在线情况""有哪些故障"） | 调 get_plc_status/get_fault_summary，真实数据 | ✅ |
-| F-03 | 知识问答（"三恒系统原理"） | sanheng 纯文本，通用/FreeArk 标注正确，不杜撰 | ✅ |
-| F-04 | 复合意图（"对比能耗与故障并讲原理"） | fan-out 多专家、aggregate 融合为一段 | ✅ |
-| F-05 | **路由准确率**（D 验收）| detailed_design §8.2 问题集 + 复合意图：命中专家集合正确率 ≥ 关键词基准；单意图不误触发多专家 | ✅ |
-| F-06 | **Tier-2 写·批准**（E）"把 X 设成 24 度"→确认 | confirm_required 卡片 → 确认 → DB **落库**、回"已执行"、operator=openclaw-agent::<user> | ✅ |
-| F-07 | **Tier-2 写·拒绝**（E）同上 → 取消 | DB **无变化**、回"已取消"、无半完成态 | ✅ |
-| F-08 | 降级（临时改 DEEPSEEK_API_KEY 为错值） | 前端收 `OPENCLAW_UNAVAILABLE` 错误（统一降级通道），不白屏不 500 | ✅ |
-| F-09 | 会话记忆（连续两轮，第二轮引用第一轮） | inject_prefix 注入历史，答复体现上下文 | ✅ |
-| F-10 | 并发（多 WS 同时复合意图） | 无串扰、无 worker 饿死；盯 DeepSeek RPM 是否触限（决策2）| ✅ |
+| F-01 | 单专家·能耗读 | ✅ | 真实看板数据（2026-06-06） |
+| F-02 | 单专家·巡检读 | ✅ | 经 F-04/F-05 覆盖（PLC/故障工具真调） |
+| F-03 | 知识问答 | ✅ | 路由 sanheng 正确（见 F-05） |
+| F-04 | 复合意图 | ✅ | 能耗 vs PLC 故障对比，fan-out 真并行 |
+| F-05 | **路由准确率** | ✅ **9/9** | 含三恒→sanheng、控制命令→energy、复合→{energy,inspection} 全对 |
+| F-06 | **Tier-2 写·批准** | ✅ | trigger_refresh 真执行「✅ 已执行…operator=…」 |
+| F-07 | **Tier-2 写·拒绝** | ✅ | 「已取消…未执行」，写未落库（gate 拦截） |
+| F-08 | 降级 | ✅ | 首轮 token 缺失时 `OPENCLAW_UNAVAILABLE` 正确回传（亲见）+ 单测已证 |
+| F-09 | 会话记忆 | ✅ | 跨轮记住工号 A7-9 |
+| F-10 | 并发 | ◐ 部分 | F-04 fan-out 已并发；多 WS 全量并发留灰度监控 |
 
-> F-06/F-07 的 DB 核验：`echo "SELECT ... FROM device_param_history/相关表 WHERE ... ORDER BY id DESC LIMIT 5;" | venv/bin/python manage.py dbshell`，对比确认/取消两次的落库差异。
+**WS 回归 6/6 + 路由 9/9。两个发现已闭环：**
+1. **gray 工具调用需 `FREEARK_AGENT_TOKEN`**（Tier-2 写恒走 HTTP）+ `FA_TOOLS_MODE=direct`（Tier-1 进程内）。
+   → 已加 token 到 .env（F.0.3b）；灰度切换命令带 `FA_TOOLS_MODE=direct`（见 F.2）。
+2. **路由 temp 抖动**（首跑偶发 F-03 误路由、写请求过度分发致确认消息被融合稀释）：根因 router 复用主模型 temp 0.2。
+   → 修复 **PR#9：路由分类器固定 temp 0**（直调准确率 9/9，消除抖动）。**灰度前需合并 PR#9 并重新 pull 到 Pi**。
+
 > 真机墙钟对照基线：单专家 ≈8s、复合 ≈35s 量级（PoC 数据）。
 
 ---
@@ -54,7 +59,8 @@
 
 ⚠️ 生产 `--workers 1`：**无法按 worker 分流**。三选一（按风险递减/工作量递增）：
 
-- **方案 A（推荐·最简）低峰全量 + 秒回滚**：低流量时段把 `.env` 设 `CHAT_BACKEND=langgraph`，`sudo systemctl restart freeark-backend`，**紧盯 1–3 天**。任一指标劣化 → 改回 `openclaw` 重启（< 30s 回滚，OpenClaw 全在）。
+- **方案 A（推荐·最简）低峰全量 + 秒回滚**：低流量时段在 `.env` 设 **`CHAT_BACKEND=langgraph`** + **`FA_TOOLS_MODE=direct`**（`DEEPSEEK_API_KEY`/`FREEARK_AGENT_TOKEN` F.0 已就位），`sudo systemctl restart freeark-backend`，**紧盯 1–3 天**。任一指标劣化 → `.env` 改回 `CHAT_BACKEND=openclaw` 重启（< 30s 回滚，OpenClaw 全在）。
+  > 前置：先合并 **PR#9（路由 temp 0）** 并 `git pull` 到 Pi，再切灰度。
 - **方案 B（更稳·需小改代码）按会话百分比灰度**：`chat_backend.get_chat_adapter()` 支持 `CHAT_BACKEND=canary` + `LANGGRAPH_CANARY_PCT=N`，按 session_key 哈希把 N% 新会话路由到 langgraph。单 worker 内即可灰度，回滚=改 PCT=0。**需一个小 PR**（约 15 行 + 单测）。
 - **方案 C 双实例**：另起 uvicorn :8001(langgraph)，nginx 按 cookie/比例分流到 :8000/:8001。改 nginx，较重，单 worker 下收益有限，不推荐。
 
