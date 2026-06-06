@@ -24,8 +24,9 @@ ChatConsumer 调用点与异常处理完全复用——失败时 raise 同一个
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
@@ -61,34 +62,75 @@ def warm() -> bool:
         return False
 
 
+async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]:
+    """驱动一次 graph.astream（payload 为初始输入 dict 或 Command(resume=...)）。
+
+    多模式流：
+      - messages 模式：透传 aggregate 节点的最终回复 token → ('content', delta)
+      - updates 模式：捕获 __interrupt__（Tier-2 写确认门）→ ('confirm', json) 后立即返回
+    非流式模型（如 fake / 单专家 passthrough）无 aggregate token 时，读最终态整段补发。
+    """
+    seen_any = False
+    interrupted = False
+    async for mode, data in orch.graph.astream(
+            payload, config, stream_mode=["updates", "messages"]):
+        if mode == "messages":
+            chunk, meta = data
+            if meta.get("langgraph_node") != "aggregate":
+                continue
+            if isinstance(chunk, (AIMessage, AIMessageChunk)) and chunk.content:
+                seen_any = True
+                yield ("content", chunk.content)
+        elif mode == "updates" and isinstance(data, dict) and "__interrupt__" in data:
+            intr = data["__interrupt__"]
+            val = intr[0].value if isinstance(intr, (list, tuple)) and intr else intr
+            interrupted = True
+            yield ("confirm", json.dumps(val, ensure_ascii=False))
+            return  # 暂停，等待 resume_chat
+
+    if not seen_any and not interrupted:
+        # 非流式兜底：从最终态取整段答复（不重跑图，避免重复副作用）
+        snap = await orch.graph.aget_state(config)
+        msgs = (snap.values or {}).get("messages", []) if snap else []
+        if msgs and getattr(msgs[-1], "content", None):
+            yield ("content", msgs[-1].content)
+
+
 class LangGraphAdapter:
     @classmethod
     async def stream_chat(cls, message: str,
                           session_key: str) -> AsyncGenerator[tuple[str, str], None]:
         orch = _get_orch()  # 构造失败 → OpenClawUnavailableError，交由 consumers 降级
-        seen_any = False
+        config = orch._cfg(session_key)  # thread_id=session_key：interrupt/resume 同线程
         try:
-            async for chunk, meta in orch.graph.astream(
-                {"messages": [HumanMessage(content=message)]},
-                stream_mode="messages",
-            ):
-                # 只透传聚合节点产出的最终回复 token，避免把专家中间态吐给用户
-                if meta.get("langgraph_node") != "aggregate":
-                    continue
-                if isinstance(chunk, (AIMessage, AIMessageChunk)) and chunk.content:
-                    seen_any = True
-                    yield ("content", chunk.content)
-
-            if not seen_any:
-                # 非流式模型兜底：取最终态整段返回
-                result = await orch.run(message)
-                yield ("content", result["answer"])
+            async for kind, text in _drive(
+                    orch, {"messages": [HumanMessage(content=message)]}, config):
+                yield (kind, text)
         except asyncio.TimeoutError:
-            # 透传给 ChatConsumer，映射为 TIMEOUT（与 OpenClaw 路径一致）
-            raise
+            raise  # 透传 → ChatConsumer 映射 TIMEOUT（与 OpenClaw 路径一致）
         except OpenClawUnavailableError:
             raise
         except Exception as exc:  # noqa: BLE001
             logger.error("LangGraph 流式失败 session=%s: %s",
                          (session_key or "")[:8], exc)
             raise OpenClawUnavailableError(f"LangGraph 编排失败: {exc}") from exc
+
+    @classmethod
+    async def resume_chat(cls, session_key: str,
+                          decision: dict) -> AsyncGenerator[tuple[str, str], None]:
+        """阶段 E：用户确认后恢复图执行。decision 形如 {"approved": True/False}。
+        必须与 stream_chat 同进程（同一 WS 连接），MemorySaver 持有该 thread 的检查点。"""
+        from langgraph.types import Command
+        orch = _get_orch()
+        config = orch._cfg(session_key)
+        try:
+            async for kind, text in _drive(orch, Command(resume=decision), config):
+                yield (kind, text)
+        except asyncio.TimeoutError:
+            raise
+        except OpenClawUnavailableError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.error("LangGraph resume 失败 session=%s: %s",
+                         (session_key or "")[:8], exc)
+            raise OpenClawUnavailableError(f"LangGraph 恢复失败: {exc}") from exc

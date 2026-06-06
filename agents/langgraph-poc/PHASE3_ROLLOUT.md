@@ -256,18 +256,54 @@ PoC 的 `_route` 是关键词命中（离线可测但易漏判）。已升级为
 
 ---
 
-## 阶段 E —— Tier-2 写操作人审门（安全，不可跳过）
+## 阶段 E —— Tier-2 写操作人审门（安全，不可跳过）✅ 已实现（2026-06-06，PR#6，栈在 PR#5/D 上）
 
-现状二次确认靠 SKILL.md **文本协议**（软约束）。LangGraph 用
-`interrupt()` 把它变成**图级强制门**（硬约束，README §6）：
-- 写工具（TIER2_HANDLERS）前插 interrupt 节点 → 暂停、回传待确认动作给前端 →
-  用户确认后 `Command(resume=...)` 继续。
-- 需要 checkpointer 才能 interrupt/resume（见决策 3）。
-- 保留 `operator_override = openclaw-agent::<chatuser>` 追溯格式（记忆 lobster-agent-architecture）。
+把二次确认从 SKILL.md 文本软约束升级为 **LangGraph 图级强制门**（interrupt 硬约束）。
+
+### E.0 图拓扑（关键：避免 resume 重跑 LLM）
+```
+route → fan-out(Send→expert) → expert → gate → aggregate → END
+```
+- **expert**：读工具内联执行；若 LLM 请求**写工具**（`WRITE_TOOL_NAMES`），不执行，把
+  `{pending_write:{tool,args}}` 写进 `expert_results`（append-only reducer）。LLM 写决策在
+  expert 返回时即被 checkpoint，故 resume 不重跑 expert（不重调 LLM）。
+- **gate**（廉价节点，无 LLM）：扫 pending_write → `interrupt({kind:confirm_required, actions})`
+  暂停 → resume 拿 `{approved}` → 批准则 `execute_write(tool,args,operator)` 真执行、拒绝记"已取消"
+  → 产出 answer。gate 重跑无副作用（写仅在批准分支执行一次）。
+- **aggregate**：只融合带 `answer` 的结果，忽略 pending 标记。
+
+### E.1 组件
+- **checkpointer = MemorySaver**（决策E，非决策3的 DB）：确认往返在同一 WS 连接=同一 worker 进程内
+  完成；重启丢待确认状态=fail-closed 安全；零额外依赖。thread_id=session_key。
+- **写工具桥接**（`fa_tools.py`）：桥接 `tier2_write.TIER2_HANDLERS`（**恒走 HTTP**，不受 direct
+  monkeypatch 影响）；新增 @tool `set_device_params`/`trigger_refresh`（绑定到 energy 专家）+
+  `WRITE_TOOL_NAMES` + `execute_write(tool,args,operator)`（注入 operator 真执行，mock 可离线）。
+- **operator 追溯**：gate 从消息 `[__freeark_user__:<name>]` 前缀提取，构造 `openclaw-agent::<name>`。
+- **适配器**（`adapter.py`）：`_drive()` 多模式流 `["updates","messages"]`——透传 aggregate token、
+  捕获 `__interrupt__` → `('confirm', json)`；新增 `resume_chat(session_key, decision)` 用 `Command(resume)`。
+- **WS 协议**（`consumers.py`）：抽出 `_pump()`（含新 `confirm` kind）；遇 confirm 发 `confirm_required`
+  暂停；收 `confirm_response{approved}` → `_handle_confirm` 走 resume；`_finalize_turn` 统一收尾。
+- **前端**（`ChatView.vue`）：`confirm_required` 渲染确认卡片（影响预览 + 确认/取消）；`handleConfirm`
+  回送 `confirm_response`；消息加 `confirm` 字段 + 样式。
+- **能耗提示**（main/PR#4 的精简 `.langgraph.md`）：加「写操作纪律」——正常发起写工具、由系统拦截确认；
+  不自拒/不假装执行/不自问确认/不构造追溯字段。
+
+### E.2 验证（2026-06-06，Windows，**真 langgraph 0.3.34**，与 Pi 同版本）
+- ✅ 新增 `OrchestratorWriteGateTests` **3/3**（fake LLM + mock 写工具）：①写触发 confirm_required、
+  确认前无 content ②批准→执行（"已执行"）③拒绝→`execute_write` **未被调用**（断言）、回"已取消"
+  ④operator 由 `[__freeark_user__:alice]` 构造为 `openclaw-agent::alice`。
+- ✅ 全套 **32/32 OK**（栈在 D 上、与 main 的精简提示协同）。py_compile 全绿。
+
+### E 仍待办
+- **前端构建**：本机无 npm，`ChatView.vue` 已人工核对，`npm run build` 须在部署机（Pi）跑过再灰度。
+- **真机端到端**：Pi + 真 DeepSeek 跑"设 24°C"——确认前 DB 无写、确认后落库、拒绝不落、operator 正确。
+- **已知限制**：MemorySaver 不跨进程/重启（fail-closed）；多写动作走批量单次确认；高危 `service_action`
+  暂未接入（仅 set_device_params/trigger_refresh）。
 
 ### ✅ E 验收门
-- 写操作（如设 24°C）**必须**经前端确认才落库；未确认时 DB 无变化（实测一条）。
-- 拒绝/超时路径不留半完成状态。
+- 写操作（如设 24°C）**必须**经前端确认才落库；未确认时 DB 无变化——**后端单测已证**（拒绝路径
+  `execute_write` 未调用），真机端到端**待灰度**。
+- 拒绝/超时路径不留半完成状态——拒绝不执行写、不留中间态（已证）。
 
 ---
 
