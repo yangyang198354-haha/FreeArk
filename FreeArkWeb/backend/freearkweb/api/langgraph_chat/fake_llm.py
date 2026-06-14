@@ -47,21 +47,24 @@ class LatencyFakeChat(BaseChatModel):
         return self.model_copy(update={"tools": list(tools)})
 
     def _script(self, messages: List[BaseMessage]) -> AIMessage:
-        # 已经有工具结果回来了 → 给最终答复
-        if any(isinstance(m, ToolMessage) for m in messages):
-            return AIMessage(content=self.final_text)
-        # 找最后一条用户消息，看是否要求触发工具
+        # 解析最后一条用户消息里的 TOOLCALL:<name> 链（按出现顺序，支持多轮/委托链）。
+        # 以「已回来的 ToolMessage 数」为游标定位下一个待发起的工具调用。
+        # 单个 TOOLCALL 时与旧行为一致（done=0 发起、回结果后 done=1 给最终答复）。
         last_human = next(
             (m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
         text = (last_human.content if last_human else "") or ""
-        if "TOOLCALL:" in text and self.tools:
-            name = text.split("TOOLCALL:", 1)[1].split()[0].strip()
-            valid = {getattr(t, "name", None) for t in self.tools}
-            if name in valid:
-                return AIMessage(
-                    content="",
-                    tool_calls=[{"name": name, "args": {}, "id": "call_fake_1"}],
-                )
+        valid = {getattr(t, "name", None) for t in self.tools}
+        requested = [
+            tok.split()[0].strip() for tok in text.split("TOOLCALL:")[1:]
+        ] if "TOOLCALL:" in text else []
+        requested = [n for n in requested if n in valid]  # 仅保留已绑定的工具
+        done = sum(1 for m in messages if isinstance(m, ToolMessage))
+        if done < len(requested):
+            return AIMessage(
+                content="",
+                tool_calls=[{"name": requested[done], "args": {},
+                             "id": f"call_fake_{done + 1}"}],
+            )
         return AIMessage(content=self.final_text)
 
     def _generate(self, messages: List[BaseMessage],

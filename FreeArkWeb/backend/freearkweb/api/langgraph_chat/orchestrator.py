@@ -40,10 +40,11 @@ import asyncio
 import datetime
 import operator
 import re
-from typing import Annotated, List, Tuple, TypedDict
+from typing import Annotated, List, Optional, Tuple, TypedDict
 
 from langchain_core.messages import (
     AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage)
+from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
@@ -51,6 +52,44 @@ from langgraph.types import Send, interrupt
 from .fa_tools import TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write
 from .prompts import EXPERT_PROMPTS
 from .router import classify_experts
+
+
+# ── 阶段 G：跨 agent 子委托（expert→expert）─────────────────────────────
+# 巡检专家在推理中可调用以下「委托工具」请求同侪能力。它们不直接执行，而是被
+# _expert 循环按名拦截，路由到目标专家（深度限 1：被委托方不再带委托工具，杜绝
+# 递归）：knowledge/read 内联跑只读子专家、结果回灌发起方继续推理；write 转为
+# pending_write 走**现有 _gate interrupt 确认门**（复用，不另起确认路径）。
+# 对应 inspection-expert SYSTEM_PROMPT 的 delegations 契约。
+DELEGATING_EXPERTS = ("inspection-expert",)
+MAX_EXPERT_STEPS = 8  # 单专家 ReAct + 委托链步数上限（防失控循环）
+
+
+@tool
+def delegate_knowledge(question: str = "") -> dict:
+    """向三恒知识库专家请求原理/机理/概念分析（只读知识，无副作用）。
+    question: 需要分析的问题或巡检情况描述。"""
+    return {"_delegation": "knowledge_query"}  # 占位：实际执行由 orchestrator 拦截
+
+
+@tool
+def delegate_read(query: str = "", specific_part: str = "") -> dict:
+    """向能耗专家请求只读数据（设备实时参数/配置/历史能耗）。
+    query: 取数需求；specific_part: 设备号如 '3-1-7-702'（可选）。"""
+    return {"_delegation": "read_query"}  # 占位：实际执行由 orchestrator 拦截
+
+
+@tool
+def delegate_write(specific_part: str = "", items: Optional[list] = None,
+                   trigger_refresh_only: bool = False) -> dict:
+    """[写处置·需用户确认] 巡检判断需自行处置时，委托执行设备写操作（经能耗专家写工具）。
+    specific_part 形如 '3-1-7-702'；items 形如 [{"param_name":"设定温度","new_value":"24"}]；
+    仅触发按需采集刷新则 trigger_refresh_only=true。写操作必经用户确认门，绝不自动执行。"""
+    return {"_delegation": "write_command"}  # 占位：转 pending_write 交 _gate 确认
+
+
+DELEGATION_TOOLS = [delegate_knowledge, delegate_read, delegate_write]
+DELEGATION_TOOL_NAMES = {t.name for t in DELEGATION_TOOLS}
+READ_DELEGATION_NAMES = {"delegate_knowledge", "delegate_read"}
 
 
 class State(TypedDict, total=False):
@@ -157,9 +196,11 @@ def _make_router_llm(main_llm, latency: float | None = None):
 
 # 编排器：图编译一次、模型一次 → 进程常驻，零 per-request 冷启动
 class Orchestrator:
-    def __init__(self, latency: float | None = None):
+    def __init__(self, latency: float | None = None,
+                 delegating_experts: tuple[str, ...] = DELEGATING_EXPERTS):
         self.llm = _make_llm(latency)
         self.router_llm = _make_router_llm(self.llm, latency)
+        self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
     # ── route：LLM 分类器选专家，复合意图分流为多个并行 Send ──────────
@@ -178,35 +219,118 @@ class Orchestrator:
         return [Send("expert", {"name": name, "query": q, "messages": []})
                 for name, q in state["plan"]]
 
-    # ── expert：单专家 ReAct（读工具内联执行；写工具延迟到 gate 确认）──
+    # ── expert：单专家 ReAct（读工具内联；写工具延迟到 gate；委托专家可子委托同侪）──
     async def _expert(self, state: State):
         name = state["name"]
         query = state["query"]
-        tools = TOOLS_BY_EXPERT.get(name, [])
-        tool_map = {t.name: t for t in tools}
-        llm = self.llm.bind_tools(tools) if tools else self.llm
+        allow_deleg = name in self.delegating_experts
+        base_tools = TOOLS_BY_EXPERT.get(name, [])
+        tool_map = {t.name: t for t in base_tools}
+        bound = list(base_tools) + (DELEGATION_TOOLS if allow_deleg else [])
+        llm = self.llm.bind_tools(bound) if bound else self.llm
 
         msgs: List[BaseMessage] = [
             SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
             HumanMessage(content=query),
         ]
+        delegations: List[dict] = []
         ai = await llm.ainvoke(msgs)
-        if getattr(ai, "tool_calls", None):
-            # 拆分读/写：读工具内联执行；写工具不执行，记 pending_write 交 gate 确认。
-            pending = [tc for tc in ai.tool_calls if tc["name"] in WRITE_TOOL_NAMES]
+        steps = 0
+        while getattr(ai, "tool_calls", None) and steps < MAX_EXPERT_STEPS:
+            steps += 1
+            tcs = ai.tool_calls
+
+            # 1) 写优先：专家自身写工具 → pending_write，终止本节点交 gate 确认。
+            pending = [tc for tc in tcs if tc["name"] in WRITE_TOOL_NAMES]
             if pending:
-                # LLM 的写决策已被 checkpoint（本节点返回即落 state）；resume 时不重跑本节点。
                 return {"expert_results": [
                     {"expert": name,
                      "pending_write": {"tool": tc["name"], "args": tc.get("args", {})}}
                     for tc in pending]}
+
+            # 2) 写委托：delegate_write → 转为 pending_write（复用 _gate 确认门）。
+            if allow_deleg:
+                dw = next((tc for tc in tcs if tc["name"] == "delegate_write"), None)
+                if dw is not None:
+                    return {"expert_results": [{
+                        "expert": name,
+                        "pending_write": self._write_from_delegation(dw.get("args", {})),
+                        "delegations": delegations + [{
+                            "target_agent": "energy-expert", "intent": "write_command",
+                            "status": "PENDING_CONFIRM"}],
+                    }]}
+
+            # 3) 读类工具 + 读/知识委托 → 内联执行，回灌后继续推理。
+            msgs.append(ai)
+            for tc in tcs:
+                if allow_deleg and tc["name"] in READ_DELEGATION_NAMES:
+                    out, log = await self._handle_read_delegation(
+                        name, tc["name"], tc.get("args", {}), query)
+                    delegations.append(log)
+                else:
+                    t = tool_map.get(tc["name"])
+                    out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
+                msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
+            ai = await llm.ainvoke(msgs)
+
+        return {"expert_results": [
+            {"expert": name, "answer": ai.content, "delegations": delegations}]}
+
+    @staticmethod
+    def _write_from_delegation(args: dict) -> dict:
+        """把 inspection 的 delegate_write 提案映射为 gate 可执行的 pending_write。
+        走能耗专家的写工具（set_device_params / trigger_refresh）+ 既有 execute_write 审计。"""
+        args = args or {}
+        sp = args.get("specific_part", "") or ""
+        if args.get("trigger_refresh_only"):
+            return {"tool": "trigger_refresh", "args": {"specific_part": sp}}
+        return {"tool": "set_device_params",
+                "args": {"specific_part": sp, "items": args.get("items") or []}}
+
+    async def _handle_read_delegation(self, origin: str, tool_name: str,
+                                      args: dict, origin_query: str):
+        """只读委托：跑目标只读子专家，返回 (回灌结果, 审计日志)。无副作用。"""
+        args = args or {}
+        if tool_name == "delegate_knowledge":
+            q = args.get("question") or (
+                f"（{origin} 委托）请就以下情况做三恒原理/机理分析：{origin_query}")
+            ans = (await self._run_subexpert("sanheng-knowledge", q)).get("answer", "")
+            return ({"status": "OK", "from": "sanheng-knowledge",
+                     "intent": "knowledge_query", "data": ans},
+                    {"target_agent": "sanheng-knowledge",
+                     "intent": "knowledge_query", "status": "OK"})
+        # delegate_read
+        part = args.get("specific_part") or ""
+        q = args.get("query") or origin_query
+        if part:
+            q = f"{q}（设备 {part}）"
+        ans = (await self._run_subexpert("energy-expert", q)).get("answer", "")
+        return ({"status": "OK", "from": "energy-expert",
+                 "intent": "read_query", "data": ans},
+                {"target_agent": "energy-expert",
+                 "intent": "read_query", "status": "OK"})
+
+    async def _run_subexpert(self, name: str, query: str) -> dict:
+        """跑被委托的只读子专家：过滤写工具、不带委托工具（深度限 1）→ 返回 {"answer": ...}。"""
+        tools = [t for t in TOOLS_BY_EXPERT.get(name, [])
+                 if t.name not in WRITE_TOOL_NAMES]
+        tool_map = {t.name: t for t in tools}
+        llm = self.llm.bind_tools(tools) if tools else self.llm
+        msgs: List[BaseMessage] = [
+            SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
+            HumanMessage(content=query),
+        ]
+        ai = await llm.ainvoke(msgs)
+        steps = 0
+        while getattr(ai, "tool_calls", None) and steps < MAX_EXPERT_STEPS:
+            steps += 1
             msgs.append(ai)
             for tc in ai.tool_calls:
                 t = tool_map.get(tc["name"])
                 out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
                 msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
             ai = await llm.ainvoke(msgs)
-        return {"expert_results": [{"expert": name, "answer": ai.content}]}
+        return {"answer": ai.content}
 
     # ── gate：Tier-2 写操作图级强制确认门（interrupt 硬约束，阶段 E）────
     async def _gate(self, state: State):
@@ -288,9 +412,11 @@ class Orchestrator:
             {"messages": [HumanMessage(content=message)]}, self._cfg(thread_id))
         msgs = out.get("messages", [])
         answer = msgs[-1].content if msgs else ""
+        results = out.get("expert_results", [])
         return {
-            "experts": [r["expert"] for r in out.get("expert_results", [])],
+            "experts": [r["expert"] for r in results],
             "answer": answer,
+            "delegations": [d for r in results for d in r.get("delegations", [])],
         }
 
     async def run_serial(self, message: str) -> dict:
