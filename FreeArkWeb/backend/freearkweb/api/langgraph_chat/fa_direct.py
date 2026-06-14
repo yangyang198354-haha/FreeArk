@@ -27,6 +27,10 @@ from __future__ import annotations
 
 import logging
 
+# 模块级导入（django.db 的 import 不需要 settings 已配置——连接是惰性代理）；
+# 置于模块级亦便于单测 patch（见 test_langgraph_phase_a.FaDirectConnectionHealthTests）。
+from django.db import OperationalError, close_old_connections
+
 logger = logging.getLogger("api.langgraph_chat.fa_direct")
 
 _AGENT_USER = None  # 缓存 openclaw-agent User（只读，跨调用复用）
@@ -65,14 +69,31 @@ class DirectClient:
         except Resolver404:
             return {"success": False, "error": f"no route: {path}", "http_status": 404}
 
-        req = _factory().get(path, data=params or {})
-        try:
+        # 连接健康兜底（修复 2026-06-14 根因：worker 线程池连接腐烂）：
+        # 本方法在 langchain 工具线程池里跑，这些线程活在 Django 请求生命周期之外，
+        # request_started/finished 信号不触发 → close_old_connections() 从不被调用 →
+        # 线程本地 MySQL 连接闲置超 CONN_MAX_AGE(300s)/服务端 wait_timeout 后腐烂，
+        # 复用即 OperationalError(2013 Lost connection)，被 LLM 转述为"服务器连接异常"。
+        # 这里手动调用，让 CONN_MAX_AGE 对工具线程真正生效（超龄/不可用连接被关→取新连接）。
+        close_old_connections()
+
+        def _invoke():
+            req = _factory().get(path, data=params or {})
             force_authenticate(req, user=_agent_user())
-        except Exception as exc:  # openclaw-agent 不存在等
-            return {"success": False, "error": f"auth setup failed: {exc}", "http_status": 0}
+            return match.func(req, *match.args, **match.kwargs)
 
         try:
-            resp = match.func(req, *match.args, **match.kwargs)
+            resp = _invoke()
+        except OperationalError as exc:
+            # 罕见：连接在 CONN_MAX_AGE 内被服务端丢弃（无 errors_occurred 标记，上面的
+            # close_old_connections 当时未关它）→ 关掉坏连接后重试一次（取新连接）。
+            logger.warning("DirectClient 连接失效，关连接重试一次 path=%s: %s", path, exc)
+            close_old_connections()
+            try:
+                resp = _invoke()
+            except Exception as exc2:  # noqa: BLE001 — 重试仍失败，包成统一信封
+                logger.warning("DirectClient 重试仍失败 path=%s: %s", path, exc2)
+                return {"success": False, "error": f"view error: {exc2}", "http_status": 500}
         except Exception as exc:  # noqa: BLE001 — view 内部异常包成统一信封
             logger.warning("DirectClient view 调用异常 path=%s: %s", path, exc)
             return {"success": False, "error": f"view error: {exc}", "http_status": 500}
