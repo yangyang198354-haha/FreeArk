@@ -73,11 +73,12 @@
             ></div>
             <!-- 降级：用户消息 / 流式中 / confirm 激活中的助手消息 → 纯文本插值（REQ-NFUNC-006）-->
             <span v-else class="bubble-content">{{ msg.content }}</span>
-            <!-- 「正在思考...」：仅在无 reasoning 活动且 content 为空时显示（降级兼容） -->
+            <!-- 「正在思考...」/ 静默期进度：无 reasoning 活动且 content 为空时显示；
+                 收到 status_update 则显示动态进度文案（如"正在调取数据并生成回复…"）-->
             <span
               v-if="msg.streaming && !msg.content && !msg.reasoning && !msg.reasoningStreaming"
               class="thinking-indicator"
-            >正在思考...</span>
+            >{{ msg.statusText || '正在思考...' }}</span>
             <span v-if="msg.streaming && msg.content" class="stream-cursor">|</span>
 
             <!-- 阶段 E：Tier-2 写操作确认卡片（需用户授权后才执行）-->
@@ -317,6 +318,15 @@ export default {
           errorMessage.value = ''
           break
 
+        // 静默期进度提示（分类/查询/生成阶段）：更新占位文案，content 到来即被替换
+        case 'status_update': {
+          const last = messages.value[messages.value.length - 1]
+          if (last && last.role === 'assistant' && last.streaming) {
+            last.statusText = data.message || ''
+          }
+          break
+        }
+
         // v1.1 新增：reasoning_token — 追加到 msg.reasoning，触发 <details> 展示
         case 'reasoning_token': {
           const last = messages.value[messages.value.length - 1]
@@ -427,6 +437,7 @@ export default {
         streaming: true,
         reasoningStreaming: false, // v1.1 新增：收到首个 reasoning_token 后置 true
         confirm: null,             // 阶段 E：Tier-2 写确认门 { actions:[...] }，无则 null
+        statusText: '',            // 静默期进度提示（status_update），content 到来前显示
       })
 
       scrollToBottom()

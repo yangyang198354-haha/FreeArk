@@ -65,28 +65,46 @@ def warm() -> bool:
 async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]:
     """驱动一次 graph.astream（payload 为初始输入 dict 或 Command(resume=...)）。
 
-    多模式流：
-      - messages 模式：透传 aggregate 节点的最终回复 token → ('content', delta)
-      - updates 模式：捕获 __interrupt__（Tier-2 写确认门）→ ('confirm', json) 后立即返回
-    非流式模型（如 fake / 单专家 passthrough）无 aggregate token 时，读最终态整段补发。
+    流式策略（2026-06-14 改：让用户尽快、持续看到增量，消灭长静默）：
+      - **单专家**：透传 `expert` 节点的 token（即最终答复，逐 token 流）；aggregate 只会把
+        同一整段再发一次 → 跳过避免重复。
+      - **多专家**：expert 们并行 token 会交错、语义混乱 → 跳过；改流 `aggregate` 的融合结果。
+      - 专家数由 `route` 节点的 plan 得知（updates 流，先于 expert token 到达）。
+      - `route` 节点自身的 token（JSON 分类结果）一律不透传给用户。
+      - 静默期（分类/查询/生成）下发 ('status', 文案) 进度事件，避免"无任何反馈"。
+      - updates 捕获 __interrupt__（Tier-2 写确认门）→ ('confirm', json) 后立即返回。
+    无任何 content 流出时（异常/退化）读最终态整段补发。
     """
     seen_any = False
     interrupted = False
+    num_experts = None  # 由 route 的 plan 得知；None=route 未完成
+    # 起步即反馈，消灭最初 1~2s 的纯静默
+    yield ("status", "正在分析您的问题…")
     async for mode, data in orch.graph.astream(
             payload, config, stream_mode=["updates", "messages"]):
         if mode == "messages":
             chunk, meta = data
-            if meta.get("langgraph_node") != "aggregate":
+            node = meta.get("langgraph_node")
+            if not (isinstance(chunk, (AIMessage, AIMessageChunk)) and chunk.content):
                 continue
-            if isinstance(chunk, (AIMessage, AIMessageChunk)) and chunk.content:
+            if node == "expert" and num_experts == 1:
                 seen_any = True
                 yield ("content", chunk.content)
-        elif mode == "updates" and isinstance(data, dict) and "__interrupt__" in data:
-            intr = data["__interrupt__"]
-            val = intr[0].value if isinstance(intr, (list, tuple)) and intr else intr
-            interrupted = True
-            yield ("confirm", json.dumps(val, ensure_ascii=False))
-            return  # 暂停，等待 resume_chat
+            elif node == "aggregate" and num_experts != 1:
+                seen_any = True
+                yield ("content", chunk.content)
+            # route 等其他节点的 token 不透传
+        elif mode == "updates" and isinstance(data, dict):
+            if "__interrupt__" in data:
+                intr = data["__interrupt__"]
+                val = intr[0].value if isinstance(intr, (list, tuple)) and intr else intr
+                interrupted = True
+                yield ("confirm", json.dumps(val, ensure_ascii=False))
+                return  # 暂停，等待 resume_chat
+            route_out = data.get("route")
+            if isinstance(route_out, dict) and "plan" in route_out:
+                num_experts = len(route_out.get("plan") or []) or None
+                yield ("status", "正在调取数据并生成回复…")
 
     if not seen_any and not interrupted:
         # 非流式兜底：从最终态取整段答复（不重跑图，避免重复副作用）
