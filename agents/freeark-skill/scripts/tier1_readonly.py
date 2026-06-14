@@ -71,11 +71,21 @@ def freeark_get_usage_daily(params: dict) -> dict:
         specific_part, energy_mode, start_date, end_date, page
 
     移植自：tier1_readonly.js freeark_get_usage_daily
+
+    注（2026-06-14 修复）：端点 /api/usage/quantity/（views.get_usage_quantity）按
+    **start_time/end_time** 过滤 time_period；本工具对外用更直观的 start_date/end_date，
+    这里映射到 API 真实参数名。旧版直接转发 start_date/end_date，API 不识别 → 日期过滤
+    从未生效，任何区间都只返回该设备按 time_period 升序的前 page_size 条（误导模型）。
     """
     query = {}
-    for key in ("specific_part", "energy_mode", "start_date", "end_date", "page"):
+    for key in ("specific_part", "energy_mode", "page"):
         if params.get(key):
             query[key] = params[key]
+    # 日期参数名映射：start_date→start_time、end_date→end_time（API 实际过滤字段）
+    if params.get("start_date"):
+        query["start_time"] = params["start_date"]
+    if params.get("end_date"):
+        query["end_time"] = params["end_date"]
 
     result = _client().get("/api/usage/quantity/", query)
     if not result["success"]:

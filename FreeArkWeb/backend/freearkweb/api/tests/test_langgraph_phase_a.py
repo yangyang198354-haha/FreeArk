@@ -406,6 +406,55 @@ class FaDirectConnectionHealthTests(SimpleTestCase):
         self.assertEqual(coc.call_count, 2)
 
 
+class UsageDailyParamMappingTests(SimpleTestCase):
+    """回归（2026-06-14）：日用量工具的 start_date/end_date 必须映射到 API 端点
+    /api/usage/quantity/ 实际过滤字段 start_time/end_time，否则日期过滤静默失效、
+    任何区间都只返回该设备最早 N 条（误导模型 punt 到"联系运维"）。"""
+
+    def test_start_date_maps_to_start_time(self):
+        from api.langgraph_chat import fa_tools  # noqa: F401 触发 sys.path 注入 skill scripts
+        try:
+            import tier1_readonly
+        except Exception:  # pragma: no cover
+            self.skipTest("tier1_readonly 不可导入（skill scripts 目录缺失）")
+
+        captured = {}
+
+        class _Cap:
+            def get(self, path, params=None, timeout=5):
+                captured["path"] = path
+                captured["params"] = dict(params or {})
+                return {"success": True, "data": []}
+
+        orig = tier1_readonly._client
+        tier1_readonly._client = lambda: _Cap()
+        try:
+            tier1_readonly.freeark_get_usage_daily({
+                "specific_part": "3-1-7-702",
+                "start_date": "2026-06-08", "end_date": "2026-06-14"})
+        finally:
+            tier1_readonly._client = orig
+
+        p = captured["params"]
+        self.assertEqual(p.get("start_time"), "2026-06-08")  # 映射到 API 真实字段
+        self.assertEqual(p.get("end_time"), "2026-06-14")
+        self.assertNotIn("start_date", p)   # 旧错误参数名不应再发给 API
+        self.assertNotIn("end_date", p)
+        self.assertEqual(p.get("specific_part"), "3-1-7-702")
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+class DateHintInjectionTests(SimpleTestCase):
+    """回归（2026-06-14）：专家上下文须注入当前日期，否则相对时间查询会臆造日期。"""
+
+    def test_date_hint_contains_today_and_guidance(self):
+        import datetime
+        from api.langgraph_chat.orchestrator import _date_hint
+        h = _date_hint()
+        self.assertIn(datetime.date.today().strftime("%Y-%m-%d"), h)  # 含今天日期
+        self.assertIn("start_date", h)   # 引导模型据此推算日期参数后再调工具
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
 class LangGraphAdapterTests(SimpleTestCase):

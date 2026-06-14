@@ -37,6 +37,7 @@ api.langgraph_chat.orchestrator —— 编排图：supervisor 路由 + 专家并
 from __future__ import annotations
 
 import asyncio
+import datetime
 import operator
 import re
 from typing import Annotated, List, Tuple, TypedDict
@@ -92,6 +93,19 @@ def _preview_write(tool: str, args: dict) -> str:
     if tool == "trigger_refresh":
         return f"将触发设备 {args.get('specific_part', '?')} 的按需数据采集刷新"
     return f"{tool}({args})"
+
+
+_WEEKDAY_CN = "一二三四五六日"
+
+
+def _date_hint() -> str:
+    """每请求注入当前系统日期（修复 2026-06-14）：专家模型本身不知道"今天"，对"近 N 天/
+    本周/上月/今天"等相对时间会臆造日期（实测把"过去七天"猜成一年前）。在专家 system
+    提示尾部附上当前日期，令其据此推算 start_date/end_date 等参数后再调工具。"""
+    today = datetime.date.today()
+    return (f"\n\n[当前系统日期：{today:%Y-%m-%d}（星期{_WEEKDAY_CN[today.weekday()]}）。"
+            f"涉及「近N天/本周/上月/今天」等相对时间时，请据此推算具体的 start_date/end_date "
+            f"等日期参数后再调用工具，不要臆造日期。]")
 
 
 def _make_llm(latency: float | None = None):
@@ -173,7 +187,7 @@ class Orchestrator:
         llm = self.llm.bind_tools(tools) if tools else self.llm
 
         msgs: List[BaseMessage] = [
-            SystemMessage(content=EXPERT_PROMPTS.get(name, "")),
+            SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
             HumanMessage(content=query),
         ]
         ai = await llm.ainvoke(msgs)
