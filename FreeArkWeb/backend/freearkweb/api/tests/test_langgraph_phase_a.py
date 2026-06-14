@@ -200,6 +200,44 @@ class RouterClassifierTests(SimpleTestCase):
         out = async_to_sync(classify_experts)(None, "查一下用电量")
         self.assertEqual(out, ["energy-expert"])
 
+    # ── 护栏：数据查询误漏到无工具 sanheng 时按关键词改派（2026-06-14 生产问题）──
+    def test_guard_overrides_sanheng_only_on_data_query(self):
+        from api.langgraph_chat.router import classify_experts
+        # LLM 误判数据查询为纯知识 → 护栏据当前问题关键词改派巡检
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["sanheng-knowledge"]'), "当前系统有多少故障，影响多少户")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_guard_keeps_sanheng_for_pure_knowledge(self):
+        from api.langgraph_chat.router import classify_experts
+        # 纯原理问题无数据关键词 → 护栏不触发，保留 sanheng（不过度改派）
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["sanheng-knowledge"]'), "三恒系统恒温恒湿恒氧的工作原理是什么")
+        self.assertEqual(out, ["sanheng-knowledge"])
+
+    def test_guard_ignores_data_keywords_in_history_prefix(self):
+        from api.langgraph_chat.router import classify_experts
+        # 当前问题是纯知识；历史前缀里有"能耗/用电量"等数据词 → 护栏只看当前问题，不改派
+        text = ("[历史记忆开始]\n用户: 看一下能耗看板和用电量\n助手: 今日能耗 8647\n"
+                "[历史记忆结束]\n[__freeark_user__:u] 那三恒的恒氧原理是什么")
+        out = async_to_sync(classify_experts)(_StubLLM('["sanheng-knowledge"]'), text)
+        self.assertEqual(out, ["sanheng-knowledge"])
+
+    def test_guard_overrides_with_history_when_current_is_data(self):
+        from api.langgraph_chat.router import classify_experts
+        # 当前问题是数据查询（带 __freeark_user__ 标签 + 历史）→ 护栏剥历史后命中巡检并改派
+        text = ("[历史记忆开始]\n用户: 三恒原理\n助手: ...\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 现在有多少设备故障")
+        out = async_to_sync(classify_experts)(_StubLLM('["sanheng-knowledge"]'), text)
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_guard_no_fire_when_data_expert_already_present(self):
+        from api.langgraph_chat.router import classify_experts
+        # LLM 已含数据专家（非 sanheng-only）→ 护栏不动，保留复合
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["sanheng-knowledge","inspection-expert"]'), "有多少故障")
+        self.assertEqual(set(out), {"sanheng-knowledge", "inspection-expert"})
+
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 class ChatBackendFactoryTests(SimpleTestCase):
