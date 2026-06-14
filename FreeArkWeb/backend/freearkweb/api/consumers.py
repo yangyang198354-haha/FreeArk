@@ -278,6 +278,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'actions': payload.get('actions', []),
                 }))
                 return ('confirm', accumulated)
+            elif kind == 'status':
+                # 静默期进度提示（分类/查询/生成阶段），不计入 accumulated、不落库
+                await self.send(json.dumps({'type': 'status_update', 'message': text}))
             # else: 未知 kind，静默忽略（前向兼容）
         return ('done', accumulated)
 

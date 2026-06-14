@@ -533,11 +533,14 @@ class LangGraphAdapterTests(SimpleTestCase):
         chunks = async_to_sync(_collect)()
         self.assertTrue(chunks, "适配器未产出任何 chunk")
         for kind, text in chunks:
-            self.assertIn(kind, ("reasoning", "content"))
+            # status：静默期进度提示（2026-06-14 新增 kind，consumers 转 status_update）
+            self.assertIn(kind, ("reasoning", "content", "status"))
             self.assertIsInstance(text, str)
         # 至少有一个 content 块，且拼起来非空
         content = "".join(t for k, t in chunks if k == "content")
         self.assertTrue(content)
+        # 应至少发一个 status 进度事件（消灭静默期无反馈）
+        self.assertTrue(any(k == "status" for k, _ in chunks))
 
     def test_failure_raises_openclaw_unavailable(self):
         """编排构造/运行失败统一抛 OpenClawUnavailableError（consumers 降级通道）。"""
