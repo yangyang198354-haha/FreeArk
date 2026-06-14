@@ -42,14 +42,32 @@ ROUTE_KEYWORDS = {
 }
 
 
+# 数据域专家（持有查询/写工具）；sanheng-knowledge 无工具、纯知识问答。
+DATA_EXPERTS = ("energy-expert", "inspection-expert")
+
+# 从含历史前缀 + [__freeark_user__:..] 标签的整块里抽「当前问题」（最后一个标签之后）。
+# 护栏关键词只匹配当前问题，避免历史里的数据词误触发、把正当的 sanheng 路由改掉。
+_CURRENT_QUERY_RE = re.compile(r"\[__freeark_user__:[^\]]*\]\s*(.*)\Z", re.DOTALL)
+
+
+def _current_query(text: str) -> str:
+    """剥掉历史记忆前缀，取最后一个 __freeark_user__ 标签之后的当前问题；无标签则原样。"""
+    m = _CURRENT_QUERY_RE.search(text or "")
+    return (m.group(1) if m else (text or "")).strip()
+
+
+def _keyword_hits(text: str) -> List[str]:
+    """关键词命中的专家（真实命中、去重保序、不含兜底）。"""
+    low = (text or "").lower()
+    return [name for name, kws in ROUTE_KEYWORDS.items()
+            if any(k in low for k in kws)]
+
+
 def route_experts(text: str) -> List[str]:
     """关键词路由：返回命中的专家列表（去重保序），空则兜底单专家。
 
     阶段 D 后此函数退居为 LLM 分类器的兜底；仍是纯函数、离线可测。"""
-    low = (text or "").lower()
-    chosen = [name for name, kws in ROUTE_KEYWORDS.items()
-              if any(k in low for k in kws)]
-    return chosen or [DEFAULT_EXPERT]
+    return _keyword_hits(text) or [DEFAULT_EXPERT]
 
 
 # ── LLM 分类器（阶段 D）──────────────────────────────────────────────────────
@@ -112,12 +130,29 @@ async def classify_experts_llm(llm, text: str) -> Optional[List[str]]:
         return None
 
 
+def _guard_against_toolless_misroute(names: List[str], text: str) -> List[str]:
+    """护栏（2026-06-14）：LLM **仅**选了无工具的 sanheng-knowledge，但「当前问题」关键词
+    命中数据域（能耗/巡检）→ 几乎必是误路由：数据查询会卡死在无工具知识专家、只能拒答
+    （生产实例：用户问"当前有多少故障、影响多少户"却被答"我是三恒知识专家"）。
+    改派关键词命中的数据专家。仅针对 sanheng-ONLY 这一危险情形，爆炸半径最小。
+
+    关键词只匹配当前问题（剥历史前缀），避免历史里的数据词污染正当的 sanheng 路由。"""
+    if names == ["sanheng-knowledge"]:
+        data_hits = [e for e in _keyword_hits(_current_query(text)) if e in DATA_EXPERTS]
+        if data_hits:
+            logger.info("router 护栏：LLM 仅选 sanheng-knowledge（无工具）但当前问题命中数据域 "
+                        "%s，判为误路由并改派之", data_hits)
+            return data_hits
+    return names
+
+
 async def classify_experts(llm, text: str) -> List[str]:
     """阶段 D 路由入口：LLM 分类器 → 关键词兜底 → DEFAULT_EXPERT。
+    LLM 命中后经 _guard_against_toolless_misroute 护栏（防数据查询漏到无工具 sanheng）。
 
     llm 为 None 时直接走关键词路由（供不想付 LLM 调用的场景）。"""
     if llm is not None:
         names = await classify_experts_llm(llm, text)
         if names:
-            return names
+            return _guard_against_toolless_misroute(names, text)
     return route_experts(text)  # 关键词路由自带 DEFAULT_EXPERT 兜底
