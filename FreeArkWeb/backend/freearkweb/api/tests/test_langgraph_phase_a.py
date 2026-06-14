@@ -165,9 +165,9 @@ class RouterClassifierTests(SimpleTestCase):
     # ── classify_experts 三级兜底 ────────────────────────────────
     def test_classify_llm_hit_wins(self):
         from api.langgraph_chat.router import classify_experts
-        # LLM 明确命中 inspection，即便文本含能耗关键词也以 LLM 为准
+        # LLM 命中 inspection，文本无矛盾的数据关键词 → 以 LLM 为准（护栏不介入）
         out = async_to_sync(classify_experts)(
-            _StubLLM('["inspection-expert"]'), "看一下能耗看板")
+            _StubLLM('["inspection-expert"]'), "看一下设备运行状况")
         self.assertEqual(out, ["inspection-expert"])
 
     def test_classify_llm_composite(self):
@@ -258,6 +258,40 @@ class RouterClassifierTests(SimpleTestCase):
         out = async_to_sync(classify_experts)(
             _StubLLM('["sanheng-knowledge"]'), "三恒系统是怎么控制温度的原理")
         self.assertEqual(out, ["sanheng-knowledge"])
+
+    # ── 护栏情形2：数据专家串门（能耗查询误落 inspection）+ 路由剥历史（2026-06-14）──
+    def test_guard_overrides_wrong_data_expert_on_energy_query(self):
+        from api.langgraph_chat.router import classify_experts
+        # 能耗查询被误路由到 inspection（无 get_usage_daily）→ 护栏据"能耗"改派 energy
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["inspection-expert"]'),
+            "3栋1单元702号 过去七天的能耗数据具体是多少，列出一个表格看一下")
+        self.assertEqual(out, ["energy-expert"])
+
+    def test_guard_keeps_llm_when_keyword_agrees(self):
+        from api.langgraph_chat.router import classify_experts
+        # 关键词与所选专家一致（故障→inspection）→ 护栏不动
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["inspection-expert"]'), "有多少设备故障")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_guard_keeps_llm_when_no_data_keyword(self):
+        from api.langgraph_chat.router import classify_experts
+        # 当前问题无数据关键词 → 护栏不介入，以 LLM 为准
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["inspection-expert"]'), "看一下设备运行状况")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_route_ignores_history_uses_current_query(self):
+        from api.langgraph_chat.router import classify_experts
+        # 路由只看当前问题：故障-heavy 历史 + 当前能耗查询 → 仍 energy（不被历史带偏）。
+        # 用 None llm 走关键词路由直接验证剥历史：整块含"故障/离线"(inspection)，
+        # 但 _current_query 只取"用电量"(energy)。
+        text = ("[历史记忆开始]\n用户: 有多少故障\n助手: 共70个设备故障\n"
+                "用户: PLC离线情况\n助手: 88台离线\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 查一下3-1-7-702的用电量")
+        out = async_to_sync(classify_experts)(None, text)
+        self.assertEqual(out, ["energy-expert"])
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
