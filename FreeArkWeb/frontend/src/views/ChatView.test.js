@@ -258,8 +258,10 @@ describe('ChatView 集成测试 — 消息渲染路径', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.bubble-content--rendered').exists()).toBe(false)
 
-    // 模拟 stream_end：将 streaming 置为 false
-    msg.streaming = false
+    // 模拟 stream_end：必须经响应式数组元素改 streaming（直接改原始对象引用
+    // 绕过 Vue3 Proxy 的 set 拦截、不触发重渲染——TC-INT-004 早前假失败的根因）。
+    const arr = wrapper.vm.messages
+    arr[arr.length - 1].streaming = false
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.bubble-content--rendered').exists()).toBe(true)
     expect(wrapper.find('.bubble-chunk').exists()).toBe(false)
