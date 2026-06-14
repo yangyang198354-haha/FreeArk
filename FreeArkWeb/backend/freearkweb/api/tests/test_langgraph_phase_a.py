@@ -298,6 +298,76 @@ class FaDirectRoutingTests(SimpleTestCase):
         self.assertEqual(_resolve_mode(), "direct")
 
 
+class FaDirectConnectionHealthTests(SimpleTestCase):
+    """回归（2026-06-14 根因）：DirectClient 在 langchain 工具线程池里跑，线程本地 DB
+    连接活在请求生命周期外、不被 close_old_connections 回收 → 闲置后腐烂复用即
+    OperationalError(2013) → 生产"服务器连接异常"。修复=get() 开头 close_old_connections
+    让 CONN_MAX_AGE 对工具线程生效 + OperationalError 关连接重试一次。全离线、不连 DB。"""
+
+    def test_get_calls_close_old_connections_before_healthy_view(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch, MagicMock
+        from api.langgraph_chat.fa_direct import DirectClient
+
+        func = MagicMock(return_value=SimpleNamespace(status_code=200, data={"ok": True}))
+        coc = MagicMock()
+        with patch("api.langgraph_chat.fa_direct.close_old_connections", coc), \
+                patch("django.urls.resolve",
+                      return_value=SimpleNamespace(func=func, args=(), kwargs={})), \
+                patch("rest_framework.test.force_authenticate", lambda *a, **k: None), \
+                patch("api.langgraph_chat.fa_direct._agent_user", return_value=object()):
+            r = DirectClient().get("/api/dashboard/summary/")
+
+        self.assertTrue(r["success"])                 # 健康连接路径成功
+        self.assertEqual(r["data"], {"ok": True})
+        self.assertEqual(func.call_count, 1)          # 无重试
+        self.assertEqual(coc.call_count, 1)           # 仅开头那次连接健康兜底
+
+    def test_get_retries_once_on_operational_error_then_succeeds(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch, MagicMock
+        from django.db import OperationalError
+        from api.langgraph_chat.fa_direct import DirectClient
+
+        func = MagicMock(side_effect=[
+            OperationalError(2013, "Lost connection to server during query"),
+            SimpleNamespace(status_code=200, data={"recovered": True}),
+        ])
+        coc = MagicMock()
+        with patch("api.langgraph_chat.fa_direct.close_old_connections", coc), \
+                patch("django.urls.resolve",
+                      return_value=SimpleNamespace(func=func, args=(), kwargs={})), \
+                patch("rest_framework.test.force_authenticate", lambda *a, **k: None), \
+                patch("api.langgraph_chat.fa_direct._agent_user", return_value=object()):
+            r = DirectClient().get("/api/dashboard/summary/")
+
+        self.assertTrue(r["success"])                 # 重试后成功
+        self.assertEqual(r["data"], {"recovered": True})
+        self.assertEqual(func.call_count, 2)          # 失败一次 + 重试一次
+        self.assertEqual(coc.call_count, 2)           # 开头一次 + 重试前一次
+
+    def test_get_retry_exhausted_returns_error_envelope(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch, MagicMock
+        from django.db import OperationalError
+        from api.langgraph_chat.fa_direct import DirectClient
+
+        func = MagicMock(side_effect=OperationalError(2013, "Lost connection"))
+        coc = MagicMock()
+        with patch("api.langgraph_chat.fa_direct.close_old_connections", coc), \
+                patch("django.urls.resolve",
+                      return_value=SimpleNamespace(func=func, args=(), kwargs={})), \
+                patch("rest_framework.test.force_authenticate", lambda *a, **k: None), \
+                patch("api.langgraph_chat.fa_direct._agent_user", return_value=object()):
+            r = DirectClient().get("/api/dashboard/summary/")
+
+        self.assertFalse(r["success"])                # 重试仍失败 → 统一 error 信封
+        self.assertEqual(r["http_status"], 500)
+        self.assertIn("view error", r["error"])
+        self.assertEqual(func.call_count, 2)          # 原调用 + 一次重试
+        self.assertEqual(coc.call_count, 2)
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
 class LangGraphAdapterTests(SimpleTestCase):
