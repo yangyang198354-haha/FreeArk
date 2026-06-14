@@ -135,29 +135,45 @@ async def classify_experts_llm(llm, text: str) -> Optional[List[str]]:
         return None
 
 
-def _guard_against_toolless_misroute(names: List[str], text: str) -> List[str]:
-    """护栏（2026-06-14）：LLM **仅**选了无工具的 sanheng-knowledge，但「当前问题」关键词
-    命中数据域（能耗/巡检）→ 几乎必是误路由：数据查询会卡死在无工具知识专家、只能拒答
-    （生产实例：用户问"当前有多少故障、影响多少户"却被答"我是三恒知识专家"）。
-    改派关键词命中的数据专家。仅针对 sanheng-ONLY 这一危险情形，爆炸半径最小。
+def _guard_against_misroute(names: List[str], query: str) -> List[str]:
+    """护栏（2026-06-14）：纠正两类高置信误路由（query 为已剥历史的当前问题）。
 
-    关键词只匹配当前问题（剥历史前缀），避免历史里的数据词污染正当的 sanheng 路由。"""
+      情形1：LLM **仅**选了无工具的 sanheng-knowledge，但当前问题命中数据域关键词
+             → 改派关键词命中的数据专家（数据查询落到无工具知识专家只能拒答）。
+             生产实例：问"当前有多少故障"却被答"我是三恒知识专家"。
+      情形2：LLM **仅**选了某单一数据专家 X，但当前问题关键词**只**指向另一数据专家(非 X)
+             → 改派之。生产实例：问"过去七天能耗数据"被路由到 inspection-expert，
+             而它无 get_usage_daily，只能答"我手头工具只能查 PLC/故障"。
+
+    仅在「单一路由 + 关键词明确指向数据域」时介入；复合路由、关键词为空、或关键词含
+    所选专家时一律保留 LLM 结果（LLM 仍是判断主力，护栏只兜高置信矛盾），爆炸半径最小。"""
+    data_hits = [e for e in _keyword_hits(query) if e in DATA_EXPERTS]
+    if not data_hits:
+        return names
+    # 情形1：仅选无工具的 sanheng，但当前问题是数据查询
     if names == ["sanheng-knowledge"]:
-        data_hits = [e for e in _keyword_hits(_current_query(text)) if e in DATA_EXPERTS]
-        if data_hits:
-            logger.info("router 护栏：LLM 仅选 sanheng-knowledge（无工具）但当前问题命中数据域 "
-                        "%s，判为误路由并改派之", data_hits)
-            return data_hits
+        logger.info("router 护栏1：LLM 仅选 sanheng-knowledge（无工具）但当前问题命中数据域 "
+                    "%s，改派", data_hits)
+        return data_hits
+    # 情形2：仅选某数据专家，但关键词只指向另一数据专家（落到无该工具的专家会拒答）
+    if len(names) == 1 and names[0] in DATA_EXPERTS and names[0] not in data_hits:
+        logger.info("router 护栏2：LLM 仅选 %s 但当前问题关键词只指向 %s，改派",
+                    names[0], data_hits)
+        return data_hits
     return names
 
 
 async def classify_experts(llm, text: str) -> List[str]:
-    """阶段 D 路由入口：LLM 分类器 → 关键词兜底 → DEFAULT_EXPERT。
-    LLM 命中后经 _guard_against_toolless_misroute 护栏（防数据查询漏到无工具 sanheng）。
+    """阶段 D 路由入口：路由决策只看「当前问题」（剥历史前缀，防历史污染路由）→
+    LLM 分类器 → 护栏纠误（防数据查询落到无该工具的专家）→ 关键词兜底 → DEFAULT_EXPERT。
+
+    注：历史仅供专家**作答**时参考（consumers 注入），不参与**路由**决策——路由是对当前
+    意图分类，掺入历史会被前文话题带偏（生产实例：故障-heavy 历史把能耗查询带偏到 inspection）。
 
     llm 为 None 时直接走关键词路由（供不想付 LLM 调用的场景）。"""
+    query = _current_query(text)  # 路由只用当前问题，不掺历史
     if llm is not None:
-        names = await classify_experts_llm(llm, text)
+        names = await classify_experts_llm(llm, query)
         if names:
-            return _guard_against_toolless_misroute(names, text)
-    return route_experts(text)  # 关键词路由自带 DEFAULT_EXPERT 兜底
+            return _guard_against_misroute(names, query)
+    return route_experts(query)  # 关键词路由自带 DEFAULT_EXPERT 兜底
