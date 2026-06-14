@@ -64,6 +64,14 @@
                 class="bubble-chunk"
               >{{ chunk }}</span>
             </template>
+            <!-- MOD-FE-01 IFC-002: stream_end 后助手消息 → Markdown 渲染（ADR-001 方向A，ADR-003 两阶段）-->
+            <!-- confirm 卡片激活时不渲染，保持纯文本（IFC-002 条件4）-->
+            <div
+              v-else-if="isRenderable(msg)"
+              class="bubble-content bubble-content--rendered"
+              v-html="renderMarkdown(msg.content)"
+            ></div>
+            <!-- 降级：用户消息 / 流式中 / confirm 激活中的助手消息 → 纯文本插值（REQ-NFUNC-006）-->
             <span v-else class="bubble-content">{{ msg.content }}</span>
             <!-- 「正在思考...」：仅在无 reasoning 活动且 content 为空时显示（降级兼容） -->
             <span
@@ -131,8 +139,56 @@
 </template>
 
 <script>
+/**
+ * @module MOD-FE-01 (MarkdownRenderer)
+ * @implements IFC-001 (renderMarkdown), IFC-002 (isRenderable)
+ * @depends marked (npm), dompurify (npm)
+ * @author sub_agent_software_developer
+ * @see project_workspace/FreeArk_ChatFormat/architecture/module_design.md
+ */
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { User, Warning, Position } from '@element-plus/icons-vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+
+// MOD-FE-01: 配置 marked — 启用 GFM 表格（REQ-FUNC-002）和 breaks（REQ-FUNC-003）
+// ADR-002 决策：marked + DOMPurify 组合
+marked.use({ gfm: true, breaks: true })
+
+// MOD-FE-01 IFC-001: renderMarkdown(rawText: string) → string（安全 HTML，已 XSS 消毒）
+// 定义在模块级别以支持独立单元测试（REQ-NFUNC-004 可维护性）
+// ADR-003 两阶段渲染：仅在 stream_end 后（isRenderable 为 true 时）才被模板调用
+// ADR-004 DOMPurify 客户端消毒：LLM 输出视为不可信输入（REQ-NFUNC-003）
+const DOMPURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'hr', 'strong', 'em', 'del',
+    'ul', 'ol', 'li',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'code', 'pre', 'blockquote',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'a', 'span', 'div',
+  ],
+  ALLOWED_ATTR: ['href', 'title', 'class', 'target', 'rel'],
+  FORCE_BODY: false,
+}
+
+export function renderMarkdown(rawText) {
+  if (!rawText) return ''
+  const htmlRaw = marked.parse(rawText)
+  return DOMPurify.sanitize(htmlRaw, DOMPURIFY_CONFIG)
+}
+
+// MOD-FE-01 IFC-002: isRenderable(msg: MessageObject) → boolean
+// 严格4条件 AND：仅对流结束后的助手消息（无 confirm 卡片）启用 Markdown 渲染
+// 保证流式期间（msg.streaming===true）始终走纯文本路径（REQ-NFUNC-002 满足）
+export function isRenderable(msg) {
+  return (
+    msg.role === 'assistant' &&
+    msg.streaming === false &&
+    msg.content.length > 0 &&
+    msg.confirm === null
+  )
+}
 
 // WebSocket 连接地址构建
 // 根据当前页面协议自动选择 ws:// 或 wss://
@@ -434,6 +490,8 @@ export default {
       handleShiftEnter,
       handleManualReconnect,
       handleConfirm,
+      renderMarkdown,
+      isRenderable,
     }
   }
 }
@@ -806,5 +864,116 @@ details[open] .reasoning-summary::before {
   color: var(--color-text-secondary, #64748B);
   text-align: right;
   padding-right: var(--space-1, 4px);
+}
+
+/* ---- MOD-FE-01：Markdown 渲染区域样式（ADR-005：:deep() 穿透 v-html 注入的 DOM）---- */
+/* 容器：覆盖父级 .chat-bubble 的 white-space: pre-wrap，避免 HTML 标签换行符显示为空白 */
+.bubble-content--rendered {
+  white-space: normal;
+}
+/* 段落（REQ-FUNC-003 标点段落规整）*/
+.bubble-content--rendered :deep(p) {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+.bubble-content--rendered :deep(p:first-child) {
+  margin-top: 0;
+}
+.bubble-content--rendered :deep(p:last-child) {
+  margin-bottom: 0;
+}
+/* 粗体强调（REQ-FUNC-001）*/
+.bubble-content--rendered :deep(strong) {
+  font-weight: 700;
+}
+/* 斜体 */
+.bubble-content--rendered :deep(em) {
+  font-style: italic;
+}
+/* 删除线 */
+.bubble-content--rendered :deep(del) {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+/* 表格对齐（REQ-FUNC-002）*/
+.bubble-content--rendered :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  margin: 8px 0;
+  display: block;
+  overflow-x: auto;
+}
+.bubble-content--rendered :deep(th),
+.bubble-content--rendered :deep(td) {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+.bubble-content--rendered :deep(th) {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+/* 列表（REQ-FUNC-004 缩进层级）*/
+.bubble-content--rendered :deep(ul),
+.bubble-content--rendered :deep(ol) {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.bubble-content--rendered :deep(li) {
+  margin: 2px 0;
+  line-height: 1.5;
+}
+/* 行内代码 */
+.bubble-content--rendered :deep(code) {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-family: monospace;
+  font-size: 12px;
+}
+/* 代码块 */
+.bubble-content--rendered :deep(pre) {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.bubble-content--rendered :deep(pre code) {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+}
+/* 链接 */
+.bubble-content--rendered :deep(a) {
+  color: var(--el-color-primary, #409EFF);
+  text-decoration: underline;
+}
+/* 引用块 */
+.bubble-content--rendered :deep(blockquote) {
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+  padding-left: 10px;
+  margin: 4px 0;
+  color: var(--color-text-secondary, #94A3B8);
+  font-style: italic;
+}
+/* 标题（h1~h3，LLM 输出通常最多用到 h3）*/
+.bubble-content--rendered :deep(h1),
+.bubble-content--rendered :deep(h2),
+.bubble-content--rendered :deep(h3) {
+  margin: 6px 0 4px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.bubble-content--rendered :deep(h1) { font-size: 1.1em; }
+.bubble-content--rendered :deep(h2) { font-size: 1.05em; }
+.bubble-content--rendered :deep(h3) { font-size: 1.0em; }
+/* 分隔线（LLM 常用 --- 分段；marked 转 <hr>，渲染为干净分隔线而非被删）*/
+.bubble-content--rendered :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 8px 0;
 }
 </style>
