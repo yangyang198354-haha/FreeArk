@@ -238,6 +238,27 @@ class RouterClassifierTests(SimpleTestCase):
             _StubLLM('["sanheng-knowledge","inspection-expert"]'), "有多少故障")
         self.assertEqual(set(out), {"sanheng-knowledge", "inspection-expert"})
 
+    # ── 控制类关键词（2026-06-14）：写/控制请求漏到无工具 sanheng 时改派 energy ──
+    def test_guard_overrides_sanheng_only_on_control_request(self):
+        from api.langgraph_chat.router import classify_experts
+        # 触发/刷新/采集类控制请求被误判纯知识 → 护栏据控制关键词改派 energy（持写工具）
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["sanheng-knowledge"]'), "请触发设备3-1-7-702的数据采集刷新")
+        self.assertEqual(out, ["energy-expert"])
+
+    def test_control_keyword_falls_back_to_energy(self):
+        from api.langgraph_chat.router import classify_experts
+        # LLM 不可用 → 关键词兜底：控制词（设定）命中 energy
+        out = async_to_sync(classify_experts)(_StubLLM("乱码无数组"), "把702的温度设定到24度")
+        self.assertEqual(out, ["energy-expert"])
+
+    def test_guard_excludes_control_concept_from_pure_knowledge(self):
+        from api.langgraph_chat.router import classify_experts
+        # "控制"刻意未收入关键词：纯知识问题（怎么控制温度的原理）不应被护栏误改派
+        out = async_to_sync(classify_experts)(
+            _StubLLM('["sanheng-knowledge"]'), "三恒系统是怎么控制温度的原理")
+        self.assertEqual(out, ["sanheng-knowledge"])
+
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 class ChatBackendFactoryTests(SimpleTestCase):

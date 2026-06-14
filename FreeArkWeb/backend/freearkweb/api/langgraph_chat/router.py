@@ -35,8 +35,13 @@ EXPERT_NAMES = ("energy-expert", "inspection-expert", "sanheng-knowledge")
 DEFAULT_EXPERT = "energy-expert"
 
 # ── 关键词路由（阶段 A 保留：LLM 不可用时的确定性兜底 + 离线单测基准）──────────
+# energy-expert 兼"操控"：除能耗读词外，含 Tier-2 写/控制类动作词（set_device_params /
+# trigger_refresh 归 energy）。控制词（2026-06-14 补）选**动作性强、与知识问题低撞车**者：
+# 收 刷新/采集/下发/触发/设定；**不收** 控制/调节（"三恒怎么控制温度的原理"是知识问题，
+# 收了会让护栏把这类纯知识问题误改派到 energy）。
 ROUTE_KEYWORDS = {
-    "energy-expert": ("能耗", "用电", "用量", "电费", "看板", "节能", "kwh"),
+    "energy-expert": ("能耗", "用电", "用量", "电费", "看板", "节能", "kwh",
+                      "刷新", "采集", "下发", "触发", "设定"),
     "inspection-expert": ("故障", "巡检", "plc", "离线", "在线", "传感器", "报警"),
     "sanheng-knowledge": ("三恒", "恒温", "恒湿", "恒氧", "原理", "为什么"),
 }
