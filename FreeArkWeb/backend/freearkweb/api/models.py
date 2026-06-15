@@ -677,6 +677,21 @@ class PLCWriteRecord(models.Model):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# 自治巡检 Agent（v1.1.0-AIA，方案 B）—— 巡检处置状态机
+# 共享于 FaultEvent / CondensationWarningEvent 两张事件表：
+#   PENDING(待巡检) → IN_PROGRESS(巡检处理中) → DONE(已处置) / SKIPPED(已跳过)
+# freeark-inspection-agent 据此 DB 轮询取用、并在重启时把 IN_PROGRESS 重置为
+# PENDING，保证零漏单/零重单（OD-02 事件接入、OD-03 状态持久化）。
+# ---------------------------------------------------------------------------
+INSPECTION_STATUS_CHOICES = [
+    ('PENDING', '待巡检'),
+    ('IN_PROGRESS', '巡检处理中'),
+    ('DONE', '已处置'),
+    ('SKIPPED', '已跳过'),
+]
+
+
 class FaultEvent(models.Model):
     """故障事件表。
 
@@ -728,6 +743,15 @@ class FaultEvent(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    # v1.1.0-AIA（方案 B）：自治巡检处置状态，由 freeark-inspection-agent 维护；
+    # 现有 fault_consumer 不读写这两个字段，新增对其零影响（migration 0033，非破坏）。
+    inspection_status = models.CharField(
+        max_length=16, choices=INSPECTION_STATUS_CHOICES, default='PENDING',
+        db_index=True, verbose_name='巡检处置状态',
+    )
+    inspection_started_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='巡检开始时间',
+    )
 
     class Meta:
         db_table = 'fault_event'
@@ -796,6 +820,15 @@ class CondensationWarningEvent(models.Model):
     is_active      = models.BooleanField(default=True, verbose_name='是否活跃', db_index=True)
     created_at     = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at     = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    # v1.1.0-AIA（方案 B）：自治巡检处置状态，由 freeark-inspection-agent 维护；
+    # 现有 condensation_consumer 不读写这两个字段，新增对其零影响（migration 0033，非破坏）。
+    inspection_status = models.CharField(
+        max_length=16, choices=INSPECTION_STATUS_CHOICES, default='PENDING',
+        db_index=True, verbose_name='巡检处置状态',
+    )
+    inspection_started_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='巡检开始时间',
+    )
 
     class Meta:
         db_table = 'condensation_warning_event'
@@ -858,3 +891,80 @@ class TokenActivity(models.Model):
 
     def __str__(self):
         return f"TokenActivity(token={self.token_id[:8]}..., last_active={self.last_active_at})"
+
+
+# ---------------------------------------------------------------------------
+# 自治巡检工单（v1.1.0-AIA，方案 B，ARCH §7）
+# ---------------------------------------------------------------------------
+
+
+class WorkOrder(models.Model):
+    """巡检工单表（freeark-inspection-agent 的人工处置出口）。
+
+    创建时机（决策循环 ARCH §5）：
+      - 预警判定"不可自动处置" → 建单待人工；
+      - LLM 生成写提案但被 WriteAuthPolicy 拦截（策略 B 下全部拦截）→ 建单，
+        recommended_action 记录被拦截的写提案；
+      - 决策超时/步数耗尽/委托异常等兜底路径 → 建单，不丢单。
+    本期仅落库 + Django Admin 查看（用户拍板：不做前端 UI、不做通知，见 requirements_spec
+    REQ-FUNC-009/010）。
+
+    防重复建单：同一来源事件在 OPEN/IN_PROGRESS 下只允许一条活跃工单
+    （uniq_active_workorder_per_event 条件唯一约束兜底 + 代码层先查后建）。
+    """
+    SOURCE_EVENT_TYPES = [
+        ('fault_event', '故障事件'),
+        ('condensation_warning_event', '结露预警事件'),
+    ]
+    STATUS_CHOICES = [
+        ('OPEN', '待处理'),
+        ('IN_PROGRESS', '处理中'),
+        ('RESOLVED', '已解决'),
+        ('CANCELLED', '已取消'),
+    ]
+
+    ticket_id = models.CharField(
+        max_length=32, unique=True, verbose_name='工单编号',
+        help_text='人可读编号，格式 WO-YYYYMMDD-NNNNNN',
+    )
+    severity = models.CharField(max_length=16, verbose_name='严重级别')
+    source_event_type = models.CharField(
+        max_length=32, choices=SOURCE_EVENT_TYPES, verbose_name='来源事件类型',
+    )
+    source_event_id = models.BigIntegerField(db_index=True, verbose_name='来源事件ID')
+    affected_device = models.CharField(
+        max_length=100, verbose_name='受影响设备',
+        help_text='格式 "{device_sn} / {specific_part}"',
+    )
+    symptom = models.TextField(verbose_name='症状', help_text='来自事件 fault_message / warning_message')
+    diagnosis = models.TextField(blank=True, verbose_name='诊断', help_text='来自 delegate_knowledge 分析摘要')
+    recommended_action = models.TextField(
+        blank=True, verbose_name='建议处置', help_text='来自 LLM 结论或被拦截的写提案',
+    )
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default='OPEN',
+        db_index=True, verbose_name='工单状态',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
+    resolved_by = models.CharField(max_length=100, blank=True, verbose_name='解决人')
+
+    class Meta:
+        db_table = 'inspection_work_order'
+        verbose_name = '巡检工单'
+        verbose_name_plural = '巡检工单'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source_event_type', 'source_event_id'],
+                condition=models.Q(status__in=['OPEN', 'IN_PROGRESS']),
+                name='uniq_active_workorder_per_event',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['status', 'created_at'], name='wo_status_time_idx'),
+            models.Index(fields=['source_event_type', 'source_event_id'], name='wo_source_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.ticket_id} [{self.status}] {self.affected_device}"
