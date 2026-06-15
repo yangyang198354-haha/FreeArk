@@ -1,0 +1,38 @@
+# freeark-inspection-agent.service — 自治巡检 Agent（v1.1.0-AIA，方案 B，ARCH §3.2）
+#
+# 路径/用户/venv 与生产现役 consumer 服务一致（见 freeark-fault-consumer.service /
+# freeark-condensation-consumer.service），非架构草案里的 /home/pi/.venv。
+# .env 不经 systemd EnvironmentFile 注入，而由 settings.py 的 load_dotenv() 从
+# WorkingDirectory 下的 .env 读入 os.environ（AUTO_WRITE_POLICY / INSPECTION_* /
+# DEEPSEEK_API_KEY 等，绝不入 git）。
+#
+# 部署步骤（在生产服务器 192.168.31.51 执行；先 git pull，禁止 pscp 逐文件上传）：
+#   cd /home/yangyang/Freeark/FreeArk && git pull
+#   cd FreeArkWeb/backend/freearkweb && /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py migrate
+#   sudo cp deployment/systemd/freeark-inspection-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now freeark-inspection-agent
+#
+# 验证：
+#   systemctl status freeark-inspection-agent
+#   journalctl -u freeark-inspection-agent -n 50 -f
+
+[Unit]
+Description=FreeArk Autonomous Inspection Agent (v1.1.0-AIA, Plan B)
+After=network.target freeark-fault-consumer.service freeark-condensation-consumer.service
+Wants=network-online.target freeark-fault-consumer.service freeark-condensation-consumer.service
+
+[Service]
+Type=simple
+User=yangyang
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python manage.py run_inspection_agent
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-inspection-agent
+Environment=DJANGO_SETTINGS_MODULE=freearkweb.settings
+
+[Install]
+WantedBy=multi-user.target
