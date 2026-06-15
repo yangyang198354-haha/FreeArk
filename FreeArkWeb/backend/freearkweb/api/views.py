@@ -1140,16 +1140,34 @@ def dashboard_trend(request):
 
 # 受监控的 systemctl 服务列表（白名单，防止任意命令注入）
 # 服务名与 systemctl/ 目录下的 .service 文件名一一对应
+# 受监控 / 受管理的 systemd 单元白名单（v1.2.0：全量纳管 freeark-*，以 Pi
+# `systemctl list-unit-files 'freeark-*'` 实测为准；不含非 freeark 的 openclaw-gateway
+# 用户服务与 redis-server apt 服务）。仅此白名单内的单元可被服务管理 / 看板查询与操作，
+# 兼作命令注入防线（subprocess 以 argv 形式调用，绝不经 shell）。
 MONITORED_SERVICES = [
+    # ── 常驻守护服务（长期 active running）──────────────────────────────
     'freeark-backend',
     'freeark-mqtt-consumer',
+    'freeark-fault-consumer',            # 故障事件写入（事件源）
+    'freeark-condensation-consumer',     # 结露预警写入（事件源）
     'freeark-screen-heartbeat',
     'freeark-daily-usage',
     'freeark-monthly-usage',
-    'freeark-plc-cleanup',
-    'freeark-dph-cleanup',
     'freeark-plc-connection-monitor',
     'freeark-task-scheduler',
+    'freeark-inspection-agent',          # v1.1.0 自治巡检 Agent（方案 B，当前可 disabled）
+    # ── 定时 / 看护类 .service（多为 static/disabled，由各自 .timer 触发）──
+    'freeark-dph-cleanup',
+    'freeark-plc-cleanup',
+    'freeark-fault-cleanup',
+    'freeark-condensation-cleanup',
+    'freeark-netwatch',
+    'freeark-wifi-watchdog',
+    # ── 定时器单元 .timer（is-active=active 表示已排程、等待触发，属正常）──
+    'freeark-fault-cleanup.timer',
+    'freeark-condensation-cleanup.timer',
+    'freeark-netwatch.timer',
+    'freeark-wifi-watchdog.timer',
 ]
 
 # 白名单 Set（O(1) 查询），用于服务管理接口安全校验
@@ -1164,6 +1182,25 @@ def _get_service_status(service_name):
     try:
         result = subprocess.run(
             ['systemctl', 'is-active', service_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() or 'unknown'
+    except Exception:
+        return 'unknown'
+
+
+def _get_service_enabled(service_name):
+    """调用 systemctl is-enabled 获取自启动状态（enabled/disabled/static/…）。
+
+    注意：systemctl is-enabled 对 disabled/static 会以非零退出码返回，但状态字符串仍写到
+    stdout，故只取 stdout、不看 returncode。失败/超时返回 'unknown'。
+    语义：enabled=开机自启；disabled=主动停用；static=由 .timer 触发的 oneshot（无独立自启开关）。
+    """
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-enabled', service_name],
             capture_output=True,
             text=True,
             timeout=5,
@@ -1232,8 +1269,10 @@ def dashboard_services(request):
     """
     看板 API 5：系统服务状态
     GET /api/dashboard/services/
-    通过 subprocess 调用 systemctl is-active 查询各服务状态。
-    返回 services 数组，每项含 name, status, is_active
+    通过 subprocess 调用 systemctl is-active + is-enabled 查询各服务状态。
+    返回 services 数组，每项含 name, status, is_active, enabled
+    （enabled 供前端做四态语义显示：运行中 / 待机 / 已停用 / 异常，区分定时服务正常待机
+      与主动停用，避免把 inactive 一律误报为"已停止"）。
     """
     services = []
     for name in MONITORED_SERVICES:
@@ -1242,6 +1281,7 @@ def dashboard_services(request):
             'name': name,
             'status': svc_status,
             'is_active': svc_status == 'active',
+            'enabled': _get_service_enabled(name),
         })
 
     return Response({
@@ -1280,25 +1320,12 @@ def service_management_list(request):
     services = []
     for name in MONITORED_SERVICES:
         active_state = _get_service_status(name)
-
-        # 查询 is-enabled 状态（enabled/disabled/static/…）
-        try:
-            enabled_result = subprocess.run(
-                ['systemctl', 'is-enabled', name],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            enabled_str = enabled_result.stdout.strip()
-        except Exception:
-            enabled_str = 'unknown'
-
         services.append({
             'name': name,
             'active_state': active_state,
             'sub_state': '',          # 简略列表不展开 sub_state，详情接口再查
             'is_active': active_state == 'active',
-            'enabled': enabled_str if enabled_str else 'unknown',
+            'enabled': _get_service_enabled(name),
         })
 
     return Response({'success': True, 'data': services})

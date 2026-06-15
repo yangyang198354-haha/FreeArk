@@ -292,9 +292,9 @@
             :key="svc.name"
             class="status-item"
           >
-            <span :class="['badge', svc.is_active ? 'on' : 'off']" class="status-badge">
+            <span :class="['badge', svcDisplayState(svc).cls]" class="status-badge">
               <span class="bd"></span>
-              {{ svc.is_active ? '运行中' : '已停止' }}
+              {{ svcDisplayState(svc).label }}
             </span>
             <span class="status-label">{{ svc.name }}</span>
           </div>
@@ -534,6 +534,25 @@ export default {
       } finally {
         loading.trend = false
       }
+    }
+
+    // 系统运行状态四态语义（v1.2.0）：区分定时服务"正常待机"与"主动停用"，
+    // 不再把所有 inactive 一律显示为"已停止"。复用全局 badge 配色类。
+    //   运行中(绿 on)：active（含 .timer 的 active=waiting，已排程）
+    //   异常(红 off) ：failed / 调用异常 unknown
+    //   待机(蓝 cool)：inactive 且 enabled∈{enabled,static}（定时/timer 触发，正常）
+    //   已停用(灰 unknown)：inactive 且 disabled（管理员主动停用，如 inspection-agent）
+    function svcDisplayState(svc) {
+      const status = svc.status || (svc.is_active ? 'active' : 'inactive')
+      const enabled = svc.enabled || ''
+      if (status === 'active') return { label: '运行中', cls: 'on' }
+      if (status === 'failed') return { label: '异常', cls: 'off' }
+      if (status === 'unknown') return { label: '未知', cls: 'unknown' }
+      // inactive（或其他非运行态）
+      if (enabled === 'enabled' || enabled === 'static') {
+        return { label: '待机', cls: 'cool' }
+      }
+      return { label: '已停用', cls: 'unknown' }
     }
 
     async function fetchServices() {
@@ -796,6 +815,7 @@ export default {
       plcRate,
       screenRate,
       services,
+      svcDisplayState,
       activities,
       trendData,
       loading,
