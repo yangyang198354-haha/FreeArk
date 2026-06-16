@@ -205,9 +205,17 @@ def log_decision_fallback(source_event_id, source_event_type, specific_part,
     )
 
 
-def log_process_completed(source_event_id, source_event_type, specific_part, outcome="") -> dict:
-    """记录一条事件处置完成（最终态）。"""
+def log_process_completed(source_event_id, source_event_type, specific_part, outcome="",
+                          summary=None) -> dict:
+    """记录一条事件处置完成（最终态）。
+
+    summary（v1.3.1-WO）：结论摘要 dict（工单号/是否清障/写提案/诊断节选等），并入
+    step_detail，使工作日志页 PROCESS_COMPLETED 一行即可看清"如何处理、结果如何"。
+    """
+    detail = {"outcome": outcome}
+    if isinstance(summary, dict):
+        detail.update(summary)
     return _emit(
         PROCESS_COMPLETED, source_event_id=source_event_id, source_event_type=source_event_type,
-        specific_part=specific_part, action_detail={"outcome": outcome}, result="SUCCESS",
+        specific_part=specific_part, action_detail=detail, result="SUCCESS",
     )

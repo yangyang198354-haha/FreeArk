@@ -92,6 +92,7 @@
           </template>
           <el-menu-item index="/chat">和方舟智能体聊天</el-menu-item>
           <el-menu-item index="/agent/inspection-worklog">巡检智能体工作日志</el-menu-item>
+          <el-menu-item index="/agent/work-orders">巡检工单</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="user" v-if="userRole === 'admin'">
