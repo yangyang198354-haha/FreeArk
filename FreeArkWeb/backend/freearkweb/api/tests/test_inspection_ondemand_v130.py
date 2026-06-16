@@ -127,19 +127,44 @@ class TriggerApiTest(TestCase):
 
     def test_trigger_409_when_in_progress(self):
         self.fe.inspection_status = 'IN_PROGRESS'
-        self.fe.save(update_fields=['inspection_status'])
+        self.fe.inspection_started_at = timezone.now()   # 新鲜在巡，非陈旧
+        self.fe.save(update_fields=['inspection_status', 'inspection_started_at'])
         with mock.patch('api.views_inspection.threading.Thread'):
             resp = self.client.post(self._url())
         self.assertEqual(resp.status_code, 409)
 
     def test_trigger_429_when_busy_elsewhere(self):
-        # 另一条事件占用 IN_PROGRESS
-        _cw(inspection_status='IN_PROGRESS')
+        # 另一条事件正在巡检（新鲜 started_at，非陈旧）→ 占用全局并发闸门
+        _cw(inspection_status='IN_PROGRESS', inspection_started_at=timezone.now())
         with mock.patch('api.views_inspection.threading.Thread'):
             resp = self.client.post(self._url())
         self.assertEqual(resp.status_code, 429)
         self.fe.refresh_from_db()
         self.assertEqual(self.fe.inspection_status, 'PENDING')   # 未被认领
+
+    def test_stale_in_progress_reclaimed_then_trigger_succeeds(self):
+        # 另一条事件 IN_PROGRESS 但 started_at 远早于阈值（疑似崩溃/旧Agent遗留）
+        stale = _cw(inspection_status='IN_PROGRESS',
+                    inspection_started_at=timezone.now() - timezone.timedelta(hours=2))
+        with mock.patch('api.views_inspection.threading.Thread'):
+            resp = self.client.post(self._url())
+        self.assertEqual(resp.status_code, 202)          # 陈旧被回收，闸门放行
+        stale.refresh_from_db()
+        self.assertEqual(stale.inspection_status, 'PENDING')   # 陈旧已复位
+        self.assertIsNone(stale.inspection_started_at)
+        self.fe.refresh_from_db()
+        self.assertEqual(self.fe.inspection_status, 'IN_PROGRESS')
+
+    def test_own_stale_in_progress_can_retrigger(self):
+        # 本事件自身卡在陈旧 IN_PROGRESS → 应被回收后重新认领，而非永久 409
+        self.fe.inspection_status = 'IN_PROGRESS'
+        self.fe.inspection_started_at = timezone.now() - timezone.timedelta(hours=2)
+        self.fe.save(update_fields=['inspection_status', 'inspection_started_at'])
+        with mock.patch('api.views_inspection.threading.Thread'):
+            resp = self.client.post(self._url())
+        self.assertEqual(resp.status_code, 202)
+        self.fe.refresh_from_db()
+        self.assertEqual(self.fe.inspection_status, 'IN_PROGRESS')
 
     def test_retrigger_done_allowed(self):
         self.fe.inspection_status = 'DONE'
