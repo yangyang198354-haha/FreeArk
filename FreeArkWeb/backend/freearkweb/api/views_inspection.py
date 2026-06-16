@@ -10,9 +10,12 @@
 权限：IsAuthenticated（REQ-NFR-008）。
 """
 
+import datetime
 import logging
+import os
 import threading
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
@@ -29,6 +32,38 @@ _EVENT_MODELS = {
 }
 # 全局并发上限（同时处于 IN_PROGRESS 的事件数）
 _MAX_CONCURRENT = 1
+# IN_PROGRESS 滞留超过此秒数即视为陈旧（进程崩溃/重启/被停用的旧自治 Agent 遗留），
+# 触发时自动回收复位为 PENDING。须大于单事件决策超时（agent 默认 300s）并留足缓冲，
+# 否则会误杀正在跑的巡检。可经 INSPECTION_STALE_RECLAIM_SECONDS 覆盖。
+_STALE_IN_PROGRESS_SECONDS = 600
+
+
+def _get_stale_seconds():
+    """陈旧回收阈值秒；非法/非正值回退默认 600。"""
+    try:
+        value = int(os.environ.get('INSPECTION_STALE_RECLAIM_SECONDS', ''))
+    except (TypeError, ValueError):
+        return _STALE_IN_PROGRESS_SECONDS
+    return value if value > 0 else _STALE_IN_PROGRESS_SECONDS
+
+
+def _reclaim_stale_in_progress():
+    """回收陈旧 IN_PROGRESS → PENDING，使全局并发闸门自愈。
+
+    判定为陈旧：inspection_started_at 早于阈值，或为空（IN_PROGRESS 必随认领原子写入
+    started_at，为空即状态不一致的孤儿）。防止单条卡死/遗留记录永久堵死按需巡检触发。
+    返回回收条数。
+    """
+    cutoff = timezone.now() - datetime.timedelta(seconds=_get_stale_seconds())
+    stale = Q(inspection_started_at__isnull=True) | Q(inspection_started_at__lt=cutoff)
+    reclaimed = 0
+    for model in _EVENT_MODELS.values():
+        reclaimed += model.objects.filter(inspection_status='IN_PROGRESS').filter(stale).update(
+            inspection_status='PENDING', inspection_started_at=None)
+    if reclaimed:
+        logger.warning("回收陈旧 IN_PROGRESS 巡检 %d 条（疑似进程崩溃/重启/旧自治Agent遗留）",
+                       reclaimed)
+    return reclaimed
 
 
 def _get_event(event_type, event_id):
@@ -94,6 +129,10 @@ def inspection_trigger(request, event_type, event_id):
     if event is None:
         return Response({'success': False, 'message': '事件不存在'},
                         status=status.HTTP_404_NOT_FOUND)
+    # 自愈：先回收崩溃/重启/旧自治 Agent 遗留的陈旧 IN_PROGRESS，避免孤儿永久堵死全局闸门，
+    # 再复读本事件状态（本事件若正是被回收对象，刷新后即为 PENDING，可继续认领）。
+    _reclaim_stale_in_progress()
+    event.refresh_from_db(fields=['inspection_status'])
     if event.inspection_status == 'IN_PROGRESS':
         return Response({'status': 'IN_PROGRESS', 'message': '该事件正在巡检中'},
                         status=status.HTTP_409_CONFLICT)
