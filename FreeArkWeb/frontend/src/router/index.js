@@ -128,6 +128,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 巡检智能体工作日志（v1.3.0-AOW，REQ-FUNC-NAV-003）
+    path: '/agent/inspection-worklog',
+    name: 'InspectionWorkLog',
+    component: () => import('../views/InspectionWorkLogView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     // 故障管理页面（v0.6.0-FM，FR-FM-04）
     path: '/device-management/faults',
     name: 'FaultManagement',

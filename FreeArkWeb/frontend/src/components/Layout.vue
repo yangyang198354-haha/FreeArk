@@ -85,10 +85,14 @@
           <el-menu-item index="/services">服务列表</el-menu-item>
         </el-sub-menu>
 
-        <el-menu-item index="/chat">
-          <el-icon><ChatDotRound /></el-icon>
-          <template #title><span>和方舟龙虾聊天</span></template>
-        </el-menu-item>
+        <el-sub-menu index="agent">
+          <template #title>
+            <el-icon><ChatDotRound /></el-icon>
+            <span>方舟智能体</span>
+          </template>
+          <el-menu-item index="/chat">和方舟智能体聊天</el-menu-item>
+          <el-menu-item index="/agent/inspection-worklog">巡检智能体工作日志</el-menu-item>
+        </el-sub-menu>
 
         <el-sub-menu index="user" v-if="userRole === 'admin'">
           <template #title>

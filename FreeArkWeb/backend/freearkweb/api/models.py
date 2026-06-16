@@ -968,3 +968,66 @@ class WorkOrder(models.Model):
 
     def __str__(self):
         return f"{self.ticket_id} [{self.status}] {self.affected_device}"
+
+
+# ---------------------------------------------------------------------------
+# 巡检智能体决策日志（v1.3.0-AOW，REQ-FUNC-WL-001）
+# ---------------------------------------------------------------------------
+
+
+class InspectionLog(models.Model):
+    """巡检智能体决策步骤日志（freeark-inspection-agent 决策过程可追溯）。
+
+    现有 inspection_agent/audit.py 仅写 journald（网页不可查）；本表为**新增双写**目标，
+    记录每次 process_event 的关键决策步骤（开始/委托/写提案被拦截/建单/兜底/完成），供
+    「巡检智能体工作日志」页面查询。DB 写入失败不阻断主决策流程（REQ-NFR-006）。
+    step_detail 经 audit._scrub() 脱敏，绝不存凭证（REQ-NFR-009）。
+    """
+    SOURCE_EVENT_TYPES = [
+        ('fault_event', '故障事件'),
+        ('condensation_warning_event', '结露预警事件'),
+    ]
+    STEP_CHOICES = [
+        ('PROCESS_STARTED', '开始处理'),
+        ('EVENT_SKIPPED', '事件已恢复跳过'),
+        ('DELEGATION_CALLED', '子专家委托'),
+        ('DELEGATION_ERROR', '委托异常'),
+        ('WRITE_PROPOSAL', 'LLM写提案'),
+        ('WRITE_BLOCKED', '写提案被拦截'),
+        ('WRITE_EXECUTED', '写操作执行'),
+        ('WORKORDER_CREATED', '工单创建'),
+        ('WORKORDER_EXISTED', '工单已存在'),
+        ('DECISION_TIMEOUT', '决策超时兜底'),
+        ('DECISION_ERROR', '决策异常兜底'),
+        ('PROCESS_COMPLETED', '处置完成'),
+    ]
+    RESULT_CHOICES = [
+        ('INFO', '信息'),
+        ('SUCCESS', '成功'),
+        ('BLOCKED', '已拦截'),
+        ('ERROR', '错误'),
+        ('SKIPPED', '已跳过'),
+    ]
+
+    source_event_type = models.CharField(
+        max_length=32, choices=SOURCE_EVENT_TYPES, verbose_name='来源事件类型')
+    source_event_id = models.BigIntegerField(db_index=True, verbose_name='来源事件ID')
+    specific_part = models.CharField(max_length=64, db_index=True, verbose_name='房号')
+    event_type_display = models.CharField(max_length=32, blank=True, verbose_name='事件类型(人读)')
+    step = models.CharField(max_length=32, choices=STEP_CHOICES, verbose_name='决策步骤')
+    step_detail = models.JSONField(default=dict, blank=True, verbose_name='步骤详情')
+    result = models.CharField(max_length=16, default='INFO', verbose_name='结果')
+    work_order_ticket = models.CharField(max_length=32, blank=True, verbose_name='关联工单编号')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='记录时间')
+
+    class Meta:
+        db_table = 'inspection_log'
+        verbose_name = '巡检决策日志'
+        verbose_name_plural = '巡检决策日志'
+        indexes = [
+            models.Index(fields=['source_event_type', 'source_event_id'], name='ilog_source_idx'),
+            models.Index(fields=['specific_part', 'created_at'], name='ilog_part_time_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.step}/{self.result}] {self.specific_part} #{self.source_event_id} @ {self.created_at}"
