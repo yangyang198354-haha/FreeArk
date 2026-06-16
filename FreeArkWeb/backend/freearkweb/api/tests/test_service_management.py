@@ -522,9 +522,13 @@ class TC_I_SM_005_SecurityInjection(TestCase):
             self.assertEqual(resp.status_code, 400, f"注入 action '{action}' 应被拒绝")
 
     def test_whitelist_service_name_not_injectable(self):
-        """合法白名单服务名不含任何特殊字符（自验）"""
+        """合法白名单服务名仅含安全字符（自验）。
+
+        允许点号 `.`（.timer 等单元后缀需要）；点号非 shell 元字符，且 subprocess 以
+        argv 形式调用（无 shell），故不构成注入风险。仍排除空格 / 分号 / 反引号 / 斜杠等。
+        """
         import re
-        safe_pattern = re.compile(r'^[a-zA-Z0-9_\-]+$')
+        safe_pattern = re.compile(r'^[a-zA-Z0-9_.\-]+$')
         for name in MONITORED_SERVICES:
             self.assertTrue(
                 safe_pattern.match(name),
