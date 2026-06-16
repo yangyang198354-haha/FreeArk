@@ -246,7 +246,41 @@ def trigger_refresh(specific_part: str) -> dict:
 ENERGY_TOOLS = [get_dashboard_summary, get_usage_daily, get_realtime_params,
                 set_device_params, trigger_refresh]
 INSPECTION_TOOLS = [get_plc_status, get_fault_summary, get_realtime_params]
-SANHENG_TOOLS: list = []  # 三恒知识专家纯文本，不查 API
+
+
+# ── 三恒知识专家 RAG 工具（v1.4.0_sanheng_rag）─────────────────────────
+@tool
+def search_sanheng_knowledge(query: str) -> str:
+    """在三恒知识库中检索与 query 相关的文档片段，用于辅助原理/参数/故障码解答。
+    返回最相关的 chunk 文本列表及来源；库为空或不可达时返回说明文字（不报错）。"""
+    try:
+        from django.conf import settings
+        from api.rag_service import search_rag
+        k = getattr(settings, 'RAG_TOP_K', 5)
+        threshold = getattr(settings, 'RAG_SCORE_THRESHOLD', 0.3)
+        result = search_rag(query, k=k, threshold=threshold)
+    except Exception as e:
+        logger.warning("fa_tools: search_sanheng_knowledge 异常（降级）: %s", e)
+        return "[知识库暂时不可达，以下为通用知识参考。degraded=true]"
+
+    if result.get('degraded'):
+        return "[知识库暂时不可达，以下为通用知识参考。degraded=true]"
+
+    chunks = result.get('chunks', [])
+    if not chunks:
+        return "[知识库中未找到与该问题相关的内容]"
+
+    lines = [f"[检索到 {len(chunks)} 条相关内容]"]
+    for i, c in enumerate(chunks, 1):
+        src_note = "（图片OCR）" if c.get('is_image_ocr') else ""
+        content_preview = (c.get('content') or '')[:400]
+        lines.append(
+            f"\n[{i}] 来源: {c.get('source', '未知')}{src_note}\n    {content_preview}"
+        )
+    return "\n".join(lines)
+
+
+SANHENG_TOOLS: list = [search_sanheng_knowledge]  # v1.4.0: RAG 检索工具
 
 TOOLS_BY_EXPERT = {
     "energy-expert": ENERGY_TOOLS,
