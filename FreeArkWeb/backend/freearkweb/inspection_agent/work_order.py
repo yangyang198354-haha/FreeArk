@@ -64,13 +64,17 @@ def find_active_work_order(source_event_type: str, source_event_id: int):
 
 
 def create_work_order(*, source_event_type, source_event_id, severity, affected_device,
-                      symptom, diagnosis='', recommended_action=''):
+                      symptom, diagnosis='', recommended_action='',
+                      proposed_tool='', proposed_args=None):
     """创建工单（先查后建 + 约束兜底）。
 
     返回 (work_order, created)：
       - 已存在活跃工单 → 返回该工单，created=False（不重复建单）；
       - 否则新建 → created=True；
       - 并发下命中 DB 约束/编号冲突 → 重查活跃工单返回，或递增编号重试。
+
+    proposed_tool/proposed_args（v1.3.1-WO）：被写授权策略拦截的结构化写提案，供工单页
+    管理员审批后 execute_write 真执行；提供 tool 即把 write_status 标 PENDING，否则 NONE。
     """
     existing = find_active_work_order(source_event_type, source_event_id)
     if existing is not None:
@@ -78,6 +82,7 @@ def create_work_order(*, source_event_type, source_event_id, severity, affected_
                     existing.ticket_id, source_event_type, source_event_id)
         return existing, False
 
+    write_status = 'PENDING' if proposed_tool else 'NONE'
     last_exc = None
     for attempt in range(_MAX_TICKET_RETRY):
         ticket_id = generate_ticket_id(offset=attempt)
@@ -92,6 +97,9 @@ def create_work_order(*, source_event_type, source_event_id, severity, affected_
                     symptom=symptom,
                     diagnosis=diagnosis,
                     recommended_action=recommended_action,
+                    proposed_tool=proposed_tool or '',
+                    proposed_args=proposed_args or {},
+                    write_status=write_status,
                 )
             return work_order, True
         except IntegrityError as exc:
@@ -109,11 +117,14 @@ def create_work_order(*, source_event_type, source_event_id, severity, affected_
     raise last_exc
 
 
-def create_from_event(event, *, diagnosis='', recommended_action=''):
+def create_from_event(event, *, diagnosis='', recommended_action='',
+                      proposed_tool='', proposed_args=None):
     """从来源事件实例（FaultEvent / CondensationWarningEvent）建单。
 
     返回 (work_order, created)，字段由 _describe_event 推导。
+    proposed_tool/proposed_args 透传给 create_work_order（v1.3.1-WO 结构化写提案）。
     """
     fields = _describe_event(event)
     return create_work_order(diagnosis=diagnosis, recommended_action=recommended_action,
+                             proposed_tool=proposed_tool, proposed_args=proposed_args,
                              **fields)

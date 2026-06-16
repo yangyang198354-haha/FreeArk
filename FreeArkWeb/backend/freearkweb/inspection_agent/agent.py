@@ -206,18 +206,22 @@ class InspectionAgent:
             return
 
         # 被拦截（策略B 全部拦截 / 策略A 越界）→ 建单，记录被拦截的写提案。
+        # 结构化 tool+args 一并落库（write_status=PENDING），供工单页管理员审批后执行。
         audit.log_write_blocked(meta.event_id, meta.event_type, meta.specific_part,
                                 tool_name, args, result.reason)
         self._create_and_done(
             event, meta,
             diagnosis=self._summarize_delegations(pending),
-            recommended_action=self._describe_blocked_write(tool_name, args, result.reason))
+            recommended_action=self._describe_blocked_write(tool_name, args, result.reason),
+            proposed_tool=tool_name, proposed_args=args)
 
     # ── 工单 + 状态持久化（DB 失败 → 重置 PENDING 下轮重试，ARCH §5.2）──
-    def _create_and_done(self, event, meta, diagnosis, recommended_action):
+    def _create_and_done(self, event, meta, diagnosis, recommended_action,
+                         proposed_tool='', proposed_args=None):
         try:
             work_order, created = create_from_event(
-                event, diagnosis=diagnosis, recommended_action=recommended_action)
+                event, diagnosis=diagnosis, recommended_action=recommended_action,
+                proposed_tool=proposed_tool, proposed_args=proposed_args)
             if created:
                 audit.log_workorder_created(meta.event_id, meta.event_type, meta.specific_part,
                                             work_order.ticket_id, meta.severity)

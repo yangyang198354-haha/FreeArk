@@ -6,6 +6,7 @@ from . import memory_views
 from . import views_fault
 from . import views_condensation
 from . import views_inspection
+from . import views_workorder
 
 urlpatterns = [
     # CSRF token获取
@@ -93,6 +94,14 @@ urlpatterns = [
     path('inspection/status/<str:event_type>/<int:event_id>/',
          views_inspection.inspection_status_view, name='inspection-status'),
     path('inspection/logs/', views_inspection.inspection_logs, name='inspection-logs'),
+
+    # 巡检工单查看 + 写提案人工审批执行（v1.3.1-WO）
+    path('workorders/', views_workorder.workorder_list, name='workorder-list'),
+    path('workorders/<int:pk>/', views_workorder.workorder_detail, name='workorder-detail'),
+    path('workorders/<int:pk>/approve-write/', views_workorder.workorder_approve_write,
+         name='workorder-approve-write'),
+    path('workorders/<int:pk>/resolve/', views_workorder.workorder_resolve,
+         name='workorder-resolve'),
 
     path('services/list/', views.service_management_list, name='service-management-list'),
     path('services/<str:service_name>/detail/', views.service_management_detail, name='service-management-detail'),

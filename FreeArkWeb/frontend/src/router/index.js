@@ -135,6 +135,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 巡检工单（v1.3.1-WO）— 查看工单 + 管理员审批执行被拦截的写提案
+    path: '/agent/work-orders',
+    name: 'WorkOrders',
+    component: () => import('../views/WorkOrderListView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     // 故障管理页面（v0.6.0-FM，FR-FM-04）
     path: '/device-management/faults',
     name: 'FaultManagement',

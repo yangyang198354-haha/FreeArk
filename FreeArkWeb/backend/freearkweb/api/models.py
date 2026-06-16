@@ -950,6 +950,31 @@ class WorkOrder(models.Model):
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='解决时间')
     resolved_by = models.CharField(max_length=100, blank=True, verbose_name='解决人')
 
+    # ── v1.3.1-WO：结构化写提案 + 人工审批执行（工单页「同意执行」按钮的可执行出口）──
+    # 策略 B 下 LLM 写提案被拦截转工单，仅记 recommended_action 人读文本不足以执行；
+    # 这里另存结构化 tool+args，管理员在工单页审批后经 execute_write 真下发。
+    WRITE_STATUS_CHOICES = [
+        ('NONE', '无写提案'),
+        ('PENDING', '待审批执行'),
+        ('EXECUTED', '已执行'),
+        ('FAILED', '执行失败'),
+    ]
+    proposed_tool = models.CharField(
+        max_length=32, blank=True, verbose_name='建议写工具',
+        help_text='被拦截的写提案工具名（set_device_params/trigger_refresh）；空=无可执行写提案',
+    )
+    proposed_args = models.JSONField(
+        default=dict, blank=True, verbose_name='建议写参数',
+        help_text='写提案结构化参数，供人工审批后 execute_write 执行',
+    )
+    write_status = models.CharField(
+        max_length=16, choices=WRITE_STATUS_CHOICES, default='NONE',
+        verbose_name='写提案状态',
+    )
+    write_executed_at = models.DateTimeField(null=True, blank=True, verbose_name='写执行时间')
+    write_executed_by = models.CharField(max_length=100, blank=True, verbose_name='写执行人')
+    write_result = models.TextField(blank=True, verbose_name='写执行结果')
+
     class Meta:
         db_table = 'inspection_work_order'
         verbose_name = '巡检工单'

@@ -63,7 +63,10 @@
         </template>
       </el-table-column>
       <el-table-column prop="work_order_ticket" label="工单编号" width="160">
-        <template #default="{ row }">{{ row.work_order_ticket || '—' }}</template>
+        <template #default="{ row }">
+          <el-link v-if="row.work_order_ticket" type="primary" @click="goWorkOrder(row.work_order_ticket)">{{ row.work_order_ticket }}</el-link>
+          <span v-else>—</span>
+        </template>
       </el-table-column>
       <el-table-column label="详情" min-width="100">
         <template #default="{ row }">
@@ -101,9 +104,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import api from '@/utils/api.js'
+
+const router = useRouter()
 
 // 步骤代码 → 中文（与后端 InspectionLog.STEP_CHOICES 对齐）
 const STEP_LABELS = {
@@ -225,6 +231,11 @@ function filterByPart(part) {
 function showDetail(row) {
   detailRow.value = row
   detailVisible.value = true
+}
+
+function goWorkOrder(ticket) {
+  if (!ticket) return
+  router.push({ name: 'WorkOrders', query: { ticket_id: ticket } })
 }
 
 onMounted(fetchLogs)

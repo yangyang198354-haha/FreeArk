@@ -82,11 +82,34 @@ def _count_in_progress():
             + CondensationWarningEvent.objects.filter(inspection_status='IN_PROGRESS').count())
 
 
+def _latest_work_order(event_type, event_id):
+    return (WorkOrder.objects
+            .filter(source_event_type=event_type, source_event_id=event_id)
+            .order_by('-created_at').first())
+
+
 def _latest_work_order_ticket(event_type, event_id):
-    wo = (WorkOrder.objects
-          .filter(source_event_type=event_type, source_event_id=event_id)
-          .order_by('-created_at').first())
+    wo = _latest_work_order(event_type, event_id)
     return wo.ticket_id if wo else None
+
+
+def _build_completion_summary(event_type, event_id, event):
+    """组装 PROCESS_COMPLETED 的结论摘要：工单号/是否清障/写提案/诊断节选。
+
+    供工作日志页一行看清"如何处理、结果如何"，不必再翻工单。
+    """
+    summary = {'fault_cleared': not bool(getattr(event, 'is_active', True))}
+    wo = _latest_work_order(event_type, event_id)
+    if wo is not None:
+        summary['work_order_ticket'] = wo.ticket_id
+        summary['work_order_status'] = wo.status
+        summary['proposed_write'] = wo.proposed_tool or None
+        # 诊断/建议节选：取 recommended_action 首个非空行，便于一眼看到结论
+        excerpt = next((ln.strip() for ln in (wo.recommended_action or '').splitlines()
+                        if ln.strip()), '')
+        if excerpt:
+            summary['conclusion'] = excerpt[:120]
+    return summary
 
 
 def _run_inspection_thread(event_type, event_id):
@@ -106,9 +129,10 @@ def _run_inspection_thread(event_type, event_id):
         try:
             audit.log_process_started(event_id, event_type, specific_part, trigger='on_demand')
             InspectionAgent().process_event(event)
-            event.refresh_from_db(fields=['inspection_status'])
-            audit.log_process_completed(event_id, event_type, specific_part,
-                                        outcome=event.inspection_status)
+            event.refresh_from_db(fields=['inspection_status', 'is_active'])
+            audit.log_process_completed(
+                event_id, event_type, specific_part, outcome=event.inspection_status,
+                summary=_build_completion_summary(event_type, event_id, event))
         except Exception as exc:  # noqa: BLE001
             logger.exception("按需巡检线程处置异常: %s", exc)
             # 兜底：仍处于 IN_PROGRESS 的事件重置 PENDING，供再次手动触发
