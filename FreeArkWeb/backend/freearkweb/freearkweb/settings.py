@@ -617,5 +617,29 @@ LOGGING = {
             'level': os.getenv('APP_LOG_LEVEL', 'ERROR'),
             'propagate': False,
         },
+        # RAG 服务（v1.4.0_sanheng_rag）：固定 INFO，入库进度需可查
+        'api.rag_service': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'api.views_rag': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
+
+# ===========================================================================
+# RAG 知识库配置（v1.4.0_sanheng_rag）
+# ===========================================================================
+# 安全约束：RAG_EMBEDDING_API_KEY 仅走 .env，绝不入 git/HTTP 响应/日志/前端。
+# 凭据字段若为空，RAG 检索降级（fail-open）：聊天不报错，专家退回通用知识。
+RAG_EMBEDDING_BASE_URL = os.environ.get('RAG_EMBEDDING_BASE_URL', '')
+RAG_EMBEDDING_MODEL = os.environ.get('RAG_EMBEDDING_MODEL', 'BAAI/bge-m3')
+RAG_EMBEDDING_API_KEY = os.environ.get('RAG_EMBEDDING_API_KEY', '')
+RAG_TOP_K = int(os.environ.get('RAG_TOP_K', '5'))
+RAG_SCORE_THRESHOLD = float(os.environ.get('RAG_SCORE_THRESHOLD', '0.3'))
+RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '500'))
+RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))

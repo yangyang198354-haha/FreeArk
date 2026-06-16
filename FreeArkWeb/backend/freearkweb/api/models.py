@@ -1056,3 +1056,10 @@ class InspectionLog(models.Model):
 
     def __str__(self):
         return f"[{self.step}/{self.result}] {self.specific_part} #{self.source_event_id} @ {self.created_at}"
+
+
+# ---------------------------------------------------------------------------
+# RAG 知识库模型（v1.4.0_sanheng_rag）
+# 定义在 models_rag.py，此处 import 使 Django ORM 发现（migration 可正常生成）
+# ---------------------------------------------------------------------------
+from .models_rag import RagDocument, RagChunk  # noqa: E402,F401

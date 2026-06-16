@@ -156,6 +156,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 三恒知识库管理（v1.4.0_sanheng_rag，管理员专属）
+    path: '/admin/knowledge-base',
+    name: 'KnowledgeBase',
+    component: () => import('../views/KnowledgeBaseView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')
@@ -166,16 +173,29 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫，检查登录状态
+// 路由守卫：检查登录状态 + 管理员权限（v1.4.0: 新增 requiresAdmin 检查）
 router.beforeEach((to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
   const isLoggedIn = localStorage.getItem('userToken') !== null
-  
+
   if (requiresAuth && !isLoggedIn) {
     next({ name: 'Login' })
-  } else {
-    next()
+    return
   }
+  if (requiresAdmin) {
+    try {
+      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+      if (!userInfo.is_staff) {
+        next({ path: '/home' })
+        return
+      }
+    } catch (e) {
+      next({ path: '/home' })
+      return
+    }
+  }
+  next()
 })
 
 export default router

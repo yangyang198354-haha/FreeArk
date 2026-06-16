@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 from . import views_device_settings
 from . import views_heartbeat_config
@@ -7,6 +8,11 @@ from . import views_fault
 from . import views_condensation
 from . import views_inspection
 from . import views_workorder
+from . import views_rag
+
+# RAG 知识库路由（v1.4.0_sanheng_rag）
+_rag_router = DefaultRouter()
+_rag_router.register(r'rag/documents', views_rag.RagDocumentViewSet, basename='rag-document')
 
 urlpatterns = [
     # CSRF token获取
@@ -127,3 +133,6 @@ urlpatterns = [
     # 结露预警接口（v0.7.0-CW，MOD-BE-CW-06）
     path('devices/condensation-warning-events/', views_condensation.condensation_warning_event_list, name='condensation-warning-event-list'),
 ]
+
+# 追加 RAG 路由（v1.4.0_sanheng_rag，不修改上方现有路由）
+urlpatterns += _rag_router.urls
