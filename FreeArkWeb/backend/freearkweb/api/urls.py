@@ -5,6 +5,7 @@ from . import views_heartbeat_config
 from . import memory_views
 from . import views_fault
 from . import views_condensation
+from . import views_inspection
 
 urlpatterns = [
     # CSRF token获取
@@ -86,6 +87,13 @@ urlpatterns = [
     path('device-management/screen-device-tree/batch-sync/<str:task_id>/', views.device_tree_sync_batch_status, name='device-tree-sync-batch-status'),
 
     # 服务管理接口
+    # 巡检智能体按需触发 / 状态轮询 / 工作日志（v1.3.0-AOW）
+    path('inspection/trigger/<str:event_type>/<int:event_id>/',
+         views_inspection.inspection_trigger, name='inspection-trigger'),
+    path('inspection/status/<str:event_type>/<int:event_id>/',
+         views_inspection.inspection_status_view, name='inspection-status'),
+    path('inspection/logs/', views_inspection.inspection_logs, name='inspection-logs'),
+
     path('services/list/', views.service_management_list, name='service-management-list'),
     path('services/<str:service_name>/detail/', views.service_management_detail, name='service-management-detail'),
     path('services/<str:service_name>/action/', views.service_management_action, name='service-management-action'),

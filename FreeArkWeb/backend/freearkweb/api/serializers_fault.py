@@ -91,6 +91,7 @@ class FaultEventSerializer(serializers.ModelSerializer):
             'is_active',
             'created_at',
             'updated_at',
+            'inspection_status',  # 新增（v1.3.0-AOW）巡检处置状态，前端「智能体巡检」按钮据此显示
             'device_name',        # 新增（v0.6.1-FM-UX）主路径，可 null
             'device_type_label',  # 新增（v0.6.1-FM-UX）兜底一，可 null
             'room_name',          # 新增（v0.6.4-FM-ROOM）冗余房间名，可 null

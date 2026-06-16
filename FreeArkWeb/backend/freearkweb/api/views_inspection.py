@@ -1,0 +1,188 @@
+"""api.views_inspection —— 巡检智能体按需触发 + 状态轮询 + 工作日志（v1.3.0-AOW）。
+
+按需模式（不依赖 systemd 轮询，省 token、便于前期调试）：
+  - 前端在故障/结露列表点「智能体巡检」→ POST trigger：原子置 IN_PROGRESS，后台线程跑
+    `InspectionAgent.process_event`（复用现有九步决策，策略 B 转工单），立即返回 202。
+  - 前端轮询 GET status，直到 DONE/SKIPPED。
+  - 决策过程经 inspection_agent/audit.py 双写 InspectionLog，工作日志页 GET logs 查询。
+
+并发保护（REQ-FUNC-IA-006）：全局同时最多 1 条 IN_PROGRESS（树莓派单核），超出 429。
+权限：IsAuthenticated（REQ-NFR-008）。
+"""
+
+import logging
+import threading
+
+from django.utils import timezone
+from rest_framework import permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+
+from .models import CondensationWarningEvent, FaultEvent, InspectionLog, WorkOrder
+
+logger = logging.getLogger("api.views_inspection")
+
+# 受支持的来源事件类型 → 模型
+_EVENT_MODELS = {
+    'fault_event': FaultEvent,
+    'condensation_warning_event': CondensationWarningEvent,
+}
+# 全局并发上限（同时处于 IN_PROGRESS 的事件数）
+_MAX_CONCURRENT = 1
+
+
+def _get_event(event_type, event_id):
+    """返回 (model, event|None)；event_type 非法时 model 为 None。"""
+    model = _EVENT_MODELS.get(event_type)
+    if model is None:
+        return None, None
+    try:
+        return model, model.objects.get(pk=event_id)
+    except model.DoesNotExist:
+        return model, None
+
+
+def _count_in_progress():
+    return (FaultEvent.objects.filter(inspection_status='IN_PROGRESS').count()
+            + CondensationWarningEvent.objects.filter(inspection_status='IN_PROGRESS').count())
+
+
+def _latest_work_order_ticket(event_type, event_id):
+    wo = (WorkOrder.objects
+          .filter(source_event_type=event_type, source_event_id=event_id)
+          .order_by('-created_at').first())
+    return wo.ticket_id if wo else None
+
+
+def _run_inspection_thread(event_type, event_id):
+    """后台线程：跑单事件决策。异常退出时重置 PENDING（REQ-NFR-007）；末尾关闭线程 DB 连接。"""
+    from django.db import connection
+    from inspection_agent import audit
+    from inspection_agent.agent import InspectionAgent
+
+    model = _EVENT_MODELS[event_type]
+    try:
+        try:
+            event = model.objects.get(pk=event_id)
+        except model.DoesNotExist:
+            logger.warning("按需巡检线程：事件不存在 %s/%s", event_type, event_id)
+            return
+        specific_part = getattr(event, 'specific_part', '') or ''
+        try:
+            audit.log_process_started(event_id, event_type, specific_part, trigger='on_demand')
+            InspectionAgent().process_event(event)
+            event.refresh_from_db(fields=['inspection_status'])
+            audit.log_process_completed(event_id, event_type, specific_part,
+                                        outcome=event.inspection_status)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("按需巡检线程处置异常: %s", exc)
+            # 兜底：仍处于 IN_PROGRESS 的事件重置 PENDING，供再次手动触发
+            model.objects.filter(pk=event_id, inspection_status='IN_PROGRESS').update(
+                inspection_status='PENDING', inspection_started_at=None)
+    finally:
+        connection.close()
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def inspection_trigger(request, event_type, event_id):
+    """POST /api/inspection/trigger/{event_type}/{event_id}/ —— 按需触发单事件巡检。"""
+    model, event = _get_event(event_type, event_id)
+    if model is None:
+        return Response({'success': False, 'message': f'未知事件类型: {event_type}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if event is None:
+        return Response({'success': False, 'message': '事件不存在'},
+                        status=status.HTTP_404_NOT_FOUND)
+    if event.inspection_status == 'IN_PROGRESS':
+        return Response({'status': 'IN_PROGRESS', 'message': '该事件正在巡检中'},
+                        status=status.HTTP_409_CONFLICT)
+    # 并发保护：全局同时最多 1 条 IN_PROGRESS
+    if _count_in_progress() >= _MAX_CONCURRENT:
+        return Response({'message': '当前有巡检任务正在执行，请稍后再试'},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS)
+    # 原子认领（允许对 PENDING/DONE/SKIPPED 触发；DONE 可重新巡检，OQ-4）
+    claimed = model.objects.filter(
+        pk=event_id, inspection_status__in=['PENDING', 'DONE', 'SKIPPED'],
+    ).update(inspection_status='IN_PROGRESS', inspection_started_at=timezone.now())
+    if not claimed:
+        return Response({'status': 'IN_PROGRESS', 'message': '该事件正在巡检中'},
+                        status=status.HTTP_409_CONFLICT)
+
+    threading.Thread(target=_run_inspection_thread, args=(event_type, event_id),
+                     daemon=True).start()
+    return Response({'status': 'IN_PROGRESS', 'message': '巡检已启动，预计 50~300 秒完成'},
+                    status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def inspection_status_view(request, event_type, event_id):
+    """GET /api/inspection/status/{event_type}/{event_id}/ —— 轮询巡检处置状态。"""
+    model, event = _get_event(event_type, event_id)
+    if model is None:
+        return Response({'success': False, 'message': f'未知事件类型: {event_type}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if event is None:
+        return Response({'success': False, 'message': '事件不存在'},
+                        status=status.HTTP_404_NOT_FOUND)
+    started = event.inspection_started_at
+    return Response({
+        'inspection_status': event.inspection_status,
+        'inspection_started_at': started.isoformat() if started else None,
+        'work_order_id': _latest_work_order_ticket(event_type, event_id),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def inspection_logs(request):
+    """GET /api/inspection/logs/ —— 巡检智能体工作日志查询（过滤 + 分页）。"""
+    qs = InspectionLog.objects.all()
+
+    event_type = request.GET.get('event_type')
+    if event_type in _EVENT_MODELS:
+        qs = qs.filter(source_event_type=event_type)
+    specific_part = request.GET.get('specific_part')
+    if specific_part:
+        qs = qs.filter(specific_part__icontains=specific_part)
+    result = request.GET.get('result')
+    if result:
+        qs = qs.filter(result=result)
+    step = request.GET.get('step')
+    if step:
+        qs = qs.filter(step=step)
+    source_event_id = request.GET.get('source_event_id')
+    if source_event_id:
+        qs = qs.filter(source_event_id=source_event_id)
+    date_from = request.GET.get('date_from')
+    if date_from:
+        qs = qs.filter(created_at__gte=date_from)
+    date_to = request.GET.get('date_to')
+    if date_to:
+        qs = qs.filter(created_at__lte=date_to)
+
+    qs = qs.order_by('-created_at')
+
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(100, max(1, int(request.GET.get('page_size', 20))))
+    except (TypeError, ValueError):
+        page_size = 20
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    items = list(qs[start:start + page_size].values(
+        'id', 'source_event_type', 'source_event_id', 'specific_part', 'event_type_display',
+        'step', 'step_detail', 'result', 'work_order_ticket', 'created_at'))
+
+    return Response({
+        'success': True,
+        'data': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+    })

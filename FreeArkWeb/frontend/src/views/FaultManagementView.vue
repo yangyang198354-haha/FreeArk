@@ -182,8 +182,8 @@
           </el-tag>
         </template>
       </el-table-column>
-      <!-- REQ-UI-003：文案"查看设备面板" → "设备面板" -->
-      <el-table-column label="操作" min-width="100" fixed="right">
+      <!-- REQ-UI-003：文案"查看设备面板" → "设备面板"；v1.3.0-AOW 新增「智能体巡检」 -->
+      <el-table-column label="操作" min-width="200" fixed="right">
         <template #default="{ row }">
           <el-button
             link
@@ -192,6 +192,16 @@
             @click="handleViewDevicePanel(row)"
           >
             设备面板
+          </el-button>
+          <el-button
+            link
+            :type="row.inspection_status === 'DONE' ? 'info' : 'warning'"
+            size="small"
+            :loading="!!inspecting[row.id]"
+            :disabled="!!inspecting[row.id] || row.inspection_status === 'IN_PROGRESS'"
+            @click="handleAgentInspect(row)"
+          >
+            {{ inspectBtnLabel(row) }}
           </el-button>
         </template>
       </el-table-column>
@@ -213,8 +223,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
 
@@ -267,6 +278,67 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
+
+// ---------------------------------------------------------------------------
+// 智能体巡检按需触发（v1.3.0-AOW，REQ-FUNC-IA-001/003/004）
+// 点击 → POST trigger（后台线程跑决策）→ 每 5s 轮询 status，直到 DONE/SKIPPED。
+// ---------------------------------------------------------------------------
+const inspecting = reactive({})   // { [eventId]: true } 触发中/轮询中
+const _pollTimers = {}
+
+function inspectBtnLabel(row) {
+  const s = row.inspection_status
+  if (s === 'IN_PROGRESS') return '巡检中...'
+  if (s === 'DONE' || s === 'SKIPPED') return '重新巡检'
+  return '智能体巡检'
+}
+
+async function handleAgentInspect(row) {
+  const id = row.id
+  inspecting[id] = true
+  try {
+    await api.post(`/api/inspection/trigger/fault_event/${id}/`)
+    row.inspection_status = 'IN_PROGRESS'
+    ElMessage.success('巡检已启动，正在后台分析…')
+    _startPoll(row)
+  } catch (err) {
+    inspecting[id] = false
+    ElMessage.warning(err.message || '触发巡检失败')
+  }
+}
+
+function _startPoll(row) {
+  const id = row.id
+  if (_pollTimers[id]) clearInterval(_pollTimers[id])
+  _pollTimers[id] = setInterval(async () => {
+    try {
+      const resp = await api.get(`/api/inspection/status/fault_event/${id}/`)
+      const s = resp && resp.inspection_status
+      if (s && s !== 'IN_PROGRESS') {
+        row.inspection_status = s
+        _stopPoll(id)
+        inspecting[id] = false
+        ElMessage.success(s === 'DONE'
+          ? `巡检完成${resp.work_order_id ? '，已生成工单 ' + resp.work_order_id : ''}`
+          : '事件已恢复，已跳过')
+      }
+    } catch (err) {
+      _stopPoll(id)
+      inspecting[id] = false
+    }
+  }, 5000)
+}
+
+function _stopPoll(id) {
+  if (_pollTimers[id]) {
+    clearInterval(_pollTimers[id])
+    delete _pollTimers[id]
+  }
+}
+
+onUnmounted(() => {
+  Object.keys(_pollTimers).forEach(_stopPoll)
+})
 
 // ---------------------------------------------------------------------------
 // 下拉选项状态

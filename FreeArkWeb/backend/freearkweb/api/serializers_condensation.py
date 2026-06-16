@@ -44,5 +44,6 @@ class CondensationWarningEventSerializer(serializers.ModelSerializer):
             'last_seen_at',
             'recovered_at',
             'is_active',
+            'inspection_status',  # 新增（v1.3.0-AOW）巡检处置状态，前端「智能体巡检」按钮据此显示
         ]
         read_only_fields = fields

@@ -145,6 +145,7 @@ class InspectionAgent:
         # 步骤1 前置检查：事件已恢复（is_active=False）→ 跳过，不建单。
         if not self._is_active(event):
             self._mark(event, 'SKIPPED')
+            audit.log_event_skipped(meta.event_id, meta.event_type, meta.specific_part)
             logger.info("事件已恢复(inactive)，标记 SKIPPED：id=%s part=%s",
                         meta.event_id, meta.specific_part)
             return
@@ -156,6 +157,9 @@ class InspectionAgent:
         try:
             decision = self._run_decision(query)
         except Exception as exc:  # asyncio.TimeoutError / 网络 / httpx / 委托异常 等
+            is_timeout = isinstance(exc, (asyncio.TimeoutError, TimeoutError))
+            audit.log_decision_fallback(meta.event_id, meta.event_type, meta.specific_part,
+                                        type(exc).__name__, str(exc), timeout=is_timeout)
             logger.error("自治决策失败(%s: %s)，兜底建单：id=%s",
                          type(exc).__name__, exc, meta.event_id)
             self._create_and_done(
@@ -220,6 +224,8 @@ class InspectionAgent:
                 logger.info("已建工单 %s：id=%s part=%s",
                             work_order.ticket_id, meta.event_id, meta.specific_part)
             else:
+                audit.log_workorder_existed(meta.event_id, meta.event_type, meta.specific_part,
+                                            work_order.ticket_id)
                 logger.info("活跃工单已存在(%s)，未重复建单：id=%s",
                             work_order.ticket_id, meta.event_id)
             self._mark(event, 'DONE')

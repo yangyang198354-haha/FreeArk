@@ -144,8 +144,8 @@
         </template>
       </el-table-column>
 
-      <!-- 列13：操作（REQ-UI-002：新增"设备面板"按钮，同标签页跳转，REQ-UI-004） -->
-      <el-table-column label="操作" min-width="120" fixed="right">
+      <!-- 列13：操作（设备面板 + v1.3.0-AOW 智能体巡检） -->
+      <el-table-column label="操作" min-width="200" fixed="right">
         <template #default="{ row }">
           <el-button
             link
@@ -154,6 +154,16 @@
             @click="handleViewDevicePanel(row)"
           >
             设备面板
+          </el-button>
+          <el-button
+            link
+            :type="row.inspection_status === 'DONE' ? 'info' : 'warning'"
+            size="small"
+            :loading="!!inspecting[row.id]"
+            :disabled="!!inspecting[row.id] || row.inspection_status === 'IN_PROGRESS'"
+            @click="handleAgentInspect(row)"
+          >
+            {{ inspectBtnLabel(row) }}
           </el-button>
         </template>
       </el-table-column>
@@ -175,8 +185,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import api from '@/utils/api.js'
 import CascadingSelector from '@/components/CascadingSelector.vue'
 
@@ -217,6 +228,66 @@ const totalCount = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
+
+// ---------------------------------------------------------------------------
+// 智能体巡检按需触发（v1.3.0-AOW，REQ-FUNC-IA-002/003/004）
+// ---------------------------------------------------------------------------
+const inspecting = reactive({})   // { [eventId]: true } 触发中/轮询中
+const _pollTimers = {}
+
+function inspectBtnLabel(row) {
+  const s = row.inspection_status
+  if (s === 'IN_PROGRESS') return '巡检中...'
+  if (s === 'DONE' || s === 'SKIPPED') return '重新巡检'
+  return '智能体巡检'
+}
+
+async function handleAgentInspect(row) {
+  const id = row.id
+  inspecting[id] = true
+  try {
+    await api.post(`/api/inspection/trigger/condensation_warning_event/${id}/`)
+    row.inspection_status = 'IN_PROGRESS'
+    ElMessage.success('巡检已启动，正在后台分析…')
+    _startPoll(row)
+  } catch (err) {
+    inspecting[id] = false
+    ElMessage.warning(err.message || '触发巡检失败')
+  }
+}
+
+function _startPoll(row) {
+  const id = row.id
+  if (_pollTimers[id]) clearInterval(_pollTimers[id])
+  _pollTimers[id] = setInterval(async () => {
+    try {
+      const resp = await api.get(`/api/inspection/status/condensation_warning_event/${id}/`)
+      const s = resp && resp.inspection_status
+      if (s && s !== 'IN_PROGRESS') {
+        row.inspection_status = s
+        _stopPoll(id)
+        inspecting[id] = false
+        ElMessage.success(s === 'DONE'
+          ? `巡检完成${resp.work_order_id ? '，已生成工单 ' + resp.work_order_id : ''}`
+          : '事件已恢复，已跳过')
+      }
+    } catch (err) {
+      _stopPoll(id)
+      inspecting[id] = false
+    }
+  }, 5000)
+}
+
+function _stopPoll(id) {
+  if (_pollTimers[id]) {
+    clearInterval(_pollTimers[id])
+    delete _pollTimers[id]
+  }
+}
+
+onUnmounted(() => {
+  Object.keys(_pollTimers).forEach(_stopPoll)
+})
 
 // ---------------------------------------------------------------------------
 // 工具函数
