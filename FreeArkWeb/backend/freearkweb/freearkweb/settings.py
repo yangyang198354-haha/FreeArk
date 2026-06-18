@@ -639,6 +639,9 @@ LOGGING = {
 RAG_EMBEDDING_BASE_URL = os.environ.get('RAG_EMBEDDING_BASE_URL', '')
 RAG_EMBEDDING_MODEL = os.environ.get('RAG_EMBEDDING_MODEL', 'BAAI/bge-m3')
 RAG_EMBEDDING_API_KEY = os.environ.get('RAG_EMBEDDING_API_KEY', '')
+# embedding 后端风格：'openai'（标准 /embeddings，支持批量）|
+# 'doubao_multimodal'（火山方舟 doubao-embedding-vision 多模态 /embeddings/multimodal，逐条）
+RAG_EMBEDDING_API_STYLE = os.environ.get('RAG_EMBEDDING_API_STYLE', 'openai')
 RAG_TOP_K = int(os.environ.get('RAG_TOP_K', '5'))
 RAG_SCORE_THRESHOLD = float(os.environ.get('RAG_SCORE_THRESHOLD', '0.3'))
 RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '500'))

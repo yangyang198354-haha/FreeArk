@@ -185,8 +185,10 @@ router.beforeEach((to, from, next) => {
   }
   if (requiresAdmin) {
     try {
+      // 本项目 admin 概念是 userInfo.role==='admin'（与菜单 v-if 及后端 role 鉴权一致）；
+      // /api/auth/me/ 不返回 is_staff，旧的 is_staff 判断恒为 undefined 会把管理员也弹回首页。
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-      if (!userInfo.is_staff) {
+      if (userInfo.role !== 'admin') {
         next({ path: '/home' })
         return
       }
