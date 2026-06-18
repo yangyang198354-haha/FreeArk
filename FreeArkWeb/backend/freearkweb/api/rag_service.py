@@ -157,7 +157,13 @@ class RagEmbedder:
             base_url=base_url or None,
             model=model,
             api_key=api_key,
-            timeout=5.0,
+            # 入库批量(20条)走 Pi→远端，5s 太紧易超时把文档误判 failed；
+            # query 端 fail-open，最坏在 embedding 故障时阻塞至此上限，取 15s 折中。
+            timeout=15.0,
+            # 关键：第三方 OpenAI 兼容端点（豆包/火山方舟、硅基流动等）必须关掉客户端
+            # tiktoken 切分，否则 langchain 会把文本编成 token-id 数组发送（非原始文本），
+            # 第三方用自家分词器 → 语义错乱或直接报错。关掉后按原始字符串发送，服务端分词。
+            check_embedding_ctx_length=False,
         )
 
     def embed_texts(self, texts: List[str]) -> List[np.ndarray]:
