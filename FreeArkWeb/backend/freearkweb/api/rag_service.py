@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import threading
+import time
 import traceback
 import urllib.error
 import urllib.request
@@ -155,33 +156,55 @@ class _DoubaoMultimodalEmbeddings:
     无法用 langchain OpenAIEmbeddings，这里用裸 HTTP 实现，接口对齐 embed_documents/embed_query。
     """
 
-    def __init__(self, base_url: str, model: str, api_key: str, timeout: float):
+    def __init__(self, base_url: str, model: str, api_key: str, timeout: float = 20.0):
         self._url = (base_url or '').rstrip('/') + '/embeddings/multimodal'
         self._model = model
         self._api_key = api_key
         self._timeout = timeout
 
-    def _embed_one(self, text: str) -> List[float]:
+    def _embed_one(self, text: str, attempts: int, timeout: float) -> List[float]:
+        """
+        单条向量化，带退避重试。
+        豆包 vision 模型偏慢 + Pi WiFi 偶发劣化，单次读超时常见（实测 8 次 1 次 >15s）。
+        瞬时错误（读超时 / 连接重置 / 5xx）退避重试；4xx（参数/模型错）立即抛（重试无意义）。
+        """
         body = json.dumps({
             "model": self._model,
             "input": [{"type": "text", "text": text}],
         }).encode("utf-8")
-        req = urllib.request.Request(
-            self._url, data=body,
-            headers={
-                "Authorization": "Bearer " + self._api_key,
-                "Content-Type": "application/json",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=self._timeout) as r:
-            d = json.loads(r.read())
-        return d["data"]["embedding"]   # 多模态接口 data 为单对象（非列表）
+        last_err = None
+        for i in range(attempts):
+            req = urllib.request.Request(
+                self._url, data=body,
+                headers={
+                    "Authorization": "Bearer " + self._api_key,
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    d = json.loads(r.read())
+                return d["data"]["embedding"]   # 多模态接口 data 为单对象（非列表）
+            except urllib.error.HTTPError as e:
+                if 400 <= e.code < 500:          # 客户端错误，重试无意义
+                    raise
+                last_err = e                     # 5xx 服务端错误，可重试
+            except (TimeoutError, ConnectionError, urllib.error.URLError) as e:
+                last_err = e                     # 读超时 / 连接失败，瞬时可重试
+            if i < attempts - 1:
+                logger.warning("rag_service: 豆包 embedding 第 %d 次失败（%r），退避重试",
+                               i + 1, last_err)
+                time.sleep(min(2 ** i, 4))
+        raise last_err
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return [self._embed_one(t) for t in texts]
+        # 入库冷路径：重试多、超时长，优先可靠（单条慢调用不应整篇 failed）
+        return [self._embed_one(t, attempts=4, timeout=max(self._timeout, 25.0))
+                for t in texts]
 
     def embed_query(self, text: str) -> List[float]:
-        return self._embed_one(text)
+        # 查询热路径：重试少、超时短，优先有界延迟（失败由 search_rag fail-open 兜底）
+        return self._embed_one(text, attempts=2, timeout=min(self._timeout, 12.0))
 
 
 # ── RagEmbedder ───────────────────────────────────────────────────────────
