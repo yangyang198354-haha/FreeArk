@@ -7,7 +7,7 @@ api.views_rag — RAG 知识库 API 视图（v1.4.0_sanheng_rag）
   DELETE /api/rag/documents/{id}/       删除文档+向量（管理员）
   POST /api/rag/documents/{id}/retry/   失败文档重试（管理员）
 
-权限：IsAdminUser（DRF 内置，is_staff=True 才可访问，否则 403）
+权限：IsAdminUser（本项目自定义，校验 role=='admin'；非 DRF 内置的 is_staff）。
 安全：文件双重校验（扩展名 + 文件头字节签名）；原始文件不落盘。
 """
 
@@ -20,9 +20,12 @@ from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+# 注意：用本项目 views.IsAdminUser（role=='admin'），不是 DRF 内置的 is_staff 版本。
+# 本平台 admin 概念 = User.role=='admin'，与设备写授权/工单审批保持一致。
+from .views import IsAdminUser
 from .models_rag import RagDocument
 from .rag_service import rag_vector_cache, start_ingest_thread
 from .serializers_rag import RagDocumentSerializer

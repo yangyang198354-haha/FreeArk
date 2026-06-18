@@ -86,7 +86,7 @@ class TestRagDocumentModel(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin_test', password='pass', is_staff=True)
+            username='admin_test', password='pass', is_staff=True, role='admin')
 
     def test_default_status_is_pending(self):
         doc = RagDocument.objects.create(
@@ -144,9 +144,9 @@ class TestRagUploadAPI(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin_api', password='pass', is_staff=True)
+            username='admin_api', password='pass', is_staff=True, role='admin')
         self.normal = User.objects.create_user(
-            username='user_api', password='pass', is_staff=False)
+            username='user_api', password='pass', is_staff=False, role='user')
         self.client = APIClient()
 
     def _auth(self, user):
@@ -328,7 +328,7 @@ class TestRagService(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin_svc', password='pass', is_staff=True)
+            username='admin_svc', password='pass', is_staff=True, role='admin')
 
     # ── RagVectorCache ────────────────────────────────────────────────────
     def test_cache_empty_search_returns_empty(self):
@@ -665,7 +665,7 @@ class TestRagIntegration(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin_integ', password='pass', is_staff=True)
+            username='admin_integ', password='pass', is_staff=True, role='admin')
         from rest_framework.authtoken.models import Token
         self.token, _ = Token.objects.get_or_create(user=self.admin)
         self.client = APIClient()
@@ -802,7 +802,7 @@ class TestRagSerializer(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin_ser', password='pass', is_staff=True)
+            username='admin_ser', password='pass', is_staff=True, role='admin')
 
     def test_serializer_returns_username_string(self):
         """uploaded_by 序列化为 username 字符串。"""
