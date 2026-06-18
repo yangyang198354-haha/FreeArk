@@ -57,8 +57,9 @@ python-docx>=1.1.0
 # .pdf 解析（AGPL v3；内部运维平台使用，见 docs/architecture/v1.4.0_sanheng_rag_adr.md ADR-003 合规说明）
 PyMuPDF>=1.24.0
 
-# 图片 OCR（aarch64 纪律：必须在树莓派 Pi 5 aarch64 上真装、真 import、真跑 OCR 验证通过后
-#           才能取消注释并上线。验证步骤见 docs/deployment/v1.4.0_sanheng_rag/deployment_plan.md
-#           §3 部署前置检查。未验证前代码以 _HAS_OCR=False 降级，OCR 跳过，文字内容正常入库。）
-# rapidocr-onnxruntime>=1.3.0
-# onnxruntime>=1.17.0
+# 图片 OCR（aarch64 已验证：2026-06-19 在生产 Pi 5（Debian 13 / Python 3.13 / venv）实测
+#           全部二进制 wheel 安装成功、cv2 无 libGL 问题、RapidOCR 实例化 0.2s、对 bytes
+#           推理 1.3s、正确识别中文。注意 rapidocr-onnxruntime 最新为 1.2.3，无 1.3.x。
+#           会传递引入 opencv-python / Pillow / shapely / pyclipper / protobuf 7.x。）
+rapidocr-onnxruntime>=1.2.3
+onnxruntime>=1.17.0

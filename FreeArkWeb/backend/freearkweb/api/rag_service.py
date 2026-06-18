@@ -40,6 +40,21 @@ except ImportError:
 except Exception as _e:
     logger.warning("rag_service: rapidocr-onnxruntime 导入失败（%s），OCR 功能跳过", _e)
 
+# OCR 引擎懒加载单例：RapidOCR() 实例化会加载 ONNX 模型，原 _ocr_image 每张图重建一次
+# （Pi 实测约 0.2s/次）浪费且占内存；此处全局缓存，首张图触发、后续复用。线程安全。
+_ocr_engine = None
+_ocr_engine_lock = threading.Lock()
+
+
+def _get_ocr_engine():
+    """返回进程内唯一的 RapidOCR 实例（仅在 _HAS_OCR 为真时调用）。"""
+    global _ocr_engine
+    if _ocr_engine is None:
+        with _ocr_engine_lock:
+            if _ocr_engine is None:
+                _ocr_engine = _RapidOCR()
+    return _ocr_engine
+
 
 # ── RagVectorCache ─────────────────────────────────────────────────────────
 
@@ -396,7 +411,7 @@ class RagParser:
         if not _HAS_OCR:
             return ""
         try:
-            ocr = _RapidOCR()
+            ocr = _get_ocr_engine()
             result, _ = ocr(img_bytes)
             if result:
                 return "\n".join(
