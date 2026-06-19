@@ -50,8 +50,17 @@ def _make_ws_app():
     ])
 
 
+_run_loop = None
+
+
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # Python 3.12：MainThread 无现存 loop 时 asyncio.get_event_loop() 抛 RuntimeError。
+    # 懒建并复用一个进程级 loop，保留原"跨调用共享同一 loop"语义。
+    global _run_loop
+    if _run_loop is None or _run_loop.is_closed():
+        _run_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_run_loop)
+    return _run_loop.run_until_complete(coro)
 
 
 class ConsumerSessionCreationTest(TransactionTestCase):
@@ -120,7 +129,7 @@ class ConsumerMessageWriteTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)  # connected
 
             with patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('content', '回答片段一'),
                     ('content', '回答片段二'),
@@ -159,7 +168,7 @@ class ConsumerMessageWriteTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(('content', '回复')),
             ):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '用户输入'})
@@ -204,7 +213,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
 
-            with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+            with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '当前问题'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -234,7 +243,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
 
-            with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+            with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '第一次对话'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -278,7 +287,7 @@ class ConsumerCrossUserIsolationTest(TransactionTestCase):
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
 
-            with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+            with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '用户B的问题'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -331,7 +340,7 @@ class ConsumerDegradationTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch('api.consumers.chat_memory.load_history', side_effect=Exception('DB timeout')), \
-                 patch('api.consumers.OpenClawAdapter.stream_chat',
+                 patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                        return_value=_make_async_gen(('content', '降级回复'))):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '测试降级'})
                 received = []
@@ -355,7 +364,7 @@ class ConsumerDegradationTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch('api.consumers.chat_memory.append_message', side_effect=Exception('write failed')), \
-                 patch('api.consumers.OpenClawAdapter.stream_chat',
+                 patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                        return_value=_make_async_gen(('content', '内容'))):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '测试'})
                 received = []
@@ -396,7 +405,7 @@ class ConsumerInjectTurnsZeroTest(TransactionTestCase):
 
             # mock load_history 返回空列表（等效于 INJECT_TURNS=0）
             with patch('api.consumers.chat_memory.load_history', return_value=[]), \
-                 patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+                 patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '问题'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -435,7 +444,7 @@ class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', '思考'),
                     ('content', '回答'),
@@ -467,7 +476,7 @@ class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('content', 't1'),
                     ('content', 't2'),
@@ -499,7 +508,7 @@ class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', 'r1'),
                     ('reasoning', 'r2'),

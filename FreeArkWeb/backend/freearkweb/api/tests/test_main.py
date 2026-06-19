@@ -24,7 +24,9 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from .models import (
+# 注：本文件原为 api/tests.py，与 api/tests/ 包同名被遮蔽（232 个测试长期未运行）；
+# 2026-06-19 移入包为 api/tests/test_main.py，相对导入(.)需改为绝对(api.)。
+from api.models import (
     CustomUser,
     PLCData,
     UsageQuantityDaily,
@@ -33,10 +35,10 @@ from .models import (
     PLCStatusChangeHistory,
     OwnerInfo,
 )
-from .daily_usage_calculator import DailyUsageCalculator
-from .monthly_usage_calculator import MonthlyUsageCalculator
-from .plc_data_cleaner import clean_old_plc_data
-from .mqtt_handlers import PLCDataHandler, ConnectionStatusHandler
+from api.daily_usage_calculator import DailyUsageCalculator
+from api.monthly_usage_calculator import MonthlyUsageCalculator
+from api.plc_data_cleaner import clean_old_plc_data
+from api.mqtt_handlers import PLCDataHandler, ConnectionStatusHandler
 
 
 # ---------------------------------------------------------------------------
@@ -1925,8 +1927,8 @@ class DashboardServicesAPITest(TestCase):
         body = response.json()
         self.assertTrue(body["success"])
         services = body["data"]
-        # 有 9 个受监控服务（含 v0.5.2 新增的 freeark-dph-cleanup）
-        self.assertEqual(len(services), 9)
+        # v1.2.0 扩至 20 个受监控服务（16 .service + 4 .timer）
+        self.assertEqual(len(services), 20)
         for svc in services:
             self.assertTrue(svc["is_active"])
             self.assertEqual(svc["status"], "active")
@@ -1984,7 +1986,8 @@ class DashboardServicesAPITest(TestCase):
         mock_run.return_value = mock_result
 
         self.client.get(reverse("dashboard-services"))
-        self.assertEqual(mock_run.call_count, 9)
+        # v1.2.0 共 20 个服务，每个服务调用 2 次 subprocess.run（is-active + is-enabled）
+        self.assertEqual(mock_run.call_count, 40)
 
     def test_unauthenticated_returns_401(self):
         client = APIClient()
@@ -3571,10 +3574,10 @@ class DphCleanupServiceWhitelistTest(TestCase):
         from api.views import _MONITORED_SERVICES_SET
         self.assertIn(self.TARGET_SERVICE, _MONITORED_SERVICES_SET)
 
-    def test_monitored_services_count_is_nine(self):
-        """白名单共 9 个服务（v0.5.2 追加 freeark-dph-cleanup 后）"""
+    def test_monitored_services_count_is_twenty(self):
+        """白名单共 20 个服务（v1.2.0 全量纳管：16 .service + 4 .timer）"""
         from api.views import MONITORED_SERVICES
-        self.assertEqual(len(MONITORED_SERVICES), 9)
+        self.assertEqual(len(MONITORED_SERVICES), 20)
 
     # ------------------------------------------------------------------
     # 服务列表接口（US-DPH-01 / FR3-1）

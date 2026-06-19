@@ -330,13 +330,14 @@ class TestStreamChat(TestCase):
         tokens, fake_ws, _ = self._run_scripted(
             self._scripted_ok_flow(['Hey', ', ', 'world'])
         )
-        self.assertEqual(tokens, ['Hey', ', ', 'world'])
+        # 协议升级：stream_chat 现 yield (kind, text) 元组（content/reasoning）。
+        self.assertEqual(tokens, [('content', 'Hey'), ('content', ', '), ('content', 'world')])
 
     def test_chinese_deltas(self):
         tokens, _, _ = self._run_scripted(
             self._scripted_ok_flow(['你好', '，', '方舟龙虾'])
         )
-        self.assertEqual(tokens, ['你好', '，', '方舟龙虾'])
+        self.assertEqual(tokens, [('content', '你好'), ('content', '，'), ('content', '方舟龙虾')])
 
     def test_empty_delta_text_filtered(self):
         """deltaText 为空串 → 不 yield 空字符串。"""
@@ -344,7 +345,7 @@ class TestStreamChat(TestCase):
             self._scripted_ok_flow(['Hello', '', 'World'])
         )
         # 中间的空 delta 不应被 yield
-        self.assertEqual(tokens, ['Hello', 'World'])
+        self.assertEqual(tokens, [('content', 'Hello'), ('content', 'World')])
 
     def test_sends_connect_then_chat_send(self):
         """验证 adapter 发出的两条帧的方法名和顺序。"""
@@ -531,8 +532,8 @@ class TestStreamChat(TestCase):
                                   'message': {'content': []}}}),
         ]
         tokens, _, _ = self._run_scripted(msgs)
-        self.assertEqual(tokens, ['real'])
-        self.assertNotIn('!!INTRUDER!!', tokens)
+        self.assertEqual(tokens, [('content', 'real')])
+        self.assertNotIn(('content', '!!INTRUDER!!'), tokens)
 
     # ============ 安全（token 不出现在产物）============
 
