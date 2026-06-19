@@ -31,8 +31,26 @@
 
     <!-- 消息列表区域 -->
     <div class="chat-messages" ref="messagesContainer">
-      <!-- 空状态 -->
-      <div v-if="messages.length === 0" class="chat-empty">
+
+      <!-- v1.4: 历史消息加载中提示（isHistoryLoading，REQ-NFR-001） -->
+      <div v-if="isHistoryLoading" class="chat-history-loading">
+        <span class="history-loading-text">正在加载历史消息...</span>
+      </div>
+
+      <!-- v1.4: 历史消息加载失败横幅（historyLoadError，可继续聊天） -->
+      <div v-if="historyLoadError" class="chat-history-error">
+        <el-icon><Warning /></el-icon>
+        <span>{{ historyLoadError }}</span>
+        <el-button type="text" size="small" @click="historyLoadError = ''">关闭</el-button>
+      </div>
+
+      <!-- v1.4: 历史消息为空提示（historyEmpty，US-007 AC-007-01） -->
+      <div v-if="historyEmpty && !isHistoryLoading && messages.length === 0" class="chat-history-empty">
+        <p>该会话暂无历史记录，可直接发送新消息</p>
+      </div>
+
+      <!-- 空状态（新会话欢迎语，仅非历史加载场景显示） -->
+      <div v-if="messages.length === 0 && !isHistoryLoading && !historyEmpty && !historyLoadError" class="chat-empty">
         <div class="chat-empty-icon"><Bot :size="48" /></div>
         <p class="chat-empty-text">你好！我是方舟智能体，有什么可以帮助你的？</p>
       </div>
@@ -162,6 +180,7 @@ import { Bot } from 'lucide-vue-next'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import SessionSidebar from '../components/SessionSidebar.vue'
+import api from '../utils/api.js'
 
 // MOD-FE-01: 配置 marked — 启用 GFM 表格（REQ-FUNC-002）和 breaks（REQ-FUNC-003）
 // ADR-002 决策：marked + DOMPurify 组合
@@ -237,6 +256,11 @@ export default {
     const errorMessage = ref('')
     const messagesContainer = ref(null)
     const currentSessionKey = ref(null)
+
+    // v1.4 历史消息加载状态（MOD-FE-CHAT，IFC-FE-CHAT-001，REQ-NFR-001）
+    const isHistoryLoading = ref(false)    // 历史消息加载 loading 状态
+    const historyLoadError = ref('')       // 历史消息加载错误提示
+    const historyEmpty = ref(false)        // 历史消息为空标记（US-007 空状态提示）
 
     // WebSocket 实例（非响应式，避免 Vue 代理 WS 对象）
     let ws = null
@@ -321,8 +345,37 @@ export default {
       connectWS(currentSessionKey.value)
     }
 
-    function handleSessionSelected(sessionKey) {
+    /**
+     * 将历史消息接口返回的 HistoryMessage 映射为 ChatView 内部消息对象格式。
+     * IFC-FE-CHAT-001 历史消息格式转换（模块设计文档 MOD-FE-CHAT）。
+     */
+    function mapHistoryToMessage(hm) {
+      return {
+        role: hm.role,           // "user" | "assistant"
+        content: hm.content,
+        chunks: [],
+        reasoning: '',
+        streaming: false,
+        reasoningStreaming: false,
+        confirm: null,
+        statusText: '',
+      }
+    }
+
+    /**
+     * 处理会话切换（v1.4 改造，IFC-FE-CHAT-001）。
+     *
+     * sessionKey = null：新建会话，不加载历史，直接 connectWS(null)。
+     * sessionKey 非 null：切换已有会话，并行 connectWS + api.getSessionHistory 加载历史。
+     *   - 历史加载成功：messages.value = history（升序）
+     *   - 历史加载失败：historyLoadError 提示（WS 聊天仍可使用）
+     *   - 历史为空：historyEmpty = true（US-007 空状态提示）
+     */
+    async function handleSessionSelected(sessionKey) {
+      // 1. 重置所有状态
       messages.value = []
+      historyLoadError.value = ''
+      historyEmpty.value = false
       if (ws) {
         ws.onclose = null
         ws.onerror = null
@@ -333,7 +386,36 @@ export default {
       wsConnected.value = false
       reconnectCount.value = 0
       errorMessage.value = ''
+
+      if (!sessionKey) {
+        // 新建会话：不加载历史，直接建立 WS 连接
+        isHistoryLoading.value = false
+        connectWS(null)
+        return
+      }
+
+      // 切换已有会话：并行建立 WS 连接 + 加载历史消息（REQ-NFR-001：不阻塞界面）
+      isHistoryLoading.value = true
+      // WS 连接先启动（不等 history 加载）
       connectWS(sessionKey)
+
+      // 加载历史消息（通过 api.js，团队规范：禁止裸 axios）
+      try {
+        const data = await api.getSessionHistory(sessionKey)
+        const historyMessages = (data.messages || []).map(mapHistoryToMessage)
+        if (historyMessages.length === 0) {
+          historyEmpty.value = true
+        } else {
+          messages.value = historyMessages
+        }
+      } catch (err) {
+        // SESSION_EXPIRED 已由 api.js authenticatedFetch 统一处理（跳转登录页）
+        if (err && err.message !== 'SESSION_EXPIRED') {
+          historyLoadError.value = '历史消息加载失败，可直接发送新消息'
+        }
+      } finally {
+        isHistoryLoading.value = false
+      }
     }
 
     // --- 消息处理（v1.1）---
@@ -535,6 +617,10 @@ export default {
       messagesContainer,
       inputPlaceholder,
       currentSessionKey,
+      // v1.4: 历史消息加载状态（MOD-FE-CHAT）
+      isHistoryLoading,
+      historyLoadError,
+      historyEmpty,
       handleSend,
       handleShiftEnter,
       handleManualReconnect,
@@ -855,6 +941,54 @@ details[open] .reasoning-summary::before {
   line-height: 1.5;
   max-height: 300px;        /* 防止超长 reasoning 撑破布局 */
   overflow-y: auto;
+}
+
+/* ---- v1.4: 历史消息加载状态区域 ---- */
+
+/* 历史消息加载中提示（REQ-NFR-001） */
+.chat-history-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3, 12px);
+  flex-shrink: 0;
+}
+
+.history-loading-text {
+  font-size: var(--font-size-sm, 12px);
+  color: var(--color-text-secondary, #94A3B8);
+  font-style: italic;
+  animation: fade-pulse 1.2s ease-in-out infinite;
+}
+
+/* 历史消息加载失败横幅 */
+.chat-history-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background-color: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-base, 6px);
+  color: #FCD34D;
+  font-size: var(--font-size-sm, 12px);
+  flex-shrink: 0;
+}
+
+/* 历史消息为空提示（US-007 AC-007-01） */
+.chat-history-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5, 24px) var(--space-3, 12px);
+  flex-shrink: 0;
+}
+
+.chat-history-empty p {
+  margin: 0;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--color-text-secondary, #94A3B8);
+  font-style: italic;
 }
 
 /* ---- 错误提示 ---- */

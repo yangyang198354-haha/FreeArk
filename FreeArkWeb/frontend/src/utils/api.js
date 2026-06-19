@@ -389,6 +389,14 @@ const api = {
   deleteSession(sessionKey) {
     return this.delete(`/api/memory/session/${sessionKey}/`);
   },
+
+  // MOD-FE-API IFC-FE-API-001: 获取会话历史消息（最近 40 条，升序）
+  // 参数：sessionKey — 完整 UUID 字符串
+  // 返回：{ session_key, messages: [{role, content, created_at}], total }
+  // 异常：网络失败或 HTTP 非 200 时抛出 Error；SESSION_EXPIRED 由 authenticatedFetch 统一处理
+  getSessionHistory(sessionKey) {
+    return this.get(`/api/memory/session/${sessionKey}/history/`);
+  },
 };
 
 export default api;

@@ -1,10 +1,11 @@
 <!--
-  @module MOD-FE-02
-  @implements IFC-FE-02-01, IFC-FE-02-02, IFC-FE-02-03, IFC-FE-02-04, IFC-FE-02-05
-  @depends MOD-FE-03 (api.js)
+  @module MOD-FE-SIDEBAR
+  @implements IFC-FE-SIDEBAR-001
+  @depends MOD-FE-API (api.js)
   @author sub_agent_software_developer
 
-  SessionSidebar — 左侧会话面板。
+  SessionSidebar — 左侧会话面板（v1.4）。
+  v1.4 变更：会话列表项新增标题展示（session.title），降级显示"历史对话"。
   所有 HTTP 请求一律通过 api.js（REQ-NFUNC-002），禁止裸 axios。
 -->
 <template>
@@ -29,6 +30,10 @@
         @click="handleSelectSession(session.session_key_full)"
       >
         <div class="session-info">
+          <!-- IFC-FE-SIDEBAR-001: 标题展示，降级逻辑：title 为 null/空时显示"历史对话" -->
+          <span class="session-title">
+            {{ (session.title && session.title.trim().length > 0) ? session.title : '历史对话' }}
+          </span>
           <span class="session-time">{{ formatTime(session.started_at) }}</span>
           <span class="session-count">{{ session.message_count }} 条消息</span>
         </div>
@@ -264,9 +269,18 @@ export default {
   flex: 1;
 }
 
-.session-time {
+.session-title {
   font-size: var(--font-size-sm, 12px);
   color: var(--color-text-primary, #E2E8F0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.session-time {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--ink-2, #64748B);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

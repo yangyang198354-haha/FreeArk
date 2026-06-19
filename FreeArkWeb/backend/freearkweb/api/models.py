@@ -609,6 +609,7 @@ class ChatSession(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False, verbose_name='是否已删除', db_index=True)
+    title = models.CharField(max_length=100, null=True, blank=True, verbose_name='会话标题')
 
     class Meta:
         db_table = 'api_chat_session'
