@@ -296,16 +296,20 @@ class RagParser:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def _split_text(self, text: str, source: str) -> List[ParsedChunk]:
+    def _split_text(self, text: str, source: str,
+                    is_image_ocr: bool = False) -> List[ParsedChunk]:
         """
         滑动窗口分块，不在段落中间强制切断超过 chunk_size 的文本。
         重叠量 chunk_overlap 字符。
+        is_image_ocr：标记产出的全部 chunk 来源于图片 OCR（整页扫描/内嵌图片的
+        OCR 文本同样可能超过 chunk_size，需走此处分块，避免单个超大 chunk 拖累检索粒度）。
         """
         text = text.strip()
         if not text:
             return []
         if len(text) <= self.chunk_size:
-            return [ParsedChunk(content=text, page_or_section=source)]
+            return [ParsedChunk(content=text, page_or_section=source,
+                                is_image_ocr=is_image_ocr)]
         chunks = []
         start = 0
         while start < len(text):
@@ -313,6 +317,7 @@ class RagParser:
             chunks.append(ParsedChunk(
                 content=text[start:end].strip(),
                 page_or_section=source,
+                is_image_ocr=is_image_ocr,
             ))
             if end >= len(text):
                 break
@@ -356,9 +361,8 @@ class RagParser:
                     img_idx += 1
                     ocr_text = self._ocr_image(img_bytes)
                     if ocr_text:
-                        chunks.append(ParsedChunk(
-                            content=ocr_text,
-                            page_or_section=f"图片 {img_idx}",
+                        chunks.extend(self._split_text(
+                            ocr_text, f"图片 {img_idx}",
                             is_image_ocr=True,
                         ))
                 except Exception as e:
@@ -407,9 +411,8 @@ class RagParser:
                     img_bytes = base_image["image"]
                     ocr_text = self._ocr_image(img_bytes)
                     if ocr_text:
-                        chunks.append(ParsedChunk(
-                            content=ocr_text,
-                            page_or_section=f"{page_label} 图片{img_idx + 1}",
+                        chunks.extend(self._split_text(
+                            ocr_text, f"{page_label} 图片{img_idx + 1}",
                             is_image_ocr=True,
                         ))
                 except Exception as e:
@@ -451,9 +454,8 @@ class RagParser:
                             )
                             ocr_text = self._ocr_image(png_bytes)
                             if ocr_text:
-                                chunks.append(ParsedChunk(
-                                    content=ocr_text,
-                                    page_or_section=f"{page_label} 扫描",
+                                chunks.extend(self._split_text(
+                                    ocr_text, f"{page_label} 扫描",
                                     is_image_ocr=True,
                                 ))
                             else:
