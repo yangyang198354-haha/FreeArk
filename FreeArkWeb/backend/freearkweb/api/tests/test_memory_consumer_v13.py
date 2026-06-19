@@ -193,7 +193,11 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
         self.token, _ = Token.objects.get_or_create(user=self.user)
 
     def test_history_prefix_passed_to_openclaw(self):
-        """有历史记忆时，发给 OpenClaw 的 message 包含 [历史记忆开始] 前缀。"""
+        """沿用已有历史的 session 时，发给 OpenClaw 的 message 包含 [历史记忆开始] 前缀。
+
+        v1.4 起历史按 session 隔离（load_history_by_session）：必须用 ?session_key=
+        沿用持有历史的那个 session，新建的空 session 不会注入旧历史（见 session 隔离测试）。
+        """
         # 先建立一个已有历史的 session
         from api.models import ChatSession, ChatMessage
         old_sess = ChatSession.objects.create(user=self.user, session_key='sk-old-hist')
@@ -208,7 +212,9 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
 
         async def _inner():
             app = _make_ws_app()
-            communicator = WebsocketCommunicator(app, f'/ws/chat/?token={self.token.key}')
+            # v1.4: 沿用持有历史的 session（session 隔离下唯一能取到旧历史的方式）
+            communicator = WebsocketCommunicator(
+                app, f'/ws/chat/?token={self.token.key}&session_key={old_sess.session_key}')
             connected, _ = await communicator.connect()
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
