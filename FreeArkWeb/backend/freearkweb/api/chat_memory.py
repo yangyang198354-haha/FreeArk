@@ -57,7 +57,7 @@ def clear_memory(user) -> int:
 
 
 def get_sessions(user, page: int = 1, page_size: int = 20) -> dict:
-    qs = ChatSession.objects.filter(user=user).order_by('-started_at')
+    qs = ChatSession.objects.filter(user=user, is_deleted=False).order_by('-started_at')
     total = qs.count()
     offset = (page - 1) * page_size
     sessions = []
@@ -65,11 +65,48 @@ def get_sessions(user, page: int = 1, page_size: int = 20) -> dict:
         sessions.append({
             'id': s.id,
             'session_key': s.session_key[:8] + '...',
+            'session_key_full': s.session_key,
             'started_at': s.started_at.isoformat() if s.started_at else None,
             'ended_at': s.ended_at.isoformat() if s.ended_at else None,
             'message_count': s.messages.count(),
         })
     return {'total': total, 'page': page, 'sessions': sessions}
+
+
+def load_history_by_session(session: ChatSession, limit: int = None) -> list:
+    """
+    返回指定 session 的最近 limit 轮对话，按时间升序排列。
+    仅查询 session 内消息（session 隔离），不跨 session 查询。
+    limit=None 时从 settings 读取（支持 override_settings）。
+    """
+    if limit is None:
+        limit = getattr(settings, 'CHAT_HISTORY_INJECT_TURNS', _INJECT_LIMIT)
+    rows = (
+        ChatMessage.objects
+        .filter(session=session)
+        .order_by('-created_at', '-id')
+        .values('role', 'content')[:limit * 2]
+    )
+    return list(reversed([{'role': r['role'], 'content': r['content']} for r in rows]))
+
+
+def soft_delete_session(user, session_key: str) -> bool:
+    """
+    软删除指定 session：校验 user 归属且 is_deleted=False，然后设 is_deleted=True。
+    找不到或不属于该 user 时抛 ValueError。
+    返回 True 表示软删除成功。
+    """
+    try:
+        session = ChatSession.objects.get(
+            user=user,
+            session_key=session_key,
+            is_deleted=False,
+        )
+    except ChatSession.DoesNotExist:
+        raise ValueError('session not found or not owned by user')
+    session.is_deleted = True
+    session.save(update_fields=['is_deleted'])
+    return True
 
 
 def build_inject_prefix(history: list) -> str:

@@ -70,3 +70,26 @@ class AdminMemoryView(APIView):
             'target_user': target.username,
             'message': f'用户 {target.username} 的记忆已清空',
         })
+
+
+class SessionDeleteView(APIView):
+    """
+    @module MOD-BE-04
+    @implements IFC-BE-04-01, IFC-BE-04-02
+    @depends MOD-BE-02 (soft_delete_session)
+    @author sub_agent_software_developer
+
+    DELETE /api/memory/session/{session_key}/ — 软删除指定会话。
+    归属校验由 chat_memory.soft_delete_session 保证，本视图不可跨用户删除。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, session_key):
+        try:
+            chat_memory.soft_delete_session(request.user, session_key)
+        except ValueError:
+            return Response(
+                {'detail': '会话不存在或无权限删除'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({'message': '会话已删除', 'session_key': session_key})

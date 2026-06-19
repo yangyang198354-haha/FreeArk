@@ -376,7 +376,19 @@ const api = {
   // v0.9.0: 暴露 clearAuthCookie，供特殊场景使用
   clearAuthCookie,
   // v1.0.x: 暴露会话过期提示复位，供登录成功后调用
-  resetSessionExpiredFlag
+  resetSessionExpiredFlag,
+
+  // MOD-FE-03 IFC-FE-03-01: 获取会话列表（语义封装，内部调用 api.get）
+  getSessionList(page, pageSize) {
+    if (page === undefined) page = 1;
+    if (pageSize === undefined) pageSize = 20;
+    return this.get('/api/memory/me/', { page: page, page_size: pageSize });
+  },
+
+  // MOD-FE-03 IFC-FE-03-02: 软删除指定会话（语义封装，内部调用 api.delete）
+  deleteSession(sessionKey) {
+    return this.delete(`/api/memory/session/${sessionKey}/`);
+  },
 };
 
 export default api;

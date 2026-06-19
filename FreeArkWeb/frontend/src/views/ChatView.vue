@@ -1,12 +1,20 @@
 <template>
   <div class="chat-view">
+    <!-- 左侧会话面板 -->
+    <SessionSidebar
+      :currentSessionKey="currentSessionKey"
+      @session-selected="handleSessionSelected"
+    />
+
+    <!-- 右侧主内容区 -->
+    <div class="chat-main">
     <!-- 页面标题 -->
     <div class="page-header">
       <div class="page-title-group">
         <div class="ph-accent-inline"></div>
         <div>
-          <h2>和方舟龙虾聊天</h2>
-          <p class="page-subtitle">由 OpenClaw 驱动的 AI 助手，流式回复体验</p>
+          <h2>和方舟智能体聊天</h2>
+          <p class="page-subtitle">方舟智能体 · 流式回复体验</p>
         </div>
       </div>
       <!-- 连接状态指示 -->
@@ -25,8 +33,8 @@
     <div class="chat-messages" ref="messagesContainer">
       <!-- 空状态 -->
       <div v-if="messages.length === 0" class="chat-empty">
-        <div class="chat-empty-icon">🦞</div>
-        <p class="chat-empty-text">你好！我是方舟龙虾，有什么可以帮助你的？</p>
+        <div class="chat-empty-icon"><Bot :size="48" /></div>
+        <p class="chat-empty-text">你好！我是方舟智能体，有什么可以帮助你的？</p>
       </div>
 
       <!-- 消息列表 -->
@@ -39,7 +47,7 @@
         >
           <!-- 助手消息头像/标识 -->
           <div v-if="msg.role === 'assistant'" class="chat-avatar chat-avatar--assistant">
-            <span class="avatar-icon">🦞</span>
+            <span class="avatar-icon"><Bot :size="18" /></span>
           </div>
 
           <!-- 消息气泡 -->
@@ -136,6 +144,7 @@
       </div>
       <p class="chat-hint">Enter 发送 · Shift+Enter 换行</p>
     </div>
+    </div>
   </div>
 </template>
 
@@ -149,8 +158,10 @@
  */
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { User, Warning, Position } from '@element-plus/icons-vue'
+import { Bot } from 'lucide-vue-next'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import SessionSidebar from '../components/SessionSidebar.vue'
 
 // MOD-FE-01: 配置 marked — 启用 GFM 表格（REQ-FUNC-002）和 breaks（REQ-FUNC-003）
 // ADR-002 决策：marked + DOMPurify 组合
@@ -193,10 +204,15 @@ export function isRenderable(msg) {
 
 // WebSocket 连接地址构建
 // 根据当前页面协议自动选择 ws:// 或 wss://
-function buildWsUrl(token) {
+// sessionKey 可选：传入时追加 &session_key=... 以加载已有会话
+function buildWsUrl(token, sessionKey) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
-  return `${protocol}//${host}/ws/chat/?token=${encodeURIComponent(token)}`
+  let url = `${protocol}//${host}/ws/chat/?token=${encodeURIComponent(token)}`
+  if (sessionKey) {
+    url += `&session_key=${encodeURIComponent(sessionKey)}`
+  }
+  return url
 }
 
 const MAX_RECONNECT = 3
@@ -208,6 +224,8 @@ export default {
     User,
     Warning,
     Position,
+    Bot,
+    SessionSidebar,
   },
   setup() {
     // --- 状态 ---
@@ -218,6 +236,7 @@ export default {
     const wsConnected = ref(false)
     const errorMessage = ref('')
     const messagesContainer = ref(null)
+    const currentSessionKey = ref(null)
 
     // WebSocket 实例（非响应式，避免 Vue 代理 WS 对象）
     let ws = null
@@ -227,12 +246,12 @@ export default {
     // --- 计算属性 ---
     const inputPlaceholder = computed(() => {
       if (!wsConnected.value) return '连接中，请稍候...'
-      if (isWaiting.value) return '方舟龙虾正在回复中...'
+      if (isWaiting.value) return '方舟智能体正在回复中...'
       return '输入消息，Enter 发送'
     })
 
     // --- WebSocket 连接 ---
-    function connectWS() {
+    function connectWS(sessionKey) {
       const token = localStorage.getItem('userToken')
       if (!token) {
         errorMessage.value = '未检测到登录凭证，请重新登录'
@@ -248,7 +267,7 @@ export default {
         ws = null
       }
 
-      const url = buildWsUrl(token)
+      const url = buildWsUrl(token, sessionKey || null)
       try {
         ws = new WebSocket(url)
       } catch (err) {
@@ -280,7 +299,7 @@ export default {
           errorMessage.value = `连接断开，${RECONNECT_DELAY_MS / 1000}s 后自动重连（第 ${reconnectCount.value}/${MAX_RECONNECT} 次）...`
           reconnectTimer = setTimeout(() => {
             errorMessage.value = ''
-            connectWS()
+            connectWS(currentSessionKey.value)
           }, RECONNECT_DELAY_MS)
         } else {
           errorMessage.value = '连接多次失败，请点击"重新连接"按钮手动重试'
@@ -299,7 +318,22 @@ export default {
         clearTimeout(reconnectTimer)
         reconnectTimer = null
       }
-      connectWS()
+      connectWS(currentSessionKey.value)
+    }
+
+    function handleSessionSelected(sessionKey) {
+      messages.value = []
+      if (ws) {
+        ws.onclose = null
+        ws.onerror = null
+        ws.onmessage = null
+        try { ws.close() } catch (_) { /* 忽略 */ }
+        ws = null
+      }
+      wsConnected.value = false
+      reconnectCount.value = 0
+      errorMessage.value = ''
+      connectWS(sessionKey)
     }
 
     // --- 消息处理（v1.1）---
@@ -316,6 +350,9 @@ export default {
           wsConnected.value = true
           reconnectCount.value = 0
           errorMessage.value = ''
+          if (data.session_key) {
+            currentSessionKey.value = data.session_key
+          }
           break
 
         // 静默期进度提示（分类/查询/生成阶段）：更新占位文案，content 到来即被替换
@@ -497,10 +534,12 @@ export default {
       MAX_RECONNECT,
       messagesContainer,
       inputPlaceholder,
+      currentSessionKey,
       handleSend,
       handleShiftEnter,
       handleManualReconnect,
       handleConfirm,
+      handleSessionSelected,
       renderMarkdown,
       isRenderable,
     }
@@ -512,10 +551,19 @@ export default {
 /* ---- 整体布局 ---- */
 .chat-view {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: calc(100vh - var(--header-height) - var(--space-5) * 2 - 32px);
   min-height: 480px;
   gap: var(--space-3);
+}
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-3);
+  overflow: hidden;
 }
 
 /* ---- 页面标题行 ---- */
