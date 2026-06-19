@@ -50,8 +50,17 @@ def _make_ws_app():
     ])
 
 
+_run_loop = None
+
+
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # Python 3.12：MainThread 无现存 loop 时 asyncio.get_event_loop() 抛 RuntimeError。
+    # 懒建并复用一个进程级 loop，保留原"跨调用共享同一 loop"语义。
+    global _run_loop
+    if _run_loop is None or _run_loop.is_closed():
+        _run_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_run_loop)
+    return _run_loop.run_until_complete(coro)
 
 
 class ConsumerSessionCreationTest(TransactionTestCase):

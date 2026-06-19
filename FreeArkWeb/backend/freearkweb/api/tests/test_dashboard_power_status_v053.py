@@ -552,7 +552,7 @@ class TestFrontendCodeReview(TestCase):
             self.assertIn(key, content, f"模板中缺少 mode_distribution.{key} 绑定")
 
     def test_ac204_v_loading_present(self):
-        """AC-204：卡片有 v-loading="loading.powerStatus""""
+        """AC-204：卡片有 v-loading 绑定 loading.powerStatus"""
         content = self._read_homeview()
         self.assertIn('loading.powerStatus', content, "未找到 v-loading 绑定")
 

@@ -124,7 +124,13 @@ class TestChatConsumerIntegration(TransactionTestCase):
 
     def _run(self, coro):
         """在同步测试方法中运行异步协程。"""
-        return asyncio.get_event_loop().run_until_complete(coro)
+        # Python 3.12 兼容：懒建并复用 loop（原 get_event_loop 在无 loop 时会抛 RuntimeError）。
+        loop = getattr(self, "_event_loop", None)
+        if loop is None or loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._event_loop = loop
+        return loop.run_until_complete(coro)
 
     # ------------------------------------------------------------------
     # TC-I-01: 有效 token 建立 WS 连接
