@@ -15,7 +15,7 @@ test_session_delete_view.py — SessionDeleteView 集成测试
   US-008 AC-008-01~03, US-011 AC-011-01~03
 """
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -46,6 +46,7 @@ def _session(user, key):
 # T-INT-01~04: SessionDeleteView DELETE 端点
 # AC: US-011 AC-011-01, AC-011-02, AC-011-03
 # ---------------------------------------------------------------------------
+@tag('integration')
 class SessionDeleteViewTest(TestCase):
     """集成测试：DELETE /api/memory/session/{session_key}/"""
 
@@ -115,6 +116,7 @@ class SessionDeleteViewTest(TestCase):
 # T-INT-06~08: MyMemoryView GET 端点（集成验证）
 # AC: US-008 AC-008-01~03
 # ---------------------------------------------------------------------------
+@tag('integration')
 class MyMemoryViewSessionKeyFullTest(TestCase):
     """集成测试：GET /api/memory/me/ 返回 session_key_full + is_deleted 过滤。"""
 

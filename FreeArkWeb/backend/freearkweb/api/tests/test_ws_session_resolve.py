@@ -18,7 +18,7 @@ test_ws_session_resolve.py — v1.4 ChatConsumer.connect() session_key 解析的
 """
 import asyncio
 
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from rest_framework.authtoken.models import Token
 
 try:
@@ -60,6 +60,7 @@ async def _connect_and_get_session_key(token_key, session_key=None):
     return msg
 
 
+@tag('integration')
 class WsResolveSessionTest(TransactionTestCase):
 
     def setUp(self):

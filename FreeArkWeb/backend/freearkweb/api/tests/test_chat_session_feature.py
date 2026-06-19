@@ -23,7 +23,7 @@ import asyncio
 import uuid
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, tag
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -65,6 +65,7 @@ def _msgs(session, n):
 # 单元测试：generate_title_truncate
 # ============================================================================
 
+@tag('unit')
 class GenerateTitleTruncateTest(TestCase):
     """TC-UNIT-001~004: generate_title_truncate 截断逻辑。"""
 
@@ -108,6 +109,7 @@ class GenerateTitleTruncateTest(TestCase):
 # 单元测试：generate_title_llm_async
 # ============================================================================
 
+@tag('unit')
 class GenerateTitleLlmAsyncTest(TransactionTestCase):
     """TC-UNIT-005~007: generate_title_llm_async（mock LLM）。
 
@@ -289,6 +291,7 @@ class GenerateTitleLlmAsyncTest(TransactionTestCase):
 # 单元测试：get_session_history
 # ============================================================================
 
+@tag('unit')
 class GetSessionHistoryTest(TestCase):
     """TC-UNIT-008~010: get_session_history（归属校验、顺序、跨用户）。"""
 
@@ -352,6 +355,7 @@ class GetSessionHistoryTest(TestCase):
 # 单元测试：_ensure_session_created（mock DB）
 # ============================================================================
 
+@tag('integration')
 class EnsureSessionCreatedTest(TransactionTestCase):
     """TC-UNIT-011~012: _ensure_session_created 首次创建和幂等。"""
 
@@ -429,6 +433,7 @@ class EnsureSessionCreatedTest(TransactionTestCase):
 # 单元测试：get_sessions title 字段
 # ============================================================================
 
+@tag('unit')
 class GetSessionsTitleFieldTest(TestCase):
     """TC-UNIT-013~014: get_sessions 返回 title 字段。"""
 
@@ -462,6 +467,7 @@ class GetSessionsTitleFieldTest(TestCase):
 # 集成测试：GET /api/memory/session/{key}/history/
 # ============================================================================
 
+@tag('integration')
 class SessionHistoryViewTest(TestCase):
     """TC-INT-001~004: SessionHistoryView REST 端点。"""
 
@@ -531,6 +537,7 @@ class SessionHistoryViewTest(TestCase):
 # 集成测试：GET /api/memory/me/ title 字段
 # ============================================================================
 
+@tag('integration')
 class GetSessionsTitleIntegrationTest(TestCase):
     """TC-INT-005~006: GET /api/memory/me/ 新增 title 字段。"""
 
@@ -586,6 +593,7 @@ def _make_ws_app():
     return URLRouter([re_path(r'^ws/chat/$', ChatConsumer.as_asgi())])
 
 
+@tag('integration')
 class WsNoDbOnConnectTest(TransactionTestCase):
     """TC-INT-007: WS connect 不产生 DB 记录（ADR-001 策略 A）。"""
 
@@ -621,6 +629,7 @@ class WsNoDbOnConnectTest(TransactionTestCase):
         self.assertEqual(count, 0, f'connect 但不发消息时，DB 应无 ChatSession，实际 count={count}')
 
 
+@tag('integration')
 class WsFirstMessageCreatesSessionTest(TransactionTestCase):
     """TC-INT-008: 发送首条消息后，ChatSession 存在且 title 非空。"""
 

@@ -14,7 +14,7 @@ test_chat_memory_session.py — FreeArk_ChatRebranding_SessionMgmt 单元测试
   US-011 AC-011-01~03, US-012 AC-012-01~02, US-013 AC-013-01~02
 """
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
 from api.models import ChatSession, ChatMessage
 from api import chat_memory
@@ -41,6 +41,7 @@ def _msgs(session, n_turns):
 # T-UNIT-01: load_history_by_session — 空 session 返回空列表
 # AC: US-012 AC-012-01 (会话内上下文保留，无历史时返回空)
 # ---------------------------------------------------------------------------
+@tag('unit')
 class LoadHistoryBySessionEmptyTest(TestCase):
     def test_empty_session_returns_empty_list(self):
         """T-UNIT-01: 空 session（无消息）调用 load_history_by_session 返回空列表。"""
@@ -55,6 +56,7 @@ class LoadHistoryBySessionEmptyTest(TestCase):
 # T-UNIT-02: load_history_by_session — 正常路径，返回升序列表
 # AC: US-012 AC-012-01
 # ---------------------------------------------------------------------------
+@tag('unit')
 class LoadHistoryBySessionBasicTest(TestCase):
     def setUp(self):
         self.user = _user('t_unit_02_user')
@@ -86,6 +88,7 @@ class LoadHistoryBySessionBasicTest(TestCase):
 # T-CRIT-01 / T-UNIT-03: 会话隔离
 # AC: US-013 AC-013-01, US-013 AC-013-02, US-010 AC-010-02
 # ---------------------------------------------------------------------------
+@tag('unit')
 class LoadHistoryBySessionIsolationTest(TestCase):
     """T-CRIT-01: load_history_by_session 确保跨 session 历史不串味。"""
 
@@ -130,6 +133,7 @@ class LoadHistoryBySessionIsolationTest(TestCase):
 # T-CRIT-02 / T-UNIT-04: 历史 20 轮上限
 # AC: US-012 AC-012-01 (20 轮截断)
 # ---------------------------------------------------------------------------
+@tag('unit')
 class LoadHistoryBySessionLimitTest(TestCase):
     """T-CRIT-02: 写入 25 轮，load_history_by_session(limit=20) 返回最近 20 轮（40条）。"""
 
@@ -174,6 +178,7 @@ class LoadHistoryBySessionLimitTest(TestCase):
 # T-CRIT-03 / T-UNIT-05~07: 软删除隔离
 # AC: US-011 AC-011-01, AC-011-02, AC-011-03
 # ---------------------------------------------------------------------------
+@tag('unit')
 class SoftDeleteSessionTest(TestCase):
     """T-CRIT-03: soft_delete_session 和 get_sessions 的软删除行为。"""
 
@@ -228,6 +233,7 @@ class SoftDeleteSessionTest(TestCase):
 # T-UNIT-08: get_sessions 分页 + session_key_full 字段
 # AC: US-008 AC-008-01, AC-008-02, AC-008-03
 # ---------------------------------------------------------------------------
+@tag('unit')
 class GetSessionsExtendedTest(TestCase):
     """T-UNIT-08: get_sessions 返回 session_key_full 字段，分页正确，is_deleted 过滤。"""
 
@@ -281,6 +287,7 @@ class GetSessionsExtendedTest(TestCase):
 # T-UNIT-09: load_history_by_session — limit=0 返回空列表
 # AC: US-012 AC-012-01 (边界情况)
 # ---------------------------------------------------------------------------
+@tag('unit')
 class LoadHistoryLimitZeroTest(TestCase):
     def test_limit_zero_returns_empty(self):
         """T-UNIT-09: limit=0 时返回空列表（注入窗口为 0）。"""
@@ -296,6 +303,7 @@ class LoadHistoryLimitZeroTest(TestCase):
 # T-UNIT-10: _resolve_session 逻辑（同步单元测试，不走 WS 层）
 # AC: US-014 AC-014-01, AC-014-02, US-010 AC-010-01
 # ---------------------------------------------------------------------------
+@tag('unit')
 class ResolveSessionTest(TestCase):
     """T-UNIT-10: ChatConsumer._resolve_session 四种行为覆盖（同步路径）。"""
 
@@ -340,6 +348,7 @@ class ResolveSessionTest(TestCase):
 # T-UNIT-11: get_sessions — 按 started_at 降序排列（最新会话在前）
 # AC: US-009 AC-009-03 (新建会话出现在列表顶部)
 # ---------------------------------------------------------------------------
+@tag('unit')
 class GetSessionsOrderTest(TestCase):
     def test_sessions_ordered_by_started_at_desc(self):
         """T-UNIT-11 (AC-009-03): get_sessions 返回按 started_at 倒序排列的会话。"""
@@ -359,6 +368,7 @@ class GetSessionsOrderTest(TestCase):
 # T-UNIT-12: load_history_by_session — 验证 result 升序（最旧消息在前）
 # AC: US-012 AC-012-01
 # ---------------------------------------------------------------------------
+@tag('unit')
 class LoadHistoryBySessionOrderTest(TestCase):
     def test_messages_returned_in_ascending_order(self):
         """T-UNIT-12: 消息按 created_at 升序排列（最旧在前，最新在后）。"""

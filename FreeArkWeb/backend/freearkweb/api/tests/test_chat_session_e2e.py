@@ -22,7 +22,7 @@ import json
 import uuid
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -56,6 +56,7 @@ def _auth_client(user):
     return client
 
 
+@tag('e2e')
 class FullSessionLifecycleE2ETest(TransactionTestCase):
     """
     TC-E2E-001: 完整会话创建流程（critical path）。

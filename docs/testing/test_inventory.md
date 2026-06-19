@@ -1,7 +1,7 @@
 # FreeArk 后端测试清单（test_inventory.md）
 
 > 自动生成：`python scripts/gen_test_inventory.py`（请勿手改，改 @tag 后重新生成）
-> 生成日期：2026-06-19
+> 生成日期：2026-06-20
 
 **分层方式**：Django 原生 `@tag('unit'|'integration'|'e2e')`（类级）。文件位置保持不动（扁平），仅靠 tag 分层。
 
@@ -15,10 +15,10 @@ FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
 
 | 层级 | 用例数 |
 |------|-------:|
-| unit | 777 |
-| integration | 842 |
-| e2e | 83 |
-| **合计（已分层）** | **1702** |
+| unit | 824 |
+| integration | 871 |
+| e2e | 84 |
+| **合计（已分层）** | **1779** |
 
 > 全量 `manage.py test api` 共发现 **1702** 个测试；上表三层之和应等于 1702（每个用例恰属一层，无重复、无遗漏）。
 
@@ -26,6 +26,9 @@ FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
 
 | 脚本 | unit | integration | e2e | 合计 |
 |------|-----:|------------:|----:|-----:|
+| `api/tests/test_chat_memory_session.py` | 30 | 0 | 0 | 30 |
+| `api/tests/test_chat_session_e2e.py` | 0 | 0 | 1 | 1 |
+| `api/tests/test_chat_session_feature.py` | 17 | 12 | 0 | 29 |
 | `api/tests/test_condensation_v070_e2e.py` | 0 | 0 | 19 | 19 |
 | `api/tests/test_condensation_v070_integration.py` | 0 | 15 | 0 | 15 |
 | `api/tests/test_condensation_v070_unit.py` | 33 | 0 | 0 | 33 |
@@ -73,9 +76,11 @@ FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
 | `api/tests/test_screen_heartbeat.py` | 14 | 4 | 0 | 18 |
 | `api/tests/test_service_management.py` | 18 | 28 | 11 | 57 |
 | `api/tests/test_service_registry_v120.py` | 12 | 3 | 0 | 15 |
+| `api/tests/test_session_delete_view.py` | 0 | 13 | 0 | 13 |
 | `api/tests/test_v100_dashboard_redesign.py` | 0 | 16 | 0 | 16 |
 | `api/tests/test_waitress_config_v052.py` | 12 | 0 | 0 | 12 |
 | `api/tests/test_workorder_v131.py` | 0 | 14 | 0 | 14 |
+| `api/tests/test_ws_session_resolve.py` | 0 | 4 | 0 | 4 |
 | `api/tests_fault_count.py` | 50 | 19 | 0 | 69 |
 | `api/tests_fault_event.py` | 79 | 96 | 0 | 175 |
 | `api/tests_rag.py` | 27 | 18 | 0 | 45 |
@@ -84,6 +89,95 @@ FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
 ---
 
 ## 明细：脚本 → 测试类［层级］→ 用例方法
+
+### `api/tests/test_chat_memory_session.py`
+
+- **LoadHistoryBySessionEmptyTest** ［unit］ — 1 用例
+  - `test_empty_session_returns_empty_list`
+- **LoadHistoryBySessionBasicTest** ［unit］ — 2 用例
+  - `test_returns_messages_in_order`
+  - `test_returns_list_of_dicts`
+- **LoadHistoryBySessionIsolationTest** ［unit］ — 3 用例
+  - `test_session_a_does_not_contain_session_b_messages`
+  - `test_session_b_does_not_contain_session_a_messages`
+  - `test_isolation_with_multiple_users`
+- **LoadHistoryBySessionLimitTest** ［unit］ — 5 用例
+  - `test_limit_20_returns_at_most_40_messages`
+  - `test_limit_20_returns_most_recent_messages`
+  - `test_exactly_20_turns_returned`
+  - `test_limit_default_reads_from_settings`
+  - `test_limit_exact_match`
+- **SoftDeleteSessionTest** ［unit］ — 6 用例
+  - `test_get_sessions_excludes_deleted`
+  - `test_soft_delete_sets_is_deleted_flag`
+  - `test_soft_delete_returns_true`
+  - `test_soft_delete_idempotent_raises_value_error`
+  - `test_soft_delete_wrong_user_raises_value_error`
+  - `test_soft_delete_nonexistent_key_raises_value_error`
+- **GetSessionsExtendedTest** ［unit］ — 6 用例
+  - `test_session_key_full_field_present`
+  - `test_session_key_is_truncated_for_display`
+  - `test_is_deleted_filter_only_returns_active_sessions`
+  - `test_empty_user_returns_empty`
+  - `test_pagination_page2`
+  - `test_returns_message_count`
+- **LoadHistoryLimitZeroTest** ［unit］ — 1 用例
+  - `test_limit_zero_returns_empty`
+- **ResolveSessionTest** ［unit］ — 4 用例
+  - `test_none_param_creates_new_session`
+  - `test_valid_key_returns_existing_session`
+  - `test_deleted_key_creates_new_session`
+  - `test_wrong_user_key_creates_new_session`
+- **GetSessionsOrderTest** ［unit］ — 1 用例
+  - `test_sessions_ordered_by_started_at_desc`
+- **LoadHistoryBySessionOrderTest** ［unit］ — 1 用例
+  - `test_messages_returned_in_ascending_order`
+
+### `api/tests/test_chat_session_e2e.py`
+
+- **FullSessionLifecycleE2ETest** ［e2e］ — 1 用例
+  - `test_tc_e2e_001_full_session_lifecycle`
+
+### `api/tests/test_chat_session_feature.py`
+
+- **GenerateTitleTruncateTest** ［unit］ — 5 用例
+  - `test_tc_unit_001_truncates_long_content`
+  - `test_tc_unit_002_no_truncation_for_short_content`
+  - `test_tc_unit_003_empty_string_returns_empty`
+  - `test_tc_unit_004_exactly_max_len_not_truncated`
+  - `test_truncate_default_max_len_is_30`
+- **GenerateTitleLlmAsyncTest** ［unit］ — 4 用例
+  - `test_tc_unit_005_llm_success_updates_title`
+  - `test_tc_unit_006_llm_exception_preserves_truncated_title`
+  - `test_tc_unit_007_llm_empty_string_preserves_truncated_title`
+  - `test_tc_unit_no_api_key_no_update`
+- **GetSessionHistoryTest** ［unit］ — 6 用例
+  - `test_tc_unit_008_normal_returns_ordered_messages`
+  - `test_tc_unit_009_nonexistent_session_raises_valueerror`
+  - `test_tc_unit_010_other_user_session_raises_valueerror`
+  - `test_history_limit_respected`
+  - `test_empty_session_returns_empty_list`
+  - `test_soft_deleted_session_raises_valueerror`
+- **EnsureSessionCreatedTest** ［integration］ — 2 用例
+  - `test_tc_unit_011_first_call_creates_session`
+  - `test_tc_unit_012_idempotent_second_call`
+- **GetSessionsTitleFieldTest** ［unit］ — 2 用例
+  - `test_tc_unit_013_title_field_present_and_correct`
+  - `test_tc_unit_014_old_session_title_is_null`
+- **SessionHistoryViewTest** ［integration］ — 6 用例
+  - `test_tc_int_001_normal_returns_200_with_ordered_messages`
+  - `test_tc_int_001_limit_40_for_large_session`
+  - `test_tc_int_002_empty_session_returns_empty_list`
+  - `test_tc_int_003_other_user_session_returns_404`
+  - `test_tc_int_004_unauthenticated_returns_401_or_403`
+  - `test_nonexistent_session_returns_404`
+- **GetSessionsTitleIntegrationTest** ［integration］ — 2 用例
+  - `test_tc_int_005_sessions_contain_title_field`
+  - `test_tc_int_006_old_session_title_null`
+- **WsNoDbOnConnectTest** ［integration］ — 1 用例
+  - `test_tc_int_007_connect_no_db_record`
+- **WsFirstMessageCreatesSessionTest** ［integration］ — 1 用例
+  - `test_tc_int_008_first_message_creates_session_with_title`
 
 ### `api/tests/test_condensation_v070_e2e.py`
 
@@ -1875,6 +1969,24 @@ FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
   - `test_is_active_independent_of_enabled`
   - `test_disabled_service_reported`
 
+### `api/tests/test_session_delete_view.py`
+
+- **SessionDeleteViewTest** ［integration］ — 7 用例
+  - `test_delete_own_session_returns_200`
+  - `test_delete_marks_session_as_deleted_in_db`
+  - `test_delete_removed_from_session_list`
+  - `test_delete_other_user_session_returns_404`
+  - `test_delete_nonexistent_session_returns_404`
+  - `test_delete_idempotent_second_call_returns_404`
+  - `test_delete_unauthenticated_returns_401`
+- **MyMemoryViewSessionKeyFullTest** ［integration］ — 6 用例
+  - `test_returns_session_key_full_field`
+  - `test_deleted_sessions_excluded_from_list`
+  - `test_empty_session_list_returns_empty_state`
+  - `test_pagination_works`
+  - `test_unauthenticated_returns_401`
+  - `test_session_contains_required_fields`
+
 ### `api/tests/test_v100_dashboard_redesign.py`
 
 - **DeviceListCondensationFieldTest** ［integration］ — 4 用例
@@ -1936,6 +2048,14 @@ FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
 - **ResolveTest** ［integration］ — 2 用例
   - `test_user_403`
   - `test_admin_resolves`
+
+### `api/tests/test_ws_session_resolve.py`
+
+- **WsResolveSessionTest** ［integration］ — 4 用例
+  - `test_no_session_key_creates_new`
+  - `test_valid_own_session_key_reused`
+  - `test_deleted_session_key_falls_back_to_new`
+  - `test_other_users_session_key_falls_back_to_new`
 
 ### `api/tests_fault_count.py`
 
