@@ -366,11 +366,22 @@ class RagParser:
 
         return chunks
 
+    # 扫描件 PDF 整页渲染配置
+    # DPI=150：对 A0~A1 大图纸（约 1189×841mm）渲染后约 7000×5000px，rapidocr 可处理；
+    # 更高 DPI（300）会使单页 pixmap 超过 200MB，Pi 5（8GB RAM）在多页图纸时有 OOM 风险。
+    # 若 OCR 结果太少（大尺寸图纸文字密度低），可适当提高至 200。
+    _SCAN_RENDER_DPI = 150
+    # 整页渲染后图片字节大小上限（防止超大图纸耗尽内存）：50MB
+    _SCAN_MAX_IMG_BYTES = 50 * 1024 * 1024
+
     def parse_pdf(self, file_bytes: bytes) -> List[ParsedChunk]:
         """
         PyMuPDF 解析 .pdf（AGPL v3，内部平台合规，见 ADR-003）：
         - 页面文字按 chunk_size 分块，来源标注"第 N 页"
-        - 页面图片 OCR，来源标注"第 N 页 图片M"
+        - 页面内嵌图片 XObject OCR，来源标注"第 N 页 图片M"
+        - 扫描件/图纸 fallback：若整页既无文本层又无可提取 XObject 图片，
+          则将该页光栅化（get_pixmap）后整体 OCR，来源标注"第 N 页 扫描"。
+          此 fallback 覆盖"整页内容编码为页面位图流而非 XObject"的扫描 PDF。
         """
         import io
         import fitz  # PyMuPDF
@@ -382,12 +393,12 @@ class RagParser:
             page = doc[page_num]
             page_label = f"第 {page_num + 1} 页"
 
-            # 页面文字
+            # ── 路径1：页面文字层 ──────────────────────────────────────────
             text = page.get_text().strip()
             if text:
                 chunks.extend(self._split_text(text, page_label))
 
-            # 页面图片 OCR
+            # ── 路径2：页面内嵌 XObject 图片 OCR ──────────────────────────
             img_list = page.get_images(full=True)
             for img_idx, img_info in enumerate(img_list):
                 xref = img_info[0]
@@ -403,6 +414,58 @@ class RagParser:
                         ))
                 except Exception as e:
                     logger.warning("rag_service: pdf 图片 OCR 失败，跳过: %s", e)
+
+            # ── 路径3：扫描件 fallback — 整页栅格化 OCR ───────────────────
+            # 触发条件：该页既无可提取文本，也无 XObject 图片（典型扫描件/图纸 PDF）。
+            # 原理：将整页渲染为 PNG pixmap，直接对 PNG bytes 调 rapidocr。
+            # get_text() 对扫描件始终返回 ""，get_images() 对"页面流位图"扫描件返回 []，
+            # 两者均为假时说明本页内容完全在光栅化页面流中，需此 fallback 才能提取文字。
+            if not text and not img_list:
+                if not _HAS_OCR:
+                    logger.warning(
+                        "rag_service: 第 %d 页为扫描件但 OCR 未启用，跳过该页",
+                        page_num + 1,
+                    )
+                else:
+                    try:
+                        mat = fitz.Matrix(
+                            self._SCAN_RENDER_DPI / 72,
+                            self._SCAN_RENDER_DPI / 72,
+                        )
+                        pixmap = page.get_pixmap(matrix=mat, alpha=False)
+                        png_bytes = pixmap.tobytes("png")
+                        pixmap = None  # 及时释放，防止大图纸多页 OOM
+
+                        if len(png_bytes) > self._SCAN_MAX_IMG_BYTES:
+                            logger.warning(
+                                "rag_service: 第 %d 页渲染后 %.1f MB，超过 %d MB 上限，跳过",
+                                page_num + 1,
+                                len(png_bytes) / 1024 / 1024,
+                                self._SCAN_MAX_IMG_BYTES // 1024 // 1024,
+                            )
+                        else:
+                            logger.info(
+                                "rag_service: 第 %d 页为扫描件，整页渲染 %.1f MB，执行 OCR",
+                                page_num + 1,
+                                len(png_bytes) / 1024 / 1024,
+                            )
+                            ocr_text = self._ocr_image(png_bytes)
+                            if ocr_text:
+                                chunks.append(ParsedChunk(
+                                    content=ocr_text,
+                                    page_or_section=f"{page_label} 扫描",
+                                    is_image_ocr=True,
+                                ))
+                            else:
+                                logger.warning(
+                                    "rag_service: 第 %d 页扫描件 OCR 返回空（图纸无可识别文字或图像质量不足）",
+                                    page_num + 1,
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            "rag_service: 第 %d 页扫描件整页 OCR 失败，跳过: %s",
+                            page_num + 1, e,
+                        )
 
         return chunks
 
