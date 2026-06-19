@@ -22,7 +22,7 @@ from unittest.mock import patch, MagicMock
 from unittest import skipIf
 
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from api.models import (
     DeviceAttrBinding,
@@ -107,6 +107,7 @@ def _make_data_payload(
 # TC-LOCK-01: 单户同步成功路径
 # ===========================================================================
 
+@tag('integration')
 class SingleOwnerSyncTest(TestCase):
     """TC-LOCK-01: 单户完整同步路径，验证 pre-pass + 主事务 get() 流程正确落库。"""
 
@@ -180,6 +181,7 @@ class SingleOwnerSyncTest(TestCase):
     settings.DATABASES['default']['ENGINE'].endswith('sqlite3'),
     'SQLite 使用文件级独占写锁，无法测试真正的多线程并发；本组测试仅在 MySQL 下有意义'
 )
+@tag('integration')
 class ConcurrentSyncLockTest(TestCase):
     """TC-LOCK-02: 多户并发同步同一 product_code 的 attr 定义，验证无竞争异常。
 
@@ -277,6 +279,7 @@ class ConcurrentSyncLockTest(TestCase):
 # TC-LOCK-03: 主事务中 attr_def 不存在时的兜底路径
 # ===========================================================================
 
+@tag('integration')
 class AttrDefFallbackTest(TestCase):
     """TC-LOCK-03: 模拟 pre-pass 后行被删除的极罕见竞态，验证兜底 get_or_create 生效。"""
 

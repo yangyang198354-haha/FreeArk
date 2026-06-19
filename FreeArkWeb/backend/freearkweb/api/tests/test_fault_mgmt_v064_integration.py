@@ -20,7 +20,7 @@ test_fault_mgmt_v064_integration.py — v0.6.4-FM-ROOM 集成测试
 from datetime import timedelta
 from unittest.mock import patch, MagicMock, call
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -106,6 +106,7 @@ def _reset_cache():
 # IT-MIG: migration 0028 数据回填测试
 # ===========================================================================
 
+@tag('integration')
 class TestMigration0028Backfill(TestCase):
     """IT-MIG-001~002：migration 0028 回填逻辑验证（直接测试 backfill_room 函数）。"""
 
@@ -268,6 +269,7 @@ class TestMigration0028Backfill(TestCase):
 # IT-FC: fault_consumer 写入路径集成测试
 # ===========================================================================
 
+@tag('integration')
 class TestFaultConsumerWritePath(TestCase):
     """IT-FC-001~002：fault_consumer T1 INSERT 写入路径 room_name 集成测试。"""
 
@@ -340,6 +342,7 @@ class TestFaultConsumerWritePath(TestCase):
 # IT-VF: views_fault.py room_name 过滤集成测试
 # ===========================================================================
 
+@tag('integration')
 class TestFaultEventRoomNameFilter(TestCase):
     """IT-VF-001~006：GET /api/devices/fault-events/?room_name=xxx 过滤集成测试。"""
 
@@ -471,6 +474,7 @@ class TestFaultEventRoomNameFilter(TestCase):
 # IT-REG: 关键回归场景（主线 PM 要求，oracle 驱动）
 # ===========================================================================
 
+@tag('integration')
 class TestKeyRegressionScenarios(TestCase):
     """关键回归测试：3-1-602 四房各 sub_type 过滤 + 1-1-16-1601 三房书房返回 0 条。
 

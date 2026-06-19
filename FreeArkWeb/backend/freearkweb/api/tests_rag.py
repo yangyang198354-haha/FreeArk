@@ -48,7 +48,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -81,6 +81,7 @@ def _vec_bytes(dim: int = 1024) -> bytes:
 
 # ── 1. 数据模型测试 ────────────────────────────────────────────────────────
 
+@tag('unit')
 class TestRagDocumentModel(TestCase):
     """REQ-FUNC-RAG-01：RagDocument 模型状态机与字段约束。"""
 
@@ -139,6 +140,7 @@ class TestRagDocumentModel(TestCase):
 
 # ── 2. 上传 API 测试（REQ-FUNC-RAG-02）──────────────────────────────────
 
+@tag('integration')
 class TestRagUploadAPI(TestCase):
     """REQ-FUNC-RAG-02/03/04：上传、列表、删除、权限。"""
 
@@ -323,6 +325,7 @@ class TestRagUploadAPI(TestCase):
 
 # ── 3. rag_service 服务测试 ───────────────────────────────────────────────
 
+@tag('unit')
 class TestRagService(TestCase):
     """REQ-FUNC-RAG-06/07/08：服务层单元测试。"""
 
@@ -583,6 +586,7 @@ class TestRagService(TestCase):
 
 # ── 4. fa_tools.search_sanheng_knowledge 测试 ────────────────────────────
 
+@tag('unit')
 class TestSearchTool(TestCase):
     """REQ-FUNC-RAG-09：search_sanheng_knowledge @tool 行为。"""
 
@@ -657,6 +661,7 @@ class TestSearchTool(TestCase):
 
 # ── 5. 集成测试（E2E 后端链路）───────────────────────────────────────────
 
+@tag('integration')
 class TestRagIntegration(TestCase):
     """
     集成测试：完整的上传→入库→检索链路（全部 mock 外部 API）。
@@ -762,6 +767,7 @@ class TestRagIntegration(TestCase):
 
 # ── 6. SYSTEM_PROMPT 约定检查 ─────────────────────────────────────────────
 
+@tag('unit')
 class TestSystemPromptRAG(TestCase):
     """REQ-FUNC-RAG-10：验证 SYSTEM_PROMPT.langgraph.md 包含 RAG 约定。"""
 
@@ -797,6 +803,7 @@ class TestSystemPromptRAG(TestCase):
 
 # ── 7. 序列化器测试 ───────────────────────────────────────────────────────
 
+@tag('unit')
 class TestRagSerializer(TestCase):
     """serializers_rag.py：字段序列化正确性。"""
 

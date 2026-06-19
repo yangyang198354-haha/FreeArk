@@ -25,7 +25,7 @@ import subprocess
 import tempfile
 from unittest.mock import MagicMock, patch, call
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
@@ -74,6 +74,7 @@ _WSS_CONFIG = {
 # 1. 单元测试：工具函数
 # ===========================================================================
 
+@tag('unit')
 class TestReadHbcConfig(TestCase):
     """_read_hbc_config() 单元测试"""
 
@@ -116,6 +117,7 @@ class TestReadHbcConfig(TestCase):
             os.unlink(tmp_path)
 
 
+@tag('unit')
 class TestWriteHbcConfig(TestCase):
     """_write_hbc_config() 单元测试"""
 
@@ -152,6 +154,7 @@ class TestWriteHbcConfig(TestCase):
             self.assertIn('测试客户端', text)
 
 
+@tag('unit')
 class TestHostPatternValidation(TestCase):
     """host 字段正则校验单元测试 (REQ-NFUNC-001)"""
 
@@ -194,6 +197,7 @@ class TestHostPatternValidation(TestCase):
         self.assertFalse(self._match('../etc/passwd'))
 
 
+@tag('unit')
 class TestPasswordPreservation(TestCase):
     """OQ-004: password 空字符串时保留原值的逻辑"""
 
@@ -232,6 +236,7 @@ class TestPasswordPreservation(TestCase):
         self.assertEqual(password, 'newpass')
 
 
+@tag('unit')
 class TestRestartService(TestCase):
     """_restart_heartbeat_service() 单元测试"""
 
@@ -267,6 +272,7 @@ class TestRestartService(TestCase):
 # 2. 单元测试：Consumer 配置加载 (_load_heartbeat_config)
 # ===========================================================================
 
+@tag('unit')
 class TestLoadHeartbeatConfig(TestCase):
     """_load_heartbeat_config() 单元测试（screen_heartbeat_consumer.py 中的函数）"""
 
@@ -319,6 +325,7 @@ class TestLoadHeartbeatConfig(TestCase):
 # 3. 集成测试：GET API
 # ===========================================================================
 
+@tag('integration')
 class TestHeartbeatBrokerConfigGetAPI(TestCase):
     """GET /api/heartbeat-broker-config/ 集成测试"""
 
@@ -357,6 +364,7 @@ class TestHeartbeatBrokerConfigGetAPI(TestCase):
 # 4. 集成测试：PUT API — mqtt 协议路径
 # ===========================================================================
 
+@tag('integration')
 class TestHeartbeatBrokerConfigPutMqttAPI(TestCase):
     """PUT /api/heartbeat-broker-config/update/ 集成测试 — mqtt 协议路径"""
 
@@ -499,6 +507,7 @@ class TestHeartbeatBrokerConfigPutMqttAPI(TestCase):
 # 5. 集成测试：PUT API — wss 协议路径
 # ===========================================================================
 
+@tag('integration')
 class TestHeartbeatBrokerConfigPutWssAPI(TestCase):
     """PUT /api/heartbeat-broker-config/update/ 集成测试 — wss 协议路径"""
 
@@ -542,6 +551,7 @@ class TestHeartbeatBrokerConfigPutWssAPI(TestCase):
 # 6. 集成测试：PUT API — restart 触发（mock subprocess）
 # ===========================================================================
 
+@tag('integration')
 class TestHeartbeatBrokerConfigRestartIntegration(TestCase):
     """PUT 触发 restart 调用的集成测试（mock subprocess）"""
 
@@ -606,6 +616,7 @@ class TestHeartbeatBrokerConfigRestartIntegration(TestCase):
 # 7. 集成测试：兼容性 — 旧 mqtt 地址 (US-HBC-007)
 # ===========================================================================
 
+@tag('integration')
 class TestLegacyMqttCompatibility(TestCase):
     """旧 mqtt+47.x.x.x 地址应被接受（REQ-NFUNC-002, US-HBC-007）"""
 

@@ -13,7 +13,7 @@ test_fault_event_serializer_v061.py — FaultEventSerializer v0.6.1-FM-UX 新字
 """
 
 from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework.test import APIClient
@@ -56,6 +56,7 @@ def _reset_cache():
     cache_module._cache_loaded_at = 0.0
 
 
+@tag('integration')
 class TestSerializerNewFieldsPresent(TestCase):
     """TC-SER-01：序列化输出必须包含 device_name 和 device_type_label 字段。"""
 
@@ -137,6 +138,7 @@ class TestSerializerNewFieldsPresent(TestCase):
         self.assertIn('device_type_label', first)
 
 
+@tag('integration')
 class TestSerializerMainPath(TestCase):
     """TC-SER-02：主路径——device_sn 命中 cache → device_name = 缓存中的 device_name。"""
 
@@ -231,6 +233,7 @@ class TestSerializerMainPath(TestCase):
         self.assertEqual(first['device_name'], '水力模块')
 
 
+@tag('integration')
 class TestSerializerFallbackOne(TestCase):
     """TC-SER-03：兜底一——cache miss + product_code 命中 PRODUCT_CODE_LABELS → device_type_label。"""
 
@@ -312,6 +315,7 @@ class TestSerializerFallbackOne(TestCase):
             )
 
 
+@tag('integration')
 class TestSerializerFallbackTwo(TestCase):
     """TC-SER-04：兜底二——cache miss + product_code miss → device_name=None, device_type_label=None。"""
 
@@ -384,6 +388,7 @@ class TestSerializerFallbackTwo(TestCase):
         self.assertIsNone(first['device_type_label'])
 
 
+@tag('integration')
 class TestSerializerEdgeCases(TestCase):
     """TC-SER-05：边界情况——device_sn 非整数字符串时 get_device_name 返回 None，不崩溃。"""
 

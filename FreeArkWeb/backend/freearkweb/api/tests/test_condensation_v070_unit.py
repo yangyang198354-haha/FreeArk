@@ -39,7 +39,7 @@ from datetime import timedelta
 from unittest.mock import patch, MagicMock, call
 from io import StringIO
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from django.core.management import call_command
 
@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # UT-MIG-001: migration 0029 隐式验证
 # ---------------------------------------------------------------------------
+@tag('unit')
 class MigrationApplyTest(TestCase):
     """migration 0029 已在 Django 测试框架 setup 时通过 --keepdb=no migrate 应用。
     只要此 TestCase 能运行，即证明迁移在 SQLite 无误。"""
@@ -70,6 +71,7 @@ class MigrationApplyTest(TestCase):
 # id AutoField→BigAutoField），这些与本功能无关，已单独立项为技术债
 # TD-MIGRATION-001，不在 v0.7.0 范围内。
 # ---------------------------------------------------------------------------
+@tag('unit')
 class MakeMigrationsCheckTest(TestCase):
     """UT-MM-001: CondensationWarningEvent 模型字段与 migration 0029 一致。"""
 
@@ -129,6 +131,7 @@ class MakeMigrationsCheckTest(TestCase):
 # ---------------------------------------------------------------------------
 # UT-NS-*: _normalize_system_switch_from_mqtt
 # ---------------------------------------------------------------------------
+@tag('unit')
 class NormalizeSystemSwitchTest(TestCase):
     """UT-NS-001~004: system_switch MQTT 直取路径规范化函数。"""
 
@@ -193,6 +196,7 @@ def _make_device_status_payload(
 # UT-SM-*: 状态机 T1/T2/T3
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class StateMachineT1T2T3Test(TestCase):
     """UT-SM-001~008: 状态机三条转移规则及进程内内存维护。"""
 
@@ -448,6 +452,7 @@ class StateMachineT1T2T3Test(TestCase):
 # UT-SM-T2P-*: T2 节流落库（修复"活跃预警 发生=最后活跃 恒相同"缺陷）
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class StateMachineT2ThrottledPersistTest(TestCase):
     """T2 节流落库：活跃预警的 last_seen_at 按阈值低频写回 DB，
     修复"未恢复预警 first_seen_at 与 last_seen_at 永远相同"的缺陷
@@ -530,6 +535,7 @@ class StateMachineT2ThrottledPersistTest(TestCase):
 # UT-SS-*: system_switch 双源逻辑
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class SystemSwitchDualSourceTest(TestCase):
     """UT-SS-001~004: MQTT 直取路径 vs PLCLatestData 兜底路径。"""
 
@@ -614,6 +620,7 @@ class SystemSwitchDualSourceTest(TestCase):
 # UT-SNAP-*: 快照字段
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class SnapshotFieldTest(TestCase):
     """UT-SNAP-001~004: 快照字段提取与 NULL 兜底。"""
 
@@ -690,6 +697,7 @@ class SnapshotFieldTest(TestCase):
 # UT-ERR-*: 错误容忍
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class ErrorToleranceTest(TestCase):
     """UT-ERR-001~002: 非数字 condensation_alarm 值容忍测试。"""
 
@@ -739,6 +747,7 @@ class ErrorToleranceTest(TestCase):
 # UT-CL-*: condensation_cleanup Management Command
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class CleanupCommandTest(TestCase):
     """UT-CL-001~004: condensation_cleanup 命令清理策略。"""
 

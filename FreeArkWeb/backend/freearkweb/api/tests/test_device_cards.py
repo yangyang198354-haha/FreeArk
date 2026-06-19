@@ -14,7 +14,7 @@
 """
 from datetime import datetime, timedelta
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -83,6 +83,7 @@ def make_history(specific_part, param_name, value, collected_at=None):
 # UNIT TESTS: DeviceConfig Model
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestDeviceConfigModel(TestCase):
     """DeviceConfig 模型基本行为验证（param_name -> group/sub_type 映射语义）"""
 
@@ -182,6 +183,7 @@ class TestDeviceConfigModel(TestCase):
 # UNIT TESTS: DeviceParamHistory Model
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestDeviceParamHistoryModel(TestCase):
     """DeviceParamHistory 模型基本行为验证（specific_part 时序存储）"""
 
@@ -265,6 +267,7 @@ class TestDeviceParamHistoryModel(TestCase):
 SPECIFIC_PART = '9-1-31-3104'
 
 
+@tag('integration')
 class TestDeviceRealtimeParamsAPI(TestCase):
     """测试实时参数卡片接口的响应格式与过滤逻辑"""
 
@@ -547,6 +550,7 @@ class TestDeviceRealtimeParamsAPI(TestCase):
 # INTEGRATION TESTS: GET /api/devices/param-history/
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class TestDeviceParamHistoryAPI(TestCase):
     """测试历史参数查询接口的过滤、分页和排序逻辑"""
 

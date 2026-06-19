@@ -16,7 +16,7 @@ MAJOR-001 边界：奇数条消息时 build_inject_prefix 不崩溃
 MINOR-001 边界：load_history limit 参数绕过模块级常量
 """
 from unittest.mock import patch, MagicMock
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
 from api.models import ChatSession, ChatMessage
 from api import chat_memory
@@ -32,6 +32,7 @@ def _make_session(user, key='sk-test'):
     return chat_memory.create_session(user, key)
 
 
+@tag('unit')
 class CreateSessionTest(TestCase):
     """create_session 正常路径。"""
 
@@ -45,6 +46,7 @@ class CreateSessionTest(TestCase):
         self.assertTrue(ChatSession.objects.filter(pk=sess.pk).exists())
 
 
+@tag('unit')
 class CloseSessionTest(TestCase):
     """close_session 写入 ended_at。"""
 
@@ -57,6 +59,7 @@ class CloseSessionTest(TestCase):
         self.assertIsNotNone(sess.ended_at)
 
 
+@tag('unit')
 class AppendMessageTest(TestCase):
     """append_message 正常路径和参数校验。"""
 
@@ -85,6 +88,7 @@ class AppendMessageTest(TestCase):
         self.assertEqual(count, 2)
 
 
+@tag('unit')
 class LoadHistoryTest(TestCase):
     """load_history 各场景。"""
 
@@ -185,6 +189,7 @@ class LoadHistoryTest(TestCase):
             self.assertIn('content', item)
 
 
+@tag('unit')
 class LoadHistoryDegradationTest(TestCase):
     """降级路径：DB 错误时 load_history 不抛出，被调用方捕获（模拟 consumers.py 的 try/except）。"""
 
@@ -208,6 +213,7 @@ class LoadHistoryDegradationTest(TestCase):
             self.assertTrue(raised or not raised)  # 无论如何不崩进程
 
 
+@tag('unit')
 class BuildInjectPrefixTest(TestCase):
     """build_inject_prefix 各场景。"""
 
@@ -271,6 +277,7 @@ class BuildInjectPrefixTest(TestCase):
         self.assertNotIn('assistant:', prefix)
 
 
+@tag('unit')
 class ClearMemoryTest(TestCase):
     """clear_memory 删除用户所有 session（级联删除 messages）。"""
 
@@ -308,6 +315,7 @@ class ClearMemoryTest(TestCase):
         self.assertEqual(deleted, 0)
 
 
+@tag('unit')
 class GetSessionsTest(TestCase):
     """get_sessions 分页查询。"""
 

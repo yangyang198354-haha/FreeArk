@@ -14,7 +14,7 @@ ADR-FFF-003（fault_count=None 两侧排除）
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -69,6 +69,7 @@ def _make_plc_latest(specific_part, param_name, value):
 # ---------------------------------------------------------------------------
 
 
+@tag('unit')
 class TestFaultStatusFilterLogicUnit(TestCase):
     """
     PHASE_07 单元测试：直接测试 device_management_device_list 视图中
@@ -175,6 +176,7 @@ class TestFaultStatusFilterLogicUnit(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@tag('integration')
 class TestFaultStatusFilterIntegration(TestCase):
     """
     PHASE_08 集成测试：分页 total 正确性、与 screen_status AND 叠加、
@@ -314,6 +316,7 @@ class TestFaultStatusFilterIntegration(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@tag('e2e')
 class TestFaultStatusFilterE2E(TestCase):
     """
     PHASE_09 E2E 验收测试：种入真实 PLCLatestData，验证 get_fault_count_batch_cached

@@ -9,7 +9,7 @@
 import uuid
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 
@@ -35,6 +35,7 @@ def _make_record(**kwargs):
     return PLCWriteRecord.objects.create(**defaults)
 
 
+@tag('unit')
 class PLCWriteRecordModelTests(TestCase):
 
     def test_ut_m_01_default_status_pending(self):
@@ -108,6 +109,7 @@ class PLCWriteRecordModelTests(TestCase):
         self.assertIsNotNone(rec.acked_at)
 
 
+@tag('unit')
 class PLCWriteRecordSerializerTests(TestCase):
 
     def test_ut_s_01_serializes_all_fields(self):
@@ -154,6 +156,7 @@ class PLCWriteRecordSerializerTests(TestCase):
         self.assertFalse(ser.is_valid())
 
 
+@tag('unit')
 class NormalizeSelectValuesTests(TestCase):
 
     def test_ut_norm_01_array_passthrough(self):
@@ -182,6 +185,7 @@ class NormalizeSelectValuesTests(TestCase):
         self.assertEqual(_normalize_select_values('not json'), '[]')
 
 
+@tag('unit')
 class IsWritableTests(TestCase):
 
     def test_ut_w_01_temp_setting_writable(self):
@@ -209,6 +213,7 @@ class IsWritableTests(TestCase):
         self.assertFalse(_is_writable('living_room_unknown_field'))
 
 
+@tag('unit')
 class HandleWriteAckTests(TestCase):
 
     def _get_consumer(self):

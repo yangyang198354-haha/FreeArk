@@ -18,7 +18,7 @@ v0.9.0 会话超时功能测试 (REQ-AUTH-001, REQ-AUTH-002, REQ-NFR-AUTH-001)
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from rest_framework import status as drf_status
 from rest_framework.authtoken.models import Token
@@ -39,6 +39,7 @@ TEST_THROTTLE = 3    # 节流阈值：3 秒（测试用）
     SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
 )
+@tag('unit')
 class SlidingWindowAuthenticationUnitTests(TestCase):
     """直接测试 SlidingWindowTokenAuthentication 类的行为。"""
 
@@ -210,6 +211,7 @@ class SlidingWindowAuthenticationUnitTests(TestCase):
     SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
 )
+@tag('integration')
 class LoginAPITests(TestCase):
     """测试登录接口对 TokenActivity 和 last_login 的影响。"""
 
@@ -366,6 +368,7 @@ TEST_EXTENDED = 100000
     SESSION_EXTENDED_TIMEOUT=TEST_EXTENDED,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
 )
+@tag('integration')
 class RememberMeTests(TestCase):
     """测试"7天内保持登录"(remember_me / extended_session) 功能。"""
 
@@ -447,6 +450,7 @@ class RememberMeTests(TestCase):
     SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
 )
+@tag('integration')
 class RegisterAPITests(TestCase):
     """测试注册接口对 TokenActivity 的影响。"""
 
@@ -478,6 +482,7 @@ class RegisterAPITests(TestCase):
     SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
 )
+@tag('integration')
 class LogoutCascadeTests(TestCase):
     """测试登出时 TokenActivity 被级联删除。"""
 
@@ -515,6 +520,7 @@ class LogoutCascadeTests(TestCase):
     SESSION_INACTIVITY_TIMEOUT=TEST_TIMEOUT,
     ACTIVITY_THROTTLE_SECONDS=TEST_THROTTLE,
 )
+@tag('integration')
 class ThrottleIntegrationTests(TestCase):
     """节流集成测试：通过真实 API 调用验证 DB 写入次数。"""
 
@@ -555,6 +561,7 @@ class ThrottleIntegrationTests(TestCase):
         self.assertGreaterEqual(updated_activity.last_active_at, initial_last_active)
 
 
+@tag('unit')
 class TokenActivityModelTests(TestCase):
     """TokenActivity 模型单元测试。"""
 

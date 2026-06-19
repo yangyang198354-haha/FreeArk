@@ -18,7 +18,7 @@ ARCH-C-006 回归
 import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from rest_framework.authtoken.models import Token
 
 try:
@@ -63,6 +63,7 @@ def _run(coro):
     return _run_loop.run_until_complete(coro)
 
 
+@tag('integration')
 class ConsumerSessionCreationTest(TransactionTestCase):
     """connect 后 ChatSession 应写入 DB。"""
 
@@ -110,6 +111,7 @@ class ConsumerSessionCreationTest(TransactionTestCase):
         self.assertIsNotNone(sess.ended_at, 'disconnect 后 ended_at 应被设置')
 
 
+@tag('integration')
 class ConsumerMessageWriteTest(TransactionTestCase):
     """stream_end 后 ChatMessage(assistant) 应写入 DB。"""
 
@@ -183,6 +185,7 @@ class ConsumerMessageWriteTest(TransactionTestCase):
         self.assertEqual(user_msgs.first().content, '用户输入')
 
 
+@tag('integration')
 class ConsumerHistoryInjectionTest(TransactionTestCase):
     """历史注入格式验证：[历史记忆开始]...[历史记忆结束]。"""
 
@@ -256,6 +259,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
         self.assertNotIn('[历史记忆开始]', msg, '无历史时不应注入历史前缀')
 
 
+@tag('integration')
 class ConsumerCrossUserIsolationTest(TransactionTestCase):
     """跨用户隔离：用户 A 的历史不注入到用户 B 的消息中。"""
 
@@ -301,6 +305,7 @@ class ConsumerCrossUserIsolationTest(TransactionTestCase):
         self.assertNotIn('用户A的秘密回答', msg_b, '用户A的历史不应出现在用户B的注入中')
 
 
+@tag('integration')
 class ConsumerDegradationTest(TransactionTestCase):
     """
     降级路径：DB 操作失败时，WS 连接不中断。
@@ -379,6 +384,7 @@ class ConsumerDegradationTest(TransactionTestCase):
         _run(_inner())
 
 
+@tag('integration')
 class ConsumerInjectTurnsZeroTest(TransactionTestCase):
     """CHAT_HISTORY_INJECT_TURNS=0 时，前缀为空，不破坏消息结构。"""
 
@@ -420,6 +426,7 @@ class ConsumerInjectTurnsZeroTest(TransactionTestCase):
         self.assertIn('[__freeark_user__:', msg)
 
 
+@tag('integration')
 class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
     """
     回归测试 — ARCH-C-006：consumers.py v1.3 不破坏 reasoning 协议。

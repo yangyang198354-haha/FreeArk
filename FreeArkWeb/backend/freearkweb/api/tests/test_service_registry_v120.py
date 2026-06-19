@@ -19,7 +19,7 @@ test_service_registry_v120.py — v1.2.0 服务注册表与看板完整化
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
@@ -69,6 +69,7 @@ NEWLY_ADDED = {
 }
 
 
+@tag('unit')
 class WhitelistCompletenessTest(TestCase):
     """UT-REG-001/002: 白名单全量纳管。"""
 
@@ -105,6 +106,7 @@ class WhitelistCompletenessTest(TestCase):
         self.assertEqual(set(MONITORED_SERVICES), _MONITORED_SERVICES_SET)
 
 
+@tag('unit')
 class GetServiceEnabledTest(TestCase):
     """UT-REG-003: _get_service_enabled 解析各种 is-enabled 输出。"""
 
@@ -134,6 +136,7 @@ class GetServiceEnabledTest(TestCase):
             self.assertEqual(_get_service_enabled('freeark-backend'), 'unknown')
 
 
+@tag('integration')
 class DashboardServicesEnabledTest(TestCase):
     """UT-DASH-001/002: 看板服务接口暴露 enabled 字段（供四态显示）。"""
 

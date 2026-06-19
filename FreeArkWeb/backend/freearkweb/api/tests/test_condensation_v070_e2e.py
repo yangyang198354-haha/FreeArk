@@ -36,7 +36,7 @@ from io import StringIO
 from unittest.mock import MagicMock
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
@@ -84,6 +84,7 @@ def _inject_alarm(device_sn, product_code, specific_part, alarm_val, extra_items
 # E2E-US01-*: US-CW-01 结露预警自动持久化（端到端 MQTT → DB 完整路径）
 # ---------------------------------------------------------------------------
 
+@tag('e2e')
 class US01PersistenceE2ETest(TestCase):
 
     def setUp(self):
@@ -215,6 +216,7 @@ class US01PersistenceE2ETest(TestCase):
 # E2E-US03/04/05/06: REST API 过滤场景
 # ---------------------------------------------------------------------------
 
+@tag('e2e')
 class APIFilterE2ETest(APITestCase):
     """E2E-US03/04/05/06: 回复状态/房号/时间段/大屏在线过滤。"""
 
@@ -333,6 +335,7 @@ class APIFilterE2ETest(APITestCase):
 # E2E-US08: 清理策略
 # ---------------------------------------------------------------------------
 
+@tag('e2e')
 class CleanupE2ETest(TestCase):
     """E2E-US08-001: 清理命令 90 天边界 + 活跃豁免端到端。"""
 
@@ -367,6 +370,7 @@ class CleanupE2ETest(TestCase):
 # E2E-FRONTEND-001: 前端列数核对（静态解析 Vue 组件）
 # ---------------------------------------------------------------------------
 
+@tag('e2e')
 class FrontendColumnCheckE2ETest(TestCase):
     """E2E-FRONTEND-001: 核对 CondensationWarningView.vue 实际渲染列数与需求一致性。
 
