@@ -16,7 +16,7 @@ systemctl/LLM/线程全部 mock，不依赖真实 systemd / DeepSeek / 后台线
 
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -52,6 +52,7 @@ def _cw(seconds_ago=0, **ov):
     return CondensationWarningEvent.objects.create(**d)
 
 
+@tag('integration')
 class AuditDoubleWriteTest(TestCase):
     """audit.* → InspectionLog 双写。"""
 
@@ -96,6 +97,7 @@ class AuditDoubleWriteTest(TestCase):
         self.assertEqual(InspectionLog.objects.count(), 0)
 
 
+@tag('integration')
 class TriggerApiTest(TestCase):
     def setUp(self):
         self.client = _authed_client("trig_v130")
@@ -176,6 +178,7 @@ class TriggerApiTest(TestCase):
         self.assertEqual(self.fe.inspection_status, 'IN_PROGRESS')
 
 
+@tag('integration')
 class StatusApiTest(TestCase):
     def setUp(self):
         self.client = _authed_client("stat_v130")
@@ -197,6 +200,7 @@ class StatusApiTest(TestCase):
             self.client.get('/api/inspection/status/fault_event/888888/').status_code, 404)
 
 
+@tag('integration')
 class LogsApiTest(TestCase):
     def setUp(self):
         self.client = _authed_client("logs_v130")
@@ -239,6 +243,7 @@ class LogsApiTest(TestCase):
         self.assertEqual(body['page_size'], 2)
 
 
+@tag('integration')
 class RunThreadTest(TestCase):
     """直接调用 _run_inspection_thread（patch 掉 connection.close 与 InspectionAgent）。"""
 

@@ -22,7 +22,7 @@ systemctl 调用全部通过 unittest.mock.patch 模拟，不依赖真实 system
 import subprocess
 from unittest.mock import MagicMock, patch, call
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
@@ -58,6 +58,7 @@ def _make_authed_client(token_key):
 # PHASE_07: 单元测试
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_SM_001_WhitelistConstants(TestCase):
     """TC-U-SM-001: 白名单常量完整性验证"""
 
@@ -87,6 +88,7 @@ class TC_U_SM_001_WhitelistConstants(TestCase):
             self.assertIn(svc, _MONITORED_SERVICES_SET, f"{svc} 不在白名单中")
 
 
+@tag('unit')
 class TC_U_SM_002_GetServiceStatus(TestCase):
     """TC-U-SM-002: _get_service_status 辅助函数单元测试"""
 
@@ -133,6 +135,7 @@ class TC_U_SM_002_GetServiceStatus(TestCase):
         self.assertEqual(result, 'unknown')
 
 
+@tag('unit')
 class TC_U_SM_003_GetServiceDetail(TestCase):
     """TC-U-SM-003: _get_service_detail 辅助函数单元测试"""
 
@@ -209,6 +212,7 @@ class TC_U_SM_003_GetServiceDetail(TestCase):
 # PHASE_08: 集成测试
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class TC_I_SM_001_ServiceListAPIAuth(TestCase):
     """TC-I-SM-001: 服务列表 API 认证与权限集成测试"""
 
@@ -237,6 +241,7 @@ class TC_I_SM_001_ServiceListAPIAuth(TestCase):
         self.assertEqual(resp.status_code, 405)
 
 
+@tag('integration')
 class TC_I_SM_002_ServiceListAPIResponse(TestCase):
     """TC-I-SM-002: 服务列表 API 响应格式验证"""
 
@@ -314,6 +319,7 @@ class TC_I_SM_002_ServiceListAPIResponse(TestCase):
             self.assertFalse(item['is_active'])
 
 
+@tag('integration')
 class TC_I_SM_003_ServiceDetailAPI(TestCase):
     """TC-I-SM-003: 服务详情 API 集成测试"""
 
@@ -368,6 +374,7 @@ class TC_I_SM_003_ServiceDetailAPI(TestCase):
             self.assertIn(key, data['detail'], f"详情缺少字段: {key}")
 
 
+@tag('integration')
 class TC_I_SM_004_ServiceActionAPI(TestCase):
     """TC-I-SM-004: 服务操作 API 集成测试"""
 
@@ -484,6 +491,7 @@ class TC_I_SM_004_ServiceActionAPI(TestCase):
         self.assertEqual(resp.status_code, 400)
 
 
+@tag('integration')
 class TC_I_SM_005_SecurityInjection(TestCase):
     """TC-I-SM-005: 命令注入安全测试"""
 
@@ -540,6 +548,7 @@ class TC_I_SM_005_SecurityInjection(TestCase):
 # PHASE_09: E2E 验收测试
 # ---------------------------------------------------------------------------
 
+@tag('e2e')
 class TC_E2E_SM_US001_ServiceList(TestCase):
     """TC-E2E-SM-US001: US-SM-001 — 已登录用户可查看服务列表"""
 
@@ -567,6 +576,7 @@ class TC_E2E_SM_US001_ServiceList(TestCase):
             self.assertIn(expected, names, f"服务 {expected} 未出现在列表中")
 
 
+@tag('e2e')
 class TC_E2E_SM_US002_ServiceDetail(TestCase):
     """TC-E2E-SM-US002: US-SM-002 — 已登录用户可查看服务详情"""
 
@@ -597,6 +607,7 @@ class TC_E2E_SM_US002_ServiceDetail(TestCase):
             self.assertEqual(resp.status_code, 200, f"服务 {service} 详情接口应返回 200")
 
 
+@tag('e2e')
 class TC_E2E_SM_US003_ServiceAction(TestCase):
     """TC-E2E-SM-US003: US-SM-003 — 已登录用户可执行服务操作"""
 
@@ -655,6 +666,7 @@ class TC_E2E_SM_US003_ServiceAction(TestCase):
         self.assertEqual(resp.status_code, 401)
 
 
+@tag('e2e')
 class TC_E2E_SM_NFR_AdminOnlyWrite(TestCase):
     """TC-E2E-SM-NFR: 普通用户与管理员用户均可操作（IsAuthenticated 策略）"""
 

@@ -42,7 +42,7 @@ import json
 import os
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from api.models import CondensationWarningEvent, FaultEvent, WorkOrder
@@ -100,6 +100,7 @@ def _clear_policy_env():
 
 # ── auth.py ────────────────────────────────────────────────────────────
 
+@tag('unit')
 class WriteAuthPolicyTest(TestCase):
     """UT-AUTH-*: 写授权层（策略 B 默认拦截 / 策略 A 白名单备选）。"""
 
@@ -178,6 +179,7 @@ class WriteAuthPolicyTest(TestCase):
 
 # ── event_poller.py ─────────────────────────────────────────────────────
 
+@tag('unit')
 class EventPollerTest(TestCase):
     """UT-POLL-*: DB 轮询取用 + 原子认领 + 启动重建。"""
 
@@ -237,6 +239,7 @@ class EventPollerTest(TestCase):
 
 # ── work_order.py ───────────────────────────────────────────────────────
 
+@tag('unit')
 class WorkOrderCreateTest(TestCase):
     """UT-WO-1xx: 工单编号生成、按事件建单、防重复建单。"""
 
@@ -297,6 +300,7 @@ class WorkOrderCreateTest(TestCase):
 
 # ── audit.py ────────────────────────────────────────────────────────────
 
+@tag('unit')
 class AuditLogTest(TestCase):
     """UT-AUDIT-*: 审计 JSON 结构、事件类型映射、凭证脱敏。"""
 

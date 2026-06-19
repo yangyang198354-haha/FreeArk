@@ -19,7 +19,7 @@ BUG-CSRF-001 回归测试套件 — CSRF Token Missing on Re-login
     - 非 csrf_exempt 接口（如 change-password、user-logout）受 CSRF 保护
 """
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, tag
 from django.urls import reverse
 from rest_framework import exceptions
 from rest_framework.authentication import SessionAuthentication
@@ -39,6 +39,7 @@ def _make_user(username='csrf_testuser', password='CsrfTest!123', role='user'):
     return user, token
 
 
+@tag('integration')
 class GetCSRFTokenEndpointTest(TestCase):
     """
     TC-CSRF-01: /api/get-csrf-token/ 端点基础行为
@@ -97,6 +98,7 @@ class GetCSRFTokenEndpointTest(TestCase):
         )
 
 
+@tag('integration')
 class LoginLogoutLoginFlowTest(TestCase):
     """
     TC-CSRF-02: 登录 → 登出 → 再登录 全链路测试
@@ -215,6 +217,7 @@ class LoginLogoutLoginFlowTest(TestCase):
             )
 
 
+@tag('integration')
 class CSRFEnforcedLoginLogoutTest(TestCase):
     """
     TC-CSRF-03: 在 enforce_csrf_checks=True 环境下验证 CSRF 豁免与保护
@@ -255,6 +258,7 @@ class CSRFEnforcedLoginLogoutTest(TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+@tag('integration')
 class TokenRotationAfterLoginTest(TestCase):
     """
     TC-CSRF-04: 验证每次登录产生有效 Token（不关心 token 值是否轮换）
@@ -318,6 +322,7 @@ class TokenRotationAfterLoginTest(TestCase):
                         msg='再次登录后应创建新 Token')
 
 
+@tag('integration')
 class SessionAuthCSRFRegressionTest(TestCase):
     """
     BUG-CSRF（根因回归）: "CSRF failed: CSRF cookie not set"

@@ -13,7 +13,7 @@
     python manage.py test api.tests.test_owner_sprint2 --verbosity=2
 """
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 
@@ -88,6 +88,7 @@ def _make_device_tree(owner, n_floors=2, n_rooms_per_floor=3, n_devices_per_room
 # TC-US01: page_size 上限回滚验证（后端 device-list 接口）
 # ===========================================================================
 
+@tag('integration')
 class DeviceListPageSizeTest(TestCase):
     """US-01: 设备列表接口 page_size 上限回滚至 50。"""
 
@@ -149,6 +150,7 @@ class DeviceListPageSizeTest(TestCase):
 # TC-US02: 业主列表 room_count 字段
 # ===========================================================================
 
+@tag('integration')
 class OwnerRoomCountTest(TestCase):
     """US-02: /api/owners/ 列表响应含正确 room_count，无 N+1。"""
 
@@ -238,6 +240,7 @@ class OwnerRoomCountTest(TestCase):
 # TC-US03: 业主设备树查看 API
 # ===========================================================================
 
+@tag('integration')
 class OwnerDeviceTreeAPITest(TestCase):
     """US-03: GET /api/owners/<pk>/device-tree/ 权限与数据正确性。"""
 
@@ -381,6 +384,7 @@ class OwnerDeviceTreeAPITest(TestCase):
 # TC-US04: 批量同步 — 后端行为验证
 # ===========================================================================
 
+@tag('integration')
 class OwnerBatchSyncTest(TestCase):
     """US-04: POST /api/device-management/screen-device-tree/batch-sync/ 全量回退行为。"""
 
@@ -475,6 +479,7 @@ class OwnerBatchSyncTest(TestCase):
 # TC-INT: 集成测试 — 跨 US 场景
 # ===========================================================================
 
+@tag('integration')
 class OwnerIntegrationTest(TestCase):
     """跨用户故事集成测试：验证 room_count + device-tree 的一致性。"""
 

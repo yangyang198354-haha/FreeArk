@@ -17,7 +17,7 @@ v0.5.3-FCC 故障数量功能测试
 import time
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -71,6 +71,7 @@ def make_owner(specific_part, building='3', unit='1', room_number='702'):
 # 一、单元测试 — count_faults_for_row
 # ===========================================================================
 
+@tag('unit')
 class CountFaultsForRowTest(TestCase):
     """count_faults_for_row(param_name, value) -> int 单元测试"""
 
@@ -172,6 +173,7 @@ class CountFaultsForRowTest(TestCase):
 # 二、单元测试 — is_fault_param
 # ===========================================================================
 
+@tag('unit')
 class IsFaultParamTest(TestCase):
     """is_fault_param 正例/负例"""
 
@@ -204,6 +206,7 @@ class IsFaultParamTest(TestCase):
 # 三、单元测试 — compute_fault_count_v2
 # ===========================================================================
 
+@tag('unit')
 class ComputeFaultCountV2Test(TestCase):
     """compute_fault_count_v2(records) -> int"""
 
@@ -252,6 +255,7 @@ class ComputeFaultCountV2Test(TestCase):
 # 四、单元测试 — _compute_from_db_batch（使用 SQLite 测试库）
 # ===========================================================================
 
+@tag('unit')
 class ComputeFromDbBatchTest(TestCase):
     """_compute_from_db_batch 直接从 DB 计算（不经缓存）"""
 
@@ -312,6 +316,7 @@ class ComputeFromDbBatchTest(TestCase):
 # 四·B、单元测试 — sub_type 户型过滤（hotfix BUG-FCC-001）
 # ===========================================================================
 
+@tag('unit')
 class SubTypeFilterTest(TestCase):
     """Hotfix BUG-FCC-001: 户型不存在的房型故障字段不计入故障数。
 
@@ -403,6 +408,7 @@ class SubTypeFilterTest(TestCase):
 # 五、单元测试 — 缓存 hit / miss / TTL 过期
 # ===========================================================================
 
+@tag('unit')
 class FaultCacheTest(TestCase):
     """缓存命中 / 未命中 / TTL 过期逻辑测试（使用 Django cache.clear()）"""
 
@@ -481,6 +487,7 @@ class FaultCacheTest(TestCase):
 # 六、集成测试 — /api/devices/fault-count/ 视图
 # ===========================================================================
 
+@tag('integration')
 class DeviceFaultCountViewTest(TestCase):
     """GET /api/devices/fault-count/ 集成测试"""
 
@@ -629,6 +636,7 @@ class DeviceFaultCountViewTest(TestCase):
 # 七、集成测试 — /api/devices/fault-summary/ 视图
 # ===========================================================================
 
+@tag('integration')
 class DeviceFaultSummaryViewTest(TestCase):
     """GET /api/devices/fault-summary/ 集成测试"""
 
@@ -709,6 +717,7 @@ class DeviceFaultSummaryViewTest(TestCase):
 # 八、集成测试 — /api/device-management/device-list/ 包含 fault_count
 # ===========================================================================
 
+@tag('integration')
 class DeviceListFaultCountFieldTest(TestCase):
     """device_management_device_list 响应包含 fault_count 字段"""
 
@@ -747,6 +756,7 @@ class DeviceListFaultCountFieldTest(TestCase):
 # 九、性能测试 — mock 数据 API < 100 ms（SQLite，无 DB 穿透约束）
 # ===========================================================================
 
+@tag('integration')
 class FaultCountPerformanceTest(TestCase):
     """性能 SLA 测试：mock 1 section × 9 设备 × 30 param，API < 100 ms。
 

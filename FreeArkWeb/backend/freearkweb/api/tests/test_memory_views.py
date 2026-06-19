@@ -16,7 +16,7 @@ test_memory_views.py — memory API endpoint 测试
 US: US-MEM-008, US-MEM-009, US-MEM-011
 MINOR-004：page_size 上界校验（≤ 100）
 """
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -50,6 +50,7 @@ def _create_session_with_messages(user, key, n=2):
     return sess
 
 
+@tag('integration')
 class MyMemoryViewGetTest(TestCase):
     """GET /api/memory/me/ — 查看自己的会话列表。"""
 
@@ -107,6 +108,7 @@ class MyMemoryViewGetTest(TestCase):
         self.assertEqual(data['sessions'], [])
 
 
+@tag('integration')
 class MyMemoryViewDeleteTest(TestCase):
     """DELETE /api/memory/me/ — 清空自己的历史。"""
 
@@ -149,6 +151,7 @@ class MyMemoryViewDeleteTest(TestCase):
         self.assertIn('message', resp.json())
 
 
+@tag('integration')
 class AdminMemoryViewGetTest(TestCase):
     """GET /api/admin/memory/<user_id>/ — admin 查看指定用户会话。"""
 
@@ -196,6 +199,7 @@ class AdminMemoryViewGetTest(TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+@tag('integration')
 class AdminMemoryViewDeleteTest(TestCase):
     """DELETE /api/admin/memory/<user_id>/ — admin 清空指定用户历史（含审计日志）。"""
 

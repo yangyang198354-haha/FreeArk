@@ -24,7 +24,7 @@ test_inspection_workorder_v110.py — v1.1.0-AIA（方案 B）增量① 单元�
 """
 
 from django.db import IntegrityError, connection, transaction
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from api.models import FaultEvent, CondensationWarningEvent, WorkOrder
@@ -81,6 +81,7 @@ def _columns(table_name):
         return {row[0] for row in cursor.fetchall()}
 
 
+@tag('unit')
 class SchemaTest(TestCase):
     """UT-SCHEMA-*: migration 0033 在 SQLite 应用后表/列符合预期。"""
 
@@ -105,6 +106,7 @@ class SchemaTest(TestCase):
                         f"缺列: {expected - cols}")
 
 
+@tag('unit')
 class InspectionStatusDefaultTest(TestCase):
     """UT-DEFAULT-*: 新字段默认值正确（自治巡检初始态 PENDING）。"""
 
@@ -121,6 +123,7 @@ class InspectionStatusDefaultTest(TestCase):
         self.assertIsNone(cw.inspection_started_at)
 
 
+@tag('unit')
 class WorkOrderModelTest(TestCase):
     """UT-WO-*: WorkOrder 基本行为与防重复建单约束。"""
 

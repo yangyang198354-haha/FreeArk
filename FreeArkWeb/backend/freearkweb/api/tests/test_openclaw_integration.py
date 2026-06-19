@@ -27,7 +27,7 @@
 import asyncio
 import json
 from unittest.mock import AsyncMock, patch, MagicMock
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings, tag
 from rest_framework.authtoken.models import Token
 
 from api.models import CustomUser
@@ -107,6 +107,7 @@ import unittest
         }
     }
 )
+@tag('integration')
 class TestChatConsumerIntegration(TransactionTestCase):
     """集成测试：ChatConsumer WebSocket 握手与消息流转。
 

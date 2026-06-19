@@ -11,7 +11,7 @@ PLCLatestData 功能测试套件
 """
 from datetime import datetime
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -66,6 +66,7 @@ DEVICE = '3-1-7-702'
 # 单元测试：PLCLatestDataHandler
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestPLCLatestDataHandlerBasic(TestCase):
     """测试 handler 的核心写入逻辑"""
 
@@ -215,6 +216,7 @@ TS_H10B = '2026-04-18 10:15:00'  # 10点第二次（同小时）
 TS_H11  = '2026-04-18 11:05:00'  # 11点（新小时）
 
 
+@tag('unit')
 class TestHistoryHourlyDedup(TestCase):
     """验证 _write_history 对 general 与 energy 参数的每小时去重逻辑（energy 自 v0.5.4 P1-1 起）"""
 
@@ -315,6 +317,7 @@ class TestHistoryHourlyDedup(TestCase):
 # 集成测试：GET /api/plc-latest/
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class TestPLCLatestDataAPI(TestCase):
     """测试查询 API 的响应格式与过滤逻辑"""
 

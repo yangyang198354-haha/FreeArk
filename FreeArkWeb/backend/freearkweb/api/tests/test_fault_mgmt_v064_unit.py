@@ -19,7 +19,7 @@ import logging
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from api.fault_consumer.constants import (
@@ -93,6 +93,7 @@ def _make_fault_event(room_name=None, room_id=None, device_sn='22552', **kwargs)
 # UT-C: constants.py 结构验证
 # ===========================================================================
 
+@tag('unit')
 class TestConstantsStructure(TestCase):
     """UT-C-001~005：constants.py 三字典结构验证。"""
 
@@ -188,6 +189,7 @@ class TestConstantsStructure(TestCase):
 # UT-RL: room_lookup.py 单元测试
 # ===========================================================================
 
+@tag('unit')
 class TestRoomLookup(TestCase):
     """UT-RL-001~004：get_room_for_device 四场景。"""
 
@@ -245,6 +247,7 @@ class TestRoomLookup(TestCase):
 # UT-SM: state_machine._t1_insert 验证
 # ===========================================================================
 
+@tag('unit')
 class TestStateMachineT1RoomLookup(TestCase):
     """UT-SM-001~002：_t1_insert 调用 room_lookup 并写入 FaultEvent。"""
 
@@ -318,6 +321,7 @@ class TestStateMachineT1RoomLookup(TestCase):
 # UT-OR: oracle 反推表验证
 # ===========================================================================
 
+@tag('unit')
 class TestOracleReverseTable(TestCase):
     """UT-OR-001：3-1-602（4 房）error_code 反推表 oracle 验证。
 

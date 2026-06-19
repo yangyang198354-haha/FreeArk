@@ -27,7 +27,7 @@ import unittest
 os.environ.setdefault("FREEARK_POC_MOCK", "1")
 
 from asgiref.sync import async_to_sync
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, override_settings, tag
 
 # 检测 langgraph 依赖是否可用（阶段 A：默认 openclaw 部署可能未装）。
 try:
@@ -38,6 +38,7 @@ except Exception:  # pragma: no cover
     LANGGRAPH_AVAILABLE = False
 
 
+@tag('unit')
 class PromptLoadingTests(SimpleTestCase):
     """阶段 C：专家提示装载——优先 .langgraph.md、剥 HTML 注释、sanheng 拼 KNOWLEDGE。
 
@@ -127,6 +128,7 @@ class _StubLLM:
         return m
 
 
+@tag('unit')
 class RouterClassifierTests(SimpleTestCase):
     """阶段 D：LLM 意图分类器解析 + 三级兜底链（纯逻辑，不依赖 langgraph）。"""
 
@@ -295,6 +297,7 @@ class RouterClassifierTests(SimpleTestCase):
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
+@tag('unit')
 class ChatBackendFactoryTests(SimpleTestCase):
     """chat_backend 工厂选择逻辑。"""
 
@@ -313,6 +316,7 @@ class ChatBackendFactoryTests(SimpleTestCase):
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
 class OrchestratorRoutingTests(SimpleTestCase):
     """关键词路由 + 并行/串行编排结构。"""
 
@@ -347,6 +351,7 @@ class OrchestratorRoutingTests(SimpleTestCase):
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@tag('unit')
 class FaDirectRoutingTests(SimpleTestCase):
     """阶段 B：DirectClient 的 URL 解析路由机制（离线，不需 DB）。"""
 
@@ -391,6 +396,7 @@ class FaDirectRoutingTests(SimpleTestCase):
         self.assertEqual(_resolve_mode(), "direct")
 
 
+@tag('unit')
 class FaDirectConnectionHealthTests(SimpleTestCase):
     """回归（2026-06-14 根因）：DirectClient 在 langchain 工具线程池里跑，线程本地 DB
     连接活在请求生命周期外、不被 close_old_connections 回收 → 闲置后腐烂复用即
@@ -461,6 +467,7 @@ class FaDirectConnectionHealthTests(SimpleTestCase):
         self.assertEqual(coc.call_count, 2)
 
 
+@tag('unit')
 class UsageDailyParamMappingTests(SimpleTestCase):
     """回归（2026-06-14）：日用量工具的 start_date/end_date 必须映射到 API 端点
     /api/usage/quantity/ 实际过滤字段 start_time/end_time，否则日期过滤静默失效、
@@ -499,6 +506,7 @@ class UsageDailyParamMappingTests(SimpleTestCase):
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@tag('unit')
 class DateHintInjectionTests(SimpleTestCase):
     """回归（2026-06-14）：专家上下文须注入当前日期，否则相对时间查询会臆造日期。"""
 
@@ -512,6 +520,7 @@ class DateHintInjectionTests(SimpleTestCase):
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
 class LangGraphAdapterTests(SimpleTestCase):
     """drop-in 适配器签名与 yield 协议。"""
 
@@ -569,6 +578,7 @@ class LangGraphAdapterTests(SimpleTestCase):
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
 class OrchestratorWriteGateTests(SimpleTestCase):
     """阶段 E：Tier-2 写操作 interrupt 确认门 + resume（fake LLM + mock 写工具）。
 

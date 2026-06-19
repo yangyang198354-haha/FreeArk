@@ -11,7 +11,7 @@ import json
 import os
 import tempfile
 from io import StringIO
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.core.management import call_command
 from django.db import IntegrityError
 from rest_framework.test import APIClient
@@ -61,6 +61,7 @@ def make_owner(**kwargs):
 # TC-M: 模型测试
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class OwnerInfoModelTest(TestCase):
 
     def test_tc_m_001_create_owner(self):
@@ -97,6 +98,7 @@ class OwnerInfoModelTest(TestCase):
 from api.serializers import OwnerInfoSerializer
 
 
+@tag('unit')
 class OwnerInfoSerializerTest(TestCase):
 
     def _valid_data(self, **overrides):
@@ -164,6 +166,7 @@ class OwnerInfoSerializerTest(TestCase):
 # TC-A: API 集成测试
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class OwnerAPITest(TestCase):
 
     def setUp(self):
@@ -378,6 +381,7 @@ class OwnerAPITest(TestCase):
 # TC-CMD: Management Command 测试
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class ImportAllOwnersCommandTest(TestCase):
 
     def _write_temp_json(self, data_dict):

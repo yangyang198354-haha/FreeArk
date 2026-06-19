@@ -15,7 +15,7 @@ execute_write 全部 mock，不触发真实 PLC 写。
 
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -50,6 +50,7 @@ def _wo(fe, **ov):
     return WorkOrder.objects.create(**d)
 
 
+@tag('integration')
 class CreateWorkOrderProposalTest(TestCase):
     def test_proposed_tool_sets_pending(self):
         fe = _fault()
@@ -80,6 +81,7 @@ class CreateWorkOrderProposalTest(TestCase):
         self.assertEqual(wo.proposed_tool, 'trigger_refresh')
 
 
+@tag('integration')
 class ListDetailTest(TestCase):
     def setUp(self):
         self.client = _client('user')
@@ -127,6 +129,7 @@ class ListDetailTest(TestCase):
         self.assertEqual(self.client.get('/api/workorders/888888/').status_code, 404)
 
 
+@tag('integration')
 class ApproveWriteTest(TestCase):
     def setUp(self):
         self.admin = _client('admin')
@@ -171,6 +174,7 @@ class ApproveWriteTest(TestCase):
         self.assertEqual(self.admin.post(self._url()).status_code, 400)
 
 
+@tag('integration')
 class ResolveTest(TestCase):
     def setUp(self):
         self.admin = _client('admin')

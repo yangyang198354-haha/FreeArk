@@ -35,7 +35,7 @@ from io import StringIO
 from unittest.mock import MagicMock, patch, call, PropertyMock
 
 from django.db import OperationalError
-from django.test import TestCase
+from django.test import TestCase, tag
 
 # 被测模块路径
 CMD_MODULE = 'api.management.commands.dph_cleanup_service'
@@ -54,6 +54,7 @@ def _make_command():
 # TC-U-DPH-001 / TC-U-DPH-002：_run_cleanup() 异常被捕获，不重抛
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_001_OperationalError_Graceful(TestCase):
     """TC-U-DPH-001: OperationalError 被捕获，_run_cleanup 优雅返回 None，不重抛"""
 
@@ -90,6 +91,7 @@ class TC_U_DPH_001_OperationalError_Graceful(TestCase):
         mock_conn.close.assert_called_once()
 
 
+@tag('unit')
 class TC_U_DPH_002_GenericException_Graceful(TestCase):
     """TC-U-DPH-002: 通用 Exception 被捕获，_run_cleanup 优雅返回 None，不重抛"""
 
@@ -127,6 +129,7 @@ class TC_U_DPH_002_GenericException_Graceful(TestCase):
 # TC-U-DPH-003 / TC-U-DPH-004：cron 模式主循环健壮性
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_003_CronLoop_RunCleanup_Error(TestCase):
     """TC-U-DPH-003: cron 模式下 _run_cleanup 内 OperationalError 不冲出主循环"""
 
@@ -190,6 +193,7 @@ class TC_U_DPH_003_CronLoop_RunCleanup_Error(TestCase):
         mock_schedule.run_pending.assert_called()
 
 
+@tag('unit')
 class TC_U_DPH_004_CronLoop_ScheduleError(TestCase):
     """TC-U-DPH-004: schedule.run_pending() 抛出未预期异常，主循环不崩溃"""
 
@@ -239,6 +243,7 @@ class TC_U_DPH_004_CronLoop_ScheduleError(TestCase):
 # TC-U-DPH-005 / TC-U-DPH-006：--once 模式 handle() 正常返回
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_005_OnceModeOperationalError(TestCase):
     """TC-U-DPH-005: --once 模式下 _run_cleanup 抛出 OperationalError，handle() 正常返回"""
 
@@ -258,6 +263,7 @@ class TC_U_DPH_005_OnceModeOperationalError(TestCase):
         self.assertIsNone(result)
 
 
+@tag('unit')
 class TC_U_DPH_006_OnceModeGenericException(TestCase):
     """TC-U-DPH-006: --once 模式下 _run_cleanup 抛出 Exception，handle() 正常返回"""
 
@@ -280,6 +286,7 @@ class TC_U_DPH_006_OnceModeGenericException(TestCase):
 # TC-U-DPH-007：--dry-run 正常流程
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_007_DryRun(TestCase):
     """TC-U-DPH-007: --dry-run 模式：输出预计行数，不执行 DELETE"""
 
@@ -329,6 +336,7 @@ class TC_U_DPH_007_DryRun(TestCase):
 # TC-U-DPH-008：无超期数据时正常返回
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_008_NoExpiredData(TestCase):
     """TC-U-DPH-008: SELECT 返回 None（无超期数据），_run_cleanup 正常返回，不执行 DELETE"""
 
@@ -354,6 +362,7 @@ class TC_U_DPH_008_NoExpiredData(TestCase):
 # TC-U-DPH-009：正常删除流程
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_009_NormalDeletion(TestCase):
     """TC-U-DPH-009: 正常删除流程，分批执行，输出批次日志"""
 
@@ -411,6 +420,7 @@ class TC_U_DPH_009_NormalDeletion(TestCase):
 # TC-U-DPH-012 / TC-U-DPH-013：_setup_schedule
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_012_SetupScheduleValid(TestCase):
     """TC-U-DPH-012: 有效 cron 表达式注册每日任务"""
 
@@ -448,6 +458,7 @@ class TC_U_DPH_012_SetupScheduleValid(TestCase):
         mock_day.at.assert_called_once_with('02:30')
 
 
+@tag('unit')
 class TC_U_DPH_013_SetupScheduleInvalid(TestCase):
     """TC-U-DPH-013: 无效 cron 表达式退回默认 03:00"""
 
@@ -490,6 +501,7 @@ class TC_U_DPH_013_SetupScheduleInvalid(TestCase):
 # TC-U-DPH-014 ~ 016：_apply_cleanup_db_timeout() 进程级超时放大（DPH-CLEANUP-002）
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_014_ApplyDbTimeout(TestCase):
     """TC-U-DPH-014: _apply_cleanup_db_timeout 将 read/write_timeout 放大到 600s"""
 
@@ -515,6 +527,7 @@ class TC_U_DPH_014_ApplyDbTimeout(TestCase):
         self.assertEqual(mock_conn.settings_dict['OPTIONS']['charset'], 'utf8mb4')
 
 
+@tag('unit')
 class TC_U_DPH_015_ApplyDbTimeout_NoOp(TestCase):
     """TC-U-DPH-015: OPTIONS 无 read_timeout 时（如 SQLite），_apply_cleanup_db_timeout 无操作"""
 
@@ -535,6 +548,7 @@ class TC_U_DPH_015_ApplyDbTimeout_NoOp(TestCase):
         mock_conn.close.assert_not_called()
 
 
+@tag('unit')
 class TC_U_DPH_016_ApplyDbTimeout_ClosesConnection(TestCase):
     """TC-U-DPH-016: 修改超时后关闭旧连接，使新 OPTIONS 在下次连接时生效"""
 
@@ -554,6 +568,7 @@ class TC_U_DPH_016_ApplyDbTimeout_ClosesConnection(TestCase):
 # TC-U-DPH-017 / 018：--max-batches 单轮批次上限（DPH-CLEANUP-002）
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_017_MaxBatchesCap(TestCase):
     """TC-U-DPH-017: max_batches > 0 时，_run_cleanup 单轮最多执行 max_batches 个批次"""
 
@@ -585,6 +600,7 @@ class TC_U_DPH_017_MaxBatchesCap(TestCase):
         self.assertIn('批次上限', cmd.stdout.getvalue())
 
 
+@tag('unit')
 class TC_U_DPH_018_MaxBatchesUnlimited(TestCase):
     """TC-U-DPH-018: max_batches=0 表示不限制，正常删完不提前停止"""
 
@@ -611,6 +627,7 @@ class TC_U_DPH_018_MaxBatchesUnlimited(TestCase):
 # TC-U-DPH-019：handle() 将 --max-batches 透传给 _run_cleanup（DPH-CLEANUP-002）
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TC_U_DPH_019_HandlePassesMaxBatches(TestCase):
     """TC-U-DPH-019: --once 模式下 handle() 将 max_batches 透传给 _run_cleanup"""
 

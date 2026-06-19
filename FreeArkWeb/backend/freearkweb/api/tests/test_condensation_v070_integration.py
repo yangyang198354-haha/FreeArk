@@ -27,7 +27,7 @@ import logging
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase, APIClient
@@ -85,6 +85,7 @@ def _create_event(specific_part, is_active=True, days_ago=0, device_sn='SN1'):
 # IT-HANDLER-*: _handle_message 端到端集成
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class HandleMessageIntegrationTest(TestCase):
     """IT-HANDLER-001~006: _handle_message 从 MAC 解析到 DB 写入全链路。"""
 
@@ -218,6 +219,7 @@ class HandleMessageIntegrationTest(TestCase):
 # IT-API-*: REST API 集成测试
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class CondensationAPITest(APITestCase):
     """IT-API-001~007: GET /api/devices/condensation-warning-events/ 集成测试。"""
 

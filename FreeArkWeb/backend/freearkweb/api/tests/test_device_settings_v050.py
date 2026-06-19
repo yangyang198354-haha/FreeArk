@@ -23,7 +23,7 @@ import json
 import uuid
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
@@ -92,6 +92,7 @@ def _mqtt_mock():
 # 一、单元测试 — _is_writable（v0.5.0 新增覆盖）
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('unit')
 class IsWritableV050Tests(TestCase):
     """
     AC 映射：
@@ -184,6 +185,7 @@ class IsWritableV050Tests(TestCase):
 # 二、单元测试 — param_value_label（get_value_options / get_display_value）
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('unit')
 class ParamValueLabelTests(TestCase):
     """
     AC 映射：
@@ -278,6 +280,7 @@ class ParamValueLabelTests(TestCase):
 # 三、单元测试 — seed_device_config 幂等性（REQ-NFUNC-004）
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('unit')
 class SeedDeviceConfigIdempotencyTests(TestCase):
     """
     验证 seed_device_config 的 update_or_create 逻辑幂等性。
@@ -393,6 +396,7 @@ class SeedDeviceConfigIdempotencyTests(TestCase):
 # 四、集成测试 — REQ-FUNC-001：主温控 system_switch 软删除
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class ReqFunc001SystemSwitchTests(TestCase):
     """
     REQ-FUNC-001 端到端验证：
@@ -468,6 +472,7 @@ class ReqFunc001SystemSwitchTests(TestCase):
 # 五、集成测试 — REQ-FUNC-002：水力模块工作模式写入端到端
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class ReqFunc002OperationModeTests(TestCase):
     """
     REQ-FUNC-002 端到端验证：
@@ -559,6 +564,7 @@ class ReqFunc002OperationModeTests(TestCase):
 # 六、集成测试 — REQ-FUNC-003：离家节能标识写入端到端
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class ReqFunc003AwayEnergySavingTests(TestCase):
     """
     REQ-FUNC-003 端到端验证：
@@ -639,6 +645,7 @@ class ReqFunc003AwayEnergySavingTests(TestCase):
 # 七、集成测试 — REQ-FUNC-004：仅 dirty 字段下发（关键回归点）
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class ReqFunc004DirtyFieldsTests(TestCase):
     """
     REQ-FUNC-004 后端侧验证：
@@ -746,6 +753,7 @@ class ReqFunc004DirtyFieldsTests(TestCase):
 # 八、集成测试 — 回归保护（现有功能不受 v0.5.0 影响）
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class RegressionProtectionTests(TestCase):
     """
     验证 v0.5.0 变更不破坏现有水力模块/主温控其他字段读写行为。
@@ -822,6 +830,7 @@ class RegressionProtectionTests(TestCase):
 # 九、FR-001 边界测试 — el-input-number 清空场景
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class FR001InputNumberUndefinedTests(TestCase):
     """
     FR-001 (MINOR finding) 专项边界测试。
@@ -911,6 +920,7 @@ class FR001InputNumberUndefinedTests(TestCase):
 # 十、v0.5.1 增量测试 — mode 枚举对齐 + central_energy_supply 可写
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class V051ModeEnumAlignmentTests(TestCase):
     """
     v0.5.1 增量单元测试。
@@ -994,6 +1004,7 @@ class V051ModeEnumAlignmentTests(TestCase):
         self.assertNotEqual(label_map.get('4'), '制冷')
 
 
+@tag('integration')
 class V051CentralEnergySupplyWriteTests(TestCase):
     """
     v0.5.1 集成测试 — central_energy_supply 写入接口（REQ-FUNC-003、REQ-NFR-002）
@@ -1114,6 +1125,7 @@ class V051CentralEnergySupplyWriteTests(TestCase):
 # 十、序列化器边界测试（v0.5.0 新参数兼容性）
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class SerializerV050CompatibilityTests(TestCase):
     """验证 DeviceSettingsBatchWriteSerializer 对 v0.5.0 新增参数的兼容性。"""
 
@@ -1159,6 +1171,7 @@ class SerializerV050CompatibilityTests(TestCase):
 #   测试 ID 规则：IT-FR1FIX-*
 # ═════════════════════════════════════════════════════════════════════════════
 
+@tag('integration')
 class FR001HotfixVerificationTests(TestCase):
     """
     FR-001 Hotfix 验证测试套件。

@@ -24,7 +24,7 @@ import json
 import os
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from api.models import CondensationWarningEvent, FaultEvent, WorkOrder
@@ -105,6 +105,7 @@ def _agent(orchestrator, auth_policy=None, write_executor=None):
 
 # ── 测试 ────────────────────────────────────────────────────────────────
 
+@tag('unit')
 class DecisionLoopTest(TestCase):
 
     def test_conclusion_creates_workorder(self):

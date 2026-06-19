@@ -10,7 +10,7 @@ import json
 import uuid
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -75,6 +75,7 @@ def _make_latest(specific_part, param_name, value=22):
     )
 
 
+@tag('integration')
 class GetParamsTests(TestCase):
 
     def setUp(self):
@@ -167,6 +168,7 @@ class GetParamsTests(TestCase):
         self.assertIsInstance(parsed, list)
 
 
+@tag('integration')
 class PostWriteTests(TestCase):
 
     def setUp(self):
@@ -247,6 +249,7 @@ class PostWriteTests(TestCase):
         self.assertEqual(resp.status_code, 401)
 
 
+@tag('integration')
 class GetRecordsTests(TestCase):
 
     def setUp(self):
