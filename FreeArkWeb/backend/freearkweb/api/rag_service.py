@@ -14,6 +14,7 @@ aarch64 纪律：rapidocr-onnxruntime / onnxruntime 须在 Pi 5 真装真验证�
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import os
@@ -204,8 +205,12 @@ class _DoubaoMultimodalEmbeddings:
                 if 400 <= e.code < 500:          # 客户端错误，重试无意义
                     raise
                 last_err = e                     # 5xx 服务端错误，可重试
-            except (TimeoutError, ConnectionError, urllib.error.URLError) as e:
-                last_err = e                     # 读超时 / 连接失败，瞬时可重试
+            except (OSError, http.client.HTTPException) as e:
+                # 瞬时网络错误，全部可重试。OSError 覆盖 TimeoutError/ConnectionError/
+                # socket.timeout 及 urllib.error.URLError（URLError 是 OSError 子类）；
+                # http.client.HTTPException 覆盖 IncompleteRead（响应体被中途截断，
+                # Pi WiFi 抖动常见，实测"少最后几百字节"）。
+                last_err = e
             if i < attempts - 1:
                 logger.warning("rag_service: 豆包 embedding 第 %d 次失败（%r），退避重试",
                                i + 1, last_err)
