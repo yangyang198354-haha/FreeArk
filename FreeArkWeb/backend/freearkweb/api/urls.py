@@ -125,6 +125,7 @@ urlpatterns = [
     # 记忆隔离接口（freeark_lobster_memory_isolation，REQ-FUNC-017）
     path('memory/me/', memory_views.MyMemoryView.as_view(), name='memory-me'),
     path('admin/memory/<int:user_id>/', memory_views.AdminMemoryView.as_view(), name='admin-memory-user'),
+    path('memory/session/<str:session_key>/', memory_views.SessionDeleteView.as_view(), name='memory-session-delete'),
 
     # 故障管理接口（v0.6.0-FM，FR-FM-05）
     path('devices/fault-events/', views_fault.fault_event_list, name='fault-event-list'),

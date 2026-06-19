@@ -605,9 +605,10 @@ class ChatSession(models.Model):
         on_delete=models.CASCADE,
         related_name='chat_sessions',
     )
-    session_key = models.CharField(max_length=36)
+    session_key = models.CharField(max_length=36, unique=True)
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    is_deleted = models.BooleanField(default=False, verbose_name='是否已删除', db_index=True)
 
     class Meta:
         db_table = 'api_chat_session'

@@ -80,22 +80,27 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         self.user = user
-        self.session_key = str(uuid.uuid4())
         self._is_streaming = False
         # self.chat_session / self._pending_assistant_content 已在 connect 顶部初始化
 
-        # v1.3: 创建 DB 会话记录（失败则降级，WS 仍正常建立）
-        try:
-            self.chat_session = await sync_to_async(
-                chat_memory.create_session
-            )(self.user, self.session_key)
-        except Exception as exc:
-            logger.warning('ChatConsumer: create_session 失败，记忆功能降级: %s', exc)
+        # v1.4: 从 query param 解析 session_key（可选）
+        session_key_param_bytes = params.get(b'session_key', [None])[0]
+        session_key_param = (
+            session_key_param_bytes.decode('utf-8', errors='replace')
+            if session_key_param_bytes is not None else None
+        )
+
+        # v1.4: 按 session_key_param 决定新建或加载已有 session
+        self.chat_session = await sync_to_async(self._resolve_session)(
+            self.user, session_key_param
+        )
+        self.session_key = self.chat_session.session_key if self.chat_session else str(uuid.uuid4())
 
         await self.accept()
         await self.send(json.dumps({
             'type': 'connected',
             'session_id': self.session_key,
+            'session_key': self.session_key,
         }))
         logger.info('ChatConsumer: 用户 %s 连接成功，session_key=%s',
                     user.username, self.session_key[:8] + '...')
@@ -157,7 +162,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send(json.dumps({
                 'type': 'error',
                 'code': 'BUSY',
-                'message': '方舟龙虾正在回复中，请等待当前回复完成',
+                'message': '方舟智能体正在回复中，请等待当前回复完成',
             }))
             return
 
@@ -186,10 +191,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             inject_prefix = ''
             if self.chat_session is not None:
                 try:
-                    history = await sync_to_async(chat_memory.load_history)(self.user)
+                    history = await sync_to_async(chat_memory.load_history_by_session)(self.chat_session)
                     inject_prefix = chat_memory.build_inject_prefix(history)
                 except Exception as exc:
-                    logger.warning('ChatConsumer: load_history 失败，以空历史继续: %s', exc)
+                    logger.warning('ChatConsumer: load_history_by_session 失败，以空历史继续: %s', exc)
 
             # CONFIRM-7（不变）: 注入 chatuser 前缀
             chat_user = getattr(self.user, 'username', 'unknown')
@@ -340,6 +345,47 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'type': 'error', 'code': 'INTERNAL_ERROR',
                 'message': '服务出现内部错误，请刷新页面后重试',
             }))
+
+    def _resolve_session(self, user, session_key_param):
+        """
+        按 session_key_param 决定新建或加载已有 ChatSession（同步，由 connect 用 sync_to_async 包装）。
+
+        行为矩阵：
+          - session_key_param 为 None → 生成新 UUID，创建新 session
+          - session_key_param 有效且属于该 user 且 is_deleted=False → 返回已有 session
+          - session_key_param 无效（不存在/归属错误/已删除）→ 生成新 UUID，创建新 session（降级）
+          - DB 失败 → 返回 None（保持现有降级策略）
+        """
+        from .models import ChatSession
+        if session_key_param is None:
+            new_key = str(uuid.uuid4())
+            try:
+                return chat_memory.create_session(user, new_key)
+            except Exception as exc:
+                logger.warning('ChatConsumer: create_session 失败，记忆功能降级: %s', exc)
+                return None
+
+        try:
+            session = ChatSession.objects.get(
+                user=user,
+                session_key=session_key_param,
+                is_deleted=False,
+            )
+            return session
+        except ChatSession.DoesNotExist:
+            logger.info(
+                'ChatConsumer: session_key_param=%s 不存在或无效，降级新建 session',
+                session_key_param[:8] + '...' if len(session_key_param) >= 8 else session_key_param,
+            )
+        except Exception as exc:
+            logger.warning('ChatConsumer: 查询 session 失败，降级新建 session: %s', exc)
+
+        new_key = str(uuid.uuid4())
+        try:
+            return chat_memory.create_session(user, new_key)
+        except Exception as exc:
+            logger.warning('ChatConsumer: create_session 降级失败: %s', exc)
+            return None
 
     @sync_to_async
     def _get_user_by_token(self, token_key: str):
