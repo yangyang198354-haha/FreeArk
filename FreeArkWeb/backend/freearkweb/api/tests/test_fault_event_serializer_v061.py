@@ -158,7 +158,7 @@ class TestSerializerMainPath(TestCase):
         now = timezone.now()
         _make_fault_event(
             device_sn='22155',
-            product_code='130004',
+            product_code='250001',  # 非 DEVICE_NAME_OVERRIDE 码（130004 会被覆盖为'新风机'），验证缓存值直接返回
             first_seen_at=now - timedelta(hours=1),
             last_seen_at=now - timedelta(minutes=30),
         )
@@ -186,7 +186,7 @@ class TestSerializerMainPath(TestCase):
         now = timezone.now()
         _make_fault_event(
             device_sn='22155',
-            product_code='130004',  # '130004' → '新风机'（PRODUCT_CODE_LABELS）
+            product_code='250001',  # 能耗表：非 DEVICE_NAME_OVERRIDE 码，device_name 应取缓存值而非 product_code
             first_seen_at=now - timedelta(hours=1),
             last_seen_at=now - timedelta(minutes=30),
         )
@@ -204,7 +204,7 @@ class TestSerializerMainPath(TestCase):
         # device_name 来自缓存（主路径）
         self.assertEqual(first['device_name'], '新风')
         # device_type_label 来自 PRODUCT_CODE_LABELS（兜底一，同时返回）
-        self.assertEqual(first['device_type_label'], '新风机')
+        self.assertEqual(first['device_type_label'], '能耗表')
 
     def test_cache_already_warm_no_reload(self):
         """
@@ -213,6 +213,7 @@ class TestSerializerMainPath(TestCase):
         now = timezone.now()
         _make_fault_event(
             device_sn='22155',
+            product_code='250001',  # 非 DEVICE_NAME_OVERRIDE 码（默认 130004 会被覆盖），验证缓存命中直接返回
             first_seen_at=now - timedelta(hours=1),
             last_seen_at=now - timedelta(minutes=30),
         )

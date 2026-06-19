@@ -66,10 +66,14 @@ def get_test_application():
 # ---------------------------------------------------------------------------
 
 async def mock_stream_chat_normal(message, session_key):
-    """模拟正常的 OpenClawAdapter.stream_chat — 返回 3 个 token。"""
-    yield '你好'
-    yield '，我是方舟龙虾'
-    yield '！'
+    """模拟正常的 OpenClawAdapter.stream_chat — 返回 3 个 token。
+
+    协议升级（v1.x）：stream_chat 现 yield (kind, text) 元组（content/reasoning），
+    consumer._pump 按此解包；旧的 yield 纯字符串会导致解包异常、无输出 → 测试超时。
+    """
+    yield ('content', '你好')
+    yield ('content', '，我是方舟龙虾')
+    yield ('content', '！')
 
 
 async def mock_stream_chat_unavailable(message, session_key):
@@ -227,7 +231,7 @@ class TestChatConsumerIntegration(TransactionTestCase):
         self.assertEqual(conn_msg['type'], 'connected')
 
         # Mock OpenClawAdapter.stream_chat
-        with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat_normal):
+        with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat_normal):
             # 发送 chat_message
             await communicator.send_json_to({
                 'type': 'chat_message',
@@ -269,7 +273,7 @@ class TestChatConsumerIntegration(TransactionTestCase):
         conn_msg = await communicator.receive_json_from()
         self.assertEqual(conn_msg['type'], 'connected')
 
-        with patch('api.consumers.OpenClawAdapter.stream_chat',
+        with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                    side_effect=mock_stream_chat_unavailable):
             await communicator.send_json_to({
                 'type': 'chat_message',
@@ -301,7 +305,7 @@ class TestChatConsumerIntegration(TransactionTestCase):
         conn_msg = await communicator.receive_json_from()
         self.assertEqual(conn_msg['type'], 'connected')
 
-        with patch('api.consumers.OpenClawAdapter.stream_chat',
+        with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                    side_effect=mock_stream_chat_timeout):
             await communicator.send_json_to({
                 'type': 'chat_message',
@@ -332,7 +336,7 @@ class TestChatConsumerIntegration(TransactionTestCase):
         conn_msg = await communicator.receive_json_from()
         self.assertEqual(conn_msg['type'], 'connected')
 
-        with patch('api.consumers.OpenClawAdapter.stream_chat',
+        with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                    side_effect=mock_stream_chat_normal):
             await communicator.send_json_to({
                 'type': 'chat_message',
@@ -419,7 +423,7 @@ class TestChatConsumerIntegration(TransactionTestCase):
 
         async def mock_stream_capture(message, session_key):
             captured_session_keys.append(session_key)
-            yield '回复1'
+            yield ('content', '回复1')
 
         app = get_test_application()
         communicator = WebsocketCommunicator(app, f'/ws/chat/?token={self.valid_token}')
@@ -431,7 +435,7 @@ class TestChatConsumerIntegration(TransactionTestCase):
         session_id = conn_msg['session_id']
 
         # 第一次发送
-        with patch('api.consumers.OpenClawAdapter.stream_chat',
+        with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                    side_effect=mock_stream_capture):
             await communicator.send_json_to({
                 'type': 'chat_message',
@@ -446,9 +450,9 @@ class TestChatConsumerIntegration(TransactionTestCase):
         # 第二次发送
         async def mock_stream_capture2(message, session_key):
             captured_session_keys.append(session_key)
-            yield '回复2'
+            yield ('content', '回复2')
 
-        with patch('api.consumers.OpenClawAdapter.stream_chat',
+        with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
                    side_effect=mock_stream_capture2):
             await communicator.send_json_to({
                 'type': 'chat_message',

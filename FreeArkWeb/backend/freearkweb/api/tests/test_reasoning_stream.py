@@ -97,7 +97,7 @@ class ChatConsumerReasoningProtocolTest(TransactionTestCase):
 
             # mock stream_chat 返回 reasoning + content 序列
             with _patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', '思考片段1'),
                     ('reasoning', '思考片段2'),
@@ -157,7 +157,7 @@ class ChatConsumerReasoningProtocolTest(TransactionTestCase):
             self.assertEqual(msg['type'], 'connected')
 
             with _patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', 'r1'),
                     ('reasoning', 'r2'),
@@ -228,7 +228,7 @@ class ChatConsumerNoReasoningCompatTest(TransactionTestCase):
             self.assertEqual(msg['type'], 'connected')
 
             with _patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('content', 'token1'),
                     ('content', 'token2'),
@@ -798,7 +798,7 @@ class ChatConsumerEdgeCasesTest(TransactionTestCase):
             self.assertEqual(msg['type'], 'connected')
 
             with _patch(
-                'api.consumers.OpenClawAdapter.stream_chat',
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', 'r1'),
                     ('content', 'c1'),
