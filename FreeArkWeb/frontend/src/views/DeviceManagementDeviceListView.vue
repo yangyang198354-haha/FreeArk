@@ -46,7 +46,7 @@
       <el-table-column label="PLC状态" width="120" align="center">
         <template #default="{ row }"><el-tag :type="plcStatusTagType(row.plc_status)" size="small">{{ plcStatusLabel(row.plc_status) }}</el-tag></template>
       </el-table-column>
-      <el-table-column label="PLC上次心跳" width="150" align="center">
+      <el-table-column label="PLC上次心跳" min-width="150" align="center">
         <template #default="{ row }"><span>{{ formatDateTime(row.plc_last_online_time) }}</span></template>
       </el-table-column>
       <el-table-column label="系统开关" width="110" align="center">

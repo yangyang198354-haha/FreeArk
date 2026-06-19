@@ -603,8 +603,6 @@ export default {
 
 .page-container {
   padding: 28px 32px 48px;
-  max-width: var(--content-max-width, 1680px);
-  margin: 0 auto;
   min-height: 100%;
 }
 

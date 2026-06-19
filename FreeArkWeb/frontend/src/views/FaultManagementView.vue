@@ -175,7 +175,7 @@
           {{ row.recovered_at ? formatDatetime(row.recovered_at) : '-' }}
         </template>
       </el-table-column>
-      <el-table-column prop="is_active" label="状态" min-width="90">
+      <el-table-column prop="is_active" label="状态" width="90" align="center">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'danger' : 'success'" size="small">
             {{ row.is_active ? '未恢复' : '已恢复' }}
@@ -183,7 +183,7 @@
         </template>
       </el-table-column>
       <!-- REQ-UI-003：文案"查看设备面板" → "设备面板"；v1.3.0-AOW 新增「智能体巡检」 -->
-      <el-table-column label="操作" min-width="200" fixed="right">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <el-button
             link
