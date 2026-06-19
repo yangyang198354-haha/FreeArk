@@ -125,6 +125,9 @@ urlpatterns = [
     # 记忆隔离接口（freeark_lobster_memory_isolation，REQ-FUNC-017）
     path('memory/me/', memory_views.MyMemoryView.as_view(), name='memory-me'),
     path('admin/memory/<int:user_id>/', memory_views.AdminMemoryView.as_view(), name='admin-memory-user'),
+    # DEV-001: /history/ 路由必须先于 /<str:session_key>/ 注册，否则 Django 会将
+    # "history" 当作 session_key 参数匹配到 SessionDeleteView。
+    path('memory/session/<str:session_key>/history/', memory_views.SessionHistoryView.as_view(), name='memory-session-history'),
     path('memory/session/<str:session_key>/', memory_views.SessionDeleteView.as_view(), name='memory-session-delete'),
 
     # 故障管理接口（v0.6.0-FM，FR-FM-05）

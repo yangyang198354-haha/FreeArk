@@ -1,25 +1,31 @@
 """
-ChatConsumer — WebSocket 聊天代理（MOD-BE-01 v1.3）
+ChatConsumer — WebSocket 聊天代理（MOD-BE-CONS v1.4）
 
-v1.3 变更（相对 v1.2）：
-  - connect()：鉴权成功后调用 chat_memory.create_session()，新增 self.chat_session
-  - disconnect()：调用 chat_memory.close_session()；若有 _pending_assistant_content 则先写入
+v1.4 变更（相对 v1.3，实现 ADR-001 策略 A + ADR-002 异步标题）：
+  - connect()：移除立即创建 DB 会话的逻辑；仅保存 self.session_key（字符串）；
+    新增初始化 self._session_created = False, self._first_round_done = False
+  - 新增 _ensure_session_created()：首条 user 消息到达时幂等创建 ChatSession，
+    写入截断标题（generate_title_truncate），设 self.chat_session
   - _handle_chat()：
-      a. 开始时 load_history() + build_inject_prefix()，前缀追加到 augmented_message 前
-      b. 发送给 OpenClaw 前 append_message('user', ...)
-      c. 流结束后 append_message('assistant', accumulated_content)
-  - 新增实例变量：self.chat_session / self._pending_assistant_content
-  - 所有 DB 操作失败均降级（记日志，WS 不中断），满足 ARCH-C-011
+      a. 首行调用 await self._ensure_session_created(user_message)
+      b. 首轮（user+assistant各一条）完成后触发 asyncio.create_task(generate_title_llm_async)
+  - disconnect()：self.chat_session is None 时跳过所有 DB 操作（满足 ADR-001）
+  - 删除 _resolve_session() 方法（职责已内联进 connect()）
 
-v1.2 关键约束（保持不变）：
+v1.3 变更（保持不变）：
   - (kind, text) 协议不变（ARCH-C-006，C-008）
   - reasoning_token / reasoning_end / stream_token / stream_end 消息类型不变
   - _get_user_by_token 不变
   - OpenClawAdapter.stream_chat 调用签名不变
 
-项目: FreeArk_Openclaw
-文档引用: module_design.md MOD-BE-01 v1.3, architecture_design.md ADR-009/010/013
-需求引用: REQ-FUNC-013, REQ-FUNC-016, REQ-NFR-013
+@module MOD-BE-CONS
+@implements IFC-CONS-001, IFC-CONS-002, IFC-CONS-003, IFC-CONS-004
+@depends MOD-BE-MEM
+@author sub_agent_software_developer
+
+项目: FreeArk_ChatSession
+文档引用: module_design.md MOD-BE-CONS v1.4, architecture_design.md ADR-001/002/003
+需求引用: REQ-FUNC-001, REQ-FUNC-002, REQ-FUNC-003, REQ-NFR-004
 """
 
 import asyncio
@@ -30,6 +36,7 @@ from urllib.parse import parse_qs
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
+from django.db import IntegrityError
 
 # OpenClawUnavailableError 仍作为统一降级异常（LangGraphAdapter 失败时也抛它）；
 # 具体适配器（OpenClaw / LangGraph）由 chat_backend 工厂按 settings.CHAT_BACKEND 选择。
@@ -42,23 +49,31 @@ logger = logging.getLogger('api.consumers')
 
 class ChatConsumer(AsyncWebsocketConsumer):
     """
-    异步 WebSocket Consumer，实现 FreeArk 与 OpenClaw 之间的流式聊天代理。
+    异步 WebSocket Consumer，实现 FreeArk 与 OpenClaw/LangGraph 之间的流式聊天代理。
 
-    v1.3 新增实例变量：
-      self.chat_session: ChatSession | None — DB 会话对象，connect 时创建
+    v1.4 实例变量：
+      self.chat_session: ChatSession | None — DB 会话对象（首条消息后才赋值，ADR-001）
       self._pending_assistant_content: str — 当前未写入 DB 的 assistant content
+      self._session_created: bool — 标记当前连接内 session 是否已创建（幂等守卫）
+      self._first_round_done: bool — 标记首轮对话（user+assistant各一条）是否已完成
     """
 
     async def connect(self):
-        """握手鉴权：验证 FreeArk token，通过后建立连接并创建 DB 会话记录。"""
-        # 提前初始化实例属性：connect 在无/无效 token 时会 close()+return，但 Channels
-        # 仍会调用 disconnect()，其中访问 self.chat_session / self._pending_assistant_content。
-        # 若不先置默认值，早期拒绝路径会抛 AttributeError（'ChatConsumer' object has no
-        # attribute 'chat_session'）。在任何 early-return 之前先兜底。
+        """
+        握手鉴权：验证 FreeArk token，通过后建立连接。
+
+        ADR-001 策略 A：connect 不创建 DB 记录，仅保存 session_key 字符串到实例变量。
+        首条 user 消息到达时才由 _ensure_session_created() 幂等创建 ChatSession。
+
+        @implements IFC-CONS-001
+        """
+        # 提前初始化所有实例属性：connect 在无/无效 token 时会 close()+return，但 Channels
+        # 仍会调用 disconnect()，需要所有属性已初始化，否则抛 AttributeError。
         self.chat_session = None
         self._pending_assistant_content = ''
-        # 阶段 E：Tier-2 写确认门状态。_awaiting_confirm=True 表示图已 interrupt、
-        # 正等前端 confirm_response；_confirm_accumulated 暂存确认前已流式的内容。
+        self._session_created = False   # ADR-001：首条消息后才设为 True
+        self._first_round_done = False  # ADR-002：首轮完成后才设为 True
+        # 阶段 E：Tier-2 写确认门状态。
         self._awaiting_confirm = False
         self._confirm_accumulated = ''
 
@@ -81,20 +96,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         self.user = user
         self._is_streaming = False
-        # self.chat_session / self._pending_assistant_content 已在 connect 顶部初始化
 
-        # v1.4: 从 query param 解析 session_key（可选）
+        # ADR-001：从 query param 解析 session_key（可选），仅保存字符串，不查 DB
         session_key_param_bytes = params.get(b'session_key', [None])[0]
         session_key_param = (
             session_key_param_bytes.decode('utf-8', errors='replace')
             if session_key_param_bytes is not None else None
         )
 
-        # v1.4: 按 session_key_param 决定新建或加载已有 session
-        self.chat_session = await sync_to_async(self._resolve_session)(
-            self.user, session_key_param
-        )
-        self.session_key = self.chat_session.session_key if self.chat_session else str(uuid.uuid4())
+        # ADR-001：保留传入的 session_key（用于恢复已有会话），否则生成新 UUID
+        # connect 不做 DB 查询，session_key 有效性在首条消息时验证（_ensure_session_created）
+        self.session_key = session_key_param if session_key_param else str(uuid.uuid4())
 
         await self.accept()
         await self.send(json.dumps({
@@ -106,11 +118,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     user.username, self.session_key[:8] + '...')
 
     async def disconnect(self, close_code):
-        """连接断开：写入 pending assistant 内容，关闭 DB 会话记录。"""
+        """
+        连接断开：写入 pending assistant 内容，关闭 DB 会话记录。
+
+        ADR-001：若 self.chat_session is None（从未发言，session 未创建），
+        跳过所有 DB 操作，满足"connect 不落库"策略。
+
+        @implements IFC-CONS-004
+        """
         username = getattr(getattr(self, 'user', None), 'username', 'unknown')
         logger.info('ChatConsumer: 用户 %s 断开连接，code=%d', username, close_code)
 
-        # v1.3: 关闭会话记录（含 pending content 写入）
+        # ADR-001：chat_session 为 None 表示用户从未发消息，无需任何 DB 操作
         if self.chat_session is not None:
             if self._pending_assistant_content:
                 try:
@@ -126,7 +145,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 logger.warning('ChatConsumer: close_session 失败: %s', exc)
 
     async def receive(self, text_data=None, bytes_data=None):
-        """接收前端消息，驱动 OpenClaw 流式调用。"""
+        """接收前端消息，驱动 OpenClaw/LangGraph 流式调用。"""
         if text_data is None:
             return
 
@@ -172,21 +191,93 @@ class ChatConsumer(AsyncWebsocketConsumer):
         finally:
             self._is_streaming = False
 
+    async def _ensure_session_created(self, user_message: str) -> None:
+        """
+        幂等地创建 ChatSession 并写入截断标题。
+
+        触发时机：_handle_chat() 首行调用，在任何 DB 写操作之前。
+        幂等性：
+          1. 主守卫：self._session_created=True 时直接返回（避免重复调用）。
+          2. DB 层守卫：session_key 有 unique=True 约束，IntegrityError 时查询并复用已有 session。
+
+        副作用：设置 self.chat_session, self._session_created = True。
+
+        @implements IFC-CONS-002
+        """
+        # 主幂等守卫（RISK-001 缓解）
+        if self._session_created:
+            return
+
+        from .models import ChatSession  # noqa: PLC0415
+
+        try:
+            # 尝试创建会话（ORM 操作必须用 sync_to_async，RISK-003）
+            session_obj = await sync_to_async(chat_memory.create_session)(
+                self.user, self.session_key
+            )
+        except IntegrityError:
+            # session_key 唯一约束冲突（极罕见并发重传场景，RISK-001 兜底）
+            logger.warning(
+                'ChatConsumer._ensure_session_created: session_key=%s 已存在，查询并复用',
+                self.session_key[:8] + '...',
+            )
+            try:
+                session_obj = await sync_to_async(
+                    lambda: ChatSession.objects.get(
+                        user=self.user,
+                        session_key=self.session_key,
+                        is_deleted=False,
+                    )
+                )()
+            except Exception as exc:
+                logger.error(
+                    'ChatConsumer._ensure_session_created: 复用 session 失败，记忆功能降级: %s', exc
+                )
+                return
+        except Exception as exc:
+            logger.warning(
+                'ChatConsumer._ensure_session_created: create_session 失败，记忆功能降级: %s', exc
+            )
+            return
+
+        # 生成截断标题并立即写入（同步计算，无 DB IO）
+        truncated_title = chat_memory.generate_title_truncate(user_message, max_len=30)
+        if truncated_title:
+            try:
+                await sync_to_async(
+                    lambda: ChatSession.objects.filter(pk=session_obj.pk).update(
+                        title=truncated_title
+                    )
+                )()
+                # 更新本地对象保持一致
+                session_obj.title = truncated_title
+            except Exception as exc:
+                logger.warning(
+                    'ChatConsumer._ensure_session_created: 写入截断标题失败（非致命）: %s', exc
+                )
+
+        self.chat_session = session_obj
+        self._session_created = True
+
     async def _handle_chat(self, user_message: str):
         """
-        核心聊天处理（v1.3）：注入历史记忆，调用 OpenClawAdapter，写入 DB 记录。
+        核心聊天处理（v1.4）：ADR-001 首行确保 session 已创建，ADR-002 首轮后触发异步标题。
 
-        变更点（相对 v1.2）：
-          1. 构建 augmented_message 前先 load_history + build_inject_prefix
-          2. 发送给 OpenClaw 前 append_message('user', ...)
-          3. 累积 kind=='content' 的 text → accumulated_content
-          4. 流结束后 append_message('assistant', accumulated_content)
+        变更点（相对 v1.3）：
+          1. 首行调用 await self._ensure_session_created(user_message)（ADR-001）
+          2. _finalize_turn 成功后，首轮完成时 asyncio.create_task 异步 LLM 标题（ADR-002）
+          3. 历史注入保持不变（self.chat_session 可能仍为 None 时跳过）
 
         不变点（ARCH-C-006）：
           - reasoning_token / reasoning_end / stream_token / stream_end 发送逻辑不变
           - stream_chat 调用签名不变（message + session_key）
+
+        @implements IFC-CONS-003
         """
         try:
+            # ADR-001：首条消息到达时幂等创建 session（已创建则直接返回）
+            await self._ensure_session_created(user_message)
+
             # v1.3: 加载历史记忆并构建注入前缀
             inject_prefix = ''
             if self.chat_session is not None:
@@ -226,6 +317,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 return  # 不发 stream_end、不写 assistant 记录（确认后再终结本轮）
 
             await self._finalize_turn(accumulated_content)
+
+            # ADR-002：首轮完成后异步生成 LLM 标题（user+assistant各一条）
+            if (
+                self.chat_session is not None
+                and not self._first_round_done
+                and accumulated_content
+            ):
+                self._first_round_done = True
+                asyncio.create_task(
+                    chat_memory.generate_title_llm_async(
+                        session_id=self.chat_session.pk,
+                        first_user_msg=user_message,
+                        first_assistant_msg=accumulated_content,
+                    )
+                )
+                logger.info(
+                    'ChatConsumer: 已触发异步 LLM 标题生成 session_id=%d',
+                    self.chat_session.pk,
+                )
 
         except OpenClawUnavailableError as exc:
             logger.warning('ChatConsumer: OpenClaw 不可用: %s', exc)
@@ -346,54 +456,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message': '服务出现内部错误，请刷新页面后重试',
             }))
 
-    def _resolve_session(self, user, session_key_param):
-        """
-        按 session_key_param 决定新建或加载已有 ChatSession（同步，由 connect 用 sync_to_async 包装）。
-
-        行为矩阵：
-          - session_key_param 为 None → 生成新 UUID，创建新 session
-          - session_key_param 有效且属于该 user 且 is_deleted=False → 返回已有 session
-          - session_key_param 无效（不存在/归属错误/已删除）→ 生成新 UUID，创建新 session（降级）
-          - DB 失败 → 返回 None（保持现有降级策略）
-        """
-        from .models import ChatSession
-        if session_key_param is None:
-            new_key = str(uuid.uuid4())
-            try:
-                return chat_memory.create_session(user, new_key)
-            except Exception as exc:
-                logger.warning('ChatConsumer: create_session 失败，记忆功能降级: %s', exc)
-                return None
-
-        try:
-            session = ChatSession.objects.get(
-                user=user,
-                session_key=session_key_param,
-                is_deleted=False,
-            )
-            return session
-        except ChatSession.DoesNotExist:
-            logger.info(
-                'ChatConsumer: session_key_param=%s 不存在或无效，降级新建 session',
-                session_key_param[:8] + '...' if len(session_key_param) >= 8 else session_key_param,
-            )
-        except Exception as exc:
-            logger.warning('ChatConsumer: 查询 session 失败，降级新建 session: %s', exc)
-
-        new_key = str(uuid.uuid4())
-        try:
-            return chat_memory.create_session(user, new_key)
-        except Exception as exc:
-            logger.warning('ChatConsumer: create_session 降级失败: %s', exc)
-            return None
-
     @sync_to_async
     def _get_user_by_token(self, token_key: str):
         """通过 DRF Token 验证 FreeArk 用户身份（不变）。"""
         if not token_key:
             return None
         try:
-            from rest_framework.authtoken.models import Token
+            from rest_framework.authtoken.models import Token  # noqa: PLC0415
             return Token.objects.select_related('user').get(key=token_key).user
         except Token.DoesNotExist:
             return None

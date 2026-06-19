@@ -1,13 +1,20 @@
 """
-memory_views — 记忆生命周期管理 REST API（MOD-BE-API-MEM）
+memory_views — 记忆生命周期管理 REST API（MOD-BE-API-MEM, MOD-BE-HIST）
 
 URL 映射（在 urls.py 中注册）：
-  GET  /api/memory/me/                 — 查看自己的会话列表（分页）
-  DELETE /api/memory/me/               — 清空自己的所有历史记忆
-  GET  /api/admin/memory/<user_id>/    — admin 查看指定用户会话列表
-  DELETE /api/admin/memory/<user_id>/  — admin 清空指定用户历史记忆
+  GET  /api/memory/me/                                   — 查看自己的会话列表（分页）
+  DELETE /api/memory/me/                                 — 清空自己的所有历史记忆
+  GET  /api/admin/memory/<user_id>/                      — admin 查看指定用户会话列表
+  DELETE /api/admin/memory/<user_id>/                    — admin 清空指定用户历史记忆
+  DELETE /api/memory/session/<session_key>/              — 软删除指定会话
+  GET  /api/memory/session/<session_key>/history/        — 获取会话历史消息（最近 40 条）
 
-需求引用: REQ-FUNC-017a/b/c, REQ-NFR-010
+需求引用: REQ-FUNC-017a/b/c, REQ-NFR-010, REQ-FUNC-006, REQ-FUNC-007, REQ-FUNC-008
+
+@module MOD-BE-HIST (SessionHistoryView), MOD-BE-API-MEM (其他视图)
+@implements IFC-HIST-001
+@depends MOD-BE-MEM (chat_memory)
+@author sub_agent_software_developer
 """
 
 import logging
@@ -93,3 +100,36 @@ class SessionDeleteView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({'message': '会话已删除', 'session_key': session_key})
+
+
+class SessionHistoryView(APIView):
+    """
+    GET /api/memory/session/{session_key}/history/ — 获取会话历史消息（最近 40 条，升序）。
+
+    权限：IsAuthenticated（DRF Token 认证），仅允许归属用户访问。
+    路径参数：session_key — 完整 UUID 字符串
+    响应：{ session_key, messages: [{role, content, created_at}], total }
+    错误：404 — session_key 不存在或不属于当前用户
+
+    @module MOD-BE-HIST
+    @implements IFC-HIST-001
+    @depends MOD-BE-MEM (get_session_history)
+    @author sub_agent_software_developer
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, session_key):
+        try:
+            messages = chat_memory.get_session_history(
+                request.user, session_key, limit=40
+            )
+        except ValueError:
+            return Response(
+                {'detail': '会话不存在或无权限访问'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({
+            'session_key': session_key,
+            'messages': messages,
+            'total': len(messages),
+        })
