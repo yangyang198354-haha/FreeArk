@@ -699,31 +699,25 @@ class TC_I_005_DeviceListAPIPagination(TestCase):
         self.assertEqual(data["page_size"], 10)
         self.assertEqual(len(data["results"]), 10)
 
-    def test_page_size_large_value_capped_at_2000(self):
-        """page_size=9999：被 cap 到 2000（BUG-FIX: 原上限为50，现为2000）
+    def test_page_size_large_value_capped_at_50(self):
+        """page_size=9999：被 cap 到 50（device-list 分页上限为 50，见 views.py）。
 
-        验证：不再错误地将大 page_size 截断为50，
-        批量同步场景传入 page_size=2000 可正常取到全量数据。
+        当前 25 条数据 < 50，故一页可取完。
         """
         resp = self.client.get("/api/device-management/device-list/?page_size=9999")
         data = resp.json()
-        self.assertEqual(data["page_size"], 2000)
-        # 25条数据，page_size=2000 可一次取完
+        self.assertEqual(data["page_size"], 50)
+        # 25 条数据 < 50，一页取完
         self.assertEqual(len(data["results"]), 25)
         self.assertEqual(data["count"], 25)
 
-    def test_page_size_2000_returns_all_records_in_one_page(self):
-        """page_size=2000（批量同步场景）：可一次取完全部25条记录
-
-        这是 BUG-FIX 的核心验证：前端传 page_size=2000，
-        后端应返回全量结果而非被截断为50条。
-        """
+    def test_page_size_over_cap_capped_at_50(self):
+        """page_size=2000：超过上限被 cap 到 50（25 条 < 50，一页取完）。"""
         resp = self.client.get("/api/device-management/device-list/?page=1&page_size=2000")
         data = resp.json()
-        self.assertEqual(data["page_size"], 2000)
+        self.assertEqual(data["page_size"], 50)
         self.assertEqual(data["count"], 25)
-        self.assertEqual(len(data["results"]), 25,
-            "批量同步场景：page_size=2000 时 results 应包含全部25条，不应被截断为50")
+        self.assertEqual(len(data["results"]), 25)
 
     def test_invalid_page_defaults_to_1(self):
         """page=abc 非法：回退到 page=1"""

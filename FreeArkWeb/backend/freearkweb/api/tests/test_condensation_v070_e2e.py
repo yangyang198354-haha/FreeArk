@@ -33,6 +33,7 @@ import logging
 import re
 from datetime import timedelta
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from django.core.management import call_command
@@ -385,8 +386,11 @@ class FrontendColumnCheckE2ETest(TestCase):
     本测试静态解析 Vue 文件，验证 el-table-column 数量和标签文字。
     """
 
+    # 相对仓库根动态定位，避免写死绝对路径（原写死他机用户名，本机/CI/Linux 必挂）。
+    # 本文件位于 FreeArkWeb/backend/freearkweb/api/tests/，parents[4] = FreeArkWeb/。
     VUE_FILE = (
-        r'C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\frontend\src\views\CondensationWarningView.vue'
+        Path(__file__).resolve().parents[4]
+        / 'frontend' / 'src' / 'views' / 'CondensationWarningView.vue'
     )
 
     EXPECTED_LABELS = [
