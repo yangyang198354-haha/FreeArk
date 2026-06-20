@@ -181,6 +181,13 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import SessionSidebar from '../components/SessionSidebar.vue'
 import api from '../utils/api.js'
+import {
+  chatHistoryCache,
+  chatHistoryCacheTime,
+  chatHistoryCacheKey,
+} from '../router/index.js'
+
+const CHAT_HISTORY_CACHE_TTL_MS = 30000  // 与会话列表缓存 TTL 保持一致
 
 // MOD-FE-01: 配置 marked — 启用 GFM 表格（REQ-FUNC-002）和 breaks（REQ-FUNC-003）
 // ADR-002 决策：marked + DOMPurify 组合
@@ -370,8 +377,12 @@ export default {
      *   - 历史加载成功：messages.value = history（升序）
      *   - 历史加载失败：historyLoadError 提示（WS 聊天仍可使用）
      *   - 历史为空：historyEmpty = true（US-007 空状态提示）
+     *
+     * cachedHistory（可选）：路由预取缓存数据（{ messages }），命中时跳过 HTTP 请求，
+     *   直接渲染缓存内容；后台静默刷新由 onMounted 的 silent 逻辑负责。
+     *   此参数仅供内部 onMounted 缓存优先路径使用，侧边栏点击切换时不传。
      */
-    async function handleSessionSelected(sessionKey) {
+    async function handleSessionSelected(sessionKey, cachedHistory) {
       // 1. 重置所有状态
       messages.value = []
       historyLoadError.value = ''
@@ -394,12 +405,25 @@ export default {
         return
       }
 
-      // 切换已有会话：并行建立 WS 连接 + 加载历史消息（REQ-NFR-001：不阻塞界面）
-      isHistoryLoading.value = true
-      // WS 连接先启动（不等 history 加载）
+      // 切换已有会话：WS 连接先启动（不等 history 加载，REQ-NFR-001 不阻塞界面）
       connectWS(sessionKey)
 
-      // 加载历史消息（通过 api.js，团队规范：禁止裸 axios）
+      // 缓存优先路径：路由 beforeEnter 已预取历史，直接渲染，跳过 HTTP 请求
+      if (cachedHistory) {
+        isHistoryLoading.value = false
+        const historyMessages = (cachedHistory.messages || []).map(mapHistoryToMessage)
+        if (historyMessages.length === 0) {
+          historyEmpty.value = true
+        } else {
+          messages.value = historyMessages
+          await nextTick()
+          scrollToBottom()
+        }
+        return
+      }
+
+      // 正常路径：网络加载历史消息（通过 api.js，团队规范：禁止裸 axios）
+      isHistoryLoading.value = true
       try {
         const data = await api.getSessionHistory(sessionKey)
         const historyMessages = (data.messages || []).map(mapHistoryToMessage)
@@ -592,7 +616,40 @@ export default {
 
     // --- 生命周期 ---
     onMounted(() => {
-      connectWS()
+      // v1.5 首屏优化：路由 beforeEnter 已预取最新会话历史，缓存命中时直接渲染，
+      // 并同时发起带 sessionKey 的 WS 连接，省去用户手动点击选择会话的步骤。
+      //
+      // 判断缓存有效条件：
+      //   1. chatHistoryCacheKey 非 null（有最新会话）
+      //   2. 距写入时间 < 30s（缓存未过期）
+      //   3. 与会话列表第一条 key 一致（chatHistoryCacheKey 本身已保证）
+      const now = Date.now()
+      const historyCacheHit = chatHistoryCacheKey !== null
+        && chatHistoryCache !== null
+        && (now - chatHistoryCacheTime) < CHAT_HISTORY_CACHE_TTL_MS
+
+      if (historyCacheHit) {
+        // 缓存命中：直接用最新会话 key 触发渲染（不发 HTTP 历史请求）
+        currentSessionKey.value = chatHistoryCacheKey
+        handleSessionSelected(chatHistoryCacheKey, chatHistoryCache)
+        // 后台静默刷新：确保历史内容最新（不影响已渲染内容）
+        api.getSessionHistory(chatHistoryCacheKey)
+          .then(freshData => {
+            // 仅在当前 session 未切换时才更新（防止用户已切换到其他会话）
+            if (currentSessionKey.value === chatHistoryCacheKey) {
+              const freshMsgs = (freshData.messages || []).map(mapHistoryToMessage)
+              if (freshMsgs.length > 0) {
+                messages.value = freshMsgs
+              }
+            }
+          })
+          .catch(() => {
+            // 静默失败：已渲染的缓存内容保持不变
+          })
+      } else {
+        // 缓存未命中（预取尚未完成或已过期）：降级为默认行为（新建会话模式）
+        connectWS()
+      }
     })
 
     onUnmounted(() => {

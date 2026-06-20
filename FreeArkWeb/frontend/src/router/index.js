@@ -1,5 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+// 聊天页会话列表预取缓存（路由 beforeEnter 写入，SessionSidebar onMounted 读取）
+export let chatSessionsCache = null
+export let chatSessionsCacheTime = 0
+const CHAT_SESSIONS_CACHE_TTL_MS = 30000  // 30秒内复用缓存
+
+// 聊天页最新会话历史预取缓存（路由 beforeEnter 串接写入，ChatView onMounted 读取）
+// chatHistoryCacheKey: 对应的 session_key_full，防止会话切换后错误复用
+export let chatHistoryCache = null
+export let chatHistoryCacheTime = 0
+export let chatHistoryCacheKey = null
+
 const routes = [
   {
     path: '/',
@@ -125,7 +136,53 @@ const routes = [
     path: '/chat',
     name: 'Chat',
     component: () => import('../views/ChatView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
+    beforeEnter: async (to, from, next) => {
+      // 认证检查（与全局 beforeEach 保持一致）
+      const isLoggedIn = localStorage.getItem('userToken') !== null
+      if (!isLoggedIn) {
+        next({ name: 'Login' })
+        return
+      }
+      // 预取会话列表（fire-and-don't-await：不阻塞路由跳转，但尽早发起请求）
+      // 使用动态 import 避免与 api.js 的循环依赖（api.js 已静态 import router/index.js）
+      const now = Date.now()
+      if (!chatSessionsCache || (now - chatSessionsCacheTime) > CHAT_SESSIONS_CACHE_TTL_MS) {
+        import('../utils/api.js').then(m => {
+          const api = m.default
+          api.get('/api/memory/me/', { page: 1, page_size: 20 })
+            .then(data => {
+              chatSessionsCache = data
+              chatSessionsCacheTime = Date.now()
+              // 串接：会话列表预取成功后，立即 fire 最新会话的历史消息预取
+              // 条件：列表非空 + 历史缓存未命中或已过期
+              const sessions = data.sessions || []
+              if (sessions.length > 0) {
+                const latestKey = sessions[0].session_key_full
+                const historyNow = Date.now()
+                const historyStale = !chatHistoryCache
+                  || chatHistoryCacheKey !== latestKey
+                  || (historyNow - chatHistoryCacheTime) > CHAT_SESSIONS_CACHE_TTL_MS
+                if (historyStale) {
+                  api.get(`/api/memory/session/${latestKey}/history/`)
+                    .then(histData => {
+                      chatHistoryCache = histData
+                      chatHistoryCacheTime = Date.now()
+                      chatHistoryCacheKey = latestKey
+                    })
+                    .catch(() => {
+                      // 静默失败，ChatView 会自行重试
+                    })
+                }
+              }
+            })
+            .catch(() => {
+              // 静默失败，SessionSidebar 会自行重试
+            })
+        })
+      }
+      next()
+    },
   },
   {
     // 巡检智能体工作日志（v1.3.0-AOW，REQ-FUNC-NAV-003）

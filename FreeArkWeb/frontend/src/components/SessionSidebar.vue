@@ -70,6 +70,8 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Trash2 } from 'lucide-vue-next'
 import api from '../utils/api.js'
+import { chatSessionsCache, chatSessionsCacheTime } from '../router/index.js'
+const CHAT_SESSIONS_CACHE_TTL_MS = 30000
 
 export default {
   name: 'SessionSidebar',
@@ -92,9 +94,9 @@ export default {
     const deleteDialogVisible = ref(false)
     const isDeleting = ref(false)
 
-    async function loadSessions(page) {
+    async function loadSessions(page, silent) {
       if (page === undefined) page = 1
-      isLoading.value = true
+      if (!silent) isLoading.value = true
       try {
         const data = await api.get('/api/memory/me/', { page: page, page_size: 20 })
         sessions.value = data.sessions || []
@@ -159,7 +161,17 @@ export default {
     }
 
     onMounted(() => {
-      loadSessions(1)
+      // 若路由预取缓存有效（30s 内），直接渲染，避免首屏等待
+      const now = Date.now()
+      if (chatSessionsCache && (now - chatSessionsCacheTime) < CHAT_SESSIONS_CACHE_TTL_MS) {
+        sessions.value = chatSessionsCache.sessions || []
+        totalSessions.value = chatSessionsCache.total || 0
+        currentPage.value = 1
+        // 后台静默刷新（确保数据最新）
+        loadSessions(1, /* silent= */ true)
+      } else {
+        loadSessions(1)
+      }
     })
 
     return {

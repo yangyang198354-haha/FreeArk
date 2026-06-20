@@ -65,7 +65,13 @@ def clear_memory(user) -> int:
 
 
 def get_sessions(user, page: int = 1, page_size: int = 20) -> dict:
-    qs = ChatSession.objects.filter(user=user, is_deleted=False).order_by('-started_at')
+    from django.db.models import Count
+    qs = (
+        ChatSession.objects
+        .filter(user=user, is_deleted=False)
+        .annotate(message_count=Count('messages'))
+        .order_by('-started_at')
+    )
     total = qs.count()
     offset = (page - 1) * page_size
     sessions = []
@@ -76,7 +82,7 @@ def get_sessions(user, page: int = 1, page_size: int = 20) -> dict:
             'session_key_full': s.session_key,
             'started_at': s.started_at.isoformat() if s.started_at else None,
             'ended_at': s.ended_at.isoformat() if s.ended_at else None,
-            'message_count': s.messages.count(),
+            'message_count': s.message_count,
             'title': s.title,  # IFC-MEM-001: 新增 title 字段（可为 None）
         })
     return {'total': total, 'page': page, 'sessions': sessions}
