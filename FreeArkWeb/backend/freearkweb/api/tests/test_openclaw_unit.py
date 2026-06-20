@@ -29,7 +29,7 @@ import asyncio
 import json
 import unittest
 from unittest.mock import MagicMock, patch
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from rest_framework.authtoken.models import Token
 
 from api.models import CustomUser
@@ -141,6 +141,7 @@ if AIOHTTP_AVAILABLE:
 # Adapter 配置类测试
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestUrlNormalization(TestCase):
     """OpenClawAdapter._to_ws_url 规范化"""
 
@@ -161,6 +162,7 @@ class TestUrlNormalization(TestCase):
                          'ws://127.0.0.1:18789/')
 
 
+@tag('unit')
 class TestConnectFrameBuilder(TestCase):
     """OpenClawAdapter._build_connect_frame 帧契约"""
 
@@ -181,6 +183,7 @@ class TestConnectFrameBuilder(TestCase):
         self.assertNotIn('device', p, '不应携带 device 字段（backend+loopback 路径）')
 
 
+@tag('unit')
 class TestChatSendFrameBuilder(TestCase):
     """OpenClawAdapter._build_chat_send_frame 帧契约"""
 
@@ -210,6 +213,7 @@ class TestChatSendFrameBuilder(TestCase):
     OPENCLAW_TIMEOUT=10,
     OPENCLAW_CONNECT_TIMEOUT=5,
 )
+@tag('unit')
 class TestStreamChat(TestCase):
     """OpenClawAdapter.stream_chat 协议正确性与错误路径"""
 
@@ -561,6 +565,7 @@ class TestStreamChat(TestCase):
 # ChatConsumer._get_user_by_token （与 v1.1 完全相同；未变化）
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestGetUserByToken(TestCase):
     """TC-U-11 ~ TC-U-13: ChatConsumer._get_user_by_token token 验证逻辑。"""
 

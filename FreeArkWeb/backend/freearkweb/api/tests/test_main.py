@@ -17,7 +17,7 @@ FreeArk API 单元测试
 from datetime import date, timedelta, datetime
 from unittest.mock import patch, MagicMock
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, tag
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -104,6 +104,7 @@ def make_monthly_record(
 # 一、数据模型测试
 # ===========================================================================
 
+@tag('unit')
 class CustomUserModelTest(TestCase):
     """CustomUser 模型基本功能测试"""
 
@@ -129,6 +130,7 @@ class CustomUserModelTest(TestCase):
         self.assertIsNone(user.position)
 
 
+@tag('unit')
 class PLCDataModelTest(TestCase):
     """PLCData 模型约束测试"""
 
@@ -185,6 +187,7 @@ class PLCDataModelTest(TestCase):
         self.assertIn("制热", str(record))
 
 
+@tag('unit')
 class UsageQuantityDailyModelTest(TestCase):
     """UsageQuantityDaily 模型测试"""
 
@@ -198,6 +201,7 @@ class UsageQuantityDailyModelTest(TestCase):
         self.assertIn("制冷", str(record))
 
 
+@tag('unit')
 class UsageQuantityMonthlyModelTest(TestCase):
     """UsageQuantityMonthly 模型测试"""
 
@@ -212,6 +216,7 @@ class UsageQuantityMonthlyModelTest(TestCase):
         self.assertIn("2025-01", str(record))
 
 
+@tag('unit')
 class PLCConnectionStatusModelTest(TestCase):
     """PLCConnectionStatus 模型测试"""
 
@@ -252,6 +257,7 @@ class PLCConnectionStatusModelTest(TestCase):
             )
 
 
+@tag('unit')
 class PLCStatusChangeHistoryModelTest(TestCase):
     """PLCStatusChangeHistory 模型测试"""
 
@@ -267,6 +273,7 @@ class PLCStatusChangeHistoryModelTest(TestCase):
         self.assertEqual(record.specific_part, "3-1-7-702")
 
 
+@tag('unit')
 class OwnerInfoUniqueIdTest(TestCase):
     """OwnerInfo.unique_id 字段测试（billing 查询路径）"""
 
@@ -303,6 +310,7 @@ class OwnerInfoUniqueIdTest(TestCase):
 # 二、DailyUsageCalculator 测试
 # ===========================================================================
 
+@tag('unit')
 class ParseSpecificPartTest(TestCase):
     """DailyUsageCalculator.parse_specific_part 解析逻辑测试"""
 
@@ -333,6 +341,7 @@ class ParseSpecificPartTest(TestCase):
         self.assertEqual(building, "")
 
 
+@tag('unit')
 class DailyUsageCalculatorTest(TestCase):
     """DailyUsageCalculator.calculate_daily_usage 集成测试（使用内存数据库）"""
 
@@ -456,6 +465,7 @@ class DailyUsageCalculatorTest(TestCase):
 # 三、MonthlyUsageCalculator 测试
 # ===========================================================================
 
+@tag('unit')
 class MonthlyUsageCalculatorTest(TestCase):
     """MonthlyUsageCalculator.calculate_monthly_usage 测试"""
 
@@ -547,6 +557,7 @@ class MonthlyUsageCalculatorTest(TestCase):
 # 四、plc_data_cleaner 测试
 # ===========================================================================
 
+@tag('unit')
 class PLCDataCleanerTest(TestCase):
     """clean_old_plc_data 函数测试
 
@@ -613,6 +624,7 @@ class PLCDataCleanerTest(TestCase):
 # 五、MQTT Handlers 测试
 # ===========================================================================
 
+@tag('unit')
 class PLCDataHandlerTest(TestCase):
     """PLCDataHandler.batch_save_plc_data 测试"""
 
@@ -784,6 +796,7 @@ class PLCDataHandlerTest(TestCase):
         )
 
 
+@tag('unit')
 class ConnectionStatusHandlerTest(TestCase):
     """ConnectionStatusHandler 测试"""
 
@@ -889,6 +902,7 @@ class ConnectionStatusHandlerTest(TestCase):
 # 六、REST API 视图测试
 # ===========================================================================
 
+@tag('integration')
 class HealthCheckAPITest(TestCase):
     """健康检查接口测试"""
 
@@ -899,6 +913,7 @@ class HealthCheckAPITest(TestCase):
         self.assertEqual(response.json()["status"], "ok")
 
 
+@tag('integration')
 class AuthAPITest(TestCase):
     """认证相关 API 测试"""
 
@@ -954,6 +969,7 @@ class AuthAPITest(TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+@tag('integration')
 class ChangePasswordAPITest(TestCase):
     """修改密码 API 测试"""
 
@@ -989,6 +1005,7 @@ class ChangePasswordAPITest(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+@tag('integration')
 class UserManagementAPITest(TestCase):
     """用户管理 API 测试（仅管理员）"""
 
@@ -1044,6 +1061,7 @@ class UserManagementAPITest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+@tag('integration')
 class UsageQuantityAPITest(TestCase):
     """日用量查询 API 测试"""
 
@@ -1124,6 +1142,7 @@ class UsageQuantityAPITest(TestCase):
         self.assertEqual(periods, sorted(periods))
 
 
+@tag('integration')
 class UsageQuantitySpecificTimePeriodAPITest(TestCase):
     """特定时间段汇总查询 API 测试"""
 
@@ -1194,6 +1213,7 @@ class UsageQuantitySpecificTimePeriodAPITest(TestCase):
         self.assertEqual(data[0]["energy_mode"], "制冷")
 
 
+@tag('integration')
 class UsageQuantityMonthlyAPITest(TestCase):
     """月度用量查询 API 测试"""
 
@@ -1268,6 +1288,7 @@ class UsageQuantityMonthlyAPITest(TestCase):
         self.assertEqual(data["total"], 3)
 
 
+@tag('integration')
 class PLCConnectionStatusAPITest(TestCase):
     """PLC 连接状态 API 测试"""
 
@@ -1371,6 +1392,7 @@ class PLCConnectionStatusAPITest(TestCase):
         self.assertEqual(data[0]["status"], "offline")
 
 
+@tag('integration')
 class BillingAPITest(TestCase):
     """历史用能账单 API 测试"""
 
@@ -1529,6 +1551,7 @@ class BillingAPITest(TestCase):
 # 七、用户注册 API 测试（补充 US-004 / AC-004-*）
 # ===========================================================================
 
+@tag('integration')
 class UserRegisterAPITest(TestCase):
     """用户注册 API 测试 — US-004"""
 
@@ -1592,6 +1615,7 @@ class UserRegisterAPITest(TestCase):
 # 八、看板 Dashboard API 测试
 # ===========================================================================
 
+@tag('integration')
 class DashboardTotalEnergyAPITest(TestCase):
     """看板 API 1：总电量查询测试"""
 
@@ -1682,6 +1706,7 @@ class DashboardTotalEnergyAPITest(TestCase):
         self.assertIn("end_date", data)
 
 
+@tag('integration')
 class DashboardSummaryAPITest(TestCase):
     """看板 API 2：今日/本月累计用电量测试"""
 
@@ -1749,6 +1774,7 @@ class DashboardSummaryAPITest(TestCase):
         self.assertIn("month", data)
 
 
+@tag('integration')
 class DashboardPLCOnlineRateAPITest(TestCase):
     """看板 API 3：PLC 系统运行率测试"""
 
@@ -1803,6 +1829,7 @@ class DashboardPLCOnlineRateAPITest(TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+@tag('integration')
 class DashboardTrendAPITest(TestCase):
     """看板 API 4：近 N 天用电量趋势测试"""
 
@@ -1907,6 +1934,7 @@ class DashboardTrendAPITest(TestCase):
         self.assertEqual(dates, sorted(dates))
 
 
+@tag('integration')
 class DashboardServicesAPITest(TestCase):
     """看板 API 5：系统服务状态测试（Mock subprocess）"""
 
@@ -1995,6 +2023,7 @@ class DashboardServicesAPITest(TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+@tag('integration')
 class DashboardActivitiesAPITest(TestCase):
     """看板 API 6：最近活动测试"""
 
@@ -2078,6 +2107,7 @@ class DashboardActivitiesAPITest(TestCase):
 # 八、CSRF Token 接口测试
 # ===========================================================================
 
+@tag('integration')
 class CSRFTokenAPITest(TestCase):
     """CSRF Token 获取接口测试"""
 
@@ -2105,6 +2135,7 @@ class CSRFTokenAPITest(TestCase):
 # 九、用户管理详情 API 测试（补充 US-006 / AC-006、AC-007 遗漏场景）
 # ===========================================================================
 
+@tag('integration')
 class UserDetailAPITest(TestCase):
     """用户详情 API 测试 — UserDetail 视图（仅管理员）"""
 
@@ -2169,6 +2200,7 @@ class UserDetailAPITest(TestCase):
 # 十、PLC 状态变化历史分页测试（补充 AC-014-* 分页场景）
 # ===========================================================================
 
+@tag('integration')
 class PLCStatusHistoryPaginationTest(TestCase):
     """PLC 状态变化历史分页测试"""
 
@@ -2215,6 +2247,7 @@ class PLCStatusHistoryPaginationTest(TestCase):
 # 十一、月度用量额外过滤场景测试（补充 AC-011-*）
 # ===========================================================================
 
+@tag('integration')
 class UsageQuantityMonthlyFilterTest(TestCase):
     """月度用量按 building/unit/room_number 过滤测试"""
 
@@ -2262,6 +2295,7 @@ class UsageQuantityMonthlyFilterTest(TestCase):
 # 十二、集成测试 — 跨模块数据流验证
 # ===========================================================================
 
+@tag('integration')
 class IntegrationTestPLCToUsagePipeline(TestCase):
     """
     集成测试：PLC 数据写入 → 日用量计算 → 月用量计算 → API 查询完整链路
@@ -2402,6 +2436,7 @@ class IntegrationTestPLCToUsagePipeline(TestCase):
             self.assertTrue(daily_cold, f"房间 {sp} 缺少制冷日用量记录")
 
 
+@tag('integration')
 class IntegrationTestUserLifecycle(TestCase):
     """
     集成测试：用户生命周期完整流程
@@ -2506,6 +2541,7 @@ class IntegrationTestUserLifecycle(TestCase):
         self.assertEqual(CustomUser.objects.filter(username="uniq_user").count(), 1)
 
 
+@tag('integration')
 class IntegrationTestPLCStatusFlow(TestCase):
     """
     集成测试：PLC 在线/离线状态切换 + 历史记录联动
@@ -2610,6 +2646,7 @@ class IntegrationTestPLCStatusFlow(TestCase):
         self.assertIsNotNone(status_obj.last_online_time)
 
 
+@tag('integration')
 class IntegrationTestBillingCalculation(TestCase):
     """
     集成测试：账单金额计算端到端验证
@@ -2741,6 +2778,7 @@ class IntegrationTestBillingCalculation(TestCase):
 # 十三、E2E 测试 — 完整 HTTP 场景
 # ===========================================================================
 
+@tag('e2e')
 class E2ETestAuthProtection(TestCase):
     """
     E2E 测试：所有需认证的接口，在未携带 Token 时均返回 401
@@ -2793,6 +2831,7 @@ class E2ETestAuthProtection(TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+@tag('e2e')
 class E2ETestBillingFlow(TestCase):
     """
     E2E 测试：完整账单查询流程
@@ -2896,6 +2935,7 @@ class E2ETestBillingFlow(TestCase):
         self.assertAlmostEqual(float(data[0]["billAmount"]), round(250 * 0.28, 2), places=2)
 
 
+@tag('e2e')
 class E2ETestPaginationConsistency(TestCase):
     """
     E2E 测试：分页一致性验证
@@ -2979,6 +3019,7 @@ class E2ETestPaginationConsistency(TestCase):
         self.assertEqual(resp1.json()["total"], 5)
 
 
+@tag('e2e')
 class E2ETestFilterCombinations(TestCase):
     """
     E2E 测试：多条件组合过滤正确性
@@ -3122,6 +3163,7 @@ class E2ETestFilterCombinations(TestCase):
         self.assertEqual(item["energy_mode"], "制冷")
 
 
+@tag('e2e')
 class E2ETestPLCStatisticsConsistency(TestCase):
     """
     E2E 测试：PLC 状态查询统计数据内部一致性
@@ -3212,6 +3254,7 @@ class E2ETestPLCStatisticsConsistency(TestCase):
 # 十四、Management Command 集成测试
 # ===========================================================================
 
+@tag('integration')
 class IntegrationTestManagementCommands(TestCase):
     """
     Management Command 集成测试
@@ -3545,6 +3588,7 @@ class IntegrationTestManagementCommands(TestCase):
 # v0.5.2 — freeark-dph-cleanup 服务管理白名单测试
 # ===========================================================================
 
+@tag('unit')
 class DphCleanupServiceWhitelistTest(TestCase):
     """
     v0.5.2 验收测试：验证 freeark-dph-cleanup 已正确加入 MONITORED_SERVICES

@@ -30,7 +30,7 @@ import queue
 from unittest.mock import MagicMock, patch
 
 from django.db.utils import ProgrammingError, OperationalError
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from api.mqtt_consumer import MQTTConsumer, _is_db_connection_error
 
@@ -41,6 +41,7 @@ GONE_AWAY = OperationalError(2006, "Server has gone away")
 LOST_DURING_QUERY = OperationalError(2013, "Lost connection to server during query")
 
 
+@tag('unit')
 class TestIsDbConnectionError(SimpleTestCase):
     """_is_db_connection_error 的识别逻辑（纯函数，无需 DB）。"""
 
@@ -63,6 +64,7 @@ class TestIsDbConnectionError(SimpleTestCase):
 
 @patch('api.mqtt_consumer.django_connection')
 @patch('api.mqtt_consumer.close_old_connections')
+@tag('unit')
 class TestWorkerLoopHeal(SimpleTestCase):
     """_worker_loop 在连接中毒时的自愈行为（连接调用全部 mock，不触碰真实 DB）。"""
 

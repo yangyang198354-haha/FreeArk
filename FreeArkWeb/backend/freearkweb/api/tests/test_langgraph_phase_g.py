@@ -23,7 +23,7 @@ import unittest
 os.environ.setdefault("FREEARK_POC_MOCK", "1")  # 必须在 import fa_tools 前置
 
 from asgiref.sync import async_to_sync
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, override_settings, tag
 
 try:
     import langgraph  # noqa: F401
@@ -35,6 +35,7 @@ except Exception:  # pragma: no cover
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 G 测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
 class ReadKnowledgeDelegationTests(SimpleTestCase):
     """读/知识委托：内联跑只读子专家、回灌、审计日志。"""
 
@@ -78,6 +79,7 @@ class ReadKnowledgeDelegationTests(SimpleTestCase):
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 G 测试")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
 class WriteDelegationGateTests(SimpleTestCase):
     """写委托复用现有 _gate interrupt 确认门。"""
 

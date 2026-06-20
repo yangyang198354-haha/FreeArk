@@ -22,7 +22,7 @@ import time
 from datetime import timedelta
 from unittest.mock import MagicMock, patch, call
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -98,6 +98,7 @@ def _get_on_message_handler():
 # TC-HB-001 ~ TC-HB-003: on_message 逻辑
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class OnMessageTest(TestCase):
 
     def setUp(self):
@@ -154,6 +155,7 @@ class OnMessageTest(TestCase):
 # TC-HB-004 ~ TC-HB-006: 在线/离线/unknown 判定
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class OnlineStatusTest(TestCase):
 
     def setUp(self):
@@ -194,6 +196,7 @@ class OnlineStatusTest(TestCase):
 # TC-HB-007: MAC 缓存刷新
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class MacCacheTest(TestCase):
 
     def test_tc_hb_007_cache_refresh_on_expiry(self):
@@ -244,6 +247,7 @@ class MacCacheTest(TestCase):
 # TC-HB-008: migration 字段检查
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class MigrationFieldTest(TestCase):
 
     def test_tc_hb_008_model_has_last_seen_at(self):
@@ -278,6 +282,7 @@ class MigrationFieldTest(TestCase):
 # TC-HB-009 ~ TC-HB-010: device_list API 集成测试
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class DeviceListAPITest(TestCase):
 
     def setUp(self):

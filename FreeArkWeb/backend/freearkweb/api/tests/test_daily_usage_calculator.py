@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
 import schedule
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from api.daily_usage_calculator import DailyUsageCalculator
 from api.models import PLCData, UsageQuantityDaily
@@ -61,6 +61,7 @@ def run_calc(target_date):
 # ---------------------------------------------------------------------------
 # TC-01: target_date=昨天，次日 initial_energy 被正确写入
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC01_NextDayInitialEnergyWritten(TestCase):
     """当 target_date 是过去日期时，次日记录的 initial_energy 必须被写入。"""
 
@@ -85,6 +86,7 @@ class TC01_NextDayInitialEnergyWritten(TestCase):
 # ---------------------------------------------------------------------------
 # TC-02: target_date=今天，明天记录不被创建或修改（漏洞修复核心）
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC02_TodayRunDoesNotCreateTomorrowRecord(TestCase):
     """当 target_date=今天时，明天的记录不应被创建。"""
 
@@ -118,6 +120,7 @@ class TC02_TodayRunDoesNotCreateTomorrowRecord(TestCase):
 # ---------------------------------------------------------------------------
 # TC-03: target_date=今天，usage_quantity = PLCData.value - initial_energy
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC03_UsageQuantityCalculation(TestCase):
     """当今日记录已有 initial_energy 时，usage_quantity 必须正确计算。"""
 
@@ -146,6 +149,7 @@ class TC03_UsageQuantityCalculation(TestCase):
 # ---------------------------------------------------------------------------
 # TC-04: target_date=今天，今天记录不存在时，创建且 usage_quantity=0
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC04_TodayRecordCreatedWithZeroUsage(TestCase):
     """今天记录不存在时，应以 usage_quantity=0 创建。"""
 
@@ -171,6 +175,7 @@ class TC04_TodayRecordCreatedWithZeroUsage(TestCase):
 # ---------------------------------------------------------------------------
 # TC-05: 连续两次对今天运行，幂等性验证
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC05_IdempotencyForToday(TestCase):
     """对今天连续运行两次，结果应保持一致，不产生重复记录。"""
 
@@ -200,6 +205,7 @@ class TC05_IdempotencyForToday(TestCase):
 # ---------------------------------------------------------------------------
 # TC-06: target_date=昨天，次日 initial_energy 已存在且非空，不被覆盖
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC06_ExistingNextDayInitialEnergyNotOverwritten(TestCase):
     """次日记录已有非空 initial_energy 时，不应被覆盖。"""
 
@@ -221,6 +227,7 @@ class TC06_ExistingNextDayInitialEnergyNotOverwritten(TestCase):
 # ---------------------------------------------------------------------------
 # TC-07: --hourly 参数使 schedule 注册 every().hour job
 # ---------------------------------------------------------------------------
+@tag('unit')
 class TC07_HourlyScheduleRegistered(TestCase):
     """传入 --hourly 选项时，schedule 中应注册 hourly_job。"""
 

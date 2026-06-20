@@ -36,7 +36,7 @@ import time
 import threading
 from unittest.mock import MagicMock, patch, call
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 
@@ -145,7 +145,10 @@ def _make_mqtt_payload(device_id, params):
 # ===========================================================================
 
 class RoomFilterTestBase(TestCase):
-    """所有 v0.5.7 测试的基类，setUp 时清空缓存防止测试间污染。"""
+    """所有 v0.5.7 测试的基类，setUp 时清空缓存防止测试间污染。
+
+    注意：本类是 unit 与 integration 子类的共享基类，不打层级 tag——
+    打 tag 会经继承污染所有子类（见 test_inventory.md 分层说明）。"""
 
     def setUp(self):
         invalidate_room_filter_cache()  # 清空全局缓存，防测试间污染
@@ -158,6 +161,7 @@ class RoomFilterTestBase(TestCase):
 # UT-M1: utils_room_filter.py 单元测试
 # ===========================================================================
 
+@tag('unit')
 class TestMatchPanelSubTypes(TestCase):
     """UT-M1-xx: _match_panel_sub_types() 内部函数测试（纯函数，无 DB）"""
 
@@ -257,6 +261,7 @@ class TestMatchPanelSubTypes(TestCase):
         self.assertNotIn('panel_fourth_children', result)
 
 
+@tag('unit')
 class TestGetAvailableSubTypes(RoomFilterTestBase):
     """UT-M1-01~07: get_available_sub_types() 集成测试（含 DB + 缓存）"""
 
@@ -376,6 +381,7 @@ class TestGetAvailableSubTypes(RoomFilterTestBase):
         self.assertNotIn('9-1-10-ERR', _room_filter_cache)
 
 
+@tag('unit')
 class TestGetPanelParamBlocklist(RoomFilterTestBase):
     """UT-M1-08/09: get_panel_param_blocklist() 测试"""
 
@@ -415,6 +421,7 @@ class TestGetPanelParamBlocklist(RoomFilterTestBase):
 # UT-M4: PLCLatestDataHandler 单元测试
 # ===========================================================================
 
+@tag('unit')
 class TestPLCLatestDataHandlerRoomFilter(RoomFilterTestBase):
     """UT-M4-01~05：PLCLatestDataHandler 落库侧房型过滤"""
 
@@ -534,6 +541,7 @@ class TestPLCLatestDataHandlerRoomFilter(RoomFilterTestBase):
 # UT-M7B: OndemandCollectSubscriber 单元测试（纯逻辑，不需要 MQTT broker）
 # ===========================================================================
 
+@tag('unit')
 class TestOndemandCollectSubscriberAllowedParams(TestCase):
     """UT-M7B-01~05：OndemandCollectSubscriber 按需采集白名单裁剪逻辑"""
 
@@ -663,6 +671,7 @@ class TestOndemandCollectSubscriberAllowedParams(TestCase):
 # IT-M2: GET /api/devices/realtime-params/ 集成测试
 # ===========================================================================
 
+@tag('integration')
 class TestGetDeviceRealtimeParamsWithRoomFilter(RoomFilterTestBase):
     """IT-M2-01~04：devices/realtime-params 接口房型过滤集成测试"""
 
@@ -776,6 +785,7 @@ class TestGetDeviceRealtimeParamsWithRoomFilter(RoomFilterTestBase):
 # IT-M3: GET /api/device-settings/params/{sp}/ 集成测试
 # ===========================================================================
 
+@tag('integration')
 class TestDeviceSettingsParamsWithRoomFilter(RoomFilterTestBase):
     """IT-M3-01/02：device-settings/params 接口房型过滤集成测试"""
 
@@ -825,6 +835,7 @@ class TestDeviceSettingsParamsWithRoomFilter(RoomFilterTestBase):
 # IT-M5: 设备树同步后缓存清除集成测试
 # ===========================================================================
 
+@tag('integration')
 class TestDeviceTreeSyncCacheInvalidation(RoomFilterTestBase):
     """IT-M5-01：device_tree_sync_one 成功后调用 invalidate_room_filter_cache"""
 
@@ -869,6 +880,7 @@ class TestDeviceTreeSyncCacheInvalidation(RoomFilterTestBase):
 # IT-M7A: POST /api/devices/ondemand-refresh/ allowed_params 注入集成测试
 # ===========================================================================
 
+@tag('integration')
 class TestOndemandRefreshAllowedParamsInjection(RoomFilterTestBase):
     """IT-M7A-01/02：ondemand-refresh MQTT payload 注入 allowed_params"""
 
@@ -949,6 +961,7 @@ class TestOndemandRefreshAllowedParamsInjection(RoomFilterTestBase):
 # EDGE: 边界测试
 # ===========================================================================
 
+@tag('integration')
 class TestEdgeCases(RoomFilterTestBase):
     """EDGE-01~04 / PERF-01 边界与性能测试"""
 

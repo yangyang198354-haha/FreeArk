@@ -19,7 +19,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -40,6 +40,7 @@ BUILDING, UNIT, ROOM = '3', '1', '702'
 # 单元测试：ConnectionStatusHandler 快/慢路径
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestConnectionStatusLockOpt(TestCase):
     """验证 v0.5.5 P2 的快/慢路径分离逻辑"""
 
@@ -247,6 +248,7 @@ class TestConnectionStatusLockOpt(TestCase):
 # 集成测试：通过 handle() 接口验证调用链未受影响
 # ---------------------------------------------------------------------------
 
+@tag('integration')
 class TestConnectionStatusHandleIntegration(TestCase):
     """验证 handle() -> _update_connection_status() 调用接口在 P2 优化后保持不变"""
 

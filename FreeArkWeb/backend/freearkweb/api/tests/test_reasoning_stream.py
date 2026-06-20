@@ -22,7 +22,7 @@
 import asyncio
 from unittest.mock import patch as _patch
 
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, tag
 from rest_framework.authtoken.models import Token as _Token
 
 try:
@@ -52,6 +52,7 @@ def _make_ws_app():
     ])
 
 
+@tag('integration')
 class ChatConsumerReasoningProtocolTest(TransactionTestCase):
     """
     US-RSN-010 场景 A/B/C：reasoning + content 双流时的消息时序验证。
@@ -183,6 +184,7 @@ class ChatConsumerReasoningProtocolTest(TransactionTestCase):
         self._run(_inner())
 
 
+@tag('integration')
 class ChatConsumerNoReasoningCompatTest(TransactionTestCase):
     """
     US-RSN-010 场景 B：无 reasoning 时的向后兼容验证。
@@ -296,6 +298,7 @@ def _parse_delta(payload: dict) -> list:
     return results
 
 
+@tag('integration')
 class AdapterDeltaParseLogicTest(TestCase):
     """
     US-RSN-002 delta 解析逻辑单元测试（TC-UNIT-001~006）。
@@ -395,6 +398,7 @@ class AdapterDeltaParseLogicTest(TestCase):
         self.assertEqual(result[1], ('content', 'dt'))
 
 
+@tag('integration')
 class AdapterBuildChatSendFrameTest(TestCase):
     """
     US-RSN-008 _build_chat_send_frame 单元测试（TC-UNIT-007~010）。
@@ -475,6 +479,7 @@ class AdapterBuildChatSendFrameTest(TestCase):
         self.assertNotIn('reasoningEffort', frame['params'])
 
 
+@tag('integration')
 class AdapterReasoningEffortWarningTest(TestCase):
     """
     US-RSN-008 场景 C：非法 reasoning_effort 值触发 WARNING 日志（AC-012-03）。
@@ -524,6 +529,7 @@ class AdapterReasoningEffortWarningTest(TestCase):
             logger_obj.removeHandler(handler)
 
 
+@tag('integration')
 class AdapterGetConfigReasoningEffortTest(TestCase):
     """
     US-RSN-008 _get_config() 读取 OPENCLAW_REASONING_EFFORT（AC-012-01）。
@@ -560,6 +566,7 @@ class AdapterGetConfigReasoningEffortTest(TestCase):
         self.assertEqual(cfg['reasoning_effort'], '')
 
 
+@tag('integration')
 class AdapterToWsUrlTest(TestCase):
     """
     _to_ws_url 工具函数回归测试（TC-UNIT-015~019）。
@@ -598,6 +605,7 @@ class AdapterToWsUrlTest(TestCase):
         self.assertEqual(result, 'wss://host:8443/')
 
 
+@tag('integration')
 class AdapterStatLogTest(TestCase):
     """
     US-RSN-004 统计日志测试（TC-UNIT-011~014）。
@@ -748,6 +756,7 @@ class AdapterStatLogTest(TestCase):
 # GROUP_D — consumer v1.2 边界集成测试
 # ===========================================================================
 
+@tag('integration')
 class ChatConsumerEdgeCasesTest(TransactionTestCase):
     """
     US-RSN-003 场景 D 边界测试（TC-INTG-001）。

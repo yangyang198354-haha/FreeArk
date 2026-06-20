@@ -10,7 +10,7 @@ import json
 import uuid
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -49,6 +49,7 @@ def _batch_payload(specific_part='3-1-7-702', items=None):
     }
 
 
+@tag('e2e')
 class E2EHappyPathTest(TestCase):
     """E2E-01: POST batch write → pending → ack(success=True) → success"""
 
@@ -93,6 +94,7 @@ class E2EHappyPathTest(TestCase):
         self.assertIsNotNone(recs[0].acked_at)
 
 
+@tag('e2e')
 class E2EPLCWriteFailTest(TestCase):
     """E2E-02: POST batch write → pending → ack(success=False for item) → failed"""
 
@@ -131,6 +133,7 @@ class E2EPLCWriteFailTest(TestCase):
         self.assertIn('PLC 写入超时', rec.error_message)
 
 
+@tag('e2e')
 class E2EMQTTUnreachableTest(TestCase):
     """E2E-03: MQTT publish 异常 → 503，PLCWriteRecord.status=failed"""
 
@@ -155,6 +158,7 @@ class E2EMQTTUnreachableTest(TestCase):
         self.assertIn('MQTT broker 不可达', rec.error_message)
 
 
+@tag('e2e')
 class E2EIdempotentAckTest(TestCase):
     """E2E-04: 同一 batch_request_id ack 两次 → 状态只更新一次"""
 

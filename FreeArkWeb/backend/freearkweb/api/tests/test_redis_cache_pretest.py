@@ -31,11 +31,12 @@ import os
 
 # ── Django TestCase（用 DummyCache，始终可通过）──────────────────────────────
 
-from django.test import TestCase, RequestFactory, override_settings
+from django.test import TestCase, RequestFactory, override_settings, tag
 from django.core.cache import cache
 from rest_framework.response import Response
 
 
+@tag('unit')
 class DummyCacheBaselineTest(TestCase):
     """
     验证测试路径仍走 DummyCache（settings._RUNNING_TESTS=True）。

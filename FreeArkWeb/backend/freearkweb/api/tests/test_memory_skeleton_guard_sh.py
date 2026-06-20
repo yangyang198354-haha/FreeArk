@@ -26,6 +26,7 @@ import stat
 import tempfile
 import shutil
 import unittest
+from django.test import tag
 from pathlib import Path
 
 # 找到 skeleton_guard.sh 的绝对路径
@@ -80,6 +81,7 @@ def _run_script(args, env=None, cwd=None, timeout=15):
 
 
 @unittest.skipUnless(_SCRIPT_RUNNABLE, 'bash/sha256sum 不可用或脚本不存在，跳过 skeleton_guard.sh 测试')
+@tag('unit')
 class SkeletonGuardInitTest(unittest.TestCase):
     """init 命令：写入哈希基准文件。"""
 
@@ -124,6 +126,7 @@ class SkeletonGuardInitTest(unittest.TestCase):
 
 
 @unittest.skipUnless(_SCRIPT_RUNNABLE, 'bash/sha256sum 不可用或脚本不存在，跳过 skeleton_guard.sh 测试')
+@tag('unit')
 class SkeletonGuardVerifyTest(unittest.TestCase):
     """verify 命令：哈希比对行为验证。"""
 
@@ -180,6 +183,7 @@ class SkeletonGuardVerifyTest(unittest.TestCase):
 
 
 @unittest.skipUnless(_SCRIPT_RUNNABLE, 'bash/sha256sum 不可用或脚本不存在，跳过 skeleton_guard.sh 测试')
+@tag('unit')
 class SkeletonGuardStatusTest(unittest.TestCase):
     """status 命令：输出骨架文件状态，不崩溃。"""
 
@@ -210,6 +214,7 @@ class SkeletonGuardStatusTest(unittest.TestCase):
 
 
 @unittest.skipUnless(_SCRIPT_RUNNABLE, 'bash/sha256sum 不可用或脚本不存在，跳过 skeleton_guard.sh 测试')
+@tag('unit')
 class SkeletonGuardInvalidCommandTest(unittest.TestCase):
     """无效命令：输出用法提示，exit 0（脚本设计如此）。"""
 

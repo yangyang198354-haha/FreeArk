@@ -15,7 +15,7 @@ test_device_name_cache_v061.py — device_name_cache 单元测试（v0.6.1-FM-UX
 import time
 
 from unittest.mock import patch, MagicMock, call
-from django.test import TestCase
+from django.test import TestCase, tag
 
 import api.device_name_cache as cache_module
 
@@ -26,6 +26,7 @@ def _reset_cache():
     cache_module._cache_loaded_at = 0.0
 
 
+@tag('unit')
 class TestGetDeviceNameBySnHit(TestCase):
     """TC-DNC-01：命中路径——mock DeviceNode 注入 sn=22155 → device_name='新风'"""
 
@@ -85,6 +86,7 @@ class TestGetDeviceNameBySnHit(TestCase):
         mock_load.assert_called_once()
 
 
+@tag('unit')
 class TestGetDeviceNameBySnMiss(TestCase):
     """TC-DNC-02：未命中路径——cache 中不存在的 sn 应返回 None。"""
 
@@ -121,6 +123,7 @@ class TestGetDeviceNameBySnMiss(TestCase):
         self.assertIsNone(result)
 
 
+@tag('unit')
 class TestTtlExpiry(TestCase):
     """TC-DNC-03：TTL 过期重建——mock time.monotonic 推进 > 60s 后再次调用应触发 _load_cache。"""
 
@@ -216,6 +219,7 @@ class TestTtlExpiry(TestCase):
         self.assertEqual(result, '新风_刷新')
 
 
+@tag('unit')
 class TestInvalidateCache(TestCase):
     """TC-DNC-04：invalidate_device_name_cache() 后下次调用必触发重建。"""
 
@@ -266,6 +270,7 @@ class TestInvalidateCache(TestCase):
         self.assertEqual(cache_module._cache_loaded_at, 0.0)
 
 
+@tag('unit')
 class TestLoadCacheExceptionSafety(TestCase):
     """TC-DNC-05：_load_cache 抛异常时不崩溃，旧缓存保留（或 None 兜底）。"""
 

@@ -21,7 +21,7 @@ from datetime import datetime
 from io import StringIO
 from unittest.mock import MagicMock, patch, call
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -132,6 +132,7 @@ def _make_plc_connection_status(specific_part, connection_status="online", last_
 # PHASE_07: 单元测试
 # ===========================================================================
 
+@tag('unit')
 class TC_U_001_ScreenConnectivityStatusModel(TestCase):
     """TC-U-001: ScreenConnectivityStatus 模型基本 CRUD 与约束（已适配心跳方案）"""
 
@@ -195,6 +196,7 @@ class TC_U_001_ScreenConnectivityStatusModel(TestCase):
         self.assertNotIn('last_checked_at', field_names)
 
 
+@tag('unit')
 class TC_U_002_ScreenConnectivityHandler(TestCase):
     """TC-U-002: ScreenConnectivityHandler 单元测试（已适配心跳方案）
 
@@ -268,6 +270,7 @@ class TC_U_002_ScreenConnectivityHandler(TestCase):
         self.assertEqual(ScreenConnectivityStatus.objects.count(), 0)
 
 
+@tag('unit')
 class TC_U_003_ScreenConnectivityChecker(TestCase):
     """TC-U-003: ScreenConnectivityChecker 探测逻辑单元测试"""
 
@@ -363,6 +366,7 @@ class TC_U_003_ScreenConnectivityChecker(TestCase):
         self.assertEqual(results[0]["status"], "offline")
 
 
+@tag('unit')
 class TC_U_004_DeviceListViewFiltering(TestCase):
     """TC-U-004: device_management_device_list 视图过滤逻辑单元测试（不通过 HTTP）"""
 
@@ -431,6 +435,7 @@ class TC_U_004_DeviceListViewFiltering(TestCase):
 # PHASE_08: 集成测试
 # ===========================================================================
 
+@tag('integration')
 class TC_I_001_DeviceListAPIAuth(TestCase):
     """TC-I-001: 设备列表 API 认证与权限集成测试"""
 
@@ -457,6 +462,7 @@ class TC_I_001_DeviceListAPIAuth(TestCase):
         self.assertEqual(resp.status_code, 405)
 
 
+@tag('integration')
 class TC_I_002_DeviceListAPIResponseSchema(TestCase):
     """TC-I-002: 响应 schema 完整性测试"""
 
@@ -519,6 +525,7 @@ class TC_I_002_DeviceListAPIResponseSchema(TestCase):
         self.assertEqual(item["system_switch_value"], 1)
 
 
+@tag('integration')
 class TC_I_003_DeviceListAPIScreenStatusValues(TestCase):
     """TC-I-003: 大屏状态三种值（online/offline/unknown）集成测试"""
 
@@ -579,6 +586,7 @@ class TC_I_003_DeviceListAPIScreenStatusValues(TestCase):
         self.assertEqual(data["results"][0]["screen_status"], "unknown")
 
 
+@tag('integration')
 class TC_I_004_DeviceListAPISystemSwitch(TestCase):
     """TC-I-004: 系统开关过滤集成测试"""
 
@@ -640,6 +648,7 @@ class TC_I_004_DeviceListAPISystemSwitch(TestCase):
         self.assertIn("703", room_numbers)
 
 
+@tag('integration')
 class TC_I_005_DeviceListAPIPagination(TestCase):
     """TC-I-005: 分页功能集成测试（NFR-003: 每页默认20，最大2000）
 
@@ -749,6 +758,7 @@ class TC_I_005_DeviceListAPIPagination(TestCase):
             "count 字段应为全量总数25，不应与 results.length(10) 相同")
 
 
+@tag('integration')
 class TC_I_006_MQTTHandlerIntegration(TestCase):
     """TC-I-006: ScreenConnectivityHandler 与数据库集成测试（已适配心跳方案）"""
 
@@ -795,6 +805,7 @@ class TC_I_006_MQTTHandlerIntegration(TestCase):
 # PHASE_09: E2E 验收测试（US-* 覆盖）
 # ===========================================================================
 
+@tag('e2e')
 class TC_E2E_US001_NavigationStructure(TestCase):
     """TC-E2E-US001: US-001 — 设备管理导航入口存在（路由可访问）"""
 
@@ -815,6 +826,7 @@ class TC_E2E_US001_NavigationStructure(TestCase):
         self.assertIn(resp.status_code, (404, 405))
 
 
+@tag('e2e')
 class TC_E2E_US002_DisplayAllDevices(TestCase):
     """TC-E2E-US002: US-002 — 设备列表展示所有专有部分"""
 
@@ -844,6 +856,7 @@ class TC_E2E_US002_DisplayAllDevices(TestCase):
         self.assertIn("4-2-5-501", sps)
 
 
+@tag('e2e')
 class TC_E2E_US003_RoomNumberFilter(TestCase):
     """TC-E2E-US003: US-003 — 房号过滤（三段格式）"""
 
@@ -876,6 +889,7 @@ class TC_E2E_US003_RoomNumberFilter(TestCase):
         self.assertEqual(data["results"][0]["room_number"], "702")
 
 
+@tag('e2e')
 class TC_E2E_US004_ScreenStatusFilter(TestCase):
     """TC-E2E-US004: US-004 — 大屏状态过滤"""
 
@@ -910,6 +924,7 @@ class TC_E2E_US004_ScreenStatusFilter(TestCase):
         self.assertEqual(data["results"][0]["room_number"], "703")
 
 
+@tag('e2e')
 class TC_E2E_US005_SystemSwitchFilter(TestCase):
     """TC-E2E-US005: US-005 — 系统开关过滤"""
 
@@ -941,6 +956,7 @@ class TC_E2E_US005_SystemSwitchFilter(TestCase):
         self.assertEqual(data["count"], 2)
 
 
+@tag('e2e')
 class TC_E2E_US006_ScreenStatusPipelineIntegration(TestCase):
     """TC-E2E-US006: US-006 — 大屏状态写入管道（heartbeat→DB→API）集成（已适配心跳方案）"""
 
@@ -973,6 +989,7 @@ class TC_E2E_US006_ScreenStatusPipelineIntegration(TestCase):
         self.assertEqual(data["results"][0]["screen_status"], "offline")
 
 
+@tag('e2e')
 class TC_E2E_US007_DevicePanelEntry(TestCase):
     """TC-E2E-US007: US-007 — 设备面板入口（specific_part 在响应中可用）"""
 
@@ -999,6 +1016,7 @@ class TC_E2E_US007_DevicePanelEntry(TestCase):
             self.assertEqual(len(parts), 4, f"specific_part 格式错误: {item['specific_part']}")
 
 
+@tag('e2e')
 class TC_E2E_NFR_Performance(TestCase):
     """TC-E2E-NFR: NFR-003 — 响应时间与分页性能（50条以内，无严格时间要求于测试环境）"""
 
@@ -1050,6 +1068,7 @@ class TC_E2E_NFR_Performance(TestCase):
 # 新增：PLC 状态字段与过滤测试（2026-05-01）
 # ===========================================================================
 
+@tag('integration')
 class TC_I_007_DeviceListAPIPlcStatusFields(TestCase):
     """TC-I-007: 设备列表 API — plc_status / plc_last_online_time 字段测试"""
 
@@ -1116,6 +1135,7 @@ class TC_I_007_DeviceListAPIPlcStatusFields(TestCase):
             self.assertIn("plc_last_online_time", item)
 
 
+@tag('integration')
 class TC_I_008_DeviceListAPIPlcStatusFilter(TestCase):
     """TC-I-008: 设备列表 API — plc_status 过滤参数测试"""
 
@@ -1177,6 +1197,7 @@ class TC_I_008_DeviceListAPIPlcStatusFilter(TestCase):
         self.assertEqual(data["results"][0]["room_number"], "701")
 
 
+@tag('integration')
 class TC_I_009_PlcStatusUnknownDegradation(TestCase):
     """TC-I-009: PLCConnectionStatus 无记录时的 unknown 降级测试"""
 
@@ -1220,6 +1241,7 @@ class TC_I_009_PlcStatusUnknownDegradation(TestCase):
 # v2 新增：运行模式列测试（AC-103~105, US-101~104）
 # ===========================================================================
 
+@tag('integration')
 class TC_I_010_OperationModeField(TestCase):
     """TC-I-010: 运行模式字段 operation_mode_value / operation_mode_display — 集成测试（AC-103~105）"""
 
@@ -1326,6 +1348,7 @@ class TC_I_010_OperationModeField(TestCase):
         self.assertEqual(item["operation_mode_display"], "未知")
 
 
+@tag('e2e')
 class TC_E2E_US103_OperationModeColumn(TestCase):
     """TC-E2E-US103: US-103/104 E2E验收 — 运行模式列在设备列表中展示"""
 
@@ -1369,6 +1392,7 @@ class TC_E2E_US103_OperationModeColumn(TestCase):
         self.assertEqual(om_record.value, 2)
 
 
+@tag('integration')
 class TC_I_011_RoomNoFilterBuildingUnit(TestCase):
     """TC-I-011: room_no 仅传楼栋或楼栋+单元的过滤（US-101/102，REQ-FUNC-001）"""
 
@@ -1425,6 +1449,7 @@ class TC_I_011_RoomNoFilterBuildingUnit(TestCase):
 # 新增：运行模式过滤参数测试（2026-05-04）
 # ===========================================================================
 
+@tag('integration')
 class TC_I_012_OperationModeFilter(TestCase):
     """TC-I-012: 设备列表 API — operation_mode 过滤参数测试"""
 

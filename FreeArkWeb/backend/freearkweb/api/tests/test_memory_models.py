@@ -10,7 +10,7 @@ test_memory_models.py — ChatSession + ChatMessage 模型测试
 需求引用: REQ-FUNC-013, REQ-FUNC-016, REQ-NFR-011
 US: US-MEM-001, US-MEM-002, US-MEM-005
 """
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from api.models import ChatSession, ChatMessage
 
@@ -21,6 +21,7 @@ def _make_user(username, password='pass1234'):
     return User.objects.create_user(username=username, password=password)
 
 
+@tag('unit')
 class ChatSessionCRUDTest(TestCase):
     """ChatSession 基本 CRUD 操作。"""
 
@@ -66,6 +67,7 @@ class ChatSessionCRUDTest(TestCase):
         self.assertIn('abcdefgh', s)
 
 
+@tag('unit')
 class ChatSessionCascadeTest(TestCase):
     """删除 User 时，其 ChatSession 也级联删除。"""
 
@@ -77,6 +79,7 @@ class ChatSessionCascadeTest(TestCase):
         self.assertFalse(ChatSession.objects.filter(pk=pk).exists())
 
 
+@tag('unit')
 class ChatSessionIsolationTest(TestCase):
     """用户 A 的 session 不出现在用户 B 的查询集中。"""
 
@@ -97,6 +100,7 @@ class ChatSessionIsolationTest(TestCase):
         self.assertTrue(a_keys.isdisjoint(b_keys))
 
 
+@tag('unit')
 class ChatSessionIndexTest(TestCase):
     """Meta.indexes 中包含预期索引定义。"""
 
@@ -108,6 +112,7 @@ class ChatSessionIndexTest(TestCase):
                       'ChatSession 应有 (user, started_at) 复合索引')
 
 
+@tag('unit')
 class ChatMessageCRUDTest(TestCase):
     """ChatMessage 基本 CRUD 操作。"""
 
@@ -153,6 +158,7 @@ class ChatMessageCRUDTest(TestCase):
         self.assertIn('user', s)
 
 
+@tag('unit')
 class ChatMessageCascadeTest(TestCase):
     """删除 ChatSession 时，其 ChatMessage 也级联删除。"""
 
@@ -174,6 +180,7 @@ class ChatMessageCascadeTest(TestCase):
         self.assertFalse(ChatMessage.objects.filter(pk=msg_pk).exists())
 
 
+@tag('unit')
 class ChatMessageIndexTest(TestCase):
     """Meta.indexes 中包含预期索引定义。"""
 
@@ -185,6 +192,7 @@ class ChatMessageIndexTest(TestCase):
                       'ChatMessage 应有 (session, created_at) 复合索引')
 
 
+@tag('unit')
 class ChatMessageRelatedManagerTest(TestCase):
     """通过 session.messages 反向管理器访问消息。"""
 

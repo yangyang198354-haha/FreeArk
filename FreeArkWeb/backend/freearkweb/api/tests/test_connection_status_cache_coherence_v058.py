@@ -25,7 +25,7 @@ ConnectionStatusHandler Cache/DB 一致性修复专项测试 (v0.5.8 F2)
 """
 
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -87,6 +87,7 @@ def _make_device_offline_by_monitor(dev=DEV, building=BUILDING, unit=UNIT, room=
 # T-F2 专项测试：F2 修复核心场景
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestCacheCoherenceFixV058(TestCase):
     """
     验证 v0.5.8 F2 修复的核心 bug 场景：
@@ -320,6 +321,7 @@ class TestCacheCoherenceFixV058(TestCase):
 # T-F2 可观测性测试：WARNING 日志格式验证
 # ---------------------------------------------------------------------------
 
+@tag('unit')
 class TestCacheCoherenceLoggingV058(TestCase):
     """
     验证 WARNING 日志格式满足 REQ-FUNC-v0.5.8-02 / AC-v0.5.8-02-01 ~ 02-02

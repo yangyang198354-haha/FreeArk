@@ -34,7 +34,7 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -91,6 +91,7 @@ def _reset_state_machine():
 # P0-1 ~ P0-4  fault_classifier 纯函数单元测试
 # ===========================================================================
 
+@tag('unit')
 class TestIsFaultCandidate(TestCase):
     """P0-1: is_fault_candidate 识别逻辑"""
 
@@ -129,6 +130,7 @@ class TestIsFaultCandidate(TestCase):
         self.assertFalse(is_fault_candidate('errorx'))
 
 
+@tag('unit')
 class TestIsFaultActive(TestCase):
     """P0-2: is_fault_active 真/假/None/数值边界"""
 
@@ -194,6 +196,7 @@ class TestIsFaultActive(TestCase):
         self.assertTrue(is_fault_active('living_room_temp_sensor_error', True))
 
 
+@tag('unit')
 class TestGetFaultTypeAndSeverity(TestCase):
     """P0-3: get_fault_type_and_severity 四大类 + severity 映射"""
 
@@ -259,6 +262,7 @@ class TestGetFaultTypeAndSeverity(TestCase):
         self.assertEqual(sev, 'error')
 
 
+@tag('unit')
 class TestGetFaultMessage(TestCase):
     """P0-4: get_fault_message 格式化"""
 
@@ -288,6 +292,7 @@ class TestGetFaultMessage(TestCase):
 # P0-5 ~ P0-6  state_machine T1/T2/T3 + rebuild_from_db
 # ===========================================================================
 
+@tag('unit')
 class TestStateMachineTransitions(TestCase):
     """P0-5: 状态机 T1/T2/T3 转移逻辑"""
 
@@ -468,6 +473,7 @@ class TestStateMachineTransitions(TestCase):
         self.assertEqual(get_state_machine_size(), 2)
 
 
+@tag('unit')
 class TestT2ThrottledPersist(TestCase):
     """方案1：T2 节流落库——活跃故障的 last_seen_at 按阈值低频写回 DB，
     修复"未恢复故障 first_seen_at 与 last_seen_at 永远相同"的缺陷。"""
@@ -539,6 +545,7 @@ class TestT2ThrottledPersist(TestCase):
         self.assertEqual(fe.last_seen_at, t)
 
 
+@tag('unit')
 class TestRebuildFromDb(TestCase):
     """P0-6: rebuild_from_db LIMIT 保护 + 空库启动"""
 
@@ -637,6 +644,7 @@ class TestRebuildFromDb(TestCase):
 # P0-7 ~ P0-9  views_fault 视图测试
 # ===========================================================================
 
+@tag('integration')
 class FaultViewTestBase(TestCase):
     """views_fault 测试基类：初始化认证客户端"""
 
@@ -651,6 +659,7 @@ class FaultViewTestBase(TestCase):
         self.categories_url = '/api/devices/fault-event-categories/'
 
 
+@tag('integration')
 class TestFaultEventListAuth(FaultViewTestBase):
     """认证检查"""
 
@@ -664,6 +673,7 @@ class TestFaultEventListAuth(FaultViewTestBase):
         self.assertEqual(resp.status_code, 200)
 
 
+@tag('integration')
 class TestFaultEventListPagination(FaultViewTestBase):
     """P0-7: 分页参数边界"""
 
@@ -734,6 +744,7 @@ class TestFaultEventListPagination(FaultViewTestBase):
         self.assertEqual(resp.json()['count'], 0)
 
 
+@tag('integration')
 class TestFaultEventListFilters(FaultViewTestBase):
     """P0-8: 过滤组合"""
 
@@ -872,6 +883,7 @@ class TestFaultEventListFilters(FaultViewTestBase):
         self.assertEqual(ids, [self.fe_702.id])
 
 
+@tag('integration')
 class TestFaultEventListDefaultTimeRange(FaultViewTestBase):
     """P0-9: 无参数时默认返回最近 7 天"""
 
@@ -898,6 +910,7 @@ class TestFaultEventListDefaultTimeRange(FaultViewTestBase):
         self.assertNotIn(old.id, ids)
 
 
+@tag('integration')
 class TestFaultEventCategories(FaultViewTestBase):
     """fault-event-categories 接口"""
 
@@ -937,6 +950,7 @@ class TestFaultEventCategories(FaultViewTestBase):
 # P0-10  serializers_fault 字段完整性 / 类型 / datetime 格式
 # ===========================================================================
 
+@tag('integration')
 class TestFaultEventSerializer(FaultViewTestBase):
     """P0-10: 序列化器字段完整性 / 类型 / datetime 序列化格式"""
 
@@ -1028,6 +1042,7 @@ class TestFaultEventSerializer(FaultViewTestBase):
 # P0-11 ~ P0-13  fault_cleanup Management Command 测试
 # ===========================================================================
 
+@tag('unit')
 class TestFaultCleanupCommand(TestCase):
     """P0-11~P0-13: fault_cleanup --dry-run / 分批 / 天数边界"""
 
@@ -1138,6 +1153,7 @@ class TestFaultCleanupCommand(TestCase):
 # P1-1  fault_consumer._handle_message + state_machine + DB 端到端
 # ===========================================================================
 
+@tag('integration')
 class TestHandleMessageIntegration(TestCase):
     """P1-1: mock paho-mqtt → _handle_message → 状态机 → DB"""
 
@@ -1363,6 +1379,7 @@ class TestHandleMessageIntegration(TestCase):
 # P1-2  API + DB 集成测试（真实 SQLite + 过滤 + 排序 + 索引结构）
 # ===========================================================================
 
+@tag('integration')
 class TestFaultEventAPIIntegration(FaultViewTestBase):
     """P1-2: API + 真实 SQLite DB 集成"""
 
@@ -1479,6 +1496,7 @@ class TestFaultEventAPIIntegration(FaultViewTestBase):
 # BUG-FM-003 回归测试：故障类型和设备类型过滤器参数格式兼容性
 # ===========================================================================
 
+@tag('integration')
 class TestFaultFilterParamFormatCompat(FaultViewTestBase):
     """BUG-FM-003 回归：验证后端能正确处理重复参数名（无方括号）格式的多值过滤。
 
@@ -1666,6 +1684,7 @@ class TestFaultFilterParamFormatCompat(FaultViewTestBase):
 # BUG-FM-004 回归测试：房号筛选段数不匹配
 # ===========================================================================
 
+@tag('integration')
 class TestBugFM004RoomNumberSegments(FaultViewTestBase):
     """BUG-FM-004 回归：前端 3 段房号（栋-单元-房号）能正确匹配 DB 4 段格式（栋-单元-楼层-房号）。
 
@@ -1815,6 +1834,7 @@ class TestBugFM004RoomNumberSegments(FaultViewTestBase):
 # BUG-FM-005 回归测试：设备类型筛选对通用 error_N 故障失效
 # ===========================================================================
 
+@tag('integration')
 class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
     """BUG-FM-005 回归：sub_type 过滤通过 fault_code OR product_code 联合查询，
     使 error_N 通用故障码也能被设备类型筛选命中。
@@ -2069,6 +2089,7 @@ class TestBugFM005SubTypeProductCodeFilter(FaultViewTestBase):
 # BUG-FM-006 回归测试：温控面板按房间过滤（room_filter Subquery）
 # ===========================================================================
 
+@tag('integration')
 class TestBugFM006RoomFilter(FaultViewTestBase):
     """BUG-FM-006 回归：sub_type 过滤通过 device_node JOIN device_room 的
     ori_room_name 关键词，区分不同房间的温控面板 sub_type。
@@ -2276,6 +2297,7 @@ class TestBugFM006RoomFilter(FaultViewTestBase):
 # BUG-FM-007 回归测试：新风机设备名称归一化
 # ===========================================================================
 
+@tag('integration')
 class TestBugFM007DeviceNameOverride(FaultViewTestBase):
     """BUG-FM-007 回归：product_code=130004 的 device_name 在 serializer 层
     归一化为"新风机"（DeviceNode.device_name="新风" → 覆盖为"新风机"）。
@@ -2405,6 +2427,7 @@ class TestBugFM007DeviceNameOverride(FaultViewTestBase):
 # BUG-FM-008 回归测试：故障描述中文化
 # ===========================================================================
 
+@tag('unit')
 class TestBugFM008FaultMessageZh(TestCase):
     """BUG-FM-008 回归：get_fault_message() 优先字典查表（中文），
     error_N 通用兜底，其他保持原 capitalize 逻辑。

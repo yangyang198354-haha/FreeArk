@@ -16,7 +16,7 @@ FreeArk v0.5.3 — 系统看板「系统开机状况」卡片 单元测试 & 集
 """
 import json
 from unittest.mock import patch, MagicMock
-from django.test import TestCase, RequestFactory
+from django.test import TestCase, RequestFactory, tag
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -73,6 +73,7 @@ def _create_powered_on_device(specific_part, operation_mode=None,
 # Part 1: 单元测试（Django TestCase，使用测试数据库）
 # ══════════════════════════════════════════════════════════════
 
+@tag('integration')
 class TestPowerStatusBasic(TestCase):
     """US-001, US-003, US-004, US-006 — 基础开机统计逻辑"""
 
@@ -165,6 +166,7 @@ class TestPowerStatusBasic(TestCase):
         self.assertEqual(data['power_on_rate'], 0.0)
 
 
+@tag('integration')
 class TestPowerStatusModeDistribution(TestCase):
     """US-002, US-005 — 运行模式分布"""
 
@@ -273,6 +275,7 @@ class TestPowerStatusModeDistribution(TestCase):
         self.assertEqual(md['unknown'], 3)
 
 
+@tag('integration')
 class TestPowerStatusUnknownMode(TestCase):
     """US-009, OQ-002 — 未知模式处理"""
 
@@ -343,6 +346,7 @@ class TestPowerStatusUnknownMode(TestCase):
         self.assertEqual(md['unknown'], 1)
 
 
+@tag('integration')
 class TestPowerStatusBoundaries(TestCase):
     """边界条件 & 数据隔离"""
 
@@ -402,6 +406,7 @@ class TestPowerStatusBoundaries(TestCase):
 # Part 2: 响应结构完整性测试
 # ══════════════════════════════════════════════════════════════
 
+@tag('integration')
 class TestPowerStatusResponseStructure(TestCase):
     """验证 API 响应 JSON 结构完整性（REQ-FUNC-001 响应结构）"""
 
@@ -448,6 +453,7 @@ class TestPowerStatusResponseStructure(TestCase):
 # Part 3: 性能约束测试（查询次数，US-008）
 # ══════════════════════════════════════════════════════════════
 
+@tag('integration')
 class TestPowerStatusQueryCount(TestCase):
     """US-008：API 不引入 N+1，总查询次数在合理范围内（<= 4 次）"""
 
@@ -483,6 +489,7 @@ class TestPowerStatusQueryCount(TestCase):
 # Part 4: URL 路由测试
 # ══════════════════════════════════════════════════════════════
 
+@tag('integration')
 class TestPowerStatusURL(TestCase):
     """验证 URL 路由注册正确"""
 
@@ -508,6 +515,7 @@ class TestPowerStatusURL(TestCase):
 # Part 5: 前端相关验收标准（代码审查覆盖，文档测试）
 # ══════════════════════════════════════════════════════════════
 
+@tag('integration')
 class TestFrontendCodeReview(TestCase):
     """
     AC-201~205 前端验收标准通过代码静态审查覆盖（读取 HomeView.vue 源码验证）。

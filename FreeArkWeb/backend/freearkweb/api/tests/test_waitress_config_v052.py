@@ -24,6 +24,7 @@ v0.5.2 waitress 配置参数单元测试
 import os
 import sys
 import unittest
+from django.test import tag
 from unittest.mock import MagicMock, patch, call
 
 # 确保 start_waitress_server.py 的目录在 sys.path 中
@@ -31,6 +32,7 @@ from unittest.mock import MagicMock, patch, call
 # 若直接 python -m pytest，则需要从项目根目录运行
 
 
+@tag('unit')
 class TestWaitressConfigEnvironmentVariables(unittest.TestCase):
     """
     UT-V052-01 ~ UT-V052-06
@@ -192,6 +194,7 @@ class TestWaitressConfigEnvironmentVariables(unittest.TestCase):
                     os.environ[key] = val
 
 
+@tag('unit')
 class TestWaitressConfigServeCallSignature(unittest.TestCase):
     """
     验证 serve() 调用签名：所有三个参数均以关键字参数传入，
@@ -283,6 +286,7 @@ class TestWaitressConfigServeCallSignature(unittest.TestCase):
             msg="WAITRESS_CONNECTION_LIMIT=200 应使 serve() 接收 connection_limit=200")
 
 
+@tag('unit')
 class TestWaitressConfigM3NoChange(unittest.TestCase):
     """
     验证 settings.py 未被修改（M3 无变更确认）。
