@@ -37,7 +37,13 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.conf import settings
-from django.db import close_old_connections, IntegrityError, OperationalError
+from django.db import (
+    close_old_connections,
+    connection,
+    IntegrityError,
+    InterfaceError,
+    OperationalError,
+)
 
 from api.fault_consumer.room_lookup import get_room_for_device
 
@@ -70,6 +76,44 @@ class CondensationState:
 # key: (specific_part: str, device_sn: str)
 # value: CondensationState
 _cw_state_machine: dict = {}
+
+
+# ---------------------------------------------------------------------------
+# 运行计数器（P0 防复发 / 可观测性，镜像 fault_consumer）
+#
+# 与 fault_consumer 同源事故：2026-06-16 condensation-consumer 进程未崩溃却静默
+# 停止写入新预警（同一时刻、同一段无自愈代码骨架）。计数器键名与 fault_consumer
+# 保持一致，以便复用 watchdog.evaluate_stall 的判活逻辑。
+# ---------------------------------------------------------------------------
+
+_counters: dict = {
+    't1_attempt': 0,
+    't1_success': 0,
+    't1_integrity': 0,
+    't1_db_error': 0,
+    't1_unexpected': 0,
+    't2_persist': 0,
+    't3_recover': 0,
+}
+
+
+def get_counters() -> dict:
+    """返回运行计数器快照（命令层周期性日志 / 看门狗使用）。"""
+    return dict(_counters)
+
+
+def reset_counters() -> None:
+    """清零计数器（仅供测试使用）。"""
+    for k in _counters:
+        _counters[k] = 0
+
+
+def _force_close_connection() -> None:
+    """连接级错误后强制关闭当前线程的 DB 连接，下次 ORM 操作自动重连。"""
+    try:
+        connection.close()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +192,7 @@ def process_condensation_alarm(
     if is_active_now:
         if state is None or not state.is_active:
             # T1: 首次出现预警，INSERT
+            _counters['t1_attempt'] += 1
             _t1_insert(
                 key, specific_part, device_sn, product_code, received_at,
                 condensation_alarm_value, dew_point_temp, ntc_temp, humidity, system_switch,
@@ -235,15 +280,20 @@ def _t1_insert(
             last_seen_at=received_at,
             last_persisted_at=received_at,  # INSERT 已写入 last_seen_at=received_at
         )
+        _counters['t1_success'] += 1
         logger.debug('T1 INSERT condensation_warning_event id=%d key=%s system_switch=%s',
                      cwe.id, key, system_switch)
     except IntegrityError:
         # 竞态（如重启重建窗口）：改为 UPDATE last_seen_at
+        _counters['t1_integrity'] += 1
         logger.warning('T1 IntegrityError，fallback to UPDATE last_seen_at: key=%s', key)
         _t1_fallback_update(key, specific_part, device_sn, received_at)
-    except OperationalError as exc:
-        logger.error('T1 OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except (OperationalError, InterfaceError) as exc:
+        _counters['t1_db_error'] += 1
+        logger.error('T1 DB 连接错误: %s key=%s（关闭连接以便重连）', exc, key)
+        _force_close_connection()
     except Exception as exc:
+        _counters['t1_unexpected'] += 1
         logger.exception('T1 未预期异常: %s key=%s', exc, key)
 
 
@@ -270,6 +320,17 @@ def _t1_fallback_update(
                 last_seen_at=received_at,
                 last_persisted_at=received_at,  # 兜底 UPDATE 已写入 last_seen_at=received_at
             )
+        else:
+            # 异常信号：INSERT 撞唯一约束却查不到活跃行（2026-06-16 静默停写特征）。
+            # 丢弃连接以便下次拿到干净连接重试。
+            logger.warning(
+                'T1 兜底未找到活跃行（IntegrityError 但无 active 行，异常信号）: key=%s，关闭连接以便重连',
+                key,
+            )
+            _force_close_connection()
+    except (OperationalError, InterfaceError) as exc:
+        logger.error('T1 fallback DB 连接错误: %s（关闭连接以便重连）', exc)
+        _force_close_connection()
     except Exception as exc:
         logger.error('T1 fallback UPDATE 失败: %s', exc)
 
@@ -287,9 +348,11 @@ def _t2_persist_last_seen(key: tuple, state: CondensationState, received_at: dat
             last_seen_at=received_at,
         )
         state.last_persisted_at = received_at
+        _counters['t2_persist'] += 1
         logger.debug('T2 PERSIST last_seen_at id=%d key=%s', state.event_id, key)
-    except OperationalError as exc:
-        logger.error('T2 PERSIST OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except (OperationalError, InterfaceError) as exc:
+        logger.error('T2 PERSIST DB 连接错误: %s key=%s（关闭连接以便重连）', exc, key)
+        _force_close_connection()
     except Exception as exc:
         logger.exception('T2 PERSIST 未预期异常: %s key=%s', exc, key)
 
@@ -305,10 +368,12 @@ def _t3_recover(key: tuple, state: CondensationState, received_at: datetime) -> 
             last_seen_at=state.last_seen_at,  # 写回内存中的最后活跃时间
         )
         _cw_state_machine[key].is_active = False
+        _counters['t3_recover'] += 1
         logger.debug('T3 RECOVER condensation_warning_event id=%d key=%s',
                      state.event_id, key)
-    except OperationalError as exc:
-        logger.error('T3 OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except (OperationalError, InterfaceError) as exc:
+        logger.error('T3 DB 连接错误: %s key=%s（关闭连接以便重连）', exc, key)
+        _force_close_connection()
     except Exception as exc:
         logger.exception('T3 未预期异常: %s key=%s', exc, key)
 
