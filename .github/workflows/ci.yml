@@ -92,9 +92,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: FreeArkWeb/frontend/package-lock.json
 
+      # 用 npm install 而非 npm ci：仓库现有 package-lock.json 与 package.json 脱节
+      # （缺 esbuild 等条目），npm ci 严格校验会直接失败。npm install 容忍并就地更新。
+      # TODO: 在有 Node 的环境重新生成 package-lock.json 后可改回更严格的 npm ci。
       - name: Install dependencies
         working-directory: FreeArkWeb/frontend
-        run: npm ci
+        run: npm install
 
       - name: Run Vitest
         working-directory: FreeArkWeb/frontend
