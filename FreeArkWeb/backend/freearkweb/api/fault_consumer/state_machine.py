@@ -18,11 +18,59 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.conf import settings
-from django.db import close_old_connections, IntegrityError, OperationalError
+from django.db import (
+    close_old_connections,
+    connection,
+    IntegrityError,
+    InterfaceError,
+    OperationalError,
+)
 
 from .room_lookup import get_room_for_device
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 运行计数器（P0 防复发 / 可观测性）
+#
+# 背景：2026-06-16 fault-consumer 在进程未崩溃的情况下静默停止写入新故障，
+# 长达 4 天无人察觉（旧代码几乎不打可诊断日志）。这里维护进程内计数器，
+# 供命令层周期性 INFO 输出与看门狗判活使用。计数器是单调累加的快照值。
+# ---------------------------------------------------------------------------
+
+_counters: dict = {
+    't1_attempt': 0,       # 进入 T1（首次故障）路径的次数
+    't1_success': 0,       # T1 成功 INSERT 新故障行的次数
+    't1_integrity': 0,     # T1 撞 IntegrityError 走兜底的次数
+    't1_db_error': 0,      # T1 连接级错误（Operational/Interface）次数
+    't1_unexpected': 0,    # T1 其它未预期异常次数
+    't2_persist': 0,       # T2 节流落库成功次数
+    't3_recover': 0,       # T3 恢复成功次数
+}
+
+
+def get_counters() -> dict:
+    """返回运行计数器快照（命令层周期性日志 / 看门狗使用）。"""
+    return dict(_counters)
+
+
+def reset_counters() -> None:
+    """清零计数器（仅供测试使用）。"""
+    for k in _counters:
+        _counters[k] = 0
+
+
+def _force_close_connection() -> None:
+    """连接级错误后强制关闭当前线程的 DB 连接，下次 ORM 操作自动重连。
+
+    防御性措施：CONN_MAX_AGE=300 已会周期回收连接，这里在出错点立即丢弃，
+    缩短"坏连接"的暴露窗口。关闭失败本身吞掉（连接可能已不可用）。
+    """
+    try:
+        connection.close()
+    except Exception:
+        pass
 
 # T2 节流落库阈值（秒）：故障持续期间，last_seen_at 默认只在内存维护，
 # 距离上次落库超过该阈值才写一次 DB，避免每条上报都写库。
@@ -123,6 +171,7 @@ def process_fault_field(
     if is_active_now:
         if state is None or not state.is_active:
             # T1: 首次出现故障，INSERT
+            _counters['t1_attempt'] += 1
             _t1_insert(key, specific_part, device_sn, product_code,
                        fault_code, fault_type, severity, fault_message, received_at)
         else:
@@ -195,14 +244,19 @@ def _t1_insert(
             last_seen_at=received_at,
             last_persisted_at=received_at,  # INSERT 已写入 last_seen_at=received_at
         )
+        _counters['t1_success'] += 1
         logger.debug('T1 INSERT fault_event id=%d key=%s', fe.id, key)
     except IntegrityError:
         # 竞态（如重启重建窗口）：改为 UPDATE last_seen_at
+        _counters['t1_integrity'] += 1
         logger.warning('T1 IntegrityError，fallback to UPDATE last_seen_at: key=%s', key)
         _t1_fallback_update(key, specific_part, device_sn, fault_code, received_at)
-    except OperationalError as exc:
-        logger.error('T1 OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except (OperationalError, InterfaceError) as exc:
+        _counters['t1_db_error'] += 1
+        logger.error('T1 DB 连接错误: %s key=%s（关闭连接以便重连）', exc, key)
+        _force_close_connection()
     except Exception as exc:
+        _counters['t1_unexpected'] += 1
         logger.exception('T1 未预期异常: %s key=%s', exc, key)
 
 
@@ -231,6 +285,18 @@ def _t1_fallback_update(
                 last_seen_at=received_at,
                 last_persisted_at=received_at,  # 兜底 UPDATE 已写入 last_seen_at=received_at
             )
+        else:
+            # 异常信号：INSERT 撞唯一约束，却查不到任何活跃行。正常情况下
+            # first_seen_at=now() 不可能与历史行相撞，出现即说明连接/进程态异常
+            # （2026-06-16 静默停写事故的特征）。丢弃连接以便下次拿到干净连接重试。
+            logger.warning(
+                'T1 兜底未找到活跃行（IntegrityError 但无 active 行，异常信号）: key=%s，关闭连接以便重连',
+                key,
+            )
+            _force_close_connection()
+    except (OperationalError, InterfaceError) as exc:
+        logger.error('T1 fallback DB 连接错误: %s（关闭连接以便重连）', exc)
+        _force_close_connection()
     except Exception as exc:
         logger.error('T1 fallback UPDATE 失败: %s', exc)
 
@@ -248,9 +314,11 @@ def _t2_persist_last_seen(key: tuple, state: FaultState, received_at: datetime) 
             last_seen_at=received_at,
         )
         state.last_persisted_at = received_at
+        _counters['t2_persist'] += 1
         logger.debug('T2 PERSIST last_seen_at id=%d key=%s', state.event_id, key)
-    except OperationalError as exc:
-        logger.error('T2 PERSIST OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except (OperationalError, InterfaceError) as exc:
+        logger.error('T2 PERSIST DB 连接错误: %s key=%s（关闭连接以便重连）', exc, key)
+        _force_close_connection()
     except Exception as exc:
         logger.exception('T2 PERSIST 未预期异常: %s key=%s', exc, key)
 
@@ -266,8 +334,10 @@ def _t3_recover(key: tuple, state: FaultState, received_at: datetime) -> None:
             last_seen_at=state.last_seen_at,  # 写回内存中的最后活跃时间
         )
         _state_machine[key].is_active = False
+        _counters['t3_recover'] += 1
         logger.debug('T3 RECOVER fault_event id=%d key=%s', state.event_id, key)
-    except OperationalError as exc:
-        logger.error('T3 OperationalError（DB 连接问题）: %s key=%s', exc, key)
+    except (OperationalError, InterfaceError) as exc:
+        logger.error('T3 DB 连接错误: %s key=%s（关闭连接以便重连）', exc, key)
+        _force_close_connection()
     except Exception as exc:
         logger.exception('T3 未预期异常: %s key=%s', exc, key)
