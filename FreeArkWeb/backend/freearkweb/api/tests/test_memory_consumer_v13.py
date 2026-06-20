@@ -73,8 +73,10 @@ class ConsumerSessionCreationTest(TransactionTestCase):
         self.user = User.objects.create_user(username='sess_conn_user', password='pass')
         self.token, _ = Token.objects.get_or_create(user=self.user)
 
-    def test_connect_creates_chat_session(self):
-        """connect 成功后，DB 中存在该用户的 ChatSession。"""
+    def test_connect_does_not_create_chat_session(self):
+        """ADR-001 策略 A：connect 不落库，仅保存 session_key 字符串。
+        （原 test_connect_creates_chat_session 的断言已随 ADR-001 反转：connect 不再建 session，
+        改由首条消息时 _ensure_session_created() 懒建。）"""
         async def _inner():
             app = _make_ws_app()
             communicator = WebsocketCommunicator(app, f'/ws/chat/?token={self.token.key}')
@@ -83,31 +85,43 @@ class ConsumerSessionCreationTest(TransactionTestCase):
 
             msg = await communicator.receive_json_from(timeout=3)
             self.assertEqual(msg['type'], 'connected')
-            session_id = msg.get('session_id')
-            self.assertIsNotNone(session_id)
+            self.assertTrue(msg.get('session_key'), 'connected 应回非空 session_key')
 
             await communicator.disconnect()
 
         _run(_inner())
-        # 连接建立后 DB 中应有该用户的 ChatSession
-        self.assertTrue(
+        # ADR-001：未发任何消息时 DB 不应有 ChatSession
+        self.assertFalse(
             ChatSession.objects.filter(user=self.user).exists(),
-            'connect 后应在 DB 中创建 ChatSession'
+            'ADR-001：connect 但未发消息时不应创建 ChatSession',
         )
 
     def test_disconnect_sets_ended_at(self):
-        """disconnect 后 ChatSession.ended_at 应被设置。"""
+        """disconnect 后 ChatSession.ended_at 应被设置。
+        （ADR-001：connect 不再建 session，故先发一条消息触发懒建，再断开。）"""
         async def _inner():
             app = _make_ws_app()
             communicator = WebsocketCommunicator(app, f'/ws/chat/?token={self.token.key}')
             connected, _ = await communicator.connect()
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)  # consume 'connected'
+
+            with patch(
+                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                return_value=_make_async_gen(('content', '回复')),
+            ):
+                await communicator.send_json_to({'type': 'chat_message', 'message': '首条消息'})
+                # 排空消息流直到 stream_end（首条消息触发 session 懒建）
+                for _ in range(10):
+                    m = await communicator.receive_json_from(timeout=5)
+                    if m.get('type') == 'stream_end':
+                        break
+
             await communicator.disconnect()
 
         _run(_inner())
         sess = ChatSession.objects.filter(user=self.user).first()
-        self.assertIsNotNone(sess)
+        self.assertIsNotNone(sess, '首条消息后应已创建 ChatSession')
         self.assertIsNotNone(sess.ended_at, 'disconnect 后 ended_at 应被设置')
 
 
