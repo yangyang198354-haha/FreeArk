@@ -2001,7 +2001,7 @@ def device_management_device_list(request):
                                     has_fault: fault_count > 0；no_fault: fault_count == 0；
                                     fault_count=None 在两侧均排除（ADR-FFF-003）
       page           (int, 可选)  — 默认 1
-      page_size      (int, 可选)  — 分页 UI 通常用 10/20/50，内部全量采集可用 ≤2000，默认 20
+      page_size      (int, 可选)  — 分页 UI 通常用 10/20/50，上限 cap 至 50，默认 20
 
     响应 200：
       {

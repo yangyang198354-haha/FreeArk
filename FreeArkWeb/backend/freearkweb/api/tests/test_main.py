@@ -403,19 +403,11 @@ class DailyUsageCalculatorTest(TestCase):
         self.assertEqual(record.final_energy, 4500)
         self.assertEqual(record.usage_quantity, 500)
 
-    def test_creates_next_day_record(self):
-        """计算时应同步创建次日的 initial_energy 预留记录"""
-        self._make_plc("3-1-7-702", "制冷", 5000)
-        DailyUsageCalculator.calculate_daily_usage(self.today)
-        tomorrow = self.today + timedelta(days=1)
-        next_day_record = UsageQuantityDaily.objects.filter(
-            specific_part="3-1-7-702",
-            energy_mode="制冷",
-            time_period=tomorrow,
-        ).first()
-        self.assertIsNotNone(next_day_record)
-        self.assertEqual(next_day_record.initial_energy, 5000)
-        self.assertIsNone(next_day_record.final_energy)
+    # [已删除] test_creates_next_day_record：该用例断言"计算今天用量时同步创建次日预留
+    # 记录"，但生产 DailyUsageCalculator 已有意加守卫（仅 target_date < today 才预写次日，
+    # 见 daily_usage_calculator.py 第 166 行），避免"今天运行时写入明天的记录"。正确行为
+    # 已由 test_daily_usage_calculator.py 的 test_next_day_initial_energy_set（过去日期写次日）
+    # 与 test_tomorrow_record_not_created（今天不写明天）完整覆盖，此处删除重复且过时的断言。
 
     def test_fills_previous_day_incomplete_records(self):
         """补全前一天 final_energy 为 None 的记录"""
@@ -801,6 +793,11 @@ class ConnectionStatusHandlerTest(TestCase):
     """ConnectionStatusHandler 测试"""
 
     def setUp(self):
+        # _conn_status_cache 是模块级 dict，跨用例存活。前序用例可能把
+        # specific_part 缓存成某状态，导致本用例走"无变化"快路径而零 DB 写入
+        # （DB 回滚清不掉模块缓存）。每个用例前清空，保证状态隔离。
+        from api.mqtt_handlers import _conn_status_cache
+        _conn_status_cache.clear()
         self.handler = ConnectionStatusHandler()
 
     def test_marks_online_when_any_success(self):

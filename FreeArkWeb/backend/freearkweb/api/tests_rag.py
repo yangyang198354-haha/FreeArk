@@ -386,10 +386,13 @@ class TestRagService(TestCase):
 
     # ── RagParser ─────────────────────────────────────────────────────────
     def test_parse_docx_text_chunks(self):
-        """parse_docx 能正确提取段落文字 chunk（AC-2.5）。"""
+        """parse_docx 能正确提取段落文字 chunk（AC-2.5；需 python-docx 已安装）。"""
         from .rag_service import RagParser
         import io
-        from docx import Document
+        try:
+            from docx import Document
+        except ImportError:
+            self.skipTest("python-docx 未安装，跳过 docx 解析测试")
 
         # 创建一个真实的 .docx 文件
         doc = Document()

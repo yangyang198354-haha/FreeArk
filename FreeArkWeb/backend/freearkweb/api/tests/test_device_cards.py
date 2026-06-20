@@ -293,13 +293,16 @@ class TestDeviceRealtimeParamsAPI(TestCase):
             group_display='暖通',
             sub_type_display='主温控器',
         )
+        # 第二个 sub_type 必须是 v0.5.7 房型过滤认可的合法 sub_type，否则会被
+        # get_available_sub_types() 过滤掉（room_panel 既非系统级也非 panel_* 命名，
+        # 且本用例未建 DeviceFloor，available 退化为仅系统级）。改用系统级 fresh_air。
         self.cfg_study = make_device_config(
             param_name='study_room_temperature',
             display_name='书房实际温度',
             group='hvac',
-            sub_type='room_panel',
+            sub_type='fresh_air',
             group_display='暖通',
-            sub_type_display='温控面板',
+            sub_type_display='新风',
         )
 
         # 为 SPECIFIC_PART 写入 PLCLatestData（10 分钟内，非超时）
@@ -336,7 +339,7 @@ class TestDeviceRealtimeParamsAPI(TestCase):
     # GWT-API-03: 分组嵌套结构正确（params 直接在 sub_type 下）
     def test_nested_structure(self):
         """
-        Given: hvac 分组下有 main_thermostat 和 room_panel 两个子类型
+        Given: hvac 分组下有 main_thermostat 和 fresh_air 两个子类型
         When:  GET /api/devices/realtime-params/?specific_part=9-1-31-3104
         Then:  data.hvac.sub_types 包含两个子类型键，每个有 params 列表
         """
@@ -344,7 +347,7 @@ class TestDeviceRealtimeParamsAPI(TestCase):
         hvac = resp.json()['data']['hvac']
         self.assertEqual(hvac['display'], '暖通')
         self.assertIn('main_thermostat', hvac['sub_types'])
-        self.assertIn('room_panel', hvac['sub_types'])
+        self.assertIn('fresh_air', hvac['sub_types'])
         # params 直接在 sub_type 下，没有 devices 列表
         self.assertIn('params', hvac['sub_types']['main_thermostat'])
         self.assertNotIn('devices', hvac['sub_types']['main_thermostat'])
