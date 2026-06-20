@@ -256,9 +256,13 @@ class Command(BaseCommand):
         )
 
         # 2. 重建状态机
-        from api.fault_consumer.state_machine import rebuild_from_db
+        from api.fault_consumer.state_machine import rebuild_from_db, get_counters
         count = rebuild_from_db()
         logger.info('fault_consumer 状态机重建完成，活跃故障 %d 条', count)
+
+        # 2.5 启动自愈看门狗（P0 防复发，2026-06-16 静默停写事故）
+        from api.fault_consumer.watchdog import start_watchdog_thread
+        start_watchdog_thread(get_counters)
 
         # 3. 初始化 MacCache
         mac_cache = _MacCache()
