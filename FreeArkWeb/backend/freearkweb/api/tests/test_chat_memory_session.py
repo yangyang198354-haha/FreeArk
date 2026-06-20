@@ -14,7 +14,10 @@ test_chat_memory_session.py — FreeArk_ChatRebranding_SessionMgmt 单元测试
   US-011 AC-011-01~03, US-012 AC-012-01~02, US-013 AC-013-01~02
 """
 
+import asyncio
+
 from django.test import TestCase, override_settings, tag
+from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 from api.models import ChatSession, ChatMessage
 from api import chat_memory
@@ -300,48 +303,94 @@ class LoadHistoryLimitZeroTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# T-UNIT-10: _resolve_session 逻辑（同步单元测试，不走 WS 层）
+# T-UNIT-10: 会话解析/创建逻辑（ADR-001 改写）
 # AC: US-014 AC-014-01, AC-014-02, US-010 AC-010-01
+#
+# ADR-001 策略 A：ChatConsumer._resolve_session() 已删除，connect() 不再创建/解析
+# 会话；解析、复用与降级职责移入 _ensure_session_created()（首条消息时触发）。
+# 本类直接驱动 _ensure_session_created()，覆盖四种 session_key 结果：
+#   全新 key → 创建；有效本人 key → 复用；已删除 key → 降级（不建会话）；
+#   他人 key → 降级（不跨用户复用）。
+# 需用 TransactionTestCase 以支持 sync_to_async（跨线程 DB 可见性）。
 # ---------------------------------------------------------------------------
 @tag('unit')
-class ResolveSessionTest(TestCase):
-    """T-UNIT-10: ChatConsumer._resolve_session 四种行为覆盖（同步路径）。"""
+class ResolveSessionTest(TransactionTestCase):
+    """T-UNIT-10（ADR-001）：_ensure_session_created 的四种 session_key 解析行为。"""
 
     def setUp(self):
-        from api.consumers import ChatConsumer
+        from api.consumers import ChatConsumer  # noqa: F401  确认 consumer 可导入
         self.user = _user('t_unit_10_user')
-        self.consumer = ChatConsumer()
 
-    def test_none_param_creates_new_session(self):
-        """T-UNIT-10a (AC-014-01): session_key_param=None 时创建新 session。"""
-        result = self.consumer._resolve_session(self.user, None)
-        self.assertIsNotNone(result)
-        self.assertIsNotNone(result.pk)
-        self.assertEqual(result.user, self.user)
+    _loop = None
 
-    def test_valid_key_returns_existing_session(self):
-        """T-UNIT-10b (AC-010-01): 有效且归属正确的 session_key_param 返回已有 session。"""
+    def _run(self, coro):
+        # 复用进程级 loop 且不关闭，避免污染其它用例的 asyncio.get_event_loop()（Py3.12）
+        cls = type(self)
+        if cls._loop is None or cls._loop.is_closed():
+            cls._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(cls._loop)
+        return cls._loop.run_until_complete(coro)
+
+    def _consumer(self, session_key):
+        from api.consumers import ChatConsumer
+        c = ChatConsumer()
+        c.user = self.user
+        c.session_key = session_key
+        c.chat_session = None
+        c._session_created = False
+        return c
+
+    def test_fresh_key_creates_session(self):
+        """T-UNIT-10a（AC-014-01）：全新 session_key → 首条消息时创建新 session。"""
+        c = self._consumer('sk-t-unit-10-fresh')
+        self._run(c._ensure_session_created('首条消息'))
+        self.assertIsNotNone(c.chat_session)
+        self.assertEqual(c.chat_session.user_id, self.user.id)
+        self.assertTrue(c._session_created)
+
+    def test_valid_own_key_reused(self):
+        """T-UNIT-10b（AC-010-01）：有效且归属本人的 session_key → 复用，不新建。"""
         existing = _session(self.user, 'sk-t-unit-10-existing')
-        result = self.consumer._resolve_session(self.user, 'sk-t-unit-10-existing')
-        self.assertEqual(result.pk, existing.pk)
+        c = self._consumer('sk-t-unit-10-existing')
+        self._run(c._ensure_session_created('首条消息'))
+        self.assertIsNotNone(c.chat_session)
+        self.assertEqual(c.chat_session.pk, existing.pk)
+        self.assertEqual(
+            ChatSession.objects.filter(
+                user=self.user, session_key='sk-t-unit-10-existing'
+            ).count(),
+            1, '复用已有 session 不应新建记录',
+        )
 
-    def test_deleted_key_creates_new_session(self):
-        """T-UNIT-10c: 已软删除的 session_key_param 降级创建新 session。"""
+    def test_deleted_key_degrades_without_session(self):
+        """T-UNIT-10c（ADR-001）：已软删除的 session_key → 降级（chat_session 仍为 None），
+        不复活原会话、不新建同 key 的未删除会话。"""
         sess = _session(self.user, 'sk-t-unit-10-deleted')
         chat_memory.soft_delete_session(self.user, 'sk-t-unit-10-deleted')
-        result = self.consumer._resolve_session(self.user, 'sk-t-unit-10-deleted')
-        self.assertIsNotNone(result)
-        # 应该是新建的 session，不是原来那个
-        self.assertNotEqual(result.pk, sess.pk)
+        c = self._consumer('sk-t-unit-10-deleted')
+        self._run(c._ensure_session_created('首条消息'))
+        self.assertIsNone(c.chat_session, '已删除 key 应降级，不应建立会话')
+        self.assertFalse(c._session_created)
+        sess.refresh_from_db()
+        self.assertTrue(sess.is_deleted, '原会话应仍为 is_deleted=True')
+        self.assertFalse(
+            ChatSession.objects.filter(
+                session_key='sk-t-unit-10-deleted', is_deleted=False
+            ).exists(),
+            '不应新建未删除的同 key 会话',
+        )
 
-    def test_wrong_user_key_creates_new_session(self):
-        """T-UNIT-10d: 归属不正确的 session_key_param 降级创建新 session（不泄露他人 session）。"""
+    def test_foreign_key_degrades_without_cross_user(self):
+        """T-UNIT-10d（AC-014 安全）：他人的 session_key → 降级，不跨用户复用、不改他人会话。"""
         other_user = _user('t_unit_10_other_user')
         other_sess = _session(other_user, 'sk-t-unit-10-other-user-key')
-        result = self.consumer._resolve_session(self.user, 'sk-t-unit-10-other-user-key')
-        self.assertIsNotNone(result)
-        self.assertNotEqual(result.pk, other_sess.pk)
-        self.assertEqual(result.user, self.user)
+        c = self._consumer('sk-t-unit-10-other-user-key')
+        self._run(c._ensure_session_created('首条消息'))
+        self.assertIsNone(c.chat_session, '他人 key 应降级，不应复用')
+        self.assertFalse(c._session_created)
+        other_sess.refresh_from_db()
+        self.assertEqual(other_sess.user_id, other_user.id, '他人会话归属不应被改动')
+        self.assertFalse(other_sess.is_deleted)
 
 
 # ---------------------------------------------------------------------------
