@@ -18,11 +18,27 @@
             <el-table-column label="当前值" width="140">
               <template #default="{ row }"><span>{{ row.display_value ?? row.current_value ?? '—' }}</span></template>
             </el-table-column>
-            <el-table-column label="设置值" width="180">
+            <el-table-column label="设置值" width="220">
               <template #default="{ row }">
+                <!-- 枚举型参数（开关/模式/精确名）：el-select，不受本次变更影响 -->
                 <el-select v-if="row.value_options && row.value_options.length > 0" v-model="inputValues[row.param_name]" size="small" style="width:150px" @change="() => markDirty(row.param_name)">
                   <el-option v-for="opt in row.value_options" :key="opt.raw" :label="opt.label" :value="opt.raw" />
                 </el-select>
+                <!-- 温度设定参数：步进按钮控件（REQ-FUNC-002） -->
+                <div v-else-if="row.param_name.endsWith('_temp_setting')" class="temp-stepper">
+                  <el-button
+                    size="small"
+                    :disabled="inputValues[row.param_name] <= getTempBounds(row.param_name).min"
+                    @click="stepTemp(row.param_name, -1)"
+                  >－</el-button>
+                  <span class="temp-display">{{ formatTempDisplay(inputValues[row.param_name]) }}</span>
+                  <el-button
+                    size="small"
+                    :disabled="inputValues[row.param_name] >= getTempBounds(row.param_name).max"
+                    @click="stepTemp(row.param_name, +1)"
+                  >＋</el-button>
+                </div>
+                <!-- 其他数值型参数（若有）：原 el-input-number，保持不变 -->
                 <el-input-number v-else v-model="inputValues[row.param_name]" size="small" :min="parseNumJson(row.num_value_json).min" :max="parseNumJson(row.num_value_json).max" :step="parseNumJson(row.num_value_json).step || 1" style="width:150px" @change="() => markDirty(row.param_name)" />
               </template>
             </el-table-column>
@@ -58,6 +74,21 @@ import { ElMessage } from 'element-plus'
 import api from '@/utils/api.js'
 import { useMqttWebSocket } from '@/composables/useMqttWebSocket.js'
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REQ-FUNC-006：温度参数边界映射（以 ℃ 为单位，集中定义便于调整）
+// 房间设定温度：16.0 ~ 30.0℃；出风温度设定：10.0 ~ 30.0℃；步长统一 0.5℃
+// ─────────────────────────────────────────────────────────────────────────────
+const TEMP_BOUNDS_MAP = {
+  living_room_temp_setting:       { min: 16.0, max: 30.0, step: 0.5 },
+  bedroom_temp_setting:           { min: 16.0, max: 30.0, step: 0.5 },
+  study_room_temp_setting:        { min: 16.0, max: 30.0, step: 0.5 },
+  children_room_temp_setting:     { min: 16.0, max: 30.0, step: 0.5 },
+  fourth_children_room_temp_setting: { min: 16.0, max: 30.0, step: 0.5 },
+  supply_air_temp_setting:        { min: 10.0, max: 30.0, step: 0.5 },
+}
+// 未命中的 _temp_setting 参数安全兜底（禁止手工输入/无界调节）
+const TEMP_BOUNDS_DEFAULT = { min: 16.0, max: 30.0, step: 0.5 }
+
 export default {
   name: 'DeviceSettingsPanelView',
   props: {
@@ -69,6 +100,31 @@ export default {
     const batchStatus = ref(''), batchError = ref(''), itemStatuses = ref([])
     const pendingBatchId = ref(null), timeoutTimer = ref(null)
     const paramDisplayMap = ref({})
+
+    // 获取温度参数边界（REQ-FUNC-006）
+    const getTempBounds = (paramName) => TEMP_BOUNDS_MAP[paramName] || TEMP_BOUNDS_DEFAULT
+
+    // 格式化温度展示（保留一位小数，附 ℃）
+    const formatTempDisplay = (val) => {
+      if (val === null || val === undefined) return '— ℃'
+      return `${Number(val).toFixed(1)} ℃`
+    }
+
+    // 步进温度值（REQ-FUNC-002/003）：delta = +1 或 -1，步长 0.5℃
+    const stepTemp = (paramName, delta) => {
+      const bounds = getTempBounds(paramName)
+      const current = inputValues.value[paramName]
+      if (current === null || current === undefined) return
+      // 用整数算术避免浮点精度问题：将 ℃ 值 ×10 运算后再 ÷10
+      const currentInt = Math.round(current * 10)
+      const stepInt = Math.round(bounds.step * 10)
+      const newInt = currentInt + delta * stepInt
+      const minInt = Math.round(bounds.min * 10)
+      const maxInt = Math.round(bounds.max * 10)
+      const clampedInt = Math.max(minInt, Math.min(maxInt, newInt))
+      inputValues.value[paramName] = clampedInt / 10
+      markDirty(paramName)
+    }
 
     const markDirty = (paramName) => {
       const val = inputValues.value[paramName]
@@ -85,8 +141,18 @@ export default {
           g.params.forEach(p => {
             paramDisplayMap.value[p.param_name] = p.display_name
             if (!dirtyFields.value.has(p.param_name)) {
-              if (p.value_options && p.value_options.length > 0) inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined ? String(p.current_value) : p.value_options[0]?.raw ?? ''
-              else inputValues.value[p.param_name] = p.current_value
+              if (p.value_options && p.value_options.length > 0) {
+                // 枚举型参数：以字符串形式存入 inputValues
+                inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined ? String(p.current_value) : p.value_options[0]?.raw ?? ''
+              } else if (p.param_name.endsWith('_temp_setting')) {
+                // 温度参数：底层整数 ÷10 转为展示值（℃，一位小数）（REQ-FUNC-002 初始化）
+                const rawInt = p.current_value
+                inputValues.value[p.param_name] = (rawInt !== null && rawInt !== undefined)
+                  ? Math.round(Number(rawInt)) / 10
+                  : getTempBounds(p.param_name).min
+              } else {
+                inputValues.value[p.param_name] = p.current_value
+              }
             }
           })
         })
@@ -98,7 +164,19 @@ export default {
     const handleBatchSubmit = async () => {
       const allParams = []
       groups.value.forEach(g => { g.params.forEach(p => { allParams.push(p) }) })
-      const changedItems = allParams.filter(p => dirtyFields.value.has(p.param_name)).filter(p => inputValues.value[p.param_name] !== undefined && inputValues.value[p.param_name] !== null).map(p => ({ param_name: p.param_name, new_value: String(inputValues.value[p.param_name]) }))
+      const changedItems = allParams
+        .filter(p => dirtyFields.value.has(p.param_name))
+        .filter(p => inputValues.value[p.param_name] !== undefined && inputValues.value[p.param_name] !== null)
+        .map(p => {
+          let newValue
+          if (p.param_name.endsWith('_temp_setting')) {
+            // REQ-FUNC-004：展示值（℃）×10 取整还原为底层整数字符串
+            newValue = String(Math.round(inputValues.value[p.param_name] * 10))
+          } else {
+            newValue = String(inputValues.value[p.param_name])
+          }
+          return { param_name: p.param_name, new_value: newValue }
+        })
       if (changedItems.length === 0) { ElMessage.warning('没有已修改的参数'); return }
       submitLoading.value = true; batchStatus.value = ''; batchError.value = ''; itemStatuses.value = []; pendingBatchId.value = null
       if (timeoutTimer.value) clearTimeout(timeoutTimer.value)
@@ -113,7 +191,20 @@ export default {
     }
 
     const handleCancel = () => {
-      groups.value.forEach(g => { g.params.forEach(p => { if (p.value_options && p.value_options.length > 0) inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined ? String(p.current_value) : p.value_options[0]?.raw ?? ''; else inputValues.value[p.param_name] = p.current_value }) })
+      groups.value.forEach(g => {
+        g.params.forEach(p => {
+          if (p.value_options && p.value_options.length > 0) {
+            inputValues.value[p.param_name] = p.current_value !== null && p.current_value !== undefined ? String(p.current_value) : p.value_options[0]?.raw ?? ''
+          } else if (p.param_name.endsWith('_temp_setting')) {
+            const rawInt = p.current_value
+            inputValues.value[p.param_name] = (rawInt !== null && rawInt !== undefined)
+              ? Math.round(Number(rawInt)) / 10
+              : getTempBounds(p.param_name).min
+          } else {
+            inputValues.value[p.param_name] = p.current_value
+          }
+        })
+      })
       batchStatus.value = ''; batchError.value = ''; itemStatuses.value = []; dirtyFields.value = new Set()
     }
 
@@ -140,7 +231,11 @@ export default {
 
     const parseNumJson = (json) => { if (!json) return { min: undefined, max: undefined, step: 1 }; try { return JSON.parse(json) } catch { return { min: undefined, max: undefined, step: 1 } } }
 
-    return { loading, loadError, groups, inputValues, submitLoading, batchStatus, batchError, itemStatuses, loadParams, handleBatchSubmit, handleCancel, parseNumJson, markDirty }
+    return {
+      loading, loadError, groups, inputValues, submitLoading, batchStatus, batchError, itemStatuses,
+      loadParams, handleBatchSubmit, handleCancel, parseNumJson, markDirty,
+      getTempBounds, formatTempDisplay, stepTemp,
+    }
   },
 }
 </script>
@@ -163,4 +258,10 @@ export default {
 .item-status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; }
 .item-param { min-width: 160px; color: var(--ink-1); }
 .item-err { color: var(--danger); font-size: 12px; }
+/* 温度步进控件样式（REQ-FUNC-002） */
+.temp-stepper { display: flex; align-items: center; gap: 6px; }
+.temp-display {
+  display: inline-block; min-width: 72px; text-align: center;
+  font-size: 13px; color: var(--ink-0, #222); user-select: none;
+}
 </style>

@@ -48,6 +48,14 @@ def get_display_value(param_name: str, raw_value) -> str:
             if suffix == '_mode' and raw_str == '0':
                 return '制冷'
             return raw_str
+    # v0.6.0: _temp_setting 参数存储放大 10 倍的整数，展示时须 ÷10 保留一位小数
+    if param_name.endswith("_temp_setting"):
+        try:
+            display_val = f"{float(raw_value) / 10:.1f}"
+            return f"{display_val} ℃"
+        except (TypeError, ValueError):
+            # raw_value 非数字时安全兜底，按原逻辑返回带单位字符串
+            return f"{raw_str} ℃"
     unit = ""
     for suffix, u in PARAM_UNITS.items():
         if param_name.endswith(suffix):
