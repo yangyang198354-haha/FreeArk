@@ -41,6 +41,15 @@ class PLCReadWriter:
         self.rack = rack
         self.slot = slot
         self.client = snap7.client.Client()
+        # 设置 snap7 收发/Ping 超时（毫秒），避免在腐烂/半开连接上 db_read 无限期阻塞。
+        # 根因：旧代码不设超时，一旦底层 socket 进入异常态，读操作可能永久挂起或失败不弃连。
+        try:
+            from snap7.type import Parameter
+            self.client.set_param(Parameter.RecvTimeout, 3000)
+            self.client.set_param(Parameter.SendTimeout, 2000)
+            self.client.set_param(Parameter.PingTimeout, 1000)
+        except Exception as e:
+            logger.warning(f"⚠️  设置 PLC {plc_ip} snap7 超时参数失败（继续使用默认值）：{str(e)}")
         self.connected = False
         self.connect_time = 0  # 连接建立时间
         self.lock = threading.RLock()  # 使用可重入锁保证线程安全
@@ -49,9 +58,17 @@ class PLCReadWriter:
         """连接到PLC - 线程安全版本，增强日志记录"""
         with self.lock:
             if self.connected:
-                logger.debug(f"🔌 PLC {self.plc_ip} 已经处于连接状态，无需重复连接")
-                return True
-            
+                # 不能只信缓存标志：底层 socket 可能已被对端 RST/FIN，而 self.connected 仍停在 True。
+                # 用 get_connected() 实探真连接；若已断则重置标志，落入下方重连逻辑（修复"缓存腐烂"）。
+                try:
+                    if self.client.get_connected():
+                        logger.debug(f"🔌 PLC {self.plc_ip} 已经处于连接状态，无需重复连接")
+                        return True
+                    logger.info(f"🔄 PLC {self.plc_ip} 缓存标志为已连接但底层已断开，触发重连")
+                except Exception as e:
+                    logger.info(f"🔄 PLC {self.plc_ip} 探测连接状态异常，触发重连：{str(e)}")
+                self.connected = False
+
             try:
                 start_time = time.time()
                 self.client.connect(self.plc_ip, self.rack, self.slot)
@@ -84,6 +101,17 @@ class PLCReadWriter:
             except Exception as e:
                 logger.error(f"❌ PLC断开连接失败：{self.plc_ip} - {str(e)}")
 
+    def _mark_broken(self) -> None:
+        """读失败后强制弃连：断开底层连接并清除 connected 标志，
+        使下一轮 connect() 不再短路、而是真正重建连接（修复"失败不弃连"）。"""
+        with self.lock:
+            try:
+                self.client.disconnect()
+            except Exception:
+                pass
+            self.connected = False
+            self.connect_time = 0
+
     def read_db_data(self, db_num: int, offset: int, length: int, data_type: str, max_retries: int = 2) -> Optional[Tuple[bool, str, any]]:
         """读取指定DB块、偏移量、长度和类型的数据，支持重试"""
         retries = 0
@@ -111,6 +139,12 @@ class PLCReadWriter:
             except Exception as e:
                 retries += 1
                 if retries > max_retries:
+                    # 失败即弃连：重置连接，避免下一轮 connect() 短路复用腐烂连接导致永久静默失败。
+                    # ERROR 级日志（此前仅 WARNING，被全局 ERROR 日志级别吞掉，故障"静默"不可见）。
+                    self._mark_broken()
+                    logger.error(
+                        f"❌ PLC读取失败（已重试{max_retries}次），已弃连待重连：{self.plc_ip} - {str(e)}"
+                    )
                     return False, f"读取异常（已重试{max_retries}次）：{str(e)}", None
                 logger.warning(f"⚠️  读取异常，第{retries}次重试：{str(e)}")
                 time.sleep(0.1 * retries)  # 指数退避策略
