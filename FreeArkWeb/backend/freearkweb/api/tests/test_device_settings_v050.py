@@ -269,11 +269,21 @@ class ParamValueLabelTests(TestCase):
         self.assertEqual(get_display_value('system_switch', '0'), '关')
         self.assertEqual(get_display_value('system_switch', '1'), '开')
 
-    def test_UT_VL_13_temp_setting_display_with_unit(self):
-        """_temp_setting 后缀：数值加单位℃"""
-        result = get_display_value('living_room_temp_setting', '24')
-        self.assertIn('24', result)
-        self.assertIn('℃', result)
+    def test_UT_VL_13_temp_setting_display_divides_by_ten(self):
+        """v0.6.0: _temp_setting 后缀：原始整数 ÷10 保留一位小数，附单位 ℃（REQ-FUNC-001）"""
+        # raw=130 → "13.0 ℃"
+        self.assertEqual(get_display_value('living_room_temp_setting', 130), '13.0 ℃')
+        # raw=260 → "26.0 ℃"
+        self.assertEqual(get_display_value('living_room_temp_setting', 260), '26.0 ℃')
+        # raw=255 → "25.5 ℃"（含 0.5 颗粒度）
+        self.assertEqual(get_display_value('living_room_temp_setting', 255), '25.5 ℃')
+        # raw 为字符串时同样工作
+        self.assertEqual(get_display_value('supply_air_temp_setting', '100'), '10.0 ℃')
+        # raw=None → "—"
+        self.assertEqual(get_display_value('living_room_temp_setting', None), '—')
+        # 不影响 _temperature（只读，走原逻辑加单位）
+        result_temp = get_display_value('living_room_temperature', '250')
+        self.assertEqual(result_temp, '250 ℃')  # _temperature 原样返回，不除以10
 
 
 # ═════════════════════════════════════════════════════════════════════════════
