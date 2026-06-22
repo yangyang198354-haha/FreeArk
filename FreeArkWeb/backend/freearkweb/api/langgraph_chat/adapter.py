@@ -114,12 +114,22 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
             # AIMessageChunk 是 AIMessage 子类——若两者均放行，多专家 aggregate 会把
             # 融合答复发两遍（流式增量 + 终态整条），落库即逐字 2 倍（2026-06-22 修复）。
             # 非流式模型只产终态 AIMessage 时全被挡掉 → 由循环后 seen_any 兜底补发一次。
-            if not (isinstance(chunk, AIMessageChunk) and chunk.content):
+            if not isinstance(chunk, AIMessageChunk):
                 continue
-            if node == "expert" and num_experts == 1:
-                seen_any = True
-                yield ("content", chunk.content)
-            elif node == "aggregate" and num_experts != 1:
+            # 仅透传"会呈现给用户"的节点：单专家透 expert token，多专家透 aggregate。
+            is_user_stream = (
+                (node == "expert" and num_experts == 1)
+                or (node == "aggregate" and num_experts != 1)
+            )
+            if not is_user_stream:
+                continue
+            # (a) 模型原生思考：先透传 reasoning_content（思考阶段 content 多为空）。
+            # 由 _ReasoningChatOpenAI 注回 additional_kwargs（langchain 默认丢弃）；
+            # 首个 content 到达时 consumers 自动发 reasoning_end → 折叠思考框。
+            rc = (chunk.additional_kwargs or {}).get("reasoning_content")
+            if rc:
+                yield ("reasoning", rc)
+            if chunk.content:
                 seen_any = True
                 yield ("content", chunk.content)
             # route 等其他节点的 token 不透传
