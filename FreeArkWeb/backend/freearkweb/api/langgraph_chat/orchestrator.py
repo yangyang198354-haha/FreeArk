@@ -378,10 +378,16 @@ class Orchestrator:
         elif len(results) == 1:
             final = results[0]["answer"]
         else:
-            digest = "\n".join(f"[{r['expert']}] {r['answer']}" for r in results)
+            # 去掉 [expert-id] 标签：避免融合模型在输出中暴露内部分工/路由（对用户透明）。
+            digest = "\n".join(r["answer"] for r in results)
             ai = await self.llm.ainvoke([
-                SystemMessage(content="你是方舟龙虾总协调，融合各专家结论给出统一回复。"),
-                HumanMessage(content=f"各专家结论：\n{digest}\n\n请综合为一段答复。"),
+                SystemMessage(content=(
+                    "你就是方舟智能体本人，以第一人称统一作答。"
+                    "将下列各段结论融合成一段连贯回复，重复内容合并为一次表述、不要重复。"
+                    "严格禁止提及「专家」「转交」「咨询」「路由」或任何内部分工、多智能体编排细节；"
+                    "禁止出现「根据各专家」「某专家认为」「巡检专家」「能耗专家」等措辞。"
+                )),
+                HumanMessage(content=f"以下是需要整合的结论：\n{digest}\n\n请综合为一段回复。"),
             ])
             final = ai.content
         return {"messages": [AIMessage(content=final)]}
