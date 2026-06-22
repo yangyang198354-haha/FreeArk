@@ -136,6 +136,12 @@ class InspectionAgent:
                 logger.exception("处理事件抛未预期异常，重置为 PENDING 待重试：id=%s type=%s",
                                  event.pk, type(event).__name__)
                 self._reset_pending(event)
+        # 孤儿行收尾（REQ-FUNC-GW-005）：把"已恢复却仍 PENDING"的行批量标 SKIPPED；
+        # 失败不阻断主巡检流程（下一轮重试）。
+        try:
+            self.poller.skip_recovered_pending()
+        except Exception:
+            logger.warning("孤儿 PENDING 行清理失败，下一轮重试", exc_info=True)
         return len(events)
 
     # ── 单事件处置（ARCH §5.1 九步）────────────────────────────────────

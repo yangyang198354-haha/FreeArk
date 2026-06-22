@@ -11,6 +11,7 @@ inspection_status='PENDING' 的记录，按 first_seen_at 升序、最多 BATCH_
 
 import logging
 import os
+from datetime import timedelta
 
 from django.utils import timezone
 
@@ -19,6 +20,9 @@ from api.models import CondensationWarningEvent, FaultEvent
 logger = logging.getLogger("freeark.inspection_agent.event_poller")
 
 _DEFAULT_BATCH_SIZE = 5
+# 持续存在防抖窗口默认值（秒，10 分钟）：事件须自 first_seen_at 起连续活跃满此时长才被认领，
+# 用以过滤一闪而过的瞬态抖动（如 485 通信故障报错即恢复）。v1.3.2-IGW。
+_DEFAULT_GRACE_WINDOW_SECONDS = 600
 # 轮询的事件模型（两张事件表共享 inspection_status 状态机）
 _EVENT_MODELS = (FaultEvent, CondensationWarningEvent)
 
@@ -33,11 +37,27 @@ def get_batch_size() -> int:
     return value if value > 0 else _DEFAULT_BATCH_SIZE
 
 
+def get_grace_window() -> int:
+    """持续存在防抖窗口秒（INSPECTION_GRACE_WINDOW_SECONDS，默认 600=10 分钟）；非法值回退默认。
+
+    事件须自 first_seen_at 起连续活跃满此时长，巡检才认领它，借此过滤瞬态抖动（REQ-FUNC-GW-003）。
+    沿用同族配置范式（get_poll_interval/get_decision_timeout/get_batch_size）：非数字/空/≤0 均回退默认。
+    """
+    raw = os.environ.get("INSPECTION_GRACE_WINDOW_SECONDS", "")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_GRACE_WINDOW_SECONDS
+    return value if value > 0 else _DEFAULT_GRACE_WINDOW_SECONDS
+
+
 class EventPoller:
     """DB 轮询器：取 PENDING 事件并原子认领为 IN_PROGRESS。"""
 
-    def __init__(self, batch_size: int = None):
+    def __init__(self, batch_size: int = None, grace_window: int = None):
         self.batch_size = batch_size if batch_size and batch_size > 0 else get_batch_size()
+        # grace_window：None=读环境（默认 600s）；显式整数（含 0）原样生效，0 表示不设窗口（测试用）。
+        self.grace_window = grace_window if grace_window is not None else get_grace_window()
 
     def poll(self) -> list:
         """取至多 batch_size 条待巡检事件，原子认领，返回成功认领的实例列表。
@@ -61,12 +81,20 @@ class EventPoller:
         return claimed
 
     def _fetch_pending(self) -> list:
-        """两张表各取前 batch_size 条 PENDING，合并按 first_seen_at 升序截断。"""
+        """两张表各取前 batch_size 条 PENDING，合并按 first_seen_at 升序截断。
+
+        持续存在防抖窗口（REQ-FUNC-GW-001/002）：仅取 first_seen_at 早于 (now - grace_window)
+        的事件，即已连续活跃满窗口者。年龄未达窗口的事件保持 PENDING、本轮不认领，待其变老后
+        再被取用；窗口内自愈的瞬态抖动（consumer T3 置 is_active=False）也被 is_active=True 天然排除。
+        门槛以 SQL WHERE 下推到 DB（REQ-NFUNC-GW-002），不在 Python 层全量循环过滤。
+        """
         merged = []
+        cutoff = timezone.now() - timedelta(seconds=self.grace_window)
         for model in _EVENT_MODELS:
             merged.extend(
                 model.objects.filter(
                     is_active=True, inspection_status='PENDING',
+                    first_seen_at__lte=cutoff,
                 ).order_by('first_seen_at')[:self.batch_size]
             )
         merged.sort(key=lambda e: e.first_seen_at)
@@ -86,4 +114,22 @@ class EventPoller:
             )
         if total:
             logger.info("启动重建：重置 %d 条 IN_PROGRESS → PENDING", total)
+        return total
+
+    @staticmethod
+    def skip_recovered_pending() -> int:
+        """孤儿行收尾（REQ-FUNC-GW-005，v1.3.2-IGW OQ-2=B）。返回标记总数。
+
+        把"已恢复却仍 PENDING"的事件（is_active=False AND inspection_status='PENDING'）批量标为
+        SKIPPED。这类行被 _fetch_pending 的 is_active=True 过滤天然忽略、永不会被处置，收尾为
+        SKIPPED 使 inspection_status 语义与实际一致。条件与窗口无关：窗口内自愈、认领前恰好恢复均覆盖。
+        批量 SQL UPDATE，不逐条循环；只动 is_active=False 的 PENDING，绝不影响仍活跃的等待中事件。
+        """
+        total = 0
+        for model in _EVENT_MODELS:
+            total += model.objects.filter(
+                is_active=False, inspection_status='PENDING',
+            ).update(inspection_status='SKIPPED')
+        if total:
+            logger.info("孤儿行清理：标记 %d 条已恢复 PENDING → SKIPPED", total)
         return total
