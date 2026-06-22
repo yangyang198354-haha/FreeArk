@@ -148,17 +148,63 @@ def _date_hint() -> str:
             f"等日期参数后再调用工具，不要臆造日期。]")
 
 
+_REASONING_LLM_CLS = None  # 惰性构造并缓存的 ChatOpenAI 子类（阶段a）
+
+
+def _delta_get(delta, key):
+    """从流式 delta（dict 或 pydantic 对象）安全取字段。"""
+    if delta is None:
+        return None
+    if isinstance(delta, dict):
+        return delta.get(key)
+    return getattr(delta, key, None)
+
+
+def _get_reasoning_chat_openai_cls():
+    """惰性构造透传 reasoning_content 的 ChatOpenAI 子类（阶段a）。
+
+    deepseek-v4-flash 原生 wire 逐 token 流式输出 delta.reasoning_content（思考过程），
+    但 langchain_openai 0.3.x 的 ChatOpenAI 默认丢弃它（不进 additional_kwargs、也不进
+    response_metadata，思考期 chunk.content 为空）。本子类在 chunk 转换钩子里把
+    reasoning_content 注回 message.additional_kwargs，供 adapter._drive 以
+    ('reasoning', ...) 透传到前端折叠思考框。reasoning 提取异常绝不影响正常 content 流。"""
+    global _REASONING_LLM_CLS
+    if _REASONING_LLM_CLS is None:
+        from langchain_openai import ChatOpenAI  # 延迟 import，假模型路径不需要
+
+        class _ReasoningChatOpenAI(ChatOpenAI):
+            def _convert_chunk_to_generation_chunk(
+                    self, chunk, default_chunk_class, base_generation_info):
+                gen = super()._convert_chunk_to_generation_chunk(
+                    chunk, default_chunk_class, base_generation_info)
+                try:
+                    if gen is not None:
+                        choices = (chunk.get("choices")
+                                   or chunk.get("chunk", {}).get("choices") or [])
+                        if choices:
+                            rc = _delta_get(choices[0].get("delta"), "reasoning_content")
+                            if rc:
+                                gen.message.additional_kwargs["reasoning_content"] = rc
+                except Exception:  # noqa: BLE001 防御：reasoning 提取绝不拖垮 content 流
+                    pass
+                return gen
+
+        _REASONING_LLM_CLS = _ReasoningChatOpenAI
+    return _REASONING_LLM_CLS
+
+
 def _make_llm(latency: float | None = None):
     """模型工厂：默认连真 DeepSeek（OpenAI 兼容）；
-    settings.LANGGRAPH_USE_FAKE_LLM=True 时走离线假模型（CI/单测）。"""
+    settings.LANGGRAPH_USE_FAKE_LLM=True 时走离线假模型（CI/单测）。
+    阶段a：真模型用 _ReasoningChatOpenAI 子类透传原生 reasoning_content。"""
     from django.conf import settings
 
     if getattr(settings, "LANGGRAPH_USE_FAKE_LLM", False):
         from .fake_llm import LatencyFakeChat
         return LatencyFakeChat() if latency is None else LatencyFakeChat(latency=latency)
 
-    from langchain_openai import ChatOpenAI  # 延迟 import，假模型路径不需要
-    return ChatOpenAI(
+    cls = _get_reasoning_chat_openai_cls()
+    return cls(
         model=getattr(settings, "LANGGRAPH_MODEL", "deepseek-v4-flash"),
         base_url=getattr(settings, "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
         api_key=getattr(settings, "DEEPSEEK_API_KEY", "") or "sk-noop",

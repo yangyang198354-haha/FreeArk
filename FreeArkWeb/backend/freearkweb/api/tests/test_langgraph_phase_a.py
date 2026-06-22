@@ -653,3 +653,103 @@ class OrchestratorWriteGateTests(SimpleTestCase):
             call_args = m.call_args.args
             self.assertEqual(call_args[0], "set_device_params")          # tool
             self.assertEqual(call_args[2], "openclaw-agent::alice")      # operator 追溯
+
+
+# ===========================================================================
+# 阶段 a —— 模型原生思考（reasoning_content）透传
+# ===========================================================================
+#
+# deepseek-v4-flash 原生 wire 流式吐 delta.reasoning_content（思考过程），但
+# langchain_openai 0.3.x ChatOpenAI 默认丢弃。_ReasoningChatOpenAI 子类把它注回
+# additional_kwargs，adapter._drive 据此以 ('reasoning', ...) 透传到折叠思考框。
+# ===========================================================================
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@tag('unit')
+class ReasoningPassthroughTests(SimpleTestCase):
+    """阶段a：reasoning_content 子类注入 + _drive 透传协议。"""
+
+    def _make_llm(self):
+        from api.langgraph_chat.orchestrator import _get_reasoning_chat_openai_cls
+        cls = _get_reasoning_chat_openai_cls()
+        return cls(model="deepseek-v4-flash", api_key="sk-test",
+                   base_url="https://api.deepseek.com/v1", temperature=0.2)
+
+    def test_subclass_injects_reasoning_content(self):
+        """delta.reasoning_content → message.additional_kwargs['reasoning_content']。"""
+        from langchain_core.messages import AIMessageChunk
+        llm = self._make_llm()
+        chunk = {"choices": [{"delta": {"content": "",
+                                        "reasoning_content": "思考片段X"},
+                              "finish_reason": None}]}
+        gen = llm._convert_chunk_to_generation_chunk(chunk, AIMessageChunk, {})
+        self.assertIsNotNone(gen)
+        self.assertEqual(
+            gen.message.additional_kwargs.get("reasoning_content"), "思考片段X")
+
+    def test_subclass_no_reasoning_is_passthrough(self):
+        """无 reasoning_content 时不注入，正常 content 不受影响。"""
+        from langchain_core.messages import AIMessageChunk
+        llm = self._make_llm()
+        chunk = {"choices": [{"delta": {"content": "答案"},
+                              "finish_reason": None}]}
+        gen = llm._convert_chunk_to_generation_chunk(chunk, AIMessageChunk, {})
+        self.assertNotIn("reasoning_content", gen.message.additional_kwargs)
+        self.assertEqual(gen.message.content, "答案")
+
+    def test_drive_yields_reasoning_before_content(self):
+        """_drive：单专家路径下，先 yield ('reasoning', rc) 再 yield ('content', ...)。"""
+        from langchain_core.messages import AIMessageChunk
+        from api.langgraph_chat.adapter import _drive
+
+        class _FakeGraph:
+            def __init__(self, events):
+                self._events = events
+
+            async def astream(self, payload, config, stream_mode=None):
+                for ev in self._events:
+                    yield ev
+
+            async def aget_state(self, config):
+                return None
+
+        class _FakeOrch:
+            def __init__(self, events):
+                self.graph = _FakeGraph(events)
+
+        events = [
+            ("updates", {"route": {"plan": [("energy-expert", "q")]}}),
+            ("messages", (AIMessageChunk(content="",
+                          additional_kwargs={"reasoning_content": "先想一想"}),
+                          {"langgraph_node": "expert"})),
+            ("messages", (AIMessageChunk(content="",
+                          additional_kwargs={"reasoning_content": "再想一想"}),
+                          {"langgraph_node": "expert"})),
+            ("messages", (AIMessageChunk(content="最终答案"),
+                          {"langgraph_node": "expert"})),
+        ]
+
+        async def _collect():
+            out = []
+            async for kt in _drive(_FakeOrch(events), {"messages": []},
+                                   {"configurable": {"thread_id": "t"}}):
+                out.append(kt)
+            return out
+
+        out = async_to_sync(_collect)()
+        kinds = [k for k, _ in out]
+        # 模型原生思考被透传
+        self.assertIn(("reasoning", "先想一想"), out)
+        self.assertIn(("reasoning", "再想一想"), out)
+        self.assertIn(("content", "最终答案"), out)
+        # reasoning 在 content 之前（折叠框先显示思考、答案到达再折叠）
+        first_content = kinds.index("content")
+        self.assertLess(kinds.index("reasoning"), first_content)
+        self.assertLess(
+            max(i for i, (k, t) in enumerate(out) if t == "再想一想"),
+            first_content,
+            "模型 reasoning 应全部早于首个 content")
+        # 阶段b 编排步骤也在（两者结合）
+        self.assertTrue(any(t.startswith("🔍") for k, t in out if k == "reasoning"))
+        self.assertTrue(any("能耗分析" in t for k, t in out if k == "reasoning"))
