@@ -49,6 +49,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
+from .adapter import INTERNAL_NOSTREAM_TAG
 from .fa_tools import TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write
 from .prompts import EXPERT_PROMPTS
 from .router import classify_experts
@@ -311,7 +312,11 @@ class Orchestrator:
                  "intent": "read_query", "status": "OK"})
 
     async def _run_subexpert(self, name: str, query: str) -> dict:
-        """跑被委托的只读子专家：过滤写工具、不带委托工具（深度限 1）→ 返回 {"answer": ...}。"""
+        """跑被委托的只读子专家：过滤写工具、不带委托工具（深度限 1）→ 返回 {"answer": ...}。
+
+        子专家的所有 LLM 生成均打 INTERNAL_NOSTREAM_TAG：它是委托的**内部产物**，只回灌给
+        发起方继续推理，绝不直接流给用户——否则委托型专家会把「子专家完整答案 + 自身整合
+        终稿」两份近似内容一并流出（2026-06-22 修复）。adapter._drive 据该 tag 跳过这些生成。"""
         tools = [t for t in TOOLS_BY_EXPERT.get(name, [])
                  if t.name not in WRITE_TOOL_NAMES]
         tool_map = {t.name: t for t in tools}
@@ -320,7 +325,8 @@ class Orchestrator:
             SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
             HumanMessage(content=query),
         ]
-        ai = await llm.ainvoke(msgs)
+        nostream = {"tags": [INTERNAL_NOSTREAM_TAG]}
+        ai = await llm.ainvoke(msgs, config=nostream)
         steps = 0
         while getattr(ai, "tool_calls", None) and steps < MAX_EXPERT_STEPS:
             steps += 1
@@ -329,7 +335,7 @@ class Orchestrator:
                 t = tool_map.get(tc["name"])
                 out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
                 msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
-            ai = await llm.ainvoke(msgs)
+            ai = await llm.ainvoke(msgs, config=nostream)
         return {"answer": ai.content}
 
     # ── gate：Tier-2 写操作图级强制确认门（interrupt 硬约束，阶段 E）────
