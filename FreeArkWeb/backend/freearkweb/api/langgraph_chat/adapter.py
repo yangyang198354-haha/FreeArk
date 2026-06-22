@@ -41,6 +41,20 @@ logger = logging.getLogger("api.langgraph_chat.adapter")
 # 既单一真源、又不破坏 openclaw 回退路径下 adapter 的可导入性。
 INTERNAL_NOSTREAM_TAG = "fa_internal_nostream"
 
+# 思考过程（折叠框）展示用：专家内部 id → 面向用户的中文标签。阶段(b) 编排步骤进度。
+# 仅用于 reasoning 流（可折叠的"思考过程"），绝不进入正式答复——答复保持第一人称、
+# 不暴露内部分工（见 PR#46 orchestrator._aggregate 的"严禁提及专家/路由"约束）。
+_EXPERT_CN = {
+    "energy-expert": "能耗分析",
+    "inspection-expert": "巡检诊断",
+    "sanheng-knowledge": "三恒知识",
+}
+
+
+def _expert_cn(name: str) -> str:
+    return _EXPERT_CN.get(name, name)
+
+
 _ORCH = None  # 进程常驻单例（惰性构造）
 
 
@@ -77,15 +91,16 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
       - **多专家**：expert 们并行 token 会交错、语义混乱 → 跳过；改流 `aggregate` 的融合结果。
       - 专家数由 `route` 节点的 plan 得知（updates 流，先于 expert token 到达）。
       - `route` 节点自身的 token（JSON 分类结果）一律不透传给用户。
-      - 静默期（分类/查询/生成）下发 ('status', 文案) 进度事件，避免"无任何反馈"。
+      - 编排步骤进度（理解/路由分工/生成）下发 ('reasoning', 文案)，作为"思考过程"
+        进入前端折叠框（阶段b）；首个 content 到达时 consumers 自动发 reasoning_end 折叠。
       - updates 捕获 __interrupt__（Tier-2 写确认门）→ ('confirm', json) 后立即返回。
     无任何 content 流出时（异常/退化）读最终态整段补发。
     """
     seen_any = False
     interrupted = False
     num_experts = None  # 由 route 的 plan 得知；None=route 未完成
-    # 起步即反馈，消灭最初 1~2s 的纯静默
-    yield ("status", "正在分析您的问题…")
+    # 起步即反馈，消灭最初 1~2s 的纯静默；作为思考过程首行进入折叠框（阶段b）
+    yield ("reasoning", "🔍 正在理解你的问题…\n")
     async for mode, data in orch.graph.astream(
             payload, config, stream_mode=["updates", "messages"]):
         if mode == "messages":
@@ -117,8 +132,17 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
                 return  # 暂停，等待 resume_chat
             route_out = data.get("route")
             if isinstance(route_out, dict) and "plan" in route_out:
-                num_experts = len(route_out.get("plan") or []) or None
-                yield ("status", "正在调取数据并生成回复…")
+                plan = route_out.get("plan") or []
+                num_experts = len(plan) or None
+                # 阶段(b)：把路由分工作为思考过程展示在折叠框（仅 reasoning 流，不进答复）。
+                names = [
+                    _expert_cn(item[0])
+                    for item in plan
+                    if isinstance(item, (list, tuple)) and item and item[0]
+                ]
+                if names:
+                    yield ("reasoning", "🧭 已确定方向：" + "、".join(names) + "\n")
+                yield ("reasoning", "📊 正在调取数据并生成回复…\n")
 
     if not seen_any and not interrupted:
         # 非流式兜底：从最终态取整段答复（不重跑图，避免重复副作用）
