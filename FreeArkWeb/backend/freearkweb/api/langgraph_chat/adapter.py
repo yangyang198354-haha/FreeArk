@@ -85,7 +85,11 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
         if mode == "messages":
             chunk, meta = data
             node = meta.get("langgraph_node")
-            if not (isinstance(chunk, (AIMessage, AIMessageChunk)) and chunk.content):
+            # 只透传流式增量（AIMessageChunk）；排除节点返回的终态整条 AIMessage。
+            # AIMessageChunk 是 AIMessage 子类——若两者均放行，多专家 aggregate 会把
+            # 融合答复发两遍（流式增量 + 终态整条），落库即逐字 2 倍（2026-06-22 修复）。
+            # 非流式模型只产终态 AIMessage 时全被挡掉 → 由循环后 seen_any 兜底补发一次。
+            if not (isinstance(chunk, AIMessageChunk) and chunk.content):
                 continue
             if node == "expert" and num_experts == 1:
                 seen_any = True
