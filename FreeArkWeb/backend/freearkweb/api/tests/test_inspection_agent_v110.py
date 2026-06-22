@@ -20,6 +20,16 @@ test_inspection_agent_v110.py — v1.1.0-AIA（方案 B）增量② 单元测试
     UT-POLL-004 batch_size 截断
     UT-POLL-005 reset_in_progress 把 IN_PROGRESS 重置为 PENDING，DONE 不动
 
+  event_poller.py：持续存在防抖窗口（v1.3.2-IGW，REQ-FUNC-GW-001/002/003/005）
+    UT-POLL-GW-001 get_grace_window 默认 600s（10 分钟）
+    UT-POLL-GW-002 get_grace_window 合法值生效
+    UT-POLL-GW-003 get_grace_window 非法值（空/非数字/0/负）回退默认
+    UT-POLL-GW-004 未达窗口的事件不认领、保持 PENDING（场景 A）
+    UT-POLL-GW-005 已达窗口的事件正常认领（场景 C）
+    UT-POLL-GW-006 窗口对故障/结露两表均生效
+    UT-POLL-GW-007 skip_recovered_pending 把已恢复 PENDING 标 SKIPPED，活跃 PENDING 不动（场景 B 收尾）
+    UT-POLL-GW-008 skip_recovered_pending 不误伤 DONE/IN_PROGRESS
+
   work_order.py（ARCH §7）
     UT-WO-101 generate_ticket_id 格式 + 当天递增
     UT-WO-102 create_from_event(FaultEvent) 推导字段并建单
@@ -53,7 +63,7 @@ from inspection_agent.auth import (
     REASON_POLICY_B,
     WriteAuthPolicy,
 )
-from inspection_agent.event_poller import EventPoller
+from inspection_agent.event_poller import EventPoller, get_grace_window
 
 
 # ── 测试夹具 ────────────────────────────────────────────────────────────
@@ -187,7 +197,7 @@ class EventPollerTest(TestCase):
         # 先发生的 fault（older）应排在后发生的 cw 之前
         fe = _make_fault_event(seconds_ago=60)
         cw = _make_cw_event(seconds_ago=30)
-        claimed = EventPoller(batch_size=5).poll()
+        claimed = EventPoller(batch_size=5, grace_window=0).poll()
         self.assertEqual([e.pk for e in claimed], [fe.pk, cw.pk])
         self.assertTrue(all(e.inspection_status == 'IN_PROGRESS' for e in claimed))
         fe.refresh_from_db()
@@ -198,7 +208,7 @@ class EventPollerTest(TestCase):
 
     def test_claimed_events_not_repolled(self):
         _make_fault_event(seconds_ago=10)
-        poller = EventPoller(batch_size=5)
+        poller = EventPoller(batch_size=5, grace_window=0)
         first = poller.poll()
         self.assertEqual(len(first), 1)
         second = poller.poll()
@@ -209,13 +219,13 @@ class EventPollerTest(TestCase):
         _make_fault_event(seconds_ago=12, fault_code='E101', is_active=False)        # 已恢复
         _make_fault_event(seconds_ago=10, fault_code='E102', inspection_status='DONE')  # 已处置
         active = _make_fault_event(seconds_ago=5, fault_code='E103')
-        claimed = EventPoller(batch_size=5).poll()
+        claimed = EventPoller(batch_size=5, grace_window=0).poll()
         self.assertEqual([e.pk for e in claimed], [active.pk])
 
     def test_batch_size_limit(self):
         for i in range(4):
             _make_fault_event(seconds_ago=100 - i)
-        claimed = EventPoller(batch_size=2).poll()
+        claimed = EventPoller(batch_size=2, grace_window=0).poll()
         self.assertEqual(len(claimed), 2)
         # 剩余仍为 PENDING
         self.assertEqual(FaultEvent.objects.filter(inspection_status='PENDING').count(), 2)
@@ -235,6 +245,83 @@ class EventPollerTest(TestCase):
         self.assertIsNone(fe.inspection_started_at)
         self.assertEqual(cw.inspection_status, 'PENDING')
         self.assertEqual(done.inspection_status, 'DONE')  # 不动
+
+
+# ── event_poller.py：持续存在防抖窗口（v1.3.2-IGW）────────────────────────
+
+@tag('unit')
+class GraceWindowTest(TestCase):
+    """UT-POLL-GW-*: 持续存在防抖窗口过滤 + 孤儿行收尾（REQ-FUNC-GW-001/002/003/005）。"""
+
+    @staticmethod
+    def _clear_window_env():
+        return mock.patch.dict(
+            os.environ,
+            {k: v for k, v in os.environ.items()
+             if k != 'INSPECTION_GRACE_WINDOW_SECONDS'},
+            clear=True)
+
+    def test_get_grace_window_default_is_10_min(self):
+        with self._clear_window_env():
+            self.assertEqual(get_grace_window(), 600)
+
+    def test_get_grace_window_legal_value(self):
+        with mock.patch.dict(os.environ, {'INSPECTION_GRACE_WINDOW_SECONDS': '300'}):
+            self.assertEqual(get_grace_window(), 300)
+
+    def test_get_grace_window_illegal_falls_back_to_default(self):
+        for bad in ('', 'abc', '0', '-5'):
+            with mock.patch.dict(os.environ, {'INSPECTION_GRACE_WINDOW_SECONDS': bad}):
+                self.assertEqual(get_grace_window(), 600, msg=f'bad={bad!r}')
+
+    def test_event_younger_than_window_not_claimed(self):
+        # 上报 5 分钟前、窗口 10 分钟 → 未达窗口，不认领，保持 PENDING（场景 A）
+        fe = _make_fault_event(seconds_ago=300)
+        claimed = EventPoller(batch_size=5, grace_window=600).poll()
+        self.assertEqual(claimed, [])
+        fe.refresh_from_db()
+        self.assertEqual(fe.inspection_status, 'PENDING')
+
+    def test_event_older_than_window_claimed(self):
+        # 上报 11 分钟前、窗口 10 分钟 → 已达窗口，正常认领（场景 C）
+        fe = _make_fault_event(seconds_ago=660)
+        claimed = EventPoller(batch_size=5, grace_window=600).poll()
+        self.assertEqual([e.pk for e in claimed], [fe.pk])
+        fe.refresh_from_db()
+        self.assertEqual(fe.inspection_status, 'IN_PROGRESS')
+
+    def test_window_applies_to_both_event_models(self):
+        # 两类事件均受窗口约束：新故障被挡、老结露放行
+        young_fe = _make_fault_event(seconds_ago=60)
+        old_cw = _make_cw_event(seconds_ago=900)
+        claimed = EventPoller(batch_size=5, grace_window=600).poll()
+        self.assertEqual([e.pk for e in claimed], [old_cw.pk])
+        young_fe.refresh_from_db()
+        self.assertEqual(young_fe.inspection_status, 'PENDING')
+
+    def test_skip_recovered_pending_marks_skipped(self):
+        # is_active=False 且 PENDING → 标 SKIPPED；活跃 PENDING 不动（场景 B 收尾，REQ-FUNC-GW-005）
+        recovered = _make_fault_event(seconds_ago=300, fault_code='E201', is_active=False)
+        active = _make_fault_event(seconds_ago=300, fault_code='E202', is_active=True)
+        recovered_cw = _make_cw_event(seconds_ago=300, is_active=False)
+        with self.assertLogs('freeark.inspection_agent.event_poller', level='INFO'):
+            total = EventPoller.skip_recovered_pending()
+        self.assertEqual(total, 2)
+        recovered.refresh_from_db()
+        active.refresh_from_db()
+        recovered_cw.refresh_from_db()
+        self.assertEqual(recovered.inspection_status, 'SKIPPED')
+        self.assertEqual(recovered_cw.inspection_status, 'SKIPPED')
+        self.assertEqual(active.inspection_status, 'PENDING')  # 仍活跃，不受影响
+
+    def test_skip_recovered_pending_leaves_done_untouched(self):
+        # 仅作用于 PENDING：已恢复但状态 DONE 的行不动（防误伤）
+        done = _make_fault_event(seconds_ago=300, fault_code='E301',
+                                 is_active=False, inspection_status='DONE')
+        total = EventPoller.skip_recovered_pending()
+        self.assertEqual(total, 0)
+        done.refresh_from_db()
+        self.assertEqual(done.inspection_status, 'DONE')
 
 
 # ── work_order.py ───────────────────────────────────────────────────────
