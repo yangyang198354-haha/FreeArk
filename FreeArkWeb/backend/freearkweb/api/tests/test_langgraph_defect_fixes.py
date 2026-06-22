@@ -178,3 +178,66 @@ class DriveNoduplicateTests(SimpleTestCase):
 
         chunks = async_to_sync(_go)()
         self.assertEqual(chunks, ["FALLBACK"], f"兜底路径期望 ['FALLBACK']，实际 {chunks}")
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
+class DelegationNoStreamTests(SimpleTestCase):
+    """缺陷 3（2026-06-22）：委托型专家不得把子专家中间产物流给用户。
+
+    inspection-expert 委托子专家取知识/数据时，子专家会生成一份完整答案；若它和发起方的
+    整合终稿都被流出，用户就看到"两份高度重合"的回复。修复：子专家 LLM 调用打
+    INTERNAL_NOSTREAM_TAG，_drive 据 meta['tags'] 跳过——只留发起方的终稿。"""
+
+    def setUp(self):
+        import api.langgraph_chat.adapter as ad
+        ad._ORCH = None
+
+    def test_drive_skips_internal_nostream_tagged_chunks(self):
+        """expert 节点先产「带 INTERNAL_NOSTREAM_TAG 的子专家完整答案」再产终稿：
+        修复后只透传终稿，被打标签的子专家产物被丢弃，不再两份重合。"""
+        from langchain_core.messages import AIMessageChunk
+        from api.langgraph_chat.adapter import _drive, INTERNAL_NOSTREAM_TAG
+
+        class _MockGraph:
+            async def astream(self, payload, config, stream_mode):
+                yield ("updates", {"route": {"plan": [("inspection-expert", "q")]}})
+                # 子专家完整答案（内部，应被跳过）
+                yield ("messages", (AIMessageChunk(content="子专家完整答案-1153字"),
+                                    {"langgraph_node": "expert",
+                                     "tags": [INTERNAL_NOSTREAM_TAG]}))
+                # 发起方整合终稿（应透传）
+                yield ("messages", (AIMessageChunk(content="整合终稿"),
+                                    {"langgraph_node": "expert", "tags": []}))
+
+            async def aget_state(self, config):
+                return None
+
+        class _MockOrch:
+            graph = _MockGraph()
+
+            @staticmethod
+            def _cfg(thread_id):
+                return {}
+
+        async def _go():
+            out = []
+            async for kind, text in _drive(_MockOrch(), {}, {}):
+                if kind == "content":
+                    out.append(text)
+            return out
+
+        out = "".join(async_to_sync(_go)())
+        self.assertEqual(out, "整合终稿",
+                         f"期望仅终稿 '整合终稿'，实际 '{out}'（子专家产物未被过滤）")
+
+    def test_run_subexpert_tags_all_llm_calls(self):
+        """orchestrator._run_subexpert 的两处 LLM 调用都必须带 INTERNAL_NOSTREAM_TAG。"""
+        import inspect
+        from api.langgraph_chat.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator._run_subexpert)
+        self.assertIn("INTERNAL_NOSTREAM_TAG", src)
+        # 两次 ainvoke 都应传 config=nostream（首轮 + ReAct 循环内）
+        self.assertEqual(src.count("ainvoke(msgs, config=nostream)"), 2,
+                         "子专家两处 ainvoke 必须都打 nostream 标签，否则中间产物会泄露到流")

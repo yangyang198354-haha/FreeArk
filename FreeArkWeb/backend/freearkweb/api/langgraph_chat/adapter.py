@@ -35,6 +35,12 @@ from api.openclaw_adapter import OpenClawUnavailableError
 
 logger = logging.getLogger("api.langgraph_chat.adapter")
 
+# 委托子专家等「内部生成」的流式抑制标签：orchestrator 给这类 LLM 调用打此 tag，
+# _drive 据 meta["tags"] 跳过——它们的原始产物不应流给用户（仅供发起方整合）。
+# 定义在本（始终可导入、无 langgraph 依赖的）模块，由 orchestrator 反向 import，
+# 既单一真源、又不破坏 openclaw 回退路径下 adapter 的可导入性。
+INTERNAL_NOSTREAM_TAG = "fa_internal_nostream"
+
 _ORCH = None  # 进程常驻单例（惰性构造）
 
 
@@ -85,6 +91,10 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
         if mode == "messages":
             chunk, meta = data
             node = meta.get("langgraph_node")
+            # 委托子专家等内部生成（带 INTERNAL_NOSTREAM_TAG）一律不透传：否则委托型
+            # 专家会把「子专家完整答案 + 自身整合终稿」两份近似内容流给用户（2026-06-22）。
+            if INTERNAL_NOSTREAM_TAG in (meta.get("tags") or ()):
+                continue
             # 只透传流式增量（AIMessageChunk）；排除节点返回的终态整条 AIMessage。
             # AIMessageChunk 是 AIMessage 子类——若两者均放行，多专家 aggregate 会把
             # 融合答复发两遍（流式增量 + 终态整条），落库即逐字 2 倍（2026-06-22 修复）。
