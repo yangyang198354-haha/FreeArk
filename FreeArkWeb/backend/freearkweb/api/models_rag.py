@@ -1,10 +1,17 @@
 """
-api.models_rag — RAG 知识库数据模型（v1.4.0_sanheng_rag）
+api.models_rag — RAG 知识库数据模型（v1.4.1_rag_image_citation）
 
 RagDocument: 文档台账，状态机 pending→parsing→indexed/failed
 RagChunk:    向量块，embedding 以 numpy float32 BLOB 存储
+RagImage:    图片存储（DB BLOB 方案，ADR-IC-001），每条对应文档中一张图片
 
-Migration: 0036_add_rag_tables.py（依赖 0035_workorder_proposed_write）
+Migration:
+  0036_add_rag_tables.py（依赖 0035_workorder_proposed_write）— 基线
+  0039_rag_image.py（依赖 0038_chatsession_title）            — v1.4.1 新增
+
+@module MOD-141-01
+@implements IFC-141-301（通过 RagImage 模型 BinaryField）
+@author sub_agent_software_developer
 """
 
 from django.db import models
@@ -112,5 +119,78 @@ class RagChunk(models.Model):
             models.Index(fields=['document'], name='rag_chunk_doc_idx'),
         ]
 
+    # ── v1.4.1 新增字段（MOD-141-01）──────────────────────────────────────────
+    image = models.ForeignKey(
+        'RagImage',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='chunks',
+        verbose_name='关联图片',
+        help_text='仅 is_image_ocr=True 的 chunk 可能有关联图片；null=True 表示纯文字 chunk 或图片存储失败',
+    )
+
     def __str__(self):
         return f"RagChunk({self.id}, doc={self.document_id}, idx={self.chunk_index})"
+
+
+class RagImage(models.Model):
+    """
+    三恒知识库图片存储（DB BLOB 方案，ADR-IC-001）。
+
+    每条记录对应文档中的一张图片，图片字节以 BinaryField 直接存入主库。
+    文档删除时 CASCADE 自动清理关联图片行（REQ-FUNC-006）。
+
+    约束：
+    - image_data 上限由应用层 MAX_IMAGE_BYTES（10MB）约束，BinaryField 本身无 max_length
+    - file_size 冗余存储：SELECT SUM(file_size) 不需要读 BLOB 列，便于运维监控
+    - 取图端点（GET /api/rag/images/{id}/）从本表直接读取 image_data，不经向量缓存
+
+    @module MOD-141-01
+    @implements IFC-141-801（存储端）
+    @author sub_agent_software_developer
+    """
+
+    document = models.ForeignKey(
+        RagDocument,
+        on_delete=models.CASCADE,
+        related_name='images',
+        verbose_name='所属文档',
+        help_text='文档删除时 CASCADE 自动清理图片行（REQ-FUNC-006）',
+    )
+    image_index = models.IntegerField(
+        verbose_name='图片序号（0 起）',
+        help_text='同文档内图片序号（0 起），便于日志定位',
+    )
+    page_or_section = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='来源定位',
+        help_text='来源页/节，对齐现有 RagChunk.page_or_section 格式',
+    )
+    image_format = models.CharField(
+        max_length=20,
+        verbose_name='图片格式',
+        help_text="图片格式：'png'/'jpeg'/'other'",
+    )
+    image_data = models.BinaryField(
+        verbose_name='图片字节（BLOB）',
+        help_text='原始图片字节（DB BLOB，应用层约束上限 10MB）',
+    )
+    file_size = models.IntegerField(
+        verbose_name='字节大小',
+        help_text='字节大小，冗余存储，便于 SUM(file_size) 监控不读 BLOB 列',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+
+    class Meta:
+        db_table = 'api_ragimage'   # 显式声明（架构设计 ADR-IC-001，与 api_ragdocument/api_ragchunk 对齐命名意图）
+        verbose_name = 'RAG 图片'
+        verbose_name_plural = 'RAG 图片'
+        indexes = [
+            models.Index(fields=['document'], name='ragimage_document_idx'),
+        ]
+
+    def __str__(self):
+        return f"RagImage({self.id}, doc={self.document_id}, idx={self.image_index}, fmt={self.image_format})"

@@ -50,7 +50,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
 from .adapter import INTERNAL_NOSTREAM_TAG
-from .fa_tools import TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write
+from .fa_tools import TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write, get_last_search_images
 from .prompts import EXPERT_PROMPTS
 from .router import classify_experts
 
@@ -103,6 +103,10 @@ class State(TypedDict, total=False):
     # 仅在 Send 分支负载里出现：
     name: str
     query: str
+    # ── v1.4.1 新增（IFC-141-501，MOD-141-05）────────────────────────────
+    related_images: List[dict]
+    # 不使用 operator.add reducer：由 _aggregate 统一收集后一次性赋值
+    # 格式：[{"image_id": int, "source": str}, ...]（已去重）
 
 
 # 从消息里提取 ChatConsumer 注入的 [__freeark_user__:<name>] 前缀，构造 operator 追溯。
@@ -281,6 +285,7 @@ class Orchestrator:
             HumanMessage(content=query),
         ]
         delegations: List[dict] = []
+        accumulated_images: list = []   # v1.4.1：收集本 expert 执行期间所有命中的图片（IFC-141-502）
         ai = await llm.ainvoke(msgs)
         steps = 0
         while getattr(ai, "tool_calls", None) and steps < MAX_EXPERT_STEPS:
@@ -317,11 +322,30 @@ class Orchestrator:
                 else:
                     t = tool_map.get(tc["name"])
                     out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
+                    # ── v1.4.1：仅对 search_sanheng_knowledge 工具读取 side-channel（IFC-141-502）──
+                    if tc["name"] == "search_sanheng_knowledge":
+                        imgs = get_last_search_images()   # 读取并清零 ContextVar
+                        accumulated_images.extend(imgs)
+                    # ──────────────────────────────────────────────────────────────────────
                 msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
             ai = await llm.ainvoke(msgs)
 
+        # v1.4.1：对 accumulated_images 做最终去重（同一专家多轮工具调用可能重复命中）
+        seen_ids: set = set()
+        deduped_images: list = []
+        for img in accumulated_images:
+            if img["image_id"] not in seen_ids:
+                seen_ids.add(img["image_id"])
+                deduped_images.append(img)
+
         return {"expert_results": [
-            {"expert": name, "answer": ai.content, "delegations": delegations}]}
+            {
+                "expert": name,
+                "answer": ai.content,
+                "delegations": delegations,
+                "related_images": deduped_images,   # v1.4.1 新增（IFC-141-502）
+            }
+        ]}
 
     @staticmethod
     def _write_from_delegation(args: dict) -> dict:
@@ -442,7 +466,23 @@ class Orchestrator:
                 HumanMessage(content=f"以下是需要整合的结论：\n{digest}\n\n请综合为一段回复。"),
             ])
             final = ai.content
-        return {"messages": [AIMessage(content=final)]}
+
+        # ── v1.4.1：全局去重 related_images（IFC-141-503，MOD-141-05）──────────
+        all_images: list = []
+        for r in results:
+            all_images.extend(r.get("related_images", []))
+        seen_ids: set = set()
+        unique_images: list = []
+        for img in all_images:
+            if img["image_id"] not in seen_ids:
+                seen_ids.add(img["image_id"])
+                unique_images.append(img)
+        # ────────────────────────────────────────────────────────────────────────
+
+        return {
+            "messages": [AIMessage(content=final)],
+            "related_images": unique_images,   # v1.4.1 新增：写入 State 字段（IFC-141-503）
+        }
 
     def _build(self):
         g = StateGraph(State)

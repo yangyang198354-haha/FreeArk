@@ -400,3 +400,27 @@ const api = {
 };
 
 export default api;
+
+// ── v1.4.1 新增（IFC-141-1101，MOD-141-11）────────────────────────────────────
+// fetchRagImage：取 RAG 图片字节，返回 Blob，供调用方调用 URL.createObjectURL
+//
+// 设计决策（DEV-001）：
+//   不能用 api.get()，因为 api.get() 内部调用 response.json()；
+//   图片响应体是 binary，不能解析为 JSON（会抛错）。
+//   必须直接使用 authenticatedFetch，手动调用 response.blob()。
+//
+// 认证：authenticatedFetch 自动携带 Authorization: Token <xxx> 头（REQ-NFR-004）。
+// 前端必须用本函数取图（禁止裸 import axios，见前端认证陷阱记录）。
+//
+// 参数：imageId — integer，来自 stream_end.related_images[i].image_id
+// 返回：Promise<Blob>（成功）
+// 异常：404/非 200 时抛出 Error；网络失败或 SESSION_EXPIRED 由 authenticatedFetch 统一处理
+export async function fetchRagImage(imageId) {
+  const response = await authenticatedFetch(`/api/rag/images/${imageId}/`, {
+    method: 'GET',
+  });
+  if (!response.ok) {
+    throw new Error(`fetchRagImage: HTTP ${response.status} for image_id=${imageId}`);
+  }
+  return response.blob();
+}

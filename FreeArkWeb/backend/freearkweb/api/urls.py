@@ -140,3 +140,11 @@ urlpatterns = [
 
 # 追加 RAG 路由（v1.4.0_sanheng_rag，不修改上方现有路由）
 urlpatterns += _rag_router.urls
+
+# v1.4.1 新增（IFC-141-801，MOD-141-09）：RAG 图片取图端点
+# 独立注册（非 router），仅支持 GET，权限 IsAuthenticated
+urlpatterns += [
+    path('rag/images/<int:image_id>/',
+         views_rag.RagImageView.as_view(),
+         name='rag-image-detail'),
+]

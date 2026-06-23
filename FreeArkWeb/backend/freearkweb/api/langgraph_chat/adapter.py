@@ -154,12 +154,30 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
                     yield ("reasoning", "🧭 已确定方向：" + "、".join(names) + "\n")
                 yield ("reasoning", "📊 正在调取数据并生成回复…\n")
 
-    if not seen_any and not interrupted:
-        # 非流式兜底：从最终态取整段答复（不重跑图，避免重复副作用）
-        snap = await orch.graph.aget_state(config)
-        msgs = (snap.values or {}).get("messages", []) if snap else []
-        if msgs and getattr(msgs[-1], "content", None):
-            yield ("content", msgs[-1].content)
+    # ── v1.4.1：在 astream 完成后，从最终 State 取 related_images（IFC-141-601）──
+    # 与 seen_any 兜底的 aget_state 合并为一次调用，避免两次 DB round-trip（ADR-IC-002）。
+    # 同时处理 related_images yield 和 非流式兜底内容补发：
+    if not interrupted:
+        try:
+            snap = await orch.graph.aget_state(config)
+        except Exception as snap_exc:   # noqa: BLE001 — aget_state 失败不影响主流程
+            logger.warning("_drive: aget_state 失败（非致命）: %s", snap_exc)
+            snap = None
+
+        # related_images：从最终 State 读取（aggregate 节点已统一汇聚去重）
+        try:
+            related_images = (snap.values or {}).get("related_images", []) if snap else []
+            if related_images:
+                yield ("related_images", json.dumps(related_images, ensure_ascii=False))
+        except Exception as ri_exc:   # noqa: BLE001 — 图片引用提取失败不影响主流程
+            logger.warning("_drive: 提取 related_images 失败（非致命）: %s", ri_exc)
+
+        # 非流式兜底（seen_any=False 时补发最终答复）
+        if not seen_any:
+            msgs = (snap.values or {}).get("messages", []) if snap else []
+            if msgs and getattr(msgs[-1], "content", None):
+                yield ("content", msgs[-1].content)
+    # ──────────────────────────────────────────────────────────────────────────
 
 
 class LangGraphAdapter:

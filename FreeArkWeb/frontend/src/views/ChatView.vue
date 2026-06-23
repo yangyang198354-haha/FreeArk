@@ -118,6 +118,38 @@
                 <el-button size="small" @click="handleConfirm(false)">取消</el-button>
               </div>
             </div>
+
+            <!-- v1.4.1 新增（IFC-141-1001/1002/1003，MOD-141-10）：图片引用区域 -->
+            <!-- 仅在 stream_end 后（streaming=false）且有 related_images 时渲染 -->
+            <div
+              v-if="!msg.streaming && msg.relatedImages && msg.relatedImages.length > 0"
+              class="rag-images-section"
+            >
+              <div class="rag-images-label">相关图片参考</div>
+              <div class="rag-images-grid">
+                <div
+                  v-for="img in msg.relatedImages"
+                  :key="img.image_id"
+                  class="rag-image-item"
+                >
+                  <!-- blob: URL 就绪后渲染 el-image；未就绪时显示占位 loading -->
+                  <el-image
+                    v-if="msg.imageUrls[img.image_id]"
+                    :src="msg.imageUrls[img.image_id]"
+                    fit="contain"
+                    :preview-src-list="[msg.imageUrls[img.image_id]]"
+                    class="rag-image-thumb"
+                  />
+                  <div v-else class="rag-image-loading">
+                    <span>加载中...</span>
+                  </div>
+                  <div v-if="img.source" class="rag-image-source" :title="img.source">
+                    {{ img.source }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- ─────────────────────────────────────────────── -->
           </div>
 
           <!-- 用户消息头像 -->
@@ -180,7 +212,7 @@ import { Bot } from 'lucide-vue-next'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import SessionSidebar from '../components/SessionSidebar.vue'
-import api from '../utils/api.js'
+import api, { fetchRagImage } from '../utils/api.js'
 import {
   chatHistoryCache,
   chatHistoryCacheTime,
@@ -366,6 +398,9 @@ export default {
         reasoningStreaming: false,
         confirm: null,
         statusText: '',
+        // v1.4.1 新增（IFC-141-1001）：图片引用（历史消息不含，初始化为空）
+        relatedImages: [],   // [{ image_id, source }]
+        imageUrls: {},       // image_id → blob: URL（懒加载）
       }
     }
 
@@ -513,6 +548,15 @@ export default {
           const last = messages.value[messages.value.length - 1]
           if (last && last.role === 'assistant') {
             last.streaming = false
+            // v1.4.1 新增（IFC-141-1002）：存储图片引用元数据，触发懒加载
+            if (data.related_images && data.related_images.length > 0) {
+              last.relatedImages = data.related_images   // [{ image_id, source }]
+              last.imageUrls = {}
+              // 懒加载：立即触发每张图片的 blob URL 获取
+              data.related_images.forEach(img => {
+                loadImageBlobUrl(last, img.image_id)
+              })
+            }
           }
           isWaiting.value = false
           scrollToBottom()
@@ -581,6 +625,9 @@ export default {
         reasoningStreaming: false, // v1.1 新增：收到首个 reasoning_token 后置 true
         confirm: null,             // 阶段 E：Tier-2 写确认门 { actions:[...] }，无则 null
         statusText: '',            // 静默期进度提示（status_update），content 到来前显示
+        // v1.4.1 新增（IFC-141-1001）：图片引用（stream_end 时写入）
+        relatedImages: [],         // [{ image_id, source }]
+        imageUrls: {},             // image_id → blob: URL（懒加载，loadImageBlobUrl 填入）
       })
 
       scrollToBottom()
@@ -611,6 +658,22 @@ export default {
       await nextTick()
       if (messagesContainer.value) {
         messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      }
+    }
+
+    // --- v1.4.1 图片 Blob URL 懒加载（IFC-141-1003，MOD-141-10）---
+    // blob: URL 生命周期与消息列表等同；组件卸载时统一撤销（onUnmounted）。
+    // 懒加载：stream_end 收到 related_images 后立即触发，不阻塞其他渲染。
+    // authenticatedFetch 已在 api.js 中统一携带 Bearer Token（前端认证陷阱规避）。
+    async function loadImageBlobUrl(msg, imageId) {
+      try {
+        const blob = await fetchRagImage(imageId)
+        const blobUrl = URL.createObjectURL(blob)
+        // 响应式写入：Vue 需要 [] 操作触发响应（直接赋属性已在 Vue3 中正常响应）
+        msg.imageUrls[imageId] = blobUrl
+      } catch (err) {
+        // 取图失败不影响文字回复，仅记录 console.warn（不打扰用户）
+        console.warn(`loadImageBlobUrl: 图片 ${imageId} 加载失败:`, err.message)
       }
     }
 
@@ -661,6 +724,15 @@ export default {
         try { ws.close() } catch (_) { /* 忽略 */ }
         ws = null
       }
+      // v1.4.1 新增（IFC-141-1004）：撤销所有 blob: URL，防止内存泄漏
+      // 每条消息的 imageUrls 是 image_id → blob: URL 映射
+      messages.value.forEach(msg => {
+        if (msg.imageUrls) {
+          Object.values(msg.imageUrls).forEach(blobUrl => {
+            try { URL.revokeObjectURL(blobUrl) } catch (_) { /* 忽略 */ }
+          })
+        }
+      })
     })
 
     return {
@@ -685,6 +757,8 @@ export default {
       handleSessionSelected,
       renderMarkdown,
       isRenderable,
+      // v1.4.1 新增（IFC-141-1003）：图片 Blob URL 懒加载（模板中 el-image 使用）
+      loadImageBlobUrl,
     }
   }
 }
@@ -1225,5 +1299,69 @@ details[open] .reasoning-summary::before {
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   margin: 8px 0;
+}
+
+/* ---- v1.4.1 RAG 图片引用区域（IFC-141-1001/1002/1003，MOD-141-10）---- */
+.rag-images-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rag-images-label {
+  font-size: 11px;
+  color: var(--color-text-secondary, #94A3B8);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rag-images-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rag-image-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 180px;
+}
+
+.rag-image-thumb {
+  width: 160px;
+  height: 120px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.rag-image-loading {
+  width: 160px;
+  height: 120px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rag-image-loading span {
+  font-size: 11px;
+  color: var(--color-text-secondary, #94A3B8);
+}
+
+.rag-image-source {
+  font-size: 11px;
+  color: var(--color-text-secondary, #94A3B8);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
