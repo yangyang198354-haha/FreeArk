@@ -535,6 +535,55 @@ class MaxImageBytesConstantTest(TestCase):
 
 
 # ============================================================
+# 9b. 方案1（图文同 chunk）：_inherit_page_image 单元测试
+# ============================================================
+
+@tag("unit")
+class InheritPageImageTest(TestCase):
+    """页面文字 chunk 继承本页代表图（方案1，修复"问图命中文字 chunk 却取不到图"）"""
+
+    def _text_chunk(self, content="第7页 B.DW02/03/04PX 内部结构 ①上面板"):
+        from api.rag_service import ParsedChunk
+        return ParsedChunk(content=content, page_or_section="第 7 页", is_image_ocr=False)
+
+    def test_inherit_largest_page_image(self):
+        """有图有文字：文字 chunk 继承本页最大图字节，is_image_ocr 仍为 False，content 不变"""
+        small = (b"\xff\xd8" + b"\x00" * 5000, "jpeg", 5002)
+        large = (b"\xff\xd8" + b"\x01" * 80000, "jpeg", 80002)
+        chunk = self._text_chunk()
+        RagParser._inherit_page_image([chunk], [small, large], "第 7 页")
+        self.assertEqual(chunk.img_bytes, large[0], "应继承本页最大的那张图")
+        self.assertEqual(chunk.img_format, "jpeg")
+        self.assertEqual(chunk.img_size, large[2])
+        self.assertFalse(chunk.is_image_ocr, "继承图不改 is_image_ocr（这是页面文字，非 OCR）")
+        self.assertIn("DW02", chunk.content, "content 不被破坏")
+
+    def test_skip_when_largest_below_threshold(self):
+        """本页最大图仍小于阈值（logo/分隔条）→ 不继承"""
+        tiny = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 100, "png", 108)
+        chunk = self._text_chunk()
+        RagParser._inherit_page_image([chunk], [tiny], "第 1 页")
+        self.assertIsNone(chunk.img_bytes, "小于阈值的小图不应被继承")
+
+    def test_no_overwrite_existing_img_bytes(self):
+        """已自带 img_bytes 的 chunk（如扫描页文字）不被覆盖"""
+        from api.rag_service import ParsedChunk
+        own = b"\xff\xd8" + b"\x09" * 90000
+        chunk = ParsedChunk(content="扫描页文字", page_or_section="第 2 页 扫描",
+                            is_image_ocr=True, img_bytes=own, img_format="png", img_size=len(own))
+        other = (b"\xff\xd8" + b"\x01" * 80000, "jpeg", 80002)
+        RagParser._inherit_page_image([chunk], [other], "第 2 页")
+        self.assertEqual(chunk.img_bytes, own, "已自带图字节的 chunk 不应被覆盖")
+
+    def test_noop_without_images_or_text(self):
+        """无图或无文字 chunk → 安全无操作"""
+        chunk = self._text_chunk()
+        RagParser._inherit_page_image([chunk], [], "第 7 页")   # 无图
+        self.assertIsNone(chunk.img_bytes)
+        RagParser._inherit_page_image([], [(b"x" * 80000, "png", 80000)], "第 7 页")  # 无文字（不抛）
+
+
+# ============================================================
 # 10. 集成测试
 # ============================================================
 
@@ -669,6 +718,57 @@ class RagIngestorIntegrationTest(TestCase):
         ocr_chunks = RagChunk.objects.filter(document=doc, is_image_ocr=True)
         for c in ocr_chunks:
             self.assertIsNone(c.image_id, "超限图片 chunk 的 image_id 应为 None")
+
+    def test_ingest_inherited_text_chunk_shares_one_image(self):
+        """
+        方案1：页面文字 chunk（继承本页图）与图片 OCR chunk 共享同一图字节
+        → 只建 1 行 RagImage，两 chunk image_id 同指；继承文字 chunk is_image_ocr=False 仍可被检索带图。
+        """
+        from api.rag_service import ParsedChunk
+
+        doc = _make_doc(self.user, file_name="inherit.pdf", status="pending")
+        diagram = b"\xff\xd8" + b"\x07" * 80000   # 同一张图的字节
+
+        parsed = [
+            # 页面文字 chunk：继承了本页图字节（is_image_ocr=False，有 content）
+            ParsedChunk(
+                content="第7页 B.DW02/03/04PX 内部结构 ①上面板②下面板",
+                page_or_section="第 7 页",
+                is_image_ocr=False,
+                img_bytes=diagram, img_format="jpeg", img_size=len(diagram),
+            ),
+            # 同一张图的 OCR 碎片 chunk（is_image_ocr=True，同一字节）
+            ParsedChunk(
+                content="12",
+                page_or_section="第 7 页 图片1",
+                is_image_ocr=True,
+                img_bytes=diagram, img_format="jpeg", img_size=len(diagram),
+            ),
+        ]
+
+        # parse_pdf 路径：mock parse_pdf 返回上述 chunk，走 .pdf 分支
+        from api.rag_service import RagIngestor
+        from unittest.mock import patch
+        import numpy as np
+        ingestor = RagIngestor()
+        with patch("api.rag_service.RagParser.parse_pdf", return_value=parsed), \
+             patch("api.rag_service.RagEmbedder.embed_texts",
+                   return_value=[np.zeros(4, dtype=np.float32)] * 2):
+            ingestor.ingest(doc.id, b"%PDF-1.4" + b"\x00" * 50, ".pdf")
+
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, "indexed", f"error: {doc.error_message}")
+
+        # 哈希去重：只建 1 行 RagImage
+        images = RagImage.objects.filter(document=doc)
+        self.assertEqual(images.count(), 1, "同一图字节应只建 1 行 RagImage")
+        img_id = images.first().id
+
+        # 两 chunk 都写入向量表，且 image_id 同指（关键：文字 chunk 也带图了）
+        text_chunk = RagChunk.objects.get(document=doc, is_image_ocr=False)
+        ocr_chunk = RagChunk.objects.get(document=doc, is_image_ocr=True)
+        self.assertEqual(text_chunk.image_id, img_id, "页面文字 chunk 应链接到图（方案1 核心）")
+        self.assertEqual(ocr_chunk.image_id, img_id, "图 OCR chunk 也链接到同一图")
 
     def test_ingest_no_image_doc(self):
         """
