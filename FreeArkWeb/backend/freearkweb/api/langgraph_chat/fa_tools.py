@@ -39,25 +39,53 @@ from langchain_core.tools import tool
 logger = logging.getLogger("api.langgraph_chat.fa_tools")
 
 # ── v1.4.1：ContextVar side-channel（ADR-IC-002，IFC-141-401/402）──────────
-# 每个 asyncio Task 有独立的 context 副本（Python 3.7+ 标准，asyncio.Task 自动 copy context）。
-# search_sanheng_knowledge @tool 在返回纯文本 str 给 LLM 之前，将 related_images 写入此 var；
-# orchestrator._expert 在工具调用后读取并清零，实现 side-channel 传递（C-003 LLM 不见 image_id）。
-_last_search_images_var: contextvars.ContextVar[list] = contextvars.ContextVar(
-    '_last_search_images_var', default=[])
+# 【2026-06-23 修正】原实现工具体内 `_last_search_images_var.set(images)` 回传——**实测失效**：
+# LangChain 的 tool.ainvoke() 无论同步/异步工具，都在 `copy_context().run(...)` 的**副本 context**
+# 里执行工具体（同步工具还另跑在 executor 线程）。在副本里 `.set()` 重新绑定的新对象**不会**反映
+# 回 orchestrator 所在的原 context，故 get_last_search_images() 恒读到默认空列表 → related_images
+# 永远为空、图片从不回显（v1.4.1 当时无图可挂，缺陷被掩盖）。
+#
+# 修法（原地 mutate 共享对象）：copy_context() 是**浅拷贝**，副本与原 context 指向**同一个 list**。
+# 于是改为：orchestrator 调工具**前** prepare_search_images_sink() 在当前 context 放入一个可变 list；
+# 工具体经 _emit_search_images() **原地 append/extend**（绝不 .set 重绑）该 list；调用后 orchestrator
+# 在原 context 读到同一个被改写的 list。默认 None 用于区分"未 prepare"（直接调用/单测）走 set 兜底。
+_last_search_images_var: contextvars.ContextVar = contextvars.ContextVar(
+    '_last_search_images_var', default=None)
+
+
+def prepare_search_images_sink() -> None:
+    """orchestrator 在调用 search_sanheng_knowledge 工具**前**调用：在当前 asyncio Task context
+    放入一个可变 list 作为回传容器（见上方机制说明）。每次工具调用前重置，防跨轮残留。"""
+    _last_search_images_var.set([])
+
+
+def _emit_search_images(images: list) -> None:
+    """工具体内回传 related_images：**原地改**当前 sink list（穿透 ainvoke 的 copy_context 副本）。
+    若未经 prepare（box 为 None，如直接调用/离线单测）则退回 .set（同 context 内可见，兼容旧测）。"""
+    box = _last_search_images_var.get()
+    if box is None:
+        _last_search_images_var.set(list(images))
+    else:
+        box.clear()
+        box.extend(images)
 
 
 def get_last_search_images() -> list:
     """
-    读取并清空本 asyncio Task context 中最近一次 search_rag() 产生的 related_images 列表。
+    读取并清空 sink 中最近一次 search_rag() 产生的 related_images 列表。
 
     调用方：orchestrator._expert（在调用 search_sanheng_knowledge tool 之后，IFC-141-401）
-    返回：list[dict]，格式为 [{"image_id": int, "source": str}, ...]
-          若无图片命中，返回 []
+    返回：list[dict]，格式为 [{"image_id": int, "source": str}, ...]；无命中返回 []
 
-    副作用：清空 ContextVar（防止跨 tool-call 轮次的数据残留）
+    副作用：重置 sink（在 orchestrator 真实 context 内直接调用，.set 生效；防跨 tool-call 轮次残留）。
+    注意：本函数由 orchestrator **直接**调用（非经 ainvoke），故此处 .set 有效——失效的只是工具体
+    内（ainvoke copy_context 副本）的 .set，那条路径才必须走 _emit_search_images 原地 mutate。
     """
-    images = _last_search_images_var.get([])
-    _last_search_images_var.set([])
+    box = _last_search_images_var.get()
+    if not box:
+        return []
+    images = list(box)
+    _last_search_images_var.set([])   # 重置（不原地改 box，避免动到调用方持有的列表引用）
     return images
 
 
@@ -290,16 +318,16 @@ def search_sanheng_knowledge(query: str) -> str:
         result = search_rag(query, k=k, threshold=threshold)
     except Exception as e:
         logger.warning("fa_tools: search_sanheng_knowledge 异常（降级）: %s", e)
-        _last_search_images_var.set([])   # 清空，防止残留（IFC-141-402）
+        _emit_search_images([])   # 清空，防止残留（IFC-141-402）
         return "[知识库暂时不可达，以下为通用知识参考。degraded=true]"
 
     if result.get('degraded'):
-        _last_search_images_var.set([])
+        _emit_search_images([])
         return "[知识库暂时不可达，以下为通用知识参考。degraded=true]"
 
     chunks = result.get('chunks', [])
     if not chunks:
-        _last_search_images_var.set([])
+        _emit_search_images([])
         return "[知识库中未找到与该问题相关的内容]"
 
     # ── v1.4.1 side-channel：收集 related_images，不进入返回的 str（C-003 防幻觉）──
@@ -313,7 +341,7 @@ def search_sanheng_knowledge(query: str) -> str:
                 "image_id": image_id,
                 "source": c.get('source', ''),
             })
-    _last_search_images_var.set(related_images)   # 写入 ContextVar，供 orchestrator._expert 读取
+    _emit_search_images(related_images)   # 原地回传 sink，供 orchestrator._expert 读取
     # ────────────────────────────────────────────────────────────────────────
 
     # 以下返回给 LLM 的文本不含 image_id（C-003 严格满足，IFC-141-402）

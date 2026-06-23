@@ -367,6 +367,45 @@ class FaToolsContextVarTest(TestCase):
 
 
 # ============================================================
+# 6b. side-channel 经 ainvoke 回传（2026-06-23 回归）
+# ============================================================
+
+@tag("unit")
+class SearchToolSideChannelAinvokeTest(TestCase):
+    """回归：search_sanheng_knowledge 经 `.ainvoke()` 调用后，side-channel 仍能回传 related_images。
+
+    背景：原实现工具体内 `_last_search_images_var.set(images)` 在 ainvoke 的 copy_context 副本里
+    丢失，get_last_search_images() 恒空 → 图片从不回显。改为 prepare(放可变 sink)+原地 mutate 后修复。
+    本测试**经真实 ainvoke 路径**断言（原有 FaToolsContextVarTest 只直接 set/get，测不出此回归）。
+    """
+
+    def test_side_channel_survives_ainvoke(self):
+        from unittest.mock import patch
+        from api.langgraph_chat.fa_tools import (
+            search_sanheng_knowledge, prepare_search_images_sink, get_last_search_images)
+
+        fake = {"degraded": False, "chunks": [
+            {"content": "B.DW02/03/04PX 内部结构 ①上面板", "source": "DW.pdf · 第 7 页",
+             "is_image_ocr": False, "score": 0.9, "image_id": 119},
+        ]}
+
+        async def run():
+            with patch("api.rag_service.search_rag", return_value=fake):
+                prepare_search_images_sink()                              # orchestrator 调用前置
+                out = await search_sanheng_knowledge.ainvoke({"query": "DW 内部结构图"})
+                imgs = get_last_search_images()
+            return out, imgs
+
+        out, imgs = asyncio.run(run())
+        self.assertIn("检索到", out)
+        self.assertEqual(len(imgs), 1, "经 ainvoke 后 side-channel 应回传 1 张图（修复前为空）")
+        self.assertEqual(imgs[0]["image_id"], 119)
+        # C-003：image_id 不得泄露进返回给 LLM 的文本
+        self.assertNotIn("119", out)
+        self.assertNotIn("image_id", out)
+
+
+# ============================================================
 # 7. RagImageView 端点测试
 # ============================================================
 

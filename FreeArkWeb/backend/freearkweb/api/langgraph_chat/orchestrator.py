@@ -50,7 +50,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
 from .adapter import INTERNAL_NOSTREAM_TAG
-from .fa_tools import TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write, get_last_search_images
+from .fa_tools import (TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write,
+                       get_last_search_images, prepare_search_images_sink)
 from .prompts import EXPERT_PROMPTS
 from .router import classify_experts
 
@@ -321,10 +322,13 @@ class Orchestrator:
                     delegations.append(log)
                 else:
                     t = tool_map.get(tc["name"])
-                    out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
-                    # ── v1.4.1：仅对 search_sanheng_knowledge 工具读取 side-channel（IFC-141-502）──
+                    # ── v1.4.1：search_sanheng_knowledge 前先放置可变 sink，工具体原地回传图片
+                    # （2026-06-23 修正 ContextVar 经 ainvoke copy_context 失效，见 fa_tools 说明）──
                     if tc["name"] == "search_sanheng_knowledge":
-                        imgs = get_last_search_images()   # 读取并清零 ContextVar
+                        prepare_search_images_sink()
+                    out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
+                    if tc["name"] == "search_sanheng_knowledge":
+                        imgs = get_last_search_images()   # 读取并清空 sink（IFC-141-502）
                         accumulated_images.extend(imgs)
                     # ──────────────────────────────────────────────────────────────────────
                 msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
