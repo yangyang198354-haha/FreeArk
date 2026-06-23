@@ -76,6 +76,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # 阶段 E：Tier-2 写确认门状态。
         self._awaiting_confirm = False
         self._confirm_accumulated = ''
+        # ── v1.4.1 新增（IFC-141-701，MOD-141-07）──────────────────────────────
+        self._related_images: list = []   # 存储本轮 related_images（实时，不持久化，OQ-IC-004）
 
         query_string = self.scope.get('query_string', b'')
         params = parse_qs(query_string)
@@ -316,7 +318,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self._confirm_accumulated = accumulated_content
                 return  # 不发 stream_end、不写 assistant 记录（确认后再终结本轮）
 
-            await self._finalize_turn(accumulated_content)
+            # ── v1.4.1：取出本轮收集的 related_images，立即重置防下轮残留（IFC-141-703）──
+            related_images = self._related_images
+            self._related_images = []   # 重置
+            # ────────────────────────────────────────────────────────────────────────
+            await self._finalize_turn(accumulated_content, related_images=related_images)
 
             # ADR-002：首轮完成后异步生成 LLM 标题（user+assistant各一条）
             if (
@@ -396,12 +402,34 @@ class ChatConsumer(AsyncWebsocketConsumer):
             elif kind == 'status':
                 # 静默期进度提示（分类/查询/生成阶段），不计入 accumulated、不落库
                 await self.send(json.dumps({'type': 'status_update', 'message': text}))
+            elif kind == 'related_images':
+                # v1.4.1 新增（IFC-141-702）：存入实例变量，不转发 WS
+                # 通过 _finalize_turn 的 stream_end 统一发送给前端（OQ-IC-004）
+                try:
+                    self._related_images = json.loads(text) or []
+                except (ValueError, TypeError):
+                    self._related_images = []
+                    logger.warning(
+                        "ChatConsumer._pump: related_images 解析失败，忽略: %s", text[:200])
             # else: 未知 kind，静默忽略（前向兼容）
         return ('done', accumulated)
 
-    async def _finalize_turn(self, accumulated_content: str):
-        """结束一轮：发 stream_end，写入 assistant 记录（失败则存 pending）。"""
-        await self.send(json.dumps({'type': 'stream_end'}))
+    async def _finalize_turn(self, accumulated_content: str,
+                             related_images: list | None = None):
+        """结束一轮：发 stream_end（v1.4.1 新增 related_images 字段），写入 assistant 记录。
+
+        related_images 格式：[{"image_id": int, "source": str}, ...] 或 []
+        OQ-IC-004 决策：related_images 不持久化到 chat_memory.append_message，
+                       仅随 stream_end 实时发送给前端。
+
+        IFC-141-704，MOD-141-07
+        """
+        # 构造 stream_end 载荷（related_images 为空时不加字段，向后兼容）
+        payload: dict = {'type': 'stream_end'}
+        if related_images:
+            payload['related_images'] = related_images
+        await self.send(json.dumps(payload))
+
         if self.chat_session is not None and accumulated_content:
             try:
                 await sync_to_async(chat_memory.append_message)(
@@ -436,7 +464,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self._awaiting_confirm = True
                 self._confirm_accumulated = accumulated
                 return
-            await self._finalize_turn(accumulated)
+            # v1.4.1：confirm 路径（写确认门）不涉及知识专家，related_images 恒为空（DEV-002）
+            await self._finalize_turn(accumulated, related_images=[])
         except OpenClawUnavailableError as exc:
             logger.warning('ChatConsumer: confirm resume 不可用: %s', exc)
             await self.send(json.dumps({

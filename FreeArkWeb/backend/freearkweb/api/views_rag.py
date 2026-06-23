@@ -1,14 +1,23 @@
 """
-api.views_rag — RAG 知识库 API 视图（v1.4.0_sanheng_rag）
+api.views_rag — RAG 知识库 API 视图（v1.4.1_rag_image_citation）
 
 端点：
   GET  /api/rag/documents/              列出所有文档（管理员）
   POST /api/rag/documents/              上传文档（管理员，异步入库）
   DELETE /api/rag/documents/{id}/       删除文档+向量（管理员）
   POST /api/rag/documents/{id}/retry/   失败文档重试（管理员）
+  GET  /api/rag/images/{image_id}/      取图（所有已登录用户，v1.4.1 新增）
 
-权限：IsAdminUser（本项目自定义，校验 role=='admin'；非 DRF 内置的 is_staff）。
+权限：
+  文档管理端点：IsAdminUser（本项目自定义，校验 role=='admin'；非 DRF 内置的 is_staff）。
+  取图端点：    IsAuthenticated（Bearer Token，所有已登录用户，REQ-NFR-004）。
+
 安全：文件双重校验（扩展名 + 文件头字节签名）；原始文件不落盘。
+
+@module MOD-141-08（RagImageView）
+@implements IFC-141-801
+@depends MOD-141-01（RagImage 模型）
+@author sub_agent_software_developer
 """
 
 from __future__ import annotations
@@ -17,11 +26,13 @@ import logging
 import os
 
 from django.db import transaction
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 # 注意：用本项目 views.IsAdminUser（role=='admin'），不是 DRF 内置的 is_staff 版本。
 # 本平台 admin 概念 = User.role=='admin'，与设备写授权/工单审批保持一致。
@@ -203,3 +214,58 @@ class RagDocumentViewSet(viewsets.GenericViewSet):
         logger.info("views_rag: 文档 %s（id=%s）重试已触发", doc.file_name, doc.id)
         serializer = self.get_serializer(doc)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ── v1.4.1 新增：RagImageView（IFC-141-801，MOD-141-08）─────────────────────
+
+class RagImageView(APIView):
+    """
+    GET /api/rag/images/<image_id>/
+
+    返回图片二进制内容（image/png 或 image/jpeg）。
+    权限：IsAuthenticated — 所有已登录用户（前端 Bearer Token 认证）。
+    前端必须使用 authenticatedFetch 获取 Blob 后创建 blob: URL（REQ-FUNC-004/005）；
+    直接请求 URL 会因无 Bearer Token 而 401（REQ-NFR-004 认证不绕过）。
+
+    响应：
+      200  图片字节（Content-Type: image/png 或 image/jpeg）
+      404  image_id 不存在
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    # MIME 映射（按 RagImage.image_format，IFC-141-801 规范：仅 png/jpeg/other）
+    _FORMAT_TO_MIME: dict = {
+        'png': 'image/png',
+        'jpeg': 'image/jpeg',
+        'jpg': 'image/jpeg',
+        'other': 'application/octet-stream',
+    }
+
+    def get(self, request, image_id: int):
+        """
+        返回指定 image_id 的原始图片字节。
+        BinaryField 在 Python 层返回 memoryview（MySQL）或 bytes（SQLite），
+        需调用 bytes() 转换后再写响应体（IFC-141-801 注意事项）。
+        """
+        from .models_rag import RagImage   # 延迟 import（与 ViewSet 放同文件，避免 import 序）
+        try:
+            img = RagImage.objects.only('image_data', 'image_format').get(pk=image_id)
+        except RagImage.DoesNotExist:
+            return HttpResponse(status=404)
+
+        # BinaryField 兼容：SQLite 返回 bytes，MySQL 返回 memoryview
+        img_bytes = bytes(img.image_data)
+        mime = self._FORMAT_TO_MIME.get(img.image_format, 'application/octet-stream')
+
+        response = HttpResponse(
+            img_bytes,
+            content_type=mime,
+            status=200,
+        )
+        # REQ-NFR-004 安全要求：
+        # Content-Disposition: inline — 防止浏览器将图片误判为可下载/可执行文件
+        # Cache-Control: no-store — 图片可能含设备参数等敏感信息，禁止浏览器缓存
+        response['Content-Disposition'] = 'inline'
+        response['Cache-Control'] = 'no-store'
+        return response
