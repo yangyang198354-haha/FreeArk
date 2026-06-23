@@ -384,6 +384,51 @@ class RagParser:
             return (None, '')
         return (img_bytes, img_format)
 
+    # ── 方案1（图文同 chunk）：页面文字 chunk 继承本页代表图 ────────────────────
+    # 继承图片的最小尺寸阈值（字节）。工程图纸/示意图导出通常数十 KB 以上；过滤掉
+    # logo/页眉小图/扫描分隔条等"伪图"，避免文字 chunk 继承到无意义小图。
+    # （生产实证 doc31：真实图纸 21KB~310KB，垃圾碎片 <1KB；阈值 4KB 全部命中且滤掉碎片。）
+    _MIN_INHERIT_IMG_BYTES = 4096
+
+    @staticmethod
+    def _inherit_page_image(
+        text_chunks: List['ParsedChunk'],
+        page_images: List[tuple],
+        page_label: str,
+    ) -> None:
+        """让本页「页面文字 chunk」继承本页代表图片的字节，使「描述图的文字」与「图」落到同一可检索 chunk。
+
+        动机（生产实证）：PDF 解析的 路径1(页面文字层) 与 路径2(图片OCR) 产出**两条独立 chunk**——
+        描述详尽的文字（如 "B.DW02/03/04PX 内部结构 ①上面板…"）在文字 chunk（image_id=NULL），
+        而图自身 OCR 多为碎片（"12"/"al"），用户"问图"时语义命中文字 chunk 却取不到图。
+        令文字 chunk 继承本页图片后，命中描述文字即可回显原图。亦可救回"OCR 空、仅占位"的孤儿图。
+
+        选图规则：取本页**最大**的一张已存图片（图纸通常远大于 logo），且需 ≥ 阈值。受 RagChunk.image
+        单 FK 约束，每 chunk 只继承一张；一页多图时其余图仍由各自 OCR chunk 承载（命中其碎片文字才出，
+        概率低，属已知局限）。
+
+        不改 is_image_ocr（保持 False：这是页面文字，非图片 OCR），不覆盖已自带 img_bytes 的 chunk
+        （路径3 扫描页文字本就源自整页图）。依赖 RagIngestor 的 img_bytes 哈希去重：文字 chunk 与图
+        OCR chunk 共享同一图字节 → 只建一行 RagImage，二者 image_id 指向同一图。
+        """
+        if not text_chunks or not page_images:
+            return
+        primary = max(page_images, key=lambda t: t[2])   # 取本页最大图作代表
+        p_bytes, p_fmt, p_size = primary
+        if p_size < RagParser._MIN_INHERIT_IMG_BYTES:
+            return   # 仅 logo/分隔条等小图，不继承
+        inherited = 0
+        for c in text_chunks:
+            if c.img_bytes is None:   # 不覆盖已自带图字节的 chunk（如扫描页文字）
+                c.img_bytes = p_bytes
+                c.img_format = p_fmt
+                c.img_size = p_size
+                inherited += 1
+        if inherited:
+            logger.info(
+                "rag_service: %s 文字 chunk 继承本页代表图（%d 字节）×%d 条（方案1 图文同 chunk）",
+                page_label, p_size, inherited)
+
     def _split_text(self, text: str, source: str,
                     is_image_ocr: bool = False) -> List[ParsedChunk]:
         """
@@ -497,6 +542,10 @@ class RagParser:
         - 扫描件/图纸 fallback：若整页既无文本层又无可提取 XObject 图片，
           则将该页光栅化（get_pixmap）后整体 OCR，来源标注"第 N 页 扫描"。
           此 fallback 覆盖"整页内容编码为页面位图流而非 XObject"的扫描 PDF。
+
+        方案1（图文同 chunk）：页末令本页「页面文字 chunk」继承本页代表图片字节
+        （见 _inherit_page_image），使"描述图的文字"与"图"落到同一可检索 chunk——
+        修复"问图时命中文字 chunk 却取不到图"（图自身 OCR 多为碎片，语义匹配不上）。
         """
         import io
         import fitz  # PyMuPDF
@@ -507,11 +556,15 @@ class RagParser:
         for page_num in range(len(doc)):
             page = doc[page_num]
             page_label = f"第 {page_num + 1} 页"
+            # 方案1（图文同 chunk）：按页收集，便于页末让文字 chunk 继承本页代表图。
+            page_text_chunks: List[ParsedChunk] = []
+            page_image_chunks: List[ParsedChunk] = []
+            page_images: List[tuple] = []   # 本页已存图片 [(bytes, fmt, size)]，供文字 chunk 继承
 
             # ── 路径1：页面文字层 ──────────────────────────────────────────
             text = page.get_text().strip()
             if text:
-                chunks.extend(self._split_text(text, page_label))
+                page_text_chunks.extend(self._split_text(text, page_label))
 
             # ── 路径2：页面内嵌 XObject 图片 OCR ──────────────────────────
             img_list = page.get_images(full=True)
@@ -529,6 +582,9 @@ class RagParser:
                     source_hint = f"{page_label} 图片{img_idx + 1}"
                     saved_bytes, saved_fmt = self._try_save_image_bytes(
                         img_bytes_raw, img_fmt, source_hint)
+                    if saved_bytes is not None:
+                        # 方案1：登记本页图片，供页末文字 chunk 继承
+                        page_images.append((saved_bytes, saved_fmt, len(saved_bytes)))
 
                     ocr_text = self._ocr_image(img_bytes_raw)
                     if ocr_text:
@@ -538,7 +594,7 @@ class RagParser:
                             c.img_bytes = saved_bytes
                             c.img_format = saved_fmt
                             c.img_size = len(saved_bytes) if saved_bytes else 0
-                        chunks.extend(split_chunks)
+                        page_image_chunks.extend(split_chunks)
                     elif saved_bytes is not None:
                         # 无 OCR 文字但有图片（OQ-IC-003）
                         placeholder = ParsedChunk(
@@ -549,7 +605,7 @@ class RagParser:
                             img_format=saved_fmt,
                             img_size=len(saved_bytes),
                         )
-                        chunks.append(placeholder)
+                        page_image_chunks.append(placeholder)
                 except Exception as e:
                     logger.warning("rag_service: pdf 图片 OCR 失败，跳过: %s", e)
 
@@ -591,6 +647,10 @@ class RagParser:
                             scan_source = f"{page_label} 扫描"
                             saved_bytes, saved_fmt = self._try_save_image_bytes(
                                 png_bytes, 'png', scan_source)
+                            if saved_bytes is not None:
+                                # 方案1：登记本页整页图，供文字 chunk 继承（路径3 文字本就源自整页图，
+                                # 其文字 chunk 已自带 img_bytes，_inherit_page_image 不会覆盖）
+                                page_images.append((saved_bytes, saved_fmt, len(saved_bytes)))
 
                             ocr_text = self._ocr_image(png_bytes)
                             if ocr_text:
@@ -600,7 +660,7 @@ class RagParser:
                                     c.img_bytes = saved_bytes   # 可能为 None（超 10MB）
                                     c.img_format = saved_fmt
                                     c.img_size = len(saved_bytes) if saved_bytes else 0
-                                chunks.extend(split_chunks)
+                                page_image_chunks.extend(split_chunks)
                             elif saved_bytes is not None:
                                 # 扫描件 OCR 空 + 图片可存：创建占位 chunk（OQ-IC-003）
                                 placeholder = ParsedChunk(
@@ -611,7 +671,7 @@ class RagParser:
                                     img_format=saved_fmt,
                                     img_size=len(saved_bytes),
                                 )
-                                chunks.append(placeholder)
+                                page_image_chunks.append(placeholder)
                                 logger.warning(
                                     "rag_service: 第 %d 页扫描件 OCR 返回空（图纸无可识别文字或图像质量不足），图片仍存储",
                                     page_num + 1,
@@ -626,6 +686,11 @@ class RagParser:
                             "rag_service: 第 %d 页扫描件整页 OCR 失败，跳过: %s",
                             page_num + 1, e,
                         )
+
+            # ── 方案1（图文同 chunk）：本页文字 chunk 继承本页代表图，再按"文字先、图后"汇入 ──
+            self._inherit_page_image(page_text_chunks, page_images, page_label)
+            chunks.extend(page_text_chunks)
+            chunks.extend(page_image_chunks)
 
         return chunks
 
