@@ -664,8 +664,9 @@ DOUBAO_VISION_BASE_URL = os.environ.get(
 DOUBAO_API_KEY = os.environ.get('DOUBAO_API_KEY', '')
 
 # DOUBAO_VISION_TIMEOUT：单次 VLM 调用超时秒数
-# Pi WiFi 偶发 >15s（历史实测 8 次约 1 次），设 30s 保护（C-003）
-DOUBAO_VISION_TIMEOUT = int(os.environ.get('DOUBAO_VISION_TIMEOUT', '30'))
+# doubao-vision-pro 推理偏慢 + Pi WiFi 偶发劣化，实测缩图后单次约 10s，但延迟方差大
+# （同一 payload 偶尔 >30s）；配合 _downscale_for_vlm 缩图，默认 60s 留足余量（C-003）
+DOUBAO_VISION_TIMEOUT = int(os.environ.get('DOUBAO_VISION_TIMEOUT', '60'))
 
 # DOUBAO_VISION_MAX_RETRIES：超时/5xx 时最大重试次数
 # 指数退避 2s 起始；4xx 不重试

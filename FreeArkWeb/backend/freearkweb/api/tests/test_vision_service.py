@@ -41,6 +41,7 @@ from api.vision_service import (
     get_upload,
     store_upload,
     analyze_image,
+    _downscale_for_vlm,
     _store_lock,
 )
 import api.vision_service as vs_module
@@ -459,6 +460,64 @@ class TestAnalyzeImage(unittest.IsolatedAsyncioTestCase):
 
         # 应该尝试 2 次（1 次原始 + 1 次重试，max_retries 默认 1）
         self.assertEqual(call_count, 2, f"非 4xx 应重试 1 次，共调用 2 次，实际: {call_count}")
+
+
+# ── TC-UNIT-026 ~ TC-UNIT-029：_downscale_for_vlm（大图超时修复）─────────────────
+
+try:
+    import PIL  # noqa: F401
+    _HAS_PIL = True
+except Exception:
+    _HAS_PIL = False
+
+
+@unittest.skipUnless(_HAS_PIL, "Pillow 未安装（生产/CI 经 rapidocr 传递引入；本地 dev 可能缺）")
+class TestDownscaleForVlm(unittest.TestCase):
+    """_downscale_for_vlm 单元测试：大图缩放、小图直通、坏字节兜底退回原图。
+
+    修复背景：原图直发 doubao-vision 大图超时 → VisionServiceError。
+    """
+
+    def _make_jpeg(self, w, h, quality=92):
+        from PIL import Image
+        import io as _io
+        import os as _os
+        # 噪声填充，确保 JPEG 体积不会被压到极小
+        im = Image.frombytes("RGB", (w, h), _os.urandom(w * h * 3))
+        buf = _io.BytesIO()
+        im.save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
+
+    def test_TC_UNIT_026_large_image_downscaled(self):
+        """超长边大图 → 缩到最长边 <= _VLM_MAX_EDGE，且字节显著变小。"""
+        from PIL import Image
+        import io as _io
+        big = self._make_jpeg(3000, 2200)
+        out = _downscale_for_vlm(big)
+        self.assertLess(len(out), len(big), "缩放后字节应变小")
+        with Image.open(_io.BytesIO(out)) as im:
+            self.assertLessEqual(max(im.size), vs_module._VLM_MAX_EDGE)
+
+    def test_TC_UNIT_027_small_image_passthrough(self):
+        """尺寸小且字节小的图 → 原样返回（不重编码）。"""
+        small = self._make_jpeg(320, 240, quality=70)
+        if len(small) <= vs_module._VLM_MAX_BYTES:
+            out = _downscale_for_vlm(small)
+            self.assertEqual(out, small, "小图应原样返回")
+
+    def test_TC_UNIT_028_invalid_bytes_returns_original(self):
+        """非图片字节（Pillow 解码失败）→ 兜底退回原始字节，不抛异常。"""
+        garbage = b"this is definitely not an image"
+        out = _downscale_for_vlm(garbage)
+        self.assertEqual(out, garbage)
+
+    def test_TC_UNIT_029_small_dims_large_bytes_recompressed(self):
+        """尺寸不大但字节超 _VLM_MAX_BYTES → 重编码压缩变小。"""
+        # 高质量噪声图，尺寸 1200 但字节很可能 > _VLM_MAX_BYTES
+        data = self._make_jpeg(1200, 1200, quality=100)
+        out = _downscale_for_vlm(data)
+        if len(data) > vs_module._VLM_MAX_BYTES:
+            self.assertLessEqual(len(out), len(data))
 
 
 if __name__ == "__main__":

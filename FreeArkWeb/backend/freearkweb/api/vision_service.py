@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import logging
 import threading
 import time
@@ -31,6 +32,50 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 logger = logging.getLogger("api.vision_service")
+
+# ── 发往 VLM 前的图片预处理上限 ───────────────────────────────────────────────────
+# v1.5.0 上线后实测修复：doubao-vision 对大图推理慢 + Pi WiFi 上传慢，原图直发易超
+# timeout（11MB 图两次 30s 尝试均超时 → VisionServiceError "图片分析暂时不可用"）。
+# 缩到最长边 <= _VLM_MAX_EDGE 且重编码 JPEG 后 payload 由 MB 级降到百 KB 级，
+# 单次推理约 10s 内完成。
+_VLM_MAX_EDGE = 1536                      # 最长边像素上限，超过则等比缩小
+_VLM_JPEG_QUALITY = 85                    # 缩放/重编码后的 JPEG 质量
+_VLM_MAX_BYTES = 1536 * 1024             # 即使尺寸不大，字节超此值也重编码压缩
+
+
+def _downscale_for_vlm(image_bytes: bytes) -> bytes:
+    """把过大的图片等比缩小 + 重编码为 JPEG，控制发往 VLM 的 payload 体积。
+
+    触发条件：最长边 > _VLM_MAX_EDGE，或原始字节 > _VLM_MAX_BYTES。
+    任何失败（Pillow 不可用 / 非图片字节 / 解码异常）都退回原始字节，绝不阻断调用。
+    安全约束：日志中只打尺寸与字节数，绝不打图片内容。
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as im:
+            im = im.convert("RGB")
+            w, h = im.size
+            need_resize = max(w, h) > _VLM_MAX_EDGE
+            need_recompress = len(image_bytes) > _VLM_MAX_BYTES
+            if not need_resize and not need_recompress:
+                return image_bytes
+            if need_resize:
+                im.thumbnail((_VLM_MAX_EDGE, _VLM_MAX_EDGE), Image.LANCZOS)
+            out = io.BytesIO()
+            im.save(out, format="JPEG", quality=_VLM_JPEG_QUALITY, optimize=True)
+            result = out.getvalue()
+        logger.info(
+            "vision_service._downscale_for_vlm: %dx%d %dB -> JPEG %dB",
+            w, h, len(image_bytes), len(result),
+        )
+        return result
+    except Exception as exc:
+        logger.warning(
+            "vision_service._downscale_for_vlm: 跳过缩放（退回原图）: %s",
+            type(exc).__name__,
+        )
+        return image_bytes
 
 # ── 异常类 ─────────────────────────────────────────────────────────────────────
 
@@ -230,8 +275,10 @@ async def analyze_image(image_bytes: bytes, user_text: str) -> str:
         "请描述这张图片的内容，包括图中的文字、数字、设备型号、状态等关键信息。"
     )
 
+    # 发送前等比缩小 + 重编码，避免大图超时（v1.5.0 上线后修复）
+    image_bytes = _downscale_for_vlm(image_bytes)
     size = len(image_bytes)
-    logger.info("vision_service.analyze_image: start size=%d bytes", size)
+    logger.info("vision_service.analyze_image: start size=%d bytes (post-downscale)", size)
 
     from openai import AsyncOpenAI
 
