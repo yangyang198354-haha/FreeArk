@@ -26,12 +26,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 # 复用 OpenClaw 适配层的异常类型，使 ChatConsumer 的 except 分支零改动即可接管降级。
 from api.openclaw_adapter import OpenClawUnavailableError
+# v1.5.0：VLM 服务（MOD-MQ-03）。ImageExpiredError/ImageAccessDeniedError 由调用方捕获。
+from api import vision_service
+from api.vision_service import ImageExpiredError, ImageAccessDeniedError, VisionServiceError
 
 logger = logging.getLogger("api.langgraph_chat.adapter")
 
@@ -182,18 +185,79 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
 
 class LangGraphAdapter:
     @classmethod
-    async def stream_chat(cls, message: str,
-                          session_key: str) -> AsyncGenerator[tuple[str, str], None]:
+    async def stream_chat(
+        cls,
+        message: str,
+        session_key: str,
+        upload_id: Optional[str] = None,
+        user_id: Optional[int] = None,
+    ) -> AsyncGenerator[tuple[str, str], None]:
+        """
+        流式聊天入口（v1.5.0 扩展）。
+
+        upload_id 非空时（图文混合消息）：
+          1. vision_service.get_upload(upload_id, user_id) → image_bytes
+             ImageExpiredError / ImageAccessDeniedError → re-raise（由 consumers 捕获）
+          2. await vision_service.analyze_image(image_bytes, message) → description
+             VisionServiceError → re-raise（由 consumers 捕获）
+          3. 释放 image_bytes 引用（REQ-NFR-002）
+          4. vision_service.delete_upload(upload_id)（释放临时存储）
+          5. enhanced_message = f"[用户图片分析：{description}]\n\n{message}"
+          6. 流结束后 yield ("persist_enhanced_message", persist_msg)
+             persist_msg = f"[图片描述：{description}] {message}"（用于持久化）
+
+        向后兼容：upload_id=None 时行为与 v1.4.1 完全一致。
+        """
         orch = _get_orch()  # 构造失败 → OpenClawUnavailableError，交由 consumers 降级
         config = orch._cfg(session_key)  # thread_id=session_key：interrupt/resume 同线程
+
+        vision_description: Optional[str] = None
+        enhanced_message = message
+
+        # ── VLM 前置调用（仅当 upload_id 非空）────────────────────────────────
+        if upload_id is not None and user_id is not None:
+            # 1. 取图片字节（ImageExpiredError / ImageAccessDeniedError 由 consumers 捕获）
+            image_bytes = vision_service.get_upload(upload_id, user_id)
+            try:
+                # 2. 调用 VLM（VisionServiceError 由 consumers 捕获）
+                vision_description = await vision_service.analyze_image(
+                    image_bytes, message
+                )
+            finally:
+                # 3. 立即释放图片字节引用（REQ-NFR-002 内存约束）
+                del image_bytes
+
+            # 4. VLM 完成后删除临时存储（释放 dict 内存）
+            vision_service.delete_upload(upload_id)
+
+            # 5. 构建注入 LangGraph 的增强消息（供 _route/_fan_out/_expert 使用）
+            enhanced_message = f"[用户图片分析：{vision_description}]\n\n{message}"
+        # ── VLM 前置调用结束 ───────────────────────────────────────────────────
+
         try:
             async for kind, text in _drive(
-                    orch, {"messages": [HumanMessage(content=message)]}, config):
+                    orch,
+                    {
+                        "messages": [HumanMessage(content=enhanced_message)],
+                        "vision_description": vision_description,
+                    },
+                    config):
                 yield (kind, text)
+
+            # 6. 流结束后，通过特殊 kind 回传持久化用的增强消息
+            if vision_description is not None:
+                # 持久化格式：[图片描述：<VLM输出>] <原始文字>
+                # 与 adapter 内部格式（[用户图片分析：...]）不同：
+                #   内部格式供 LLM 理解用，持久化格式供前端检测 [图片描述：前缀标注含图
+                persist_msg = f"[图片描述：{vision_description}] {message}"
+                yield ("persist_enhanced_message", persist_msg)
+
         except asyncio.TimeoutError:
             raise  # 透传 → ChatConsumer 映射 TIMEOUT（与 OpenClaw 路径一致）
         except OpenClawUnavailableError:
             raise
+        except (ImageExpiredError, ImageAccessDeniedError, VisionServiceError):
+            raise  # VLM 相关异常透传给 consumers 的专用 except 块
         except Exception as exc:  # noqa: BLE001
             logger.error("LangGraph 流式失败 session=%s: %s",
                          (session_key or "")[:8], exc)

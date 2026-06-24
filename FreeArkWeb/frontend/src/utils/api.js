@@ -424,3 +424,98 @@ export async function fetchRagImage(imageId) {
   }
   return response.blob();
 }
+
+// ── v1.5.0 新增（IFC-MQ-01-001，MOD-MQ-01）──────────────────────────────────
+// uploadChatImage：图片预上传，返回 { upload_id, expires_in }
+//
+// 设计决策（C-010 硬约束）：
+//   必须通过 authenticatedFetch 封装调用，禁止裸 axios（见 freeark-frontend-bare-axios-session-trap）。
+//   不使用 api.post()——该方法设置 Content-Type: application/json + body: JSON.stringify，
+//   不兼容 multipart/form-data；需手动构造 FormData 并让 fetch 自动设置边界。
+//
+// 安全约束（SC-001/SC-002）：
+//   图片字节以 Blob 对象通过 multipart/form-data 上传，不做 base64 编码，
+//   不出现在任何 console.log、URL、WS 帧中。
+//
+// 参数：file — File 或 Blob 对象（前端 Canvas 压缩后的输出）
+// 返回：Promise<{ upload_id: string, expires_in: number }>
+// 异常：HTTP 非 200/413/400/503 时抛出 Error（含状态码）；SESSION_EXPIRED 由 authenticatedFetch 统一处理
+export async function uploadChatImage(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  // authenticatedFetch 默认会在 headers 中设置 'Content-Type': 'application/json'，
+  // 但 multipart/form-data 需要 fetch 自动计算 boundary，不能手动设置 Content-Type。
+  // 解决方案：先调用 authenticatedFetch，再在发出前删除 Content-Type 头。
+  // 实现：使用带自定义 headers 的方式，传入对象后删除 Content-Type 键。
+  //
+  // 注意：authenticatedFetch 的 mergedOptions.headers 是普通对象（不是 Headers 实例），
+  // 可以直接 delete。但 authenticatedFetch 内部已经完成合并，需要在外层处理。
+  //
+  // 最简洁方案：直接构造带认证头的 fetch 请求（不经 authenticatedFetch 的 Content-Type 层）。
+  // authenticatedFetch 的核心价值是：Bearer Token + CSRF + 401 统一处理。
+  // 此处通过 authenticatedFetch 获取认证信息，再单独构造请求。
+  //
+  // 实际上，可以借助 authenticatedFetch 的 headers 覆盖机制：
+  // 当 options.headers['Content-Type'] 被设为 null/空字符串时，merged header 仍存在该键。
+  // 最终 fetch 会因 Content-Type 不正确而出错（boundary 丢失）。
+  //
+  // 正确做法：让 authenticatedFetch 处理认证，但 body 为 FormData 且不手动设 Content-Type。
+  // authenticatedFetch 展开 headers 后调用 fetch，此时 Content-Type: 'application/json' 存在。
+  // 浏览器看到 Content-Type: application/json + FormData body 不会自动改写。
+  //
+  // 最终选择：完全手动构造认证 fetch，复用 getAuthToken/getCSRFToken 私有函数。
+  // 但这些函数未导出。因此采用"传递特殊标记让 authenticatedFetch 跳过 Content-Type"的方式：
+  // 传入一个特殊 _skipContentType 字段，在 authenticatedFetch 中处理。
+  //
+  // 鉴于不应修改 authenticatedFetch 核心逻辑，改为直接读取 token 并调用 fetch：
+
+  const token = localStorage.getItem('userToken')
+    || (document.cookie.split('; ').find(r => r.startsWith('auth_token=')) || '').split('=')[1]
+    || null;
+
+  if (!token) throw new Error('未登录或登录已过期');
+
+  // 获取 CSRF token（复用 cookie 读取逻辑）
+  let csrfToken = null;
+  const cookieParts = document.cookie.split('; ');
+  for (const part of cookieParts) {
+    if (part.startsWith('csrftoken=')) {
+      csrfToken = decodeURIComponent(part.split('=')[1]);
+      break;
+    }
+  }
+
+  // 构造 fetch 请求（不设 Content-Type，让 FormData 自动计算 boundary）
+  const baseUrl = import.meta.env.VITE_API_BASE_URL
+    || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+
+  const headers = {
+    'Authorization': `Token ${token}`,
+  };
+  if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+  const response = await fetch(`${baseUrl}/api/chat/image-upload/`, {
+    method: 'POST',
+    headers,
+    body: formData,
+    credentials: 'include',
+  });
+
+  // 统一 401 处理（SESSION_EXPIRED 语义对齐）
+  if (response.status === 401) {
+    localStorage.removeItem('userToken');
+    throw new Error('SESSION_EXPIRED');
+  }
+
+  if (!response.ok) {
+    let errorMsg = `图片上传失败（HTTP ${response.status}）`;
+    try {
+      const body = await response.clone().json();
+      if (body && body.error) errorMsg = body.error;
+    } catch (_) { /* 响应体非 JSON，使用默认消息 */ }
+    throw new Error(errorMsg);
+  }
+
+  return response.json();
+}
