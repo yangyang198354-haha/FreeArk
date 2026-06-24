@@ -1,0 +1,20 @@
+{
+  "name": "FreeArk",
+  "appid": "__UNI__FREEARK",
+  "description": "FreeArk 三恒系统移动端",
+  "versionName": "1.5.0",
+  "versionCode": "150",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wxc68346b8e889def4",
+    "setting": {
+      "urlCheck": false
+    },
+    "usingComponents": true
+  },
+  "h5": {
+    "router": {
+      "mode": "history"
+    }
+  }
+}

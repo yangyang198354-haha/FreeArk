@@ -1,0 +1,24 @@
+{
+  "name": "freeark-miniprogram",
+  "version": "1.0.0",
+  "scripts": {
+    "dev:mp-weixin": "cross-env UNI_INPUT_DIR=. uni -p mp-weixin",
+    "build:mp-weixin": "cross-env UNI_INPUT_DIR=. uni build -p mp-weixin",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "3.0.0-alpha-5010320260611001",
+    "@qiun/ucharts": "^2.5.0-20230101",
+    "marked": "^13.0.3",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5010320260611001",
+    "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010320260611001",
+    "cross-env": "^10.1.0",
+    "vite": "^5.2.8",
+    "vitest": "^2.1.9"
+  }
+}

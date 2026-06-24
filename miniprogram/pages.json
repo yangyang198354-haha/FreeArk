@@ -1,0 +1,168 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationBarBackgroundColor": "#1a73e8",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "FreeArk 控制中心",
+        "navigationBarBackgroundColor": "#1a73e8",
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/chat/index",
+      "style": {
+        "navigationBarTitleText": "AI 问答"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
+    },
+    {
+      "path": "pages/change-password/index",
+      "style": {
+        "navigationBarTitleText": "修改密码"
+      }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "subpackages/chat",
+      "pages": [
+        {
+          "path": "pages/session",
+          "style": {
+            "navigationBarTitleText": "聊天",
+            "disableScroll": true
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/monitor",
+      "pages": [
+        {
+          "path": "pages/index",
+          "style": {
+            "navigationBarTitleText": "设备监控"
+          }
+        },
+        {
+          "path": "pages/plc-status",
+          "style": {
+            "navigationBarTitleText": "PLC 连接状态"
+          }
+        },
+        {
+          "path": "pages/device-list",
+          "style": {
+            "navigationBarTitleText": "设备列表"
+          }
+        },
+        {
+          "path": "pages/device-panel",
+          "style": {
+            "navigationBarTitleText": "设备面板"
+          }
+        },
+        {
+          "path": "pages/param-history",
+          "style": {
+            "navigationBarTitleText": "参数历史"
+          }
+        },
+        {
+          "path": "pages/room-history",
+          "style": {
+            "navigationBarTitleText": "房间历史"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/energy",
+      "pages": [
+        {
+          "path": "pages/index",
+          "style": {
+            "navigationBarTitleText": "能耗报表"
+          }
+        },
+        {
+          "path": "pages/report",
+          "style": {
+            "navigationBarTitleText": "能耗报表"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/ops",
+      "pages": [
+        {
+          "path": "pages/faults",
+          "style": {
+            "navigationBarTitleText": "故障管理"
+          }
+        },
+        {
+          "path": "pages/condensation",
+          "style": {
+            "navigationBarTitleText": "结露预警"
+          }
+        },
+        {
+          "path": "pages/workorders",
+          "style": {
+            "navigationBarTitleText": "巡检工单"
+          }
+        },
+        {
+          "path": "pages/inspection-logs",
+          "style": {
+            "navigationBarTitleText": "巡检工作日志"
+          }
+        }
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/home/index": {
+      "network": "wifi",
+      "packages": ["subpackages/monitor"]
+    }
+  },
+  "tabBar": {
+    "color": "#7A7E83",
+    "selectedColor": "#1a73e8",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/chat/index",
+        "text": "AI 问答"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "FreeArk",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  }
+}
