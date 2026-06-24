@@ -148,3 +148,12 @@ urlpatterns += [
          views_rag.RagImageView.as_view(),
          name='rag-image-detail'),
 ]
+
+# v1.5.0 多模态提问（MOD-MQ-07）：图片预上传端点
+# POST /api/chat/image-upload/  权限 IsAuthenticated，multipart/form-data
+from . import views_chat_image  # noqa: E402
+urlpatterns += [
+    path('chat/image-upload/',
+         views_chat_image.ChatImageUploadView.as_view(),
+         name='chat-image-upload'),
+]

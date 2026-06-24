@@ -108,6 +108,9 @@ class State(TypedDict, total=False):
     related_images: List[dict]
     # 不使用 operator.add reducer：由 _aggregate 统一收集后一次性赋值
     # 格式：[{"image_id": int, "source": str}, ...]（已去重）
+    # ── v1.5.0 新增（MOD-MQ-06）：VLM 图片分析描述文字，仅作调试/观测用
+    # adapter 层在 graph.astream 启动前注入；各节点可忽略（Optional[str]）
+    vision_description: Optional[str]
 
 
 # 从消息里提取 ChatConsumer 注入的 [__freeark_user__:<name>] 前缀，构造 operator 追溯。

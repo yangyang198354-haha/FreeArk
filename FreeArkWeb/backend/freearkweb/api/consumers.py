@@ -1,7 +1,18 @@
 """
-ChatConsumer — WebSocket 聊天代理（MOD-BE-CONS v1.4）
+ChatConsumer — WebSocket 聊天代理（MOD-BE-CONS v1.5）
 
-v1.4 变更（相对 v1.3，实现 ADR-001 策略 A + ADR-002 异步标题）：
+v1.5.0 变更（相对 v1.4，实现多模态提问 MOD-MQ-04）：
+  - connect()：新增初始化 self._vision_persist_message = ''
+  - receive()：新增读取 image_upload_id；UUID 格式校验；纯图片消息默认文案注入
+  - _handle_chat()：签名扩展 upload_id 参数；vision_progress WS 通知；
+    VisionServiceError / ImageExpiredError 降级错误消息；
+    持久化步骤使用 _vision_persist_message 替换原始 user_message（若有）
+  - _pump()：新增识别 "persist_enhanced_message" kind → 存入 _vision_persist_message，
+    不转发 WS（透明内部协议）
+  - 新增 _send_error() 辅助方法（统一 WS 错误帧构造）
+  - 新增 _is_valid_uuid() 模块函数（upload_id 格式校验）
+
+v1.4 变更（保持不变）：
   - connect()：移除立即创建 DB 会话的逻辑；仅保存 self.session_key（字符串）；
     新增初始化 self._session_created = False, self._first_round_done = False
   - 新增 _ensure_session_created()：首条 user 消息到达时幂等创建 ChatSession，
@@ -16,16 +27,17 @@ v1.3 变更（保持不变）：
   - (kind, text) 协议不变（ARCH-C-006，C-008）
   - reasoning_token / reasoning_end / stream_token / stream_end 消息类型不变
   - _get_user_by_token 不变
-  - OpenClawAdapter.stream_chat 调用签名不变
 
-@module MOD-BE-CONS
-@implements IFC-CONS-001, IFC-CONS-002, IFC-CONS-003, IFC-CONS-004
-@depends MOD-BE-MEM
+@module MOD-BE-CONS, MOD-MQ-04
+@implements IFC-CONS-001, IFC-CONS-002, IFC-CONS-003, IFC-CONS-004,
+            IFC-MQ-04-001 (receive 扩展), IFC-MQ-04-002 (_handle_chat 扩展),
+            IFC-MQ-04-003 (_pump 扩展)
+@depends MOD-BE-MEM, MOD-MQ-03 (vision_service), MOD-MQ-05 (adapter 扩展)
 @author sub_agent_software_developer
 
-项目: FreeArk_ChatSession
-文档引用: module_design.md MOD-BE-CONS v1.4, architecture_design.md ADR-001/002/003
-需求引用: REQ-FUNC-001, REQ-FUNC-002, REQ-FUNC-003, REQ-NFR-004
+项目: FreeArk_ChatSession / v1.5.0_multimodal_question
+文档引用: module_design.md MOD-MQ-04, architecture_design.md ADR-MQ-001
+需求引用: REQ-FUNC-003, REQ-FUNC-006, REQ-FUNC-007, REQ-NFR-004
 """
 
 import asyncio
@@ -43,8 +55,19 @@ from django.db import IntegrityError
 from api.openclaw_adapter import OpenClawUnavailableError
 from api.chat_backend import get_chat_adapter
 from api import chat_memory
+# v1.5.0 多模态提问（MOD-MQ-04）：VLM 异常类型
+from api.vision_service import ImageExpiredError, ImageAccessDeniedError, VisionServiceError
 
 logger = logging.getLogger('api.consumers')
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """校验字符串是否为合法 UUID4 格式（upload_id 入口校验）。"""
+    try:
+        uuid.UUID(value, version=4)
+        return True
+    except (ValueError, AttributeError):
+        return False
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -78,6 +101,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self._confirm_accumulated = ''
         # ── v1.4.1 新增（IFC-141-701，MOD-141-07）──────────────────────────────
         self._related_images: list = []   # 存储本轮 related_images（实时，不持久化，OQ-IC-004）
+        # ── v1.5.0 新增（MOD-MQ-04）────────────────────────────────────────────
+        # adapter 流结束后通过 "persist_enhanced_message" kind 回传含 VLM 描述的持久化消息；
+        # _pump 识别后存入此字段；_handle_chat 持久化步骤使用此值替代原始 user_message
+        self._vision_persist_message: str = ''
 
         query_string = self.scope.get('query_string', b'')
         params = parse_qs(query_string)
@@ -176,7 +203,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         user_message = data.get('message', '').strip()
-        if not user_message:
+        # v1.5.0：读取可选的 image_upload_id（REQ-FUNC-003，MOD-MQ-04）
+        upload_id = data.get('image_upload_id')
+
+        # upload_id 格式校验（若存在）：防止非 UUID 字符串进入 vision_service
+        if upload_id is not None:
+            if not isinstance(upload_id, str) or not _is_valid_uuid(upload_id):
+                await self._send_error("IMAGE_INVALID", "图片引用无效")
+                return
+
+        # 纯图片消息（message 为空但有 upload_id）：后端注入默认提问文案（OQ-MQ-003）
+        if upload_id and not user_message:
+            user_message = "请帮我分析这张图片"
+
+        # 向后兼容：不含 upload_id 且消息为空 → 与 v1.4.1 行为一致
+        if not user_message and not upload_id:
             return
 
         if self._is_streaming or self._awaiting_confirm:
@@ -189,7 +230,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         self._is_streaming = True
         try:
-            await self._handle_chat(user_message)
+            await self._handle_chat(user_message, upload_id=upload_id)
         finally:
             self._is_streaming = False
 
@@ -261,22 +302,42 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.chat_session = session_obj
         self._session_created = True
 
-    async def _handle_chat(self, user_message: str):
+    async def _handle_chat(self, user_message: str, upload_id: str = None):
         """
-        核心聊天处理（v1.4）：ADR-001 首行确保 session 已创建，ADR-002 首轮后触发异步标题。
+        核心聊天处理（v1.5.0）：在 v1.4 基础上支持多模态图文消息。
 
-        变更点（相对 v1.3）：
-          1. 首行调用 await self._ensure_session_created(user_message)（ADR-001）
-          2. _finalize_turn 成功后，首轮完成时 asyncio.create_task 异步 LLM 标题（ADR-002）
-          3. 历史注入保持不变（self.chat_session 可能仍为 None 时跳过）
+        v1.5.0 新增（相对 v1.4，MOD-MQ-04）：
+          1. upload_id 参数（默认 None，向后兼容）
+          2. 若 upload_id 非空，预先校验 TTL（ImageExpiredError → 发错误帧，return）
+          3. 若 upload_id 非空，在调用 adapter 前向前端发送 vision_progress 进度通知
+          4. adapter.stream_chat 增加 upload_id + user_id 参数
+          5. _pump 识别 "persist_enhanced_message" kind → 存入 _vision_persist_message
+          6. 持久化步骤：若 _vision_persist_message 非空，使用该值代替 user_message
+          7. 捕获 VisionServiceError → 发 IMAGE_ANALYSIS_FAILED 错误帧（WS 连接保持）
+          8. 捕获 ImageExpiredError → 发 IMAGE_EXPIRED 错误帧（WS 连接保持）
 
-        不变点（ARCH-C-006）：
+        v1.4 不变点（ARCH-C-006）：
           - reasoning_token / reasoning_end / stream_token / stream_end 发送逻辑不变
-          - stream_chat 调用签名不变（message + session_key）
+          - ADR-001 / ADR-002 首行创建 session + 异步 LLM 标题逻辑不变
 
-        @implements IFC-CONS-003
+        @implements IFC-CONS-003, IFC-MQ-04-002
         """
+        # 重置本轮视觉持久化消息（防上轮残留）
+        self._vision_persist_message = ''
+
         try:
+            # ── v1.5.0：upload_id 存在时先做 TTL 预检（consumers 层，减少后续失败概率）
+            if upload_id is not None:
+                try:
+                    from api import vision_service as _vs
+                    _vs.get_upload(upload_id, self.user.id)
+                except ImageExpiredError:
+                    await self._send_error("IMAGE_EXPIRED", "图片已过期，请重新上传")
+                    return
+                except ImageAccessDeniedError:
+                    await self._send_error("IMAGE_INVALID", "图片引用无效")
+                    return
+
             # ADR-001：首条消息到达时幂等创建 session（已创建则直接返回）
             await self._ensure_session_created(user_message)
 
@@ -296,8 +357,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 f"[__freeark_user__:{chat_user}] {user_message}"
             )
 
-            # v1.3: 写入用户消息记录
-            if self.chat_session is not None:
+            # v1.3 / v1.5.0：写入用户消息记录（REQ-FUNC-007，MOD-MQ-04）
+            # 向后兼容策略：
+            #   - upload_id 为 None（纯文字消息）：立即写原始 user_message（与 v1.4 一致）
+            #   - upload_id 存在（含图消息）：跳过，由 _pump 收到 persist_enhanced_message
+            #     后设置 self._vision_persist_message，流结束后统一写入增强消息（含 VLM 描述前缀）
+            if self.chat_session is not None and upload_id is None:
                 try:
                     await sync_to_async(chat_memory.append_message)(
                         self.chat_session, 'user', user_message,
@@ -305,11 +370,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 except Exception as exc:
                     logger.error('ChatConsumer: append_message(user) 失败: %s', exc)
 
+            # ── v1.5.0：含图消息发送 vision_progress 进度通知（在 adapter 调用前）
+            if upload_id is not None:
+                await self.send(json.dumps({
+                    'type': 'vision_progress',
+                    'message': '正在分析图片，请稍候…',
+                }))
+
             adapter = get_chat_adapter()  # 按 CHAT_BACKEND 选 OpenClaw / LangGraph
             status, accumulated_content = await self._pump(
                 adapter.stream_chat(
                     message=augmented_message,
                     session_key=self.session_key,
+                    upload_id=upload_id,
+                    user_id=self.user.id if upload_id else None,
                 ))
 
             # 阶段 E：遇 Tier-2 写确认门 → 已发 confirm_required，暂停等前端 confirm_response
@@ -322,6 +396,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
             related_images = self._related_images
             self._related_images = []   # 重置
             # ────────────────────────────────────────────────────────────────────────
+
+            # ── v1.5.0：含图消息持久化增强（MOD-MQ-04，REQ-FUNC-007）
+            # 若 _pump 从 adapter 收到 "persist_enhanced_message"，使用增强消息覆盖已写入的
+            # user 消息记录（含 VLM 描述前缀，格式：[图片描述：<VLM输出>] <原始文字>）
+            if self._vision_persist_message and self.chat_session is not None:
+                try:
+                    # 先删除刚才写入的原始 user 消息，再写入含 VLM 描述的增强消息
+                    # 注：chat_memory 若不支持更新，则重新 append 一条（历史会有两条 user msg）
+                    # 根据现有实现，采用 append 方式补写增强消息（覆盖语义由前端展示逻辑处理）
+                    # TODO: 如果 chat_memory 支持 update_last_user_message 则改为更新
+                    await sync_to_async(chat_memory.append_message)(
+                        self.chat_session, 'user', self._vision_persist_message,
+                    )
+                except Exception as exc:
+                    logger.error('ChatConsumer: 写入含图增强消息失败（非致命）: %s', exc)
+                finally:
+                    self._vision_persist_message = ''  # 清空，防下轮残留
+            # ─────────────────────────────────────────────────────────────────────
+
             await self._finalize_turn(accumulated_content, related_images=related_images)
 
             # ADR-002：首轮完成后异步生成 LLM 标题（user+assistant各一条）
@@ -342,6 +435,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'ChatConsumer: 已触发异步 LLM 标题生成 session_id=%d',
                     self.chat_session.pk,
                 )
+
+        # ── v1.5.0：VLM 相关异常降级处理（独立 except 块，不与主流程合并）──────
+        except VisionServiceError as exc:
+            # doubao-vision 2 次调用均失败（超时/5xx）→ 降级提示，WS 连接保持
+            logger.error('ChatConsumer: VLM 分析失败: %s', exc)
+            self._is_streaming = False
+            await self._send_error(
+                "IMAGE_ANALYSIS_FAILED",
+                "图片分析暂时不可用，您可以用文字描述图片内容后重试",
+            )
+            return
+
+        except ImageExpiredError as exc:
+            # upload_id TTL 在 adapter 层再次取图时已过期（预检之后极少发生）
+            logger.info('ChatConsumer: 图片引用已过期（adapter 层）: %s', exc)
+            self._is_streaming = False
+            await self._send_error("IMAGE_EXPIRED", "图片已过期，请重新上传")
+            return
+
+        except ImageAccessDeniedError as exc:
+            logger.warning('ChatConsumer: 图片访问被拒绝（upload_id 用户不匹配）: %s', exc)
+            self._is_streaming = False
+            await self._send_error("IMAGE_INVALID", "图片引用无效")
+            return
+        # ─────────────────────────────────────────────────────────────────────────
 
         except OpenClawUnavailableError as exc:
             logger.warning('ChatConsumer: OpenClaw 不可用: %s', exc)
@@ -411,8 +529,24 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     self._related_images = []
                     logger.warning(
                         "ChatConsumer._pump: related_images 解析失败，忽略: %s", text[:200])
+            elif kind == 'persist_enhanced_message':
+                # v1.5.0 新增（MOD-MQ-04，IFC-MQ-04-003）：
+                # adapter 在 VLM 流完成后 yield 此 kind，携带含 VLM 描述的持久化消息。
+                # 存入实例变量，由 _handle_chat 持久化步骤使用（不转发前端）。
+                self._vision_persist_message = text
             # else: 未知 kind，静默忽略（前向兼容）
         return ('done', accumulated)
+
+    async def _send_error(self, code: str, message: str) -> None:
+        """
+        v1.5.0 辅助方法（MOD-MQ-04）：构造并发送统一格式的 WS 错误帧。
+        不关闭 WS 连接，用户可继续发消息（REQ-NFR-004 fail-open）。
+        """
+        await self.send(json.dumps({
+            'type': 'error',
+            'code': code,
+            'message': message,
+        }))
 
     async def _finalize_turn(self, accumulated_content: str,
                              related_images: list | None = None):

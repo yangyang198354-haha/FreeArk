@@ -646,3 +646,36 @@ RAG_TOP_K = int(os.environ.get('RAG_TOP_K', '5'))
 RAG_SCORE_THRESHOLD = float(os.environ.get('RAG_SCORE_THRESHOLD', '0.3'))
 RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '500'))
 RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))
+
+# ===========================================================================
+# v1.5.0 多模态提问：doubao-vision VLM 配置（MOD-MQ-07）
+# ===========================================================================
+# DOUBAO_VISION_MODEL：VLM 模型型号，默认 doubao-vision-lite；
+# 可通过 .env 切换为 doubao-vision-pro-32k，不改代码（OQ-MQ-001 已决策）
+DOUBAO_VISION_MODEL = os.environ.get('DOUBAO_VISION_MODEL', 'doubao-vision-lite-32k')
+
+# DOUBAO_VISION_BASE_URL：火山方舟多模态接口端点
+# 与 RAG embedding 共用账号/网络（已打通，无额外开通需求）
+DOUBAO_VISION_BASE_URL = os.environ.get(
+    'DOUBAO_VISION_BASE_URL', 'https://ark.cn-beijing.volces.com/api/v3')
+
+# DOUBAO_API_KEY：豆包 API 密钥，与 RAG embedding 共用；
+# 仅从 .env 读取，绝不入 git、HTTP 响应、日志、前端
+DOUBAO_API_KEY = os.environ.get('DOUBAO_API_KEY', '')
+
+# DOUBAO_VISION_TIMEOUT：单次 VLM 调用超时秒数
+# Pi WiFi 偶发 >15s（历史实测 8 次约 1 次），设 30s 保护（C-003）
+DOUBAO_VISION_TIMEOUT = int(os.environ.get('DOUBAO_VISION_TIMEOUT', '30'))
+
+# DOUBAO_VISION_MAX_RETRIES：超时/5xx 时最大重试次数
+# 指数退避 2s 起始；4xx 不重试
+DOUBAO_VISION_MAX_RETRIES = int(os.environ.get('DOUBAO_VISION_MAX_RETRIES', '1'))
+
+# VISION_UPLOAD_TTL：临时图片存储 TTL 秒数（默认 10 分钟）
+# TTL 到期后 get_upload 惰性清理，IMAGE_EXPIRED 错误引导用户重新上传
+VISION_UPLOAD_TTL = int(os.environ.get('VISION_UPLOAD_TTL', '600'))
+
+# VISION_UPLOAD_MAX_TOTAL_MB：进程内临时图片总占用上限（MB）
+# 超过上限时 store_upload 抛 StorageCapacityError，预上传接口返回 503
+VISION_UPLOAD_MAX_TOTAL_MB = int(os.environ.get('VISION_UPLOAD_MAX_TOTAL_MB', '50'))
+# ===========================================================================
