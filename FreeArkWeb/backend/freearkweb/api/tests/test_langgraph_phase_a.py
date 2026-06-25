@@ -301,11 +301,11 @@ class RouterClassifierTests(SimpleTestCase):
 class ChatBackendFactoryTests(SimpleTestCase):
     """chat_backend 工厂选择逻辑。"""
 
-    @override_settings(CHAT_BACKEND="openclaw")
-    def test_default_selects_openclaw(self):
+    def test_always_selects_langgraph(self):
+        """v1.7.0 退役 OpenClaw 后，工厂无论 CHAT_BACKEND 设置均返回 LangGraphAdapter。"""
         from api.chat_backend import get_chat_adapter
-        from api.openclaw_adapter import OpenClawAdapter
-        self.assertIs(get_chat_adapter(), OpenClawAdapter)
+        from api.langgraph_chat.adapter import LangGraphAdapter
+        self.assertIs(get_chat_adapter(), LangGraphAdapter)
 
     @override_settings(CHAT_BACKEND="langgraph")
     def test_switch_selects_langgraph(self):
@@ -554,7 +554,7 @@ class LangGraphAdapterTests(SimpleTestCase):
 
     def test_failure_raises_openclaw_unavailable(self):
         """编排构造/运行失败统一抛 OpenClawUnavailableError（consumers 降级通道）。"""
-        from api.openclaw_adapter import OpenClawUnavailableError
+        from api.chat_exceptions import OpenClawUnavailableError
         import api.langgraph_chat.adapter as ad
 
         class _Boom:

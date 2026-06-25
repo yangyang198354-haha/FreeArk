@@ -344,22 +344,9 @@ CHANNEL_LAYERS = {
 }
 
 # ---------------------------------------------------------------------------
-# OpenClaw Gateway 集成配置（见 ADR-002 v1.2，REQ-FUNC-005，REQ-NFR-004）
+# OpenClaw Gateway 集成配置已于 v1.7.0 退役移除
+# （聊天唯一路径为进程内 LangGraph 直连 DeepSeek；OPENCLAW_* 配置项已废弃）
 # ---------------------------------------------------------------------------
-# 协议：WebSocket Gateway RPC（protocol v4），由 openclaw_adapter.py 实现
-# 路径：'/' 是 OpenClaw Gateway 的唯一 WS 端点；http(s):// 会被适配层升级为 ws(s)://
-# 安全约束：
-#   OPENCLAW_GATEWAY_TOKEN 必须在生产服务器的 .env 文件中设置（不提交 git）
-#   该 token 仅在服务端使用，绝不写入前端代码或任何 HTTP 响应
-# 本地开发测试：在 FreeArkWeb/backend/freearkweb/.env 中设置
-OPENCLAW_BASE_URL = os.environ.get('OPENCLAW_BASE_URL', 'http://127.0.0.1:18789')
-OPENCLAW_GATEWAY_TOKEN = os.environ.get('OPENCLAW_GATEWAY_TOKEN', '')  # 必填，生产强 token
-OPENCLAW_TIMEOUT = int(os.environ.get('OPENCLAW_TIMEOUT', '60'))         # 总流响应超时（秒）
-OPENCLAW_CONNECT_TIMEOUT = int(os.environ.get('OPENCLAW_CONNECT_TIMEOUT', '10'))  # WS 升级 + 握手超时
-# reasoning_effort：控制 DeepSeek v4-flash 的推理深度（low/medium/high），空字符串=使用模型默认值
-# 实际值由 devops 在生产 .env 中写入，此处仅读取；代码层不硬编码
-# 需求引用：REQ-FUNC-012，ADR-008（adapter 侧透传方案 A）
-OPENCLAW_REASONING_EFFORT = os.environ.get('OPENCLAW_REASONING_EFFORT', '')
 
 # 记忆隔离：每次对话注入的最近历史轮数（每轮含 user + assistant 各一条）
 # ADR-010 方案 10-A，N=20 轮（40 条消息）

@@ -50,9 +50,10 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.db import IntegrityError
 
-# OpenClawUnavailableError 仍作为统一降级异常（LangGraphAdapter 失败时也抛它）；
-# 具体适配器（OpenClaw / LangGraph）由 chat_backend 工厂按 settings.CHAT_BACKEND 选择。
-from api.openclaw_adapter import OpenClawUnavailableError
+# OpenClawUnavailableError 来自 api.chat_exceptions（原定义在 api.openclaw_adapter，
+# v1.7.0 退役 OpenClaw 后迁移至此）；LangGraphAdapter 失败时抛同一异常，
+# 使此处的降级路径（OPENCLAW_UNAVAILABLE / TIMEOUT 错误码）无需改动。
+from api.chat_exceptions import OpenClawUnavailableError
 from api.chat_backend import get_chat_adapter
 from api import chat_memory
 # v1.5.0 多模态提问（MOD-MQ-04）：VLM 异常类型

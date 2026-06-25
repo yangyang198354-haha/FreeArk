@@ -107,7 +107,7 @@ class ConsumerSessionCreationTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)  # consume 'connected'
 
             with patch(
-                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                'api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                 return_value=_make_async_gen(('content', '回复')),
             ):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '首条消息'})
@@ -145,7 +145,7 @@ class ConsumerMessageWriteTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)  # connected
 
             with patch(
-                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                'api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('content', '回答片段一'),
                     ('content', '回答片段二'),
@@ -184,7 +184,7 @@ class ConsumerMessageWriteTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                'api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                 return_value=_make_async_gen(('content', '回复')),
             ):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '用户输入'})
@@ -236,7 +236,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
 
-            with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+            with patch('api.langgraph_chat.adapter.LangGraphAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '当前问题'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -266,7 +266,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
 
-            with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+            with patch('api.langgraph_chat.adapter.LangGraphAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '第一次对话'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -311,7 +311,7 @@ class ConsumerCrossUserIsolationTest(TransactionTestCase):
             self.assertTrue(connected)
             await communicator.receive_json_from(timeout=3)
 
-            with patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+            with patch('api.langgraph_chat.adapter.LangGraphAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '用户B的问题'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -365,7 +365,7 @@ class ConsumerDegradationTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch('api.consumers.chat_memory.load_history', side_effect=Exception('DB timeout')), \
-                 patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                 patch('api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                        return_value=_make_async_gen(('content', '降级回复'))):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '测试降级'})
                 received = []
@@ -389,7 +389,7 @@ class ConsumerDegradationTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch('api.consumers.chat_memory.append_message', side_effect=Exception('write failed')), \
-                 patch('api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                 patch('api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                        return_value=_make_async_gen(('content', '内容'))):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '测试'})
                 received = []
@@ -431,7 +431,7 @@ class ConsumerInjectTurnsZeroTest(TransactionTestCase):
 
             # mock load_history 返回空列表（等效于 INJECT_TURNS=0）
             with patch('api.consumers.chat_memory.load_history', return_value=[]), \
-                 patch('api.openclaw_adapter.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+                 patch('api.langgraph_chat.adapter.LangGraphAdapter.stream_chat', side_effect=mock_stream_chat):
                 await communicator.send_json_to({'type': 'chat_message', 'message': '问题'})
                 for _ in range(2):
                     await communicator.receive_json_from(timeout=5)
@@ -471,7 +471,7 @@ class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                'api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', '思考'),
                     ('content', '回答'),
@@ -503,7 +503,7 @@ class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                'api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('content', 't1'),
                     ('content', 't2'),
@@ -535,7 +535,7 @@ class ConsumerReasoningStreamRegressionTest(TransactionTestCase):
             await communicator.receive_json_from(timeout=3)
 
             with patch(
-                'api.openclaw_adapter.OpenClawAdapter.stream_chat',
+                'api.langgraph_chat.adapter.LangGraphAdapter.stream_chat',
                 return_value=_make_async_gen(
                     ('reasoning', 'r1'),
                     ('reasoning', 'r2'),

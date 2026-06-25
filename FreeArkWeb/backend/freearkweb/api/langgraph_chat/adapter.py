@@ -30,8 +30,9 @@ from typing import AsyncGenerator, Optional
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
-# 复用 OpenClaw 适配层的异常类型，使 ChatConsumer 的 except 分支零改动即可接管降级。
-from api.openclaw_adapter import OpenClawUnavailableError
+# 统一降级异常（v1.7.0 迁移自 api.openclaw_adapter → api.chat_exceptions），
+# 使 ChatConsumer 的 except 分支零改动接管降级（WS 错误码向后兼容）。
+from api.chat_exceptions import OpenClawUnavailableError
 # v1.5.0：VLM 服务（MOD-MQ-03）。ImageExpiredError/ImageAccessDeniedError 由调用方捕获。
 from api import vision_service
 from api.vision_service import ImageExpiredError, ImageAccessDeniedError, VisionServiceError
