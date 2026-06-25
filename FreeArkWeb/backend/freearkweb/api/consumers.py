@@ -62,11 +62,15 @@ logger = logging.getLogger('api.consumers')
 
 
 def _is_valid_uuid(value: str) -> bool:
-    """校验字符串是否为合法 UUID4 格式（upload_id 入口校验）。"""
+    """校验字符串是否为合法 UUID4 格式（upload_id 入口校验）。
+
+    注意：`uuid.UUID(value, version=4)` 的 version 参数是“强制改写”版本位、
+    并不做校验（nil UUID 等也会被接受）。这里改为先解析再显式核对
+    `.version == 4`，使行为与函数名/文档一致（拒绝 nil / 非 v4）。
+    """
     try:
-        uuid.UUID(value, version=4)
-        return True
-    except (ValueError, AttributeError):
+        return uuid.UUID(value).version == 4
+    except (ValueError, AttributeError, TypeError):
         return False
 
 
@@ -203,21 +207,42 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         user_message = data.get('message', '').strip()
-        # v1.5.0：读取可选的 image_upload_id（REQ-FUNC-003，MOD-MQ-04）
-        upload_id = data.get('image_upload_id')
 
-        # upload_id 格式校验（若存在）：防止非 UUID 字符串进入 vision_service
-        if upload_id is not None:
-            if not isinstance(upload_id, str) or not _is_valid_uuid(upload_id):
+        # v1.6.0：多字段解析（ADR-MI-003 优先规则）
+        # 新字段 image_upload_ids（列表）优先；旧字段 image_upload_id（字符串）向后兼容
+        image_upload_ids_raw = data.get('image_upload_ids')   # v1.6.0 新字段（列表）
+        image_upload_id_raw  = data.get('image_upload_id')    # v1.5.0 旧字段（字符串）
+
+        if isinstance(image_upload_ids_raw, list) and len(image_upload_ids_raw) > 0:
+            upload_ids = image_upload_ids_raw    # 新字段优先（多图路径）
+        elif isinstance(image_upload_id_raw, str) and image_upload_id_raw:
+            upload_ids = [image_upload_id_raw]   # 旧字段向后兼容（包装为单元素列表）
+        else:
+            upload_ids = None                    # 无图，纯文字路径
+
+        # 超5张后端拦截（REQ-MI-002，REQ-MI-009）
+        if upload_ids is not None and len(upload_ids) > 5:
+            await self._send_error(
+                "IMAGE_TOO_MANY",
+                "最多支持5张图片，请删除多余图片后重新发送",
+            )
+            return
+
+        # 逐图 UUID 格式校验（REQ-MI-NFR，v1.5.0 单图校验扩展至多图）
+        for uid in (upload_ids or []):
+            if not isinstance(uid, str) or not _is_valid_uuid(uid):
                 await self._send_error("IMAGE_INVALID", "图片引用无效")
                 return
 
-        # 纯图片消息（message 为空但有 upload_id）：后端注入默认提问文案（OQ-MQ-003）
-        if upload_id and not user_message:
-            user_message = "请帮我分析这张图片"
+        # 多图/单图默认文案（OQ-MI-004）
+        if upload_ids and not user_message:
+            if len(upload_ids) > 1:
+                user_message = "请帮我分析这些图片"   # v1.6.0 多图默认文案
+            else:
+                user_message = "请帮我分析这张图片"   # v1.5.0 单图默认文案（不变）
 
-        # 向后兼容：不含 upload_id 且消息为空 → 与 v1.4.1 行为一致
-        if not user_message and not upload_id:
+        # 无图且无文字 → 与 v1.4.1 行为一致
+        if not user_message and not upload_ids:
             return
 
         if self._is_streaming or self._awaiting_confirm:
@@ -230,7 +255,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         self._is_streaming = True
         try:
-            await self._handle_chat(user_message, upload_id=upload_id)
+            await self._handle_chat(user_message, upload_ids=upload_ids)
         finally:
             self._is_streaming = False
 
@@ -302,41 +327,42 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.chat_session = session_obj
         self._session_created = True
 
-    async def _handle_chat(self, user_message: str, upload_id: str = None):
+    async def _handle_chat(self, user_message: str, upload_ids=None):
         """
-        核心聊天处理（v1.5.0）：在 v1.4 基础上支持多模态图文消息。
+        核心聊天处理（v1.6.0）：在 v1.5.0 基础上扩展为多图支持。
 
-        v1.5.0 新增（相对 v1.4，MOD-MQ-04）：
-          1. upload_id 参数（默认 None，向后兼容）
-          2. 若 upload_id 非空，预先校验 TTL（ImageExpiredError → 发错误帧，return）
-          3. 若 upload_id 非空，在调用 adapter 前向前端发送 vision_progress 进度通知
-          4. adapter.stream_chat 增加 upload_id + user_id 参数
-          5. _pump 识别 "persist_enhanced_message" kind → 存入 _vision_persist_message
-          6. 持久化步骤：若 _vision_persist_message 非空，使用该值代替 user_message
-          7. 捕获 VisionServiceError → 发 IMAGE_ANALYSIS_FAILED 错误帧（WS 连接保持）
-          8. 捕获 ImageExpiredError → 发 IMAGE_EXPIRED 错误帧（WS 连接保持）
+        v1.6.0 变更（相对 v1.5.0，MOD-MI-04）：
+          1. upload_id 参数重命名为 upload_ids（list[str]|None），向后兼容
+          2. TTL 预检扩展为逐图循环
+          3. vision_progress 帧改由 adapter yield vision_progress kind，_pump 转发
+          4. adapter.stream_chat 调用改为传 upload_ids 参数
 
-        v1.4 不变点（ARCH-C-006）：
-          - reasoning_token / reasoning_end / stream_token / stream_end 发送逻辑不变
+        v1.5.0 不变点继承：
+          - VisionServiceError / ImageExpiredError / ImageAccessDeniedError 降级路径不变
+          - _vision_persist_message 机制继承（多图合并持久化消息）
           - ADR-001 / ADR-002 首行创建 session + 异步 LLM 标题逻辑不变
 
-        @implements IFC-CONS-003, IFC-MQ-04-002
+        @implements IFC-CONS-003, IFC-MQ-04-002, IFC-MI-04-001
         """
         # 重置本轮视觉持久化消息（防上轮残留）
         self._vision_persist_message = ''
 
         try:
-            # ── v1.5.0：upload_id 存在时先做 TTL 预检（consumers 层，减少后续失败概率）
-            if upload_id is not None:
-                try:
-                    from api import vision_service as _vs
-                    _vs.get_upload(upload_id, self.user.id)
-                except ImageExpiredError:
-                    await self._send_error("IMAGE_EXPIRED", "图片已过期，请重新上传")
-                    return
-                except ImageAccessDeniedError:
-                    await self._send_error("IMAGE_INVALID", "图片引用无效")
-                    return
+            # ── v1.6.0：逐图 TTL 预检（upload_ids 存在时，逐图校验）
+            if upload_ids is not None:
+                from api import vision_service as _vs
+                for i, uid in enumerate(upload_ids):
+                    try:
+                        _vs.get_upload(uid, self.user.id)
+                    except ImageExpiredError:
+                        await self._send_error(
+                            "IMAGE_EXPIRED",
+                            f"图片{i+1}已过期，请重新上传全部图片后重试",
+                        )
+                        return
+                    except ImageAccessDeniedError:
+                        await self._send_error("IMAGE_INVALID", "图片引用无效")
+                        return
 
             # ADR-001：首条消息到达时幂等创建 session（已创建则直接返回）
             await self._ensure_session_created(user_message)
@@ -357,12 +383,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 f"[__freeark_user__:{chat_user}] {user_message}"
             )
 
-            # v1.3 / v1.5.0：写入用户消息记录（REQ-FUNC-007，MOD-MQ-04）
+            # v1.3 / v1.6.0：写入用户消息记录（REQ-FUNC-007，MOD-MQ-04/MI-04）
             # 向后兼容策略：
-            #   - upload_id 为 None（纯文字消息）：立即写原始 user_message（与 v1.4 一致）
-            #   - upload_id 存在（含图消息）：跳过，由 _pump 收到 persist_enhanced_message
+            #   - upload_ids 为 None（纯文字消息）：立即写原始 user_message（与 v1.4 一致）
+            #   - upload_ids 存在（含图消息）：跳过，由 _pump 收到 persist_enhanced_message
             #     后设置 self._vision_persist_message，流结束后统一写入增强消息（含 VLM 描述前缀）
-            if self.chat_session is not None and upload_id is None:
+            if self.chat_session is not None and upload_ids is None:
                 try:
                     await sync_to_async(chat_memory.append_message)(
                         self.chat_session, 'user', user_message,
@@ -370,20 +396,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 except Exception as exc:
                     logger.error('ChatConsumer: append_message(user) 失败: %s', exc)
 
-            # ── v1.5.0：含图消息发送 vision_progress 进度通知（在 adapter 调用前）
-            if upload_id is not None:
-                await self.send(json.dumps({
-                    'type': 'vision_progress',
-                    'message': '正在分析图片，请稍候…',
-                }))
+            # v1.6.0：vision_progress 帧改由 adapter 通过 kind='vision_progress' yield，
+            # _pump 识别后透传给前端（进度文案"正在分析第N/T张"由 adapter 构建）。
+            # 不再在 consumers 层直接发 vision_progress（v1.5.0 单次进度已被新机制替代）
 
             adapter = get_chat_adapter()  # 按 CHAT_BACKEND 选 OpenClaw / LangGraph
             status, accumulated_content = await self._pump(
                 adapter.stream_chat(
                     message=augmented_message,
                     session_key=self.session_key,
-                    upload_id=upload_id,
-                    user_id=self.user.id if upload_id else None,
+                    upload_ids=upload_ids,
+                    user_id=self.user.id if upload_ids else None,
                 ))
 
             # 阶段 E：遇 Tier-2 写确认门 → 已发 confirm_required，暂停等前端 confirm_response
@@ -529,6 +552,27 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     self._related_images = []
                     logger.warning(
                         "ChatConsumer._pump: related_images 解析失败，忽略: %s", text[:200])
+            elif kind == 'vision_progress':
+                # v1.6.0 新增（MOD-MI-04，ADR-MI-004）：
+                # adapter 通过此 kind 传递多图进度文字（"正在分析第N/T张图片，请稍候…"）
+                # consumers 透传给前端（不累积到 accumulated，不落库）
+                await self.send(json.dumps({'type': 'vision_progress', 'message': text}))
+            elif kind == 'image_analysis_partial':
+                # v1.6.0 新增（ADR-MI-004，REQ-MI-009）：
+                # 部分图片分析失败，但整体未中止（OQ-MI-001 方案A 容错优先）
+                # adapter 通过此 kind 通知失败图片索引；consumers 发送非阻塞 WS 错误帧
+                try:
+                    partial_info = json.loads(text)
+                    failed_indices = partial_info.get('failed_indices', [])
+                    total = partial_info.get('total', 0)
+                    if failed_indices:
+                        failed_str = '、'.join(str(i + 1) for i in failed_indices)
+                        await self._send_error(
+                            'IMAGE_ANALYSIS_PARTIAL',
+                            f'第{failed_str}张图片分析失败，已用占位文字替代，其余图片分析正常',
+                        )
+                except (ValueError, TypeError, KeyError):
+                    pass  # 解析失败静默忽略（非阻塞，不中断流）
             elif kind == 'persist_enhanced_message':
                 # v1.5.0 新增（MOD-MQ-04，IFC-MQ-04-003）：
                 # adapter 在 VLM 流完成后 yield 此 kind，携带含 VLM 描述的持久化消息。

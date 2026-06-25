@@ -262,7 +262,12 @@ class TestConsumersMultimodal(TransactionTestCase):
     # ── TC-INT-104：vision_progress 消息发送验证 ──────────────────────────────────
 
     def test_TC_INT_104_vision_progress_sent_when_upload_id_present(self):
-        """TC-INT-104 (AC-MQ-004-03): 含有效 upload_id 的消息 → 前端收到 vision_progress 消息。"""
+        """TC-INT-104 (AC-MQ-004-03): 含有效 upload_id 的消息 → 前端收到 vision_progress 消息。
+
+        v1.6.0 架构变更：vision_progress 不再由 consumers 层主动发送，而是由 adapter
+        通过 kind='vision_progress' yield、_pump 透传（见 adapter.stream_chat / consumers._pump）。
+        因此 mock adapter 需像真实 adapter 那样先 yield vision_progress kind。
+        """
         async def _run_test():
             from datetime import datetime, timedelta
             with vs_module._store_lock:
@@ -274,7 +279,10 @@ class TestConsumersMultimodal(TransactionTestCase):
                 }
                 vs_module._total_size += len(SMALL_IMAGE_BYTES)
 
-            mock_stream = _make_async_gen(('content', '分析完成'),)
+            mock_stream = _make_async_gen(
+                ('vision_progress', '正在分析第1/1张图片，请稍候…'),
+                ('content', '分析完成'),
+            )
             mock_adapter = MagicMock()
             mock_adapter.stream_chat = MagicMock(return_value=mock_stream)
 

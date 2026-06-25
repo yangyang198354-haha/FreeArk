@@ -519,3 +519,46 @@ export async function uploadChatImage(file) {
 
   return response.json();
 }
+
+// ── v1.6.0 新增（IFC-MI-01-001，MOD-MI-01）──────────────────────────────────
+// uploadChatImages：并发批量上传多张图片，返回成功上传的 upload_id 列表。
+//
+// 设计决策（ADR-MI-002：并发 POST，Promise.allSettled）：
+//   - 并发上传将5张图的等待时间从 O(N) 降至 O(1)（最慢一张）
+//   - Promise.allSettled 保证全部 settled，部分失败不阻断（容错优先，OQ-MI-001 方案A）
+//   - 失败图片记录到 console.warn，不抛出，由调用方处理
+//
+// 安全约束（SC-001/SC-002/C-MI-005）：
+//   - 每张图通过 uploadChatImage 上传（authenticatedFetch，禁止裸 axios）
+//   - upload_id 不含图片内容，不出现在 WS 帧或日志中
+//
+// 参数：files — File[] 或 Blob[] 数组（前端 Canvas 压缩后的输出）
+// 返回：Promise<string[]>（成功上传的 upload_id 列表，长度可能 < files.length）
+// 异常：不抛出（allSettled 保证全部 settled，失败项通过 console.warn 记录）
+export async function uploadChatImages(files) {
+  if (!files || files.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    files.map(file => uploadChatImage(file))
+  );
+
+  const uploadIds = [];
+  const failures = [];
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      uploadIds.push(result.value.upload_id);
+    } else {
+      failures.push({ index, reason: result.reason && result.reason.message });
+    }
+  });
+
+  if (failures.length > 0) {
+    // 安全约束：日志中不含图片内容，只记录失败索引和原因
+    console.warn(
+      `uploadChatImages: ${failures.length}/${files.length} 张图片上传失败`,
+      failures.map(f => `[${f.index}] ${f.reason}`).join(', ')
+    );
+  }
+
+  return uploadIds; // 仅返回成功的 upload_id 列表
+}

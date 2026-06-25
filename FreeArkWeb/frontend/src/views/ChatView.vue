@@ -99,16 +99,17 @@
             ></div>
             <!-- 降级：用户消息 / 流式中 / confirm 激活中的助手消息 → 纯文本插值（REQ-NFUNC-006）-->
             <span v-else class="bubble-content">
-              <!-- v1.5.0 history 含图前缀检测：[图片描述：...] 前缀说明来自含图历史消息 -->
+              <!-- v1.6.0 history 含图前缀检测：覆盖 v1.5.0 单图格式和 v1.6.0 多图格式 -->
+              <!-- 单图格式：[图片描述：...] | 多图格式：[图片1描述：...] [图片2描述：...] -->
               <!-- 若有前缀则显示"含图"徽标，不显示 VLM 描述原文（保持简洁）-->
-              <template v-if="msg.content && msg.content.startsWith('[图片描述：')">
+              <template v-if="msg.content && /^\[图片(\d+)?描述：/.test(msg.content)">
                 <span class="msg-image-badge">
                   <el-icon :size="10"><Picture /></el-icon> 含图
                 </span>
-                <!-- 提取原始文字部分（跳过 [图片描述：...] 前缀）-->
-                {{ msg.content.replace(/^\[图片描述：[^\]]*\]\s*/, '') || '（图片消息）' }}
+                <!-- 提取原始文字部分（跳过所有 [图片N描述：...] 前缀）-->
+                {{ msg.content.replace(/\[图片(\d+)?描述：[^\]]*\]\s*/g, '').trim() || '（图片消息）' }}
               </template>
-              <!-- v1.5.0 新消息含图标注：hasImage=true 说明本次发送含图（尚未入库，无前缀）-->
+              <!-- v1.5.0/v1.6.0 新消息含图标注：hasImage=true 说明本次发送含图（尚未入库，无前缀）-->
               <template v-else-if="msg.hasImage">
                 <span class="msg-image-badge">
                   <el-icon :size="10"><Picture /></el-icon> 含图
@@ -187,29 +188,40 @@
 
     <!-- 输入区域 -->
     <div class="chat-input-area">
-      <!-- v1.5.0：图片预览区（选中图片后显示）-->
-      <div v-if="previewDataURL" class="image-preview-area">
-        <img :src="previewDataURL" class="image-preview-thumb" alt="待发送图片预览" />
-        <button class="image-preview-clear" @click="clearSelectedImage" title="移除图片">×</button>
-        <span v-if="isAnalyzingImage" class="image-analyzing-hint">正在分析图片内容…</span>
+      <!-- v1.6.0：多图预览区（选中1~5张图片后显示，REQ-MI-001）-->
+      <div v-if="selectedImages.length > 0" class="image-preview-area image-preview-area--multi">
+        <div
+          v-for="(img, idx) in selectedImages"
+          :key="idx"
+          class="image-preview-item"
+        >
+          <img :src="img.previewDataURL" class="image-preview-thumb" :alt="`待发送图片${idx+1}`" />
+          <button class="image-preview-clear" @click="removeImage(idx)" :title="`移除第${idx+1}张图片`">×</button>
+        </div>
+        <!-- 已达上限提示（REQ-MI-002 方案A：已达5张则显示提示）-->
+        <span v-if="selectedImages.length >= 5" class="image-limit-hint">已达上限（5/5）</span>
+        <!-- VLM 分析进度提示（多图进度，由服务端传来）-->
+        <span v-if="isAnalyzingImage" class="image-analyzing-hint">{{ visionProgressMsg || '正在分析图片内容…' }}</span>
       </div>
 
       <div class="chat-input-wrapper">
-        <!-- v1.5.0：图片上传按钮（隐藏 file input + 图标按钮）-->
+        <!-- v1.6.0：图片上传按钮（多选，已达5张时禁用，REQ-MI-002）-->
         <input
           ref="imageFileInput"
           type="file"
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          multiple
           style="display:none"
           @change="onImageSelect"
         />
         <el-button
           class="chat-image-btn"
-          :disabled="!wsConnected || isWaiting || !!selectedImageBlob"
-          title="上传图片（支持 JPEG/PNG/WebP，最大 10MB）"
+          :disabled="!wsConnected || isWaiting || selectedImages.length >= 5"
+          :title="selectedImages.length >= 5 ? '已达上限（最多5张图片）' : '上传图片（支持 JPEG/PNG/WebP，最大 10MB，最多5张）'"
           @click="imageFileInput && imageFileInput.click()"
         >
           <el-icon><Picture /></el-icon>
+          <span v-if="selectedImages.length > 0" class="image-count-badge">{{ selectedImages.length }}</span>
         </el-button>
 
         <el-input
@@ -217,7 +229,7 @@
           type="textarea"
           :autosize="{ minRows: 1, maxRows: 4 }"
           :disabled="!wsConnected || isWaiting"
-          :placeholder="selectedImageBlob ? '添加文字说明（可选，直接发送将分析图片内容）' : inputPlaceholder"
+          :placeholder="selectedImages.length > 0 ? '添加文字说明（可选，直接发送将分析图片内容）' : inputPlaceholder"
           resize="none"
           class="chat-input"
           @keydown.enter.exact.prevent="handleSend"
@@ -225,7 +237,7 @@
         />
         <el-button
           type="primary"
-          :disabled="!wsConnected || isWaiting || (!inputText.trim() && !selectedImageBlob)"
+          :disabled="!wsConnected || isWaiting || (!inputText.trim() && selectedImages.length === 0)"
           :loading="isWaiting"
           class="chat-send-btn"
           @click="handleSend"
@@ -254,7 +266,7 @@ import { Bot } from 'lucide-vue-next'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import SessionSidebar from '../components/SessionSidebar.vue'
-import api, { fetchRagImage, uploadChatImage } from '../utils/api.js'
+import api, { fetchRagImage, uploadChatImage, uploadChatImages } from '../utils/api.js'
 import {
   chatHistoryCache,
   chatHistoryCacheTime,
@@ -346,9 +358,14 @@ export default {
     const historyEmpty = ref(false)        // 历史消息为空标记（US-007 空状态提示）
 
     // v1.5.0 多模态提问（MOD-MQ-01，REQ-FUNC-001）
-    const selectedImageBlob = ref(null)    // 选中并可能压缩过的 Blob 对象
-    const previewDataURL = ref(null)       // 图片预览 data:URL（用于 img src）
+    // v1.6.0 扩展为多图（MOD-MI-01，REQ-MI-001）
+    const selectedImageBlob = ref(null)    // v1.5.0 保留（向后兼容，不直接使用）
+    const previewDataURL = ref(null)       // v1.5.0 保留（向后兼容，不直接使用）
     const isAnalyzingImage = ref(false)    // VLM 分析进行中（显示进度提示）
+    // v1.6.0 新增：多图列表（最多5张，REQ-MI-001）
+    // 每个元素：{ blob: Blob, previewDataURL: string }
+    const selectedImages = ref([])
+    const visionProgressMsg = ref('')     // 当前进度提示文字（多图分析时显示）
 
     // WebSocket 实例（非响应式，避免 Vue 代理 WS 对象）
     let ws = null
@@ -577,8 +594,9 @@ export default {
         }
 
         case 'stream_token': {
-          // v1.5.0：收到第一个 token，VLM 分析已完成，清除进度状态
+          // v1.5.0/v1.6.0：收到第一个 token，VLM 分析已完成，清除进度状态
           isAnalyzingImage.value = false
+          visionProgressMsg.value = ''
           // 找到最后一条 streaming 的 assistant 消息，追加 token
           // content：保留聚合字符串供 stream_end 后整段渲染 / 持久化
           // chunks：保留每帧增量供流式期间逐 chunk 淡入动画（A2）
@@ -599,17 +617,20 @@ export default {
         // adapter 在 VLM 调用开始前 yield 此消息，前端显示进度动画
         case 'vision_progress': {
           isAnalyzingImage.value = true
-          // 将进度提示写入最后一条 assistant 消息的 statusText（若已有则追加）
+          // v1.6.0：直接显示服务端传来的 message 文字（含"正在分析第N/T张"进度信息）
+          const progressMsg = data.message || '正在分析图片，请稍候…'
+          visionProgressMsg.value = progressMsg
           const last = messages.value[messages.value.length - 1]
           if (last && last.role === 'assistant' && last.streaming) {
-            last.statusText = data.message || '正在分析图片内容…'
+            last.statusText = progressMsg
           }
           break
         }
 
         case 'stream_end': {
-          // v1.5.0：VLM 分析结束（流内容开始），清除图片分析进度状态
+          // v1.5.0/v1.6.0：VLM 分析结束（流内容开始），清除图片分析进度状态
           isAnalyzingImage.value = false
+          visionProgressMsg.value = ''
           const last = messages.value[messages.value.length - 1]
           if (last && last.role === 'assistant') {
             last.streaming = false
@@ -641,7 +662,14 @@ export default {
         }
 
         case 'error':
-          // 如果有正在流式渲染的助手消息，用错误内容替换
+          // v1.6.0：IMAGE_ANALYSIS_PARTIAL 是非阻塞通知帧，不中断流（ADR-MI-004）
+          // 其余错误码保持原有阻塞逻辑
+          if (data.code === 'IMAGE_ANALYSIS_PARTIAL') {
+            // 非阻塞通知：显示提示但不停止流、不重置 isWaiting
+            errorMessage.value = data.message || '部分图片分析失败，已用占位文字替代'
+            break
+          }
+          // 如果有正在流式渲染的助手消息，标记流结束
           {
             const last = messages.value[messages.value.length - 1]
             if (last && last.role === 'assistant' && last.streaming) {
@@ -649,8 +677,9 @@ export default {
               last.content = last.content || ''  // 保留已接收到的内容
             }
           }
-          // v1.5.0：清除 VLM 图片分析进度状态
+          // v1.5.0/v1.6.0：清除 VLM 图片分析进度状态
           isAnalyzingImage.value = false
+          visionProgressMsg.value = ''
           isWaiting.value = false
           errorMessage.value = data.message || '发生未知错误'
           break
@@ -672,47 +701,92 @@ export default {
     ])
 
     /**
-     * onImageSelect：处理 <input type="file"> 的 change 事件。
-     * 校验文件大小和 MIME 类型，超过 1920px 则 Canvas 压缩，设置预览。
+     * onImageSelect：处理 <input type="file"> 的 change 事件（v1.6.0 多图版本）。
+     * 支持多选，每张独立校验和压缩后追加到 selectedImages 列表。
+     * 超过5张时拦截并提示（REQ-MI-001，REQ-MI-002）。
      */
     async function onImageSelect(event) {
-      const file = event.target.files && event.target.files[0]
-      if (!file) return
+      const files = event.target.files
+      if (!files || files.length === 0) return
 
-      // 大小校验：> 10MB 拒绝
-      if (file.size > 10 * 1024 * 1024) {
-        alert('图片文件过大（>10MB），请压缩后上传')
-        event.target.value = ''  // 重置 file input
-        return
-      }
+      const MAX_IMAGES = 5
 
-      // MIME 类型客户端校验（辅助 UX，服务端有魔数检测）
-      if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-        alert('不支持的图片格式，请上传 JPEG/PNG/WebP 格式图片')
-        event.target.value = ''
-        return
-      }
+      // 逐文件处理
+      for (let fi = 0; fi < files.length; fi++) {
+        const file = files[fi]
 
-      try {
-        // 压缩（超过 1920×1920 时等比缩放，JPEG quality=0.85）
-        const blob = await compressImage(file, 1920, 0.85)
-        selectedImageBlob.value = blob
+        // 超5张限制检查（前端主动拦截，REQ-MI-002 方案A）
+        if (selectedImages.value.length >= MAX_IMAGES) {
+          alert(`最多5张图片，已忽略第${fi + 1}张及之后的图片`)
+          break
+        }
 
-        // 生成预览 data:URL
-        const reader = new FileReader()
-        reader.onload = (e) => { previewDataURL.value = e.target.result }
-        reader.readAsDataURL(blob)
-      } catch (err) {
-        // 压缩失败降级：直接使用原文件（iOS Safari 兼容性降级，RISK-MQ-006）
-        console.warn('onImageSelect: 压缩失败，使用原文件:', err.message)
-        selectedImageBlob.value = file
-        const reader = new FileReader()
-        reader.onload = (e) => { previewDataURL.value = e.target.result }
-        reader.readAsDataURL(file)
+        // 大小校验：> 10MB 拒绝
+        if (file.size > 10 * 1024 * 1024) {
+          alert(`图片文件过大（>10MB），请压缩后上传（第${fi + 1}张已忽略）`)
+          continue
+        }
+
+        // MIME 类型客户端校验（辅助 UX，服务端有魔数检测）
+        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+          alert(`不支持的图片格式，请上传 JPEG/PNG/WebP 格式图片（第${fi + 1}张已忽略）`)
+          continue
+        }
+
+        try {
+          // 压缩（超过 1920×1920 时等比缩放，JPEG quality=0.85）
+          const blob = await compressImage(file, 1920, 0.85)
+          // 生成预览 data:URL
+          const dataURL = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = (e) => resolve(e.target.result)
+            reader.onerror = () => reject(new Error('FileReader 失败'))
+            reader.readAsDataURL(blob)
+          })
+          selectedImages.value.push({ blob, previewDataURL: dataURL })
+        } catch (err) {
+          // 压缩失败降级：直接使用原文件（iOS Safari 兼容性降级，RISK-MQ-006）
+          console.warn('onImageSelect: 压缩失败，使用原文件:', err.message)
+          try {
+            const dataURL = await new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = (e) => resolve(e.target.result)
+              reader.onerror = () => reject(new Error('FileReader 失败'))
+              reader.readAsDataURL(file)
+            })
+            selectedImages.value.push({ blob: file, previewDataURL: dataURL })
+          } catch (readErr) {
+            console.warn('onImageSelect: 读取原文件也失败，跳过:', readErr.message)
+          }
+        }
       }
 
       // 重置 file input value（允许重复选同一文件触发 change）
       event.target.value = ''
+    }
+
+    /**
+     * removeImage：从 selectedImages 中移除指定索引的图片（REQ-MI-001）。
+     */
+    function removeImage(index) {
+      selectedImages.value.splice(index, 1)
+    }
+
+    /**
+     * clearSelectedImages：清空所有已选图片（v1.6.0，替代 clearSelectedImage）。
+     */
+    function clearSelectedImages() {
+      selectedImages.value = []
+      if (imageFileInput.value) imageFileInput.value.value = ''
+    }
+
+    /**
+     * clearSelectedImage：v1.5.0 兼容方法（保留，内部调用 clearSelectedImages）。
+     */
+    function clearSelectedImage() {
+      selectedImageBlob.value = null
+      previewDataURL.value = null
+      clearSelectedImages()
     }
 
     /**
@@ -769,21 +843,12 @@ export default {
       })
     }
 
-    /**
-     * clearSelectedImage：清空已选图片状态，重置 file input。
-     */
-    function clearSelectedImage() {
-      selectedImageBlob.value = null
-      previewDataURL.value = null
-      // 重置 file input ref（允许重复选同一文件触发 change 事件）
-      if (imageFileInput.value) imageFileInput.value.value = ''
-    }
-
-    // --- 发送消息（v1.5.0：支持图文混合消息）---
+    // --- 发送消息（v1.6.0：支持多图混合消息）---
     async function handleSend() {
       const text = inputText.value.trim()
+      const hasImages = selectedImages.value.length > 0
       // 允许纯图片消息（text 为空但有图）
-      if (!text && !selectedImageBlob.value) return
+      if (!text && !hasImages) return
       if (!wsConnected.value || isWaiting.value) return
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         errorMessage.value = '连接尚未就绪，请稍候'
@@ -792,37 +857,51 @@ export default {
 
       // 清除旧错误
       errorMessage.value = ''
+      visionProgressMsg.value = ''
+
+      // 决定发送的文字（多图/单图默认文案，OQ-MI-004）
+      let sendText = text
+      if (!sendText && hasImages) {
+        sendText = selectedImages.value.length > 1 ? '请帮我分析这些图片' : '请帮我分析这张图片'
+      }
 
       // 添加用户消息到列表（含图标注由 hasImage 驱动渲染）
-      const hasImage = selectedImageBlob.value !== null
       messages.value.push({
         role: 'user',
-        content: text || '请帮我分析这张图片',
-        hasImage,   // v1.5.0：用于消息气泡渲染"含图"标注（无历史前缀检测时）
+        content: sendText,
+        hasImage: hasImages,   // 含图标注（用于消息气泡渲染）
       })
 
-      // v1.5.0：若有选中图片，先预上传获取 upload_id
-      let upload_id = null
-      if (selectedImageBlob.value) {
-        try {
-          const uploadResult = await uploadChatImage(selectedImageBlob.value)
-          upload_id = uploadResult.upload_id
-        } catch (err) {
-          errorMessage.value = `图片上传失败：${err.message}，可以改为纯文字描述后重试`
-          // 上传失败：移除刚加入的用户消息，不继续发送
+      // v1.6.0：若有选中图片，并发预上传获取所有 upload_id（ADR-MI-002）
+      let upload_ids = []
+      if (hasImages) {
+        const blobs = selectedImages.value.map(img => img.blob)
+        // 清空图片选择（在发出请求前清空，REQ-MI-001 发送后预览清空）
+        clearSelectedImages()
+
+        upload_ids = await uploadChatImages(blobs)
+
+        if (upload_ids.length === 0) {
+          errorMessage.value = '所有图片上传失败，可以改为纯文字描述后重试'
           messages.value.pop()
           return
         }
+        if (upload_ids.length < blobs.length) {
+          // 部分上传失败：继续发送（容错优先，OQ-MI-001 方案A 精神一致）
+          errorMessage.value = `${blobs.length - upload_ids.length} 张图片上传失败，已继续发送剩余 ${upload_ids.length} 张`
+        }
+      } else {
+        // 无图：清空图片选择（保持状态一致）
+        clearSelectedImages()
       }
 
-      // 发送 WebSocket 消息
-      const wsPayload = { type: 'chat_message', message: text }
-      if (upload_id) wsPayload.image_upload_id = upload_id
+      // 发送 WebSocket 消息（ADR-MI-003：新字段 image_upload_ids 复数列表）
+      const wsPayload = { type: 'chat_message', message: sendText }
+      if (upload_ids.length > 0) wsPayload.image_upload_ids = upload_ids
       ws.send(JSON.stringify(wsPayload))
 
-      // 清空输入和图片选择
+      // 清空输入
       inputText.value = ''
-      clearSelectedImage()
 
       isWaiting.value = true
       messages.value.push({
@@ -975,6 +1054,11 @@ export default {
       isAnalyzingImage,
       onImageSelect,
       clearSelectedImage,
+      // v1.6.0 多图扩展（MOD-MI-01，REQ-MI-001）
+      selectedImages,
+      visionProgressMsg,
+      removeImage,
+      clearSelectedImages,
     }
   }
 }

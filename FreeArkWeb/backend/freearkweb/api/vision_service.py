@@ -118,6 +118,8 @@ def _get_vision_config():
         "max_retries": getattr(settings, "DOUBAO_VISION_MAX_RETRIES", 1),
         "upload_ttl": getattr(settings, "VISION_UPLOAD_TTL", 600),
         "max_total_mb": getattr(settings, "VISION_UPLOAD_MAX_TOTAL_MB", 50),
+        # v1.6.0 新增：多图批量分析整体超时（RISK-MI-002）
+        "batch_timeout": getattr(settings, "VISION_BATCH_TIMEOUT_SECONDS", 90),
     }
 
 
@@ -388,3 +390,98 @@ async def analyze_image(image_bytes: bytes, user_text: str) -> str:
     raise VisionServiceError(
         "图片分析暂时不可用，您可以用文字描述图片内容后重试"
     ) from last_error
+
+
+# ── 多图批量分析接口（v1.6.0 新增，MOD-MI-03）────────────────────────────────────
+
+async def analyze_images_batch(
+    image_bytes_list: list,
+    user_text: str,
+    on_progress=None,
+) -> list:
+    """
+    批量分析多张图片，逐图独立调用 analyze_image，返回有序结果列表。
+
+    参数：
+      image_bytes_list: 图片字节列表（list[bytes]），顺序与 upload_ids 保持一致（REQ-MI-004）
+                        安全约束：不进任何 logger 调用，日志只记录 index 和 size
+      user_text: 用户原始文字（可为空）；对每张图使用相同的 user_text
+      on_progress: 可选的进度回调（异步，Callable[[int, int], Awaitable[None]]）
+                   每张图开始分析前调用，参数 (index: int, total: int)
+
+    行为（ADR-MI-001：逐图独立调用，asyncio.gather with return_exceptions=True）：
+      1. 整体用 asyncio.timeout(VISION_BATCH_TIMEOUT_SECONDS) 包裹（默认90s，RISK-MI-002）
+      2. 对每张图创建 task_with_progress wrapper：先调用 on_progress，再调用 analyze_image
+      3. asyncio.gather(*tasks, return_exceptions=True) 并发执行
+      4. 聚合结果：成功(str) → results[i] = description；失败(Exception) → results[i] = None
+
+    返回：list[str | None]，长度等于 image_bytes_list 长度，顺序对应（REQ-MI-004）
+
+    异常：
+      - asyncio.TimeoutError（整体90s超时）→ 直接抛出（由 adapter 包装为 VisionServiceError）
+      - 不抛 VisionServiceError（单图失败通过 return_exceptions=True 收集为 None）
+
+    日志约束（继承 SC-002）：
+      - INFO: "analyze_images_batch: start count={N}"
+      - INFO: "analyze_images_batch: done success={S} failed={F} elapsed={t:.2f}s"
+      - 绝不记录 image_bytes 或 base64 字符串
+
+    @module MOD-MI-03
+    @since v1.6.0
+    """
+    cfg = _get_vision_config()
+    batch_timeout = cfg.get("batch_timeout", 90)
+    total = len(image_bytes_list)
+
+    logger.info("vision_service.analyze_images_batch: start count=%d", total)
+    start_ts = time.monotonic()
+
+    async def _task_wrapper(index: int, img: bytes):
+        """每张图的 wrapper：先发进度回调，再调用 analyze_image。"""
+        # 安全约束：不记录 img 内容，只记录 index 和 size
+        logger.info(
+            "vision_service.analyze_images_batch: index=%d size=%d bytes",
+            index, len(img),
+        )
+        if on_progress is not None:
+            try:
+                await on_progress(index, total)
+            except Exception as cb_exc:  # noqa: BLE001
+                # 进度回调失败不影响 VLM 调用（非阻塞）
+                logger.warning(
+                    "vision_service.analyze_images_batch: on_progress[%d] 失败（忽略）: %s",
+                    index, type(cb_exc).__name__,
+                )
+        return await analyze_image(img, user_text)
+
+    tasks = [_task_wrapper(i, img) for i, img in enumerate(image_bytes_list)]
+
+    try:
+        async with asyncio.timeout(batch_timeout):
+            raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    except asyncio.TimeoutError:
+        elapsed = time.monotonic() - start_ts
+        logger.error(
+            "vision_service.analyze_images_batch: 整体超时 elapsed=%.2fs batch_timeout=%ds",
+            elapsed, batch_timeout,
+        )
+        raise  # 由 adapter 层处理
+
+    # 聚合：成功 → str；异常 → None
+    results = []
+    success_count = 0
+    fail_count = 0
+    for r in raw_results:
+        if isinstance(r, Exception):
+            results.append(None)
+            fail_count += 1
+        else:
+            results.append(r)
+            success_count += 1
+
+    elapsed = time.monotonic() - start_ts
+    logger.info(
+        "vision_service.analyze_images_batch: done success=%d failed=%d elapsed=%.2fs",
+        success_count, fail_count, elapsed,
+    )
+    return results
