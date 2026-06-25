@@ -139,6 +139,22 @@ class IsOperatorOrAbove(permissions.BasePermission):
             and getattr(request.user, 'role', None) in ('admin', 'operator')
         )
 
+
+class IsOwnerUser(permissions.BasePermission):
+    """v1.8.0: 仅允许 role='user'（普通业主）且已登录的用户访问。
+
+    用于 /api/miniapp/ 命名空间端点的精细权限控制。
+    admin/operator 不满足此权限类（由各自权限类保护，不经此类）。
+    与 UserRoleApiGuardMiddleware 的 /api/miniapp/ 放行配合使用：
+      中间件放行整个命名空间 → 各端点通过 IsOwnerUser 确认只有 role=user 可访问。
+    """
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated
+            and getattr(request.user, 'role', None) == 'user'
+        )
+
+
 # 用户相关视图
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])

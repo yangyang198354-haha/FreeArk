@@ -20,4 +20,6 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
+    # v1.8.0 新增：小程序业主端 API（/api/miniapp/ 命名空间）
+    path('api/miniapp/', include('api.urls_miniapp')),
 ]

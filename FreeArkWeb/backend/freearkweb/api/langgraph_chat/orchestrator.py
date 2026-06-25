@@ -111,6 +111,9 @@ class State(TypedDict, total=False):
     # ── v1.5.0 新增（MOD-MQ-06）：VLM 图片分析描述文字，仅作调试/观测用
     # adapter 层在 graph.astream 启动前注入；各节点可忽略（Optional[str]）
     vision_description: Optional[str]
+    # ── v1.8.0 新增（MOD-180-07）：用户数据访问范围上下文
+    # MiniAppChatConsumer 经 adapter 注入；None=无限制（admin/operator 路径直通）
+    user_scope: Optional[object]  # UserScope instance or None
 
 
 # 从消息里提取 ChatConsumer 注入的 [__freeark_user__:<name>] 前缀，构造 operator 追溯。
@@ -271,8 +274,11 @@ class Orchestrator:
 
     def _fan_out(self, state: State):
         # 条件边：一次返回多个 Send → LangGraph 并发执行（核心并行点）
-        return [Send("expert", {"name": name, "query": q, "messages": []})
-                for name, q in state["plan"]]
+        # v1.8.0 新增：透传 user_scope 到每个 expert 子节点 State（MOD-180-07）
+        return [Send("expert", {
+            "name": name, "query": q, "messages": [],
+            "user_scope": state.get("user_scope"),
+        }) for name, q in state["plan"]]
 
     # ── expert：单专家 ReAct（读工具内联；写工具延迟到 gate；委托专家可子委托同侪）──
     async def _expert(self, state: State):
@@ -329,7 +335,24 @@ class Orchestrator:
                     # （2026-06-23 修正 ContextVar 经 ainvoke copy_context 失效，见 fa_tools 说明）──
                     if tc["name"] == "search_sanheng_knowledge":
                         prepare_search_images_sink()
-                    out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
+                    # ── v1.8.0 新增：ScopeEnforcer 工具调用前范围检查（MOD-180-07）──
+                    # user_scope=None（admin/operator）时 check_and_enforce 直通，行为不变
+                    if t:
+                        from .scope_enforcer import check_and_enforce, ScopeViolationError
+                        _user_scope = state.get("user_scope")
+                        try:
+                            _enforced_args, _clarification = check_and_enforce(
+                                tc["name"], tc.get("args", {}), _user_scope)
+                        except ScopeViolationError as _scope_err:
+                            _enforced_args = None
+                            _clarification = f"权限拒绝：您无权对该专有部分执行写操作。（{_scope_err}）"
+                        if _enforced_args is not None:
+                            out = await t.ainvoke(_enforced_args)
+                        else:
+                            out = {"clarification": _clarification, "scope_blocked": True}
+                    else:
+                        out = {"error": "no tool"}
+                    # ── end v1.8.0 ───────────────────────────────────────────────────────
                     if tc["name"] == "search_sanheng_knowledge":
                         imgs = get_last_search_images()   # 读取并清空 sink（IFC-141-502）
                         accumulated_images.extend(imgs)
@@ -441,6 +464,18 @@ class Orchestrator:
             pw = r["pending_write"]
             preview = _preview_write(pw["tool"], pw["args"])
             if approved:
+                # ── v1.8.0 新增：execute_write 前二次校验 specific_part 归属（REQ-ISO-003）──
+                from .scope_enforcer import verify_write_scope, ScopeViolationError as _SVE
+                _ws = state.get("user_scope")
+                _sp = pw["args"].get("specific_part", "")
+                try:
+                    verify_write_scope(_sp, _ws)
+                except _SVE as _ve:
+                    ans = (f"⚠️ 安全拦截：专有部分 {_sp} 不在您的绑定范围内，"
+                           f"写操作已中止。如有问题请联系管理员。")
+                    new_results.append({"expert": r["expert"], "answer": ans})
+                    continue
+                # ── end v1.8.0 ────────────────────────────────────────────────────────────
                 out = await asyncio.to_thread(
                     execute_write, pw["tool"], pw["args"], operator_id)
                 if isinstance(out, dict) and out.get("success", False):

@@ -48,6 +48,18 @@
       >
         {{ loading ? '登录中…' : '登录' }}
       </button>
+
+      <!-- v1.8.0：微信一键登录 + 注册入口 -->
+      <view class="divider"><text class="divider-text">或</text></view>
+      <button
+        class="wechat-btn"
+        :loading="wxLoading"
+        :disabled="loading || wxLoading"
+        @tap="handleWechatLogin"
+      >
+        {{ wxLoading ? '登录中…' : '微信一键登录' }}
+      </button>
+      <view class="register-link" @tap="goRegister"><text>没有账号？立即注册</text></view>
     </view>
   </view>
 </template>
@@ -61,6 +73,7 @@ const authStore = useAuthStore()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
+const wxLoading = ref(false)
 
 // Auth guard: if already logged in skip login page
 if (authStore.isLoggedIn) {
@@ -97,6 +110,48 @@ async function handleLogin() {
   } finally {
     loading.value = false
   }
+}
+
+// v1.8.0：微信一键登录（REQ-AUTH-002）。uni.login 取临时 code → 后端 code2session 换 token。
+function handleWechatLogin() {
+  wxLoading.value = true
+  uni.login({
+    provider: 'weixin',
+    success: async (loginRes) => {
+      const code = loginRes && loginRes.code
+      if (!code) {
+        wxLoading.value = false
+        uni.showToast({ title: '微信登录失败：未获取到 code', icon: 'none' })
+        return
+      }
+      try {
+        const res = await api.miniappWechatLogin({ code })
+        if (res && res.token) {
+          authStore.login(res.token, res.user)
+          uni.reLaunch({ url: '/pages/home/index' })
+        } else {
+          throw new Error('微信登录失败')
+        }
+      } catch (err) {
+        const m = err.message || ''
+        const msg =
+          m.includes('HTTP 503') ? '微信服务暂不可用，请稍后重试' :
+          m.includes('HTTP 400') ? '微信授权失败，请重试' :
+          '微信登录失败，请检查网络'
+        uni.showToast({ title: msg, icon: 'none', duration: 2500 })
+      } finally {
+        wxLoading.value = false
+      }
+    },
+    fail: () => {
+      wxLoading.value = false
+      uni.showToast({ title: '微信登录已取消', icon: 'none' })
+    },
+  })
+}
+
+function goRegister() {
+  uni.navigateTo({ url: '/pages/register/index' })
 }
 </script>
 
@@ -169,5 +224,35 @@ async function handleLogin() {
 }
 .login-btn[disabled] {
   opacity: 0.6;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 28rpx 0 20rpx;
+}
+.divider-text {
+  font-size: 24rpx;
+  color: #bbb;
+}
+.wechat-btn {
+  width: 100%;
+  height: 96rpx;
+  background: #07c160;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: bold;
+  border-radius: 48rpx;
+  border: none;
+  line-height: 96rpx;
+}
+.wechat-btn[disabled] {
+  opacity: 0.6;
+}
+.register-link {
+  text-align: center;
+  margin-top: 28rpx;
+  font-size: 26rpx;
+  color: #1a73e8;
 }
 </style>

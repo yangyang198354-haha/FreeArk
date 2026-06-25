@@ -51,6 +51,9 @@ class UserRoleApiGuardMiddleware:
             return False
         if path in self.ALLOWLIST:
             return False
+        # v1.8.0 新增：/api/miniapp/ 命名空间整体放行，各端点自配 IsOwnerUser 权限类
+        if path.startswith('/api/miniapp/'):
+            return False
         user = self._resolve_token_user(request)
         return user is not None and getattr(user, 'role', None) == 'user'
 

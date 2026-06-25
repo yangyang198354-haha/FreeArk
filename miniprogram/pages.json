@@ -34,6 +34,20 @@
       "style": {
         "navigationBarTitleText": "修改密码"
       }
+    },
+    {
+      "path": "pages/register/index",
+      "style": {
+        "navigationBarTitleText": "注册",
+        "navigationBarBackgroundColor": "#1a73e8",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/bind/index",
+      "style": {
+        "navigationBarTitleText": "专有部分绑定"
+      }
     }
   ],
   "subPackages": [

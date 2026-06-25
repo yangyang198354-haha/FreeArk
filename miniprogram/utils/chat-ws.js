@@ -2,7 +2,7 @@
  * @module MOD-CHAT-WS
  * @author sub_agent_software_developer
  * @description WebSocket client for AI chat. Strictly replicates the backend WS protocol:
- *   - URL: ws://{host}/ws/chat/?token={userToken}[&session_key={uuid}]
+ *   - URL: ws://{host}/ws/miniapp/chat/?token={userToken}[&session_key={uuid}]
  *   - Auth: token as query param (NOT header)
  *   - connected frame (NOT onOpen) gates wsConnected=true
  *   - onHide must call close() to prevent backend hang-up
@@ -17,7 +17,7 @@
 import { WS_BASE_URL } from './http'
 
 function buildWsUrl(token, sessionKey) {
-  let url = `${WS_BASE_URL}/ws/chat/?token=${encodeURIComponent(token)}`
+  let url = `${WS_BASE_URL}/ws/miniapp/chat/?token=${encodeURIComponent(token)}`
   if (sessionKey) url += `&session_key=${encodeURIComponent(sessionKey)}`
   return url
 }

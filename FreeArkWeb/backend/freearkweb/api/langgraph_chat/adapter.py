@@ -192,6 +192,7 @@ class LangGraphAdapter:
         session_key: str,
         upload_id: Optional[str] = None,
         user_id: Optional[int] = None,
+        user_scope=None,  # v1.8.0 新增（MOD-180-10）：UserScope or None，向后兼容默认 None
     ) -> AsyncGenerator[tuple[str, str], None]:
         """
         流式聊天入口（v1.5.0 扩展）。
@@ -236,13 +237,14 @@ class LangGraphAdapter:
         # ── VLM 前置调用结束 ───────────────────────────────────────────────────
 
         try:
-            async for kind, text in _drive(
-                    orch,
-                    {
-                        "messages": [HumanMessage(content=enhanced_message)],
-                        "vision_description": vision_description,
-                    },
-                    config):
+            # v1.8.0 新增（MOD-180-10）：若 user_scope 非 None，写入初始 State
+            _payload: dict = {
+                "messages": [HumanMessage(content=enhanced_message)],
+                "vision_description": vision_description,
+            }
+            if user_scope is not None:
+                _payload["user_scope"] = user_scope
+            async for kind, text in _drive(orch, _payload, config):
                 yield (kind, text)
 
             # 6. 流结束后，通过特殊 kind 回传持久化用的增强消息

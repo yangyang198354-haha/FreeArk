@@ -9,8 +9,10 @@ WebSocket URL 路由配置（MOD-BE-04）
 """
 
 from django.urls import re_path
-from api.consumers import ChatConsumer
+from api.consumers import ChatConsumer, MiniAppChatConsumer
 
 websocket_urlpatterns = [
     re_path(r'^ws/chat/$', ChatConsumer.as_asgi()),
+    # v1.8.0 新增：小程序业主端聊天 WebSocket（role=user 允许连接）
+    re_path(r'^ws/miniapp/chat/$', MiniAppChatConsumer.as_asgi()),
 ]

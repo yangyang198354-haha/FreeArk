@@ -232,15 +232,30 @@ def get_realtime_params(specific_part: str) -> dict:
 
 # ── 巡检专家工具 ────────────────────────────────────────────────────
 @tool
-def get_plc_status() -> dict:
-    """查询全部 PLC 在线/离线状态。无参数。"""
-    return _call("freeark_get_plc_status", {})
+def get_plc_status(_owner_specific_parts: list = None) -> dict:
+    """查询 PLC 在线/离线状态。
+    _owner_specific_parts: 内部参数（v1.8.0，不暴露给 LLM schema），非 None 时
+    按列表过滤只返回对应专有部分的 PLC 状态（user 路径由 ScopeEnforcer 注入）。
+    None 时查询全部（admin/operator 路径，行为与 v1.7.0 完全一致）。
+    """
+    return _call("freeark_get_plc_status", {"_owner_specific_parts": _owner_specific_parts})
 
 
 @tool
-def get_fault_summary(building: Optional[str] = None, unit: Optional[str] = None) -> dict:
-    """查询有故障的专有部分汇总（按故障数降序）。building/unit 可选过滤，如 '3'/'1'。"""
-    return _call("freeark_get_fault_summary", {"building": building, "unit": unit})
+def get_fault_summary(
+    building: Optional[str] = None,
+    unit: Optional[str] = None,
+    _owner_specific_parts: list = None,
+) -> dict:
+    """查询有故障的专有部分汇总（按故障数降序）。building/unit 可选过滤，如 '3'/'1'。
+    _owner_specific_parts: 内部参数（v1.8.0，不暴露给 LLM schema），非 None 时
+    忽略 building/unit，按精确 specific_part 列表过滤（user 路径由 ScopeEnforcer 注入）。
+    None 时按 building/unit 过滤（admin/operator 路径，行为与 v1.7.0 完全一致）。
+    """
+    return _call("freeark_get_fault_summary", {
+        "building": building, "unit": unit,
+        "_owner_specific_parts": _owner_specific_parts,
+    })
 
 
 # ── Tier-2 写工具（阶段 E）────────────────────────────────────────────

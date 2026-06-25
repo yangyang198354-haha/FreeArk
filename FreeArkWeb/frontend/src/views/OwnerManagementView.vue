@@ -55,6 +55,18 @@
             <el-tag :type="row.bind_status === '已绑定' ? 'success' : 'info'" size="small">{{ row.bind_status || '—' }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="账号绑定" width="110">
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="accountBoundUsers(row).length"
+              :content="'已关联账号：' + accountBoundUsers(row).map(u => u.username).join('、')"
+              placement="top"
+            >
+              <el-tag type="success" size="small">已绑定</el-tag>
+            </el-tooltip>
+            <el-tag v-else type="info" size="small">未绑定</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="ip_address" label="IP地址" width="130" />
         <el-table-column prop="plc_ip_address" label="PLC IP" width="130" />
         <el-table-column prop="unique_id" label="唯一标识符" width="160" show-overflow-tooltip />
@@ -167,6 +179,7 @@ export default {
   data() {
     return {
       ownerList: [], total: 0, currentPage: 1, pageSize: 20, loading: false,
+      accountBoundMap: {},  // v1.8.0: owner_id → [{username, bound_at}]，小程序业主账号绑定情况
       searchForm: { building: '', unit: '', bind_status: '', search: '' },
       buildingOptions: [], unitOptions: [],
       dialogVisible: false, dialogMode: 'create', submitting: false, editingId: null,
@@ -191,7 +204,7 @@ export default {
   },
   mounted() {
     try { const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}'); this.userRole = userInfo.role || 'user' } catch (e) { this.userRole = 'user' }
-    this.loadOwners(); this.loadFilterOptions()
+    this.loadOwners(); this.loadFilterOptions(); this.loadAccountBindings()
   },
   beforeUnmount() { this.stopOwnerBatchPolling() },
   methods: {
@@ -217,6 +230,19 @@ export default {
         }
       } catch (e) { /* 静默失败 */ }
     },
+    // v1.8.0: 加载小程序业主账号绑定情况（仅有 active 绑定的 owner 会返回）。
+    // 静默失败：拉取异常时该列降级为全部"未绑定"，不影响主表展示（C-01 不改既有行为）。
+    async loadAccountBindings() {
+      try {
+        const resp = await api.get('/api/miniapp/admin/owner-bindings/')
+        const map = {}
+        if (resp && Array.isArray(resp.results)) {
+          for (const item of resp.results) { map[item.owner_id] = item.bound_users || [] }
+        }
+        this.accountBoundMap = map
+      } catch (e) { /* 静默失败：保持空 map，列显示未绑定 */ }
+    },
+    accountBoundUsers(row) { return this.accountBoundMap[row.id] || [] },
     onBuildingChange() { this.searchForm.unit = '' },
     handleSearch() { this.currentPage = 1; this.loadOwners() },
     handleReset() { this.searchForm = { building: '', unit: '', bind_status: '', search: '' }; this.currentPage = 1; this.loadOwners() },

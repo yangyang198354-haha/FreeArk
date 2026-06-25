@@ -1071,3 +1071,83 @@ class InspectionLog(models.Model):
 # 定义在 models_rag.py，此处 import 使 Django ORM 发现（migration 可正常生成）
 # ---------------------------------------------------------------------------
 from .models_rag import RagDocument, RagChunk  # noqa: E402,F401
+
+
+# ---------------------------------------------------------------------------
+# v1.8.0_miniprogram_owner_account：业主账号绑定关系表
+# ---------------------------------------------------------------------------
+
+class WechatBinding(models.Model):
+    """微信账号与 FreeArk User 的绑定关系（v1.8.0）。
+
+    每个 openid 对应唯一一个 User（unique=True）。
+    用于微信一键登录/注册：openid 存在则返回关联 User 的 Token，否则自动建 User。
+    零侵入 CustomUser 模型（不在 CustomUser 上加字段）。
+    """
+    user = models.ForeignKey(
+        'api.CustomUser',
+        on_delete=models.CASCADE,
+        related_name='wechat_bindings',
+        verbose_name='FreeArk 用户',
+    )
+    openid = models.CharField(
+        max_length=128, unique=True, db_index=True, verbose_name='微信 openid',
+    )
+    unionid = models.CharField(
+        max_length=128, blank=True, null=True, verbose_name='微信 unionid（可选）',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='绑定时间')
+
+    class Meta:
+        db_table = 'wechat_binding'
+        verbose_name = '微信账号绑定'
+        verbose_name_plural = '微信账号绑定'
+        indexes = [
+            models.Index(fields=['user'], name='wechat_bind_user_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} → openid:{self.openid[:8]}..."
+
+
+class OwnerUserBinding(models.Model):
+    """业主专有部分与 FreeArk User 的多对多绑定关系（v1.8.0）。
+
+    多对多：一个 user 可绑多个 owner（多套房产），一个 owner 可被多个 user 绑定（家庭成员）。
+    active=False 表示已解绑（保留历史记录，不物理删除，unbound_at 记录解绑时间）。
+    active=True 的记录集合构成该用户当前的数据访问范围（specific_part IN [...]）。
+
+    注意：OwnerInfo.bind_status 字段语义为设备/PLC 绑定状态，本表不读写该字段。
+    """
+    user = models.ForeignKey(
+        'api.CustomUser',
+        on_delete=models.CASCADE,
+        related_name='owner_bindings',
+        verbose_name='FreeArk 用户',
+    )
+    owner = models.ForeignKey(
+        'api.OwnerInfo',
+        on_delete=models.PROTECT,          # OwnerInfo 是数据资产，禁止级联删除
+        related_name='user_bindings',
+        verbose_name='专有部分',
+    )
+    active = models.BooleanField(
+        default=True, db_index=True, verbose_name='是否有效',
+    )
+    bound_at = models.DateTimeField(auto_now_add=True, verbose_name='绑定时间')
+    unbound_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='解绑时间',
+    )
+
+    class Meta:
+        db_table = 'owner_user_binding'
+        verbose_name = '业主账号绑定'
+        verbose_name_plural = '业主账号绑定'
+        indexes = [
+            models.Index(fields=['user', 'active'], name='oub_user_active_idx'),
+            models.Index(fields=['owner', 'active'], name='oub_owner_active_idx'),
+        ]
+
+    def __str__(self):
+        status = 'ACTIVE' if self.active else 'UNBOUND'
+        return f"{self.user.username} → {self.owner.specific_part} [{status}]"

@@ -17,9 +17,14 @@ export const WS_BASE_URL = 'ws://192.168.31.51:8000'
 
 let _sessionExpiredShown = false
 
+// 无需登录即可访问的公开端点前缀（v1.8.0：小程序注册/微信一键登录在拿到 token 之前调用）。
+// 命中这些前缀时不强制跳登录页，让请求带空 token 正常发出。
+const PUBLIC_PREFIXES = ['/api/auth/login/', '/api/miniapp/auth/']
+
 function request(method, path, data, extraHeaders = {}) {
   const token = getToken()
-  if (!token && path !== '/api/auth/login/') {
+  const isPublic = PUBLIC_PREFIXES.some((p) => path.startsWith(p))
+  if (!token && !isPublic) {
     uni.reLaunch({ url: '/pages/login/index' })
     return Promise.reject(new Error('NOT_LOGGED_IN'))
   }

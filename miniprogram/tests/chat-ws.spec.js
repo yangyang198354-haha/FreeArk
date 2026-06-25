@@ -28,7 +28,7 @@ describe('utils/chat-ws ChatWebSocket（协议复刻）', () => {
     const ws = new ChatWebSocket({})
     ws.connect('TOK', 'SESS')
     const url = uni.connectSocket.mock.calls[0][0].url
-    expect(url).toContain('/ws/chat/?token=TOK')
+    expect(url).toContain('/ws/miniapp/chat/?token=TOK')
     expect(url).toContain('session_key=SESS')
   })
 

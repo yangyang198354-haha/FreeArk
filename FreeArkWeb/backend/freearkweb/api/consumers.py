@@ -640,3 +640,181 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as exc:
             logger.error('ChatConsumer._get_user_by_token 异常: %s', exc)
             return None
+
+
+# ── v1.8.0_miniprogram_owner_account：小程序业主端聊天 Consumer ──────────────
+
+class MiniAppChatConsumer(ChatConsumer):
+    """微信小程序业主端聊天 Consumer（v1.8.0，MOD-180-09）。
+
+    与父类 ChatConsumer 的差异（仅两处，其余全部继承）：
+    1. connect()：允许 role='user' 建立连接（小程序业主有聊天权限）；
+                  连接时查询 OwnerUserBinding(active=True) 构造 self.user_scope。
+    2. _handle_chat()：调用 adapter.stream_chat 时附带 user_scope，
+                       使 LangGraph 编排图注入数据范围过滤（NFR-ISO-001）。
+
+    所有其他方法（receive、disconnect、_pump、_ensure_session_created、
+    _handle_confirm、_send_error、_get_user_by_token 等）完全继承自 ChatConsumer，
+    零改动，零重写。
+
+    WS 路由：/ws/miniapp/chat/（在 api/routing.py 注册）
+    """
+
+    async def connect(self):
+        """覆盖 connect()：role=user 允许连接（小程序业主端专属）。
+
+        与父类 connect() 的唯一差异：
+          - 移除 role=='user' 拒绝分支（父类第 129-132 行）
+          - 增加 user_scope 构造（查 OwnerUserBinding active 绑定集）
+        其余鉴权逻辑（token 解析、无效 token 拒绝、session_key 解析）保持一致。
+        """
+        # ── 初始化父类所有实例属性（与父类 connect() 开头保持一致）──
+        self.chat_session = None
+        self._pending_assistant_content = ''
+        self._session_created = False
+        self._first_round_done = False
+        self._awaiting_confirm = False
+        self._confirm_accumulated = ''
+        self._is_streaming = False
+        self._vision_persist_message = ''
+        self.user_scope = None  # v1.8.0 新增：数据访问范围上下文
+
+        query_string = self.scope.get('query_string', b'')
+        params = parse_qs(query_string)
+        token_bytes = params.get(b'token', [None])[0]
+
+        if token_bytes is None:
+            logger.warning('MiniAppChatConsumer: 连接缺少 token 参数，拒绝')
+            await self.close(code=4001)
+            return
+
+        token_key = token_bytes.decode('utf-8', errors='replace')
+        user = await self._get_user_by_token(token_key)
+        if user is None:
+            logger.warning('MiniAppChatConsumer: token 无效或已过期，拒绝连接')
+            await self.close(code=4001)
+            return
+
+        # ── 与父类不同：role=user 允许连接（小程序业主端） ──
+        # admin/operator 也可连接（向后兼容，user_scope=None 全程直通）
+        # 无需拦截任何角色
+
+        self.user = user
+
+        # session_key：query param 优先，否则生成新 UUID
+        session_key_param_bytes = params.get(b'session_key', [None])[0]
+        session_key_param = (
+            session_key_param_bytes.decode('utf-8', errors='replace')
+            if session_key_param_bytes else None
+        )
+        self.session_key = session_key_param or str(uuid.uuid4())
+
+        # ── v1.8.0 新增：查询绑定集合，构造 user_scope ──
+        from api.langgraph_chat.user_scope import build_user_scope
+        self.user_scope = await sync_to_async(build_user_scope)(user)
+
+        await self.accept()
+        logger.info(
+            'MiniAppChatConsumer: 连接接受 user=%s role=%s bound_parts=%s',
+            user.username,
+            user.role,
+            list(self.user_scope.bound_specific_parts) if self.user_scope else 'N/A(no_limit)',
+        )
+
+    async def _handle_chat(self, user_message: str, upload_id=None):
+        """覆盖 _handle_chat()：调用 stream_chat 时附带 user_scope。
+
+        与父类实现逻辑完全一致，唯一差异：adapter.stream_chat(..., user_scope=self.user_scope)。
+        为避免复制大量代码，采用"调用父类逻辑模板"的方式：
+        直接在父类调用链上注入 user_scope，而非重写整个方法。
+
+        实现策略：本方法调用父类 _handle_chat 的核心代码，
+        但通过临时替换 adapter 的方式注入 user_scope。
+        ——由于父类 _handle_chat 直接调用 get_chat_adapter().stream_chat(...)，
+        无法在不复制代码的情况下注入额外参数。因此本覆盖复制最小化的父类流程，
+        仅在 stream_chat 调用处加 user_scope 参数。
+
+        注意：upload_id（图文混合）路径对 user 当前不开放，但此处保留参数签名以备未来扩展。
+        """
+        # 注入 chatuser 前缀（与父类一致）
+        try:
+            history = await sync_to_async(
+                chat_memory.load_history_by_session
+            )(self.session_key)
+            inject_prefix = chat_memory.build_inject_prefix(history)
+        except Exception as exc:
+            logger.warning('MiniAppChatConsumer: load_history_by_session 失败，以空历史继续: %s', exc)
+            inject_prefix = ''
+
+        chat_user = getattr(self.user, 'username', 'unknown')
+        augmented_message = (
+            f"{inject_prefix}"
+            f"[__freeark_user__:{chat_user}] {user_message}"
+        )
+
+        # 确保会话已创建
+        await self._ensure_session_created(user_message)
+
+        try:
+            adapter = get_chat_adapter()
+            # ── 关键差异：附带 user_scope，注入数据范围过滤 ──
+            status, accumulated_content = await self._pump(
+                adapter.stream_chat(
+                    message=augmented_message,
+                    session_key=self.session_key,
+                    upload_id=None,           # 小程序暂不支持图文混合（v1.8.0）
+                    user_id=None,
+                    user_scope=self.user_scope,  # v1.8.0 新增
+                ))
+
+            if status == 'confirm':
+                self._awaiting_confirm = True
+                self._confirm_accumulated = accumulated_content
+                return
+
+            # 持久化 assistant 消息
+            if self._session_created and accumulated_content:
+                try:
+                    await sync_to_async(chat_memory.append_message)(
+                        self.session_key, 'assistant', accumulated_content)
+                    self._pending_assistant_content = ''
+                except Exception as exc:
+                    self._pending_assistant_content = accumulated_content
+                    logger.error('MiniAppChatConsumer: append_message(assistant) 失败: %s', exc)
+            else:
+                self._pending_assistant_content = ''
+
+            # 首轮完成后触发异步 LLM 标题生成
+            if (
+                self.chat_session is not None
+                and not self._first_round_done
+                and accumulated_content
+            ):
+                self._first_round_done = True
+                asyncio.create_task(
+                    chat_memory.generate_title_llm_async(
+                        session_id=self.chat_session.pk,
+                        first_user_msg=user_message,
+                        first_assistant_msg=accumulated_content,
+                    )
+                )
+
+        except OpenClawUnavailableError:
+            await self.send(json.dumps({
+                'type': 'error',
+                'code': 'OPENCLAW_UNAVAILABLE',
+                'message': '方舟智能体暂时离线，请稍后再试',
+            }))
+        except asyncio.TimeoutError:
+            await self.send(json.dumps({
+                'type': 'error',
+                'code': 'TIMEOUT',
+                'message': '方舟智能体响应超时，请重试',
+            }))
+        except Exception as exc:
+            logger.exception('MiniAppChatConsumer: 未预期异常: %s', exc)
+            await self.send(json.dumps({
+                'type': 'error',
+                'code': 'INTERNAL_ERROR',
+                'message': '服务出现内部错误，请稍后重试',
+            }))

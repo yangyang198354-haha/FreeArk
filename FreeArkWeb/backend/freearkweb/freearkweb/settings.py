@@ -329,6 +329,13 @@ SESSION_EXTENDED_TIMEOUT = int(os.environ.get('SESSION_EXTENDED_TIMEOUT', 604800
 # 通过环境变量 ACTIVITY_THROTTLE_SECONDS 可覆盖（整数，秒）。
 ACTIVITY_THROTTLE_SECONDS = int(os.environ.get('ACTIVITY_THROTTLE_SECONDS', 300))
 
+# ===========================================================================
+# 微信小程序配置（v1.8.0_miniprogram_owner_account，REQ-AUTH-002）
+# ===========================================================================
+# AppID 和 AppSecret 从 .env 注入（与 DEEPSEEK_API_KEY 相同机制），绝不入 git。
+WECHAT_MINIAPP_APPID = os.environ.get('WECHAT_MINIAPP_APPID', '')
+WECHAT_MINIAPP_SECRET = os.environ.get('WECHAT_MINIAPP_SECRET', '')
+
 # 静态文件配置
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 

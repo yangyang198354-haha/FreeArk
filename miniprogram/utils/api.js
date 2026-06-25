@@ -18,6 +18,23 @@ export const api = {
   login: (data) => http.post('/api/auth/login/', data),
   logout: () => http.post('/api/auth/logout/', {}),
 
+  // Miniapp 业主端账号体系（v1.8.0）—— 走独立 /api/miniapp/ 命名空间
+  //   注册 miniapp_register：POST /api/miniapp/auth/register/ {username,password,password2,email?}
+  //     → 201 {token, user:{id,username,email,role}}（role 后端强制 user）
+  miniappRegister: (data) => http.post('/api/miniapp/auth/register/', data),
+  //   微信一键登录 miniapp_wechat_login：POST /api/miniapp/auth/wechat/ {code}
+  //     → 200/201 {token, user:{...}, is_new}
+  miniappWechatLogin: (data) => http.post('/api/miniapp/auth/wechat/', data),
+  //   绑定专有部分 miniapp_bind：POST /api/miniapp/bind/ {unique_id}
+  //     → 200 {specific_part, location_name, bound_at}；404 未找到；409 已绑定
+  bindOwner: (data) => http.post('/api/miniapp/bind/', data),
+  //   自助解绑 miniapp_unbind：POST /api/miniapp/unbind/ {unique_id|specific_part}
+  //     → 200 {detail, specific_part}
+  unbindOwner: (data) => http.post('/api/miniapp/unbind/', data),
+  //   绑定状态 miniapp_bind_status：GET /api/miniapp/bind/status/
+  //     → 200 {bound, bindings:[{specific_part, location_name, bound_at}]}
+  getBindStatus: () => http.get('/api/miniapp/bind/status/'),
+
   // Dashboard — 4 separate calls as per NQ-01
   getDashboardPlcOnlineRate: () => http.get('/api/dashboard/plc-online-rate/'),
   getDashboardFaultSummary: () => http.get('/api/dashboard/fault-summary/'),

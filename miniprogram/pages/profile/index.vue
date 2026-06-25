@@ -14,6 +14,10 @@
     </view>
 
     <view class="menu">
+      <view class="menu-item" @tap="goBind">
+        <text class="mi-label">专有部分绑定</text>
+        <text class="mi-arrow">›</text>
+      </view>
       <view class="menu-item" @tap="goChangePassword">
         <text class="mi-label">修改密码</text>
         <text class="mi-arrow">›</text>
@@ -37,6 +41,10 @@ const avatarText = computed(() => (authStore.username || '?').slice(0, 1).toUppe
 onShow(() => {
   if (!authStore.isLoggedIn) uni.reLaunch({ url: '/pages/login/index' })
 })
+
+function goBind() {
+  uni.navigateTo({ url: '/pages/bind/index' })
+}
 
 function goChangePassword() {
   uni.navigateTo({ url: '/pages/change-password/index' })
