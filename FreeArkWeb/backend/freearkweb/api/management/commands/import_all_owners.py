@@ -53,7 +53,6 @@ class Command(BaseCommand):
                         'unit': val.get('单元', ''),
                         'floor': val.get('楼层', ''),
                         'room_number': str(val.get('户号', '')),
-                        'bind_status': val.get('绑定状态', ''),
                         'ip_address': val.get('IP地址', ''),
                         'unique_id': val.get('唯一标识符', ''),
                         'plc_ip_address': val.get('PLC IP地址', ''),

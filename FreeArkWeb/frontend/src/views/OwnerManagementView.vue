@@ -21,12 +21,6 @@
             <el-option v-for="u in unitOptions" :key="u" :label="u" :value="u" />
           </el-select>
         </el-form-item>
-        <el-form-item label="绑定状态">
-          <el-select v-model="searchForm.bind_status" placeholder="全部状态" clearable style="width: 120px;">
-            <el-option label="已绑定" value="已绑定" />
-            <el-option label="未绑定" value="未绑定" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="关键词">
           <el-input v-model="searchForm.search" placeholder="专有部分/坐落/户号" clearable style="width: 200px;" @keyup.enter="handleSearch" />
         </el-form-item>
@@ -50,11 +44,6 @@
         <el-table-column prop="unit" label="单元" width="80" />
         <el-table-column prop="floor" label="楼层" width="80" />
         <el-table-column prop="room_number" label="户号" width="80" />
-        <el-table-column prop="bind_status" label="绑定状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.bind_status === '已绑定' ? 'success' : 'info'" size="small">{{ row.bind_status || '—' }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="账号绑定" width="110">
           <template #default="{ row }">
             <el-tooltip
@@ -95,7 +84,6 @@
         <el-form-item label="单元" prop="unit"><el-input v-model="ownerForm.unit" placeholder="如：1单元" /></el-form-item>
         <el-form-item label="楼层" prop="floor"><el-input v-model="ownerForm.floor" placeholder="如：2楼" /></el-form-item>
         <el-form-item label="户号" prop="room_number"><el-input v-model="ownerForm.room_number" placeholder="如：201" /></el-form-item>
-        <el-form-item label="绑定状态" prop="bind_status"><el-select v-model="ownerForm.bind_status" placeholder="请选择" style="width: 100%;"><el-option label="已绑定" value="已绑定" /><el-option label="未绑定" value="未绑定" /></el-select></el-form-item>
         <el-form-item label="IP地址" prop="ip_address"><el-input v-model="ownerForm.ip_address" placeholder="如：192.168.1.4" /></el-form-item>
         <el-form-item label="唯一标识符" prop="unique_id"><el-input v-model="ownerForm.unique_id" placeholder="如：89dbe11564b1a4e0" /></el-form-item>
         <el-form-item label="PLC IP地址" prop="plc_ip_address"><el-input v-model="ownerForm.plc_ip_address" placeholder="如：192.168.1.5" /></el-form-item>
@@ -180,10 +168,10 @@ export default {
     return {
       ownerList: [], total: 0, currentPage: 1, pageSize: 20, loading: false,
       accountBoundMap: {},  // v1.8.0: owner_id → [{username, bound_at}]，小程序业主账号绑定情况
-      searchForm: { building: '', unit: '', bind_status: '', search: '' },
+      searchForm: { building: '', unit: '', search: '' },
       buildingOptions: [], unitOptions: [],
       dialogVisible: false, dialogMode: 'create', submitting: false, editingId: null,
-      ownerForm: { specific_part: '', location_name: '', building: '', unit: '', floor: '', room_number: '', bind_status: '已绑定', ip_address: '', unique_id: '', plc_ip_address: '' },
+      ownerForm: { specific_part: '', location_name: '', building: '', unit: '', floor: '', room_number: '', ip_address: '', unique_id: '', plc_ip_address: '' },
       formRules: {
         specific_part: [{ required: true, message: '请输入专有部分标识符', trigger: 'blur' }, { max: 20, message: '最多 20 个字符', trigger: 'blur' }],
         building: [{ required: true, message: '请输入楼栋', trigger: 'blur' }],
@@ -214,7 +202,6 @@ export default {
         const params = new URLSearchParams({ page: this.currentPage, page_size: this.pageSize })
         if (this.searchForm.building) params.append('building', this.searchForm.building)
         if (this.searchForm.unit) params.append('unit', this.searchForm.unit)
-        if (this.searchForm.bind_status) params.append('bind_status', this.searchForm.bind_status)
         if (this.searchForm.search) params.append('search', this.searchForm.search)
         const response = await api.get(`/api/owners/?${params.toString()}`)
         if (response && response.success) { this.ownerList = response.data; this.total = response.total }
@@ -245,7 +232,7 @@ export default {
     accountBoundUsers(row) { return this.accountBoundMap[row.id] || [] },
     onBuildingChange() { this.searchForm.unit = '' },
     handleSearch() { this.currentPage = 1; this.loadOwners() },
-    handleReset() { this.searchForm = { building: '', unit: '', bind_status: '', search: '' }; this.currentPage = 1; this.loadOwners() },
+    handleReset() { this.searchForm = { building: '', unit: '', search: '' }; this.currentPage = 1; this.loadOwners() },
     handlePageChange(page) { this.currentPage = page; this.loadOwners() },
     handlePageSizeChange(size) { this.pageSize = size; this.currentPage = 1; this.loadOwners() },
     openCreateDialog() { this.dialogMode = 'create'; this.editingId = null; this.resetForm(); this.dialogVisible = true },
@@ -253,7 +240,7 @@ export default {
       this.dialogMode = 'edit'; this.editingId = row.id; this.resetForm()
       try {
         const response = await api.get(`/api/owners/${row.id}/`)
-        if (response && response.success) { const d = response.data; this.ownerForm = { specific_part: d.specific_part || '', location_name: d.location_name || '', building: d.building || '', unit: d.unit || '', floor: d.floor || '', room_number: d.room_number || '', bind_status: d.bind_status || '已绑定', ip_address: d.ip_address || '', unique_id: d.unique_id || '', plc_ip_address: d.plc_ip_address || '' } }
+        if (response && response.success) { const d = response.data; this.ownerForm = { specific_part: d.specific_part || '', location_name: d.location_name || '', building: d.building || '', unit: d.unit || '', floor: d.floor || '', room_number: d.room_number || '', ip_address: d.ip_address || '', unique_id: d.unique_id || '', plc_ip_address: d.plc_ip_address || '' } }
       } catch (error) { ElMessage.error('获取业主信息失败'); return }
       this.dialogVisible = true
     },
@@ -275,7 +262,7 @@ export default {
       catch (error) { console.error('删除失败：', error); ElMessage.error('删除失败，请稍后重试') }
     },
     resetForm() {
-      this.ownerForm = { specific_part: '', location_name: '', building: '', unit: '', floor: '', room_number: '', bind_status: '已绑定', ip_address: '', unique_id: '', plc_ip_address: '' }
+      this.ownerForm = { specific_part: '', location_name: '', building: '', unit: '', floor: '', room_number: '', ip_address: '', unique_id: '', plc_ip_address: '' }
       if (this.$refs.ownerFormRef) this.$refs.ownerFormRef.clearValidate()
     },
     async openDetailDrawer(row) {

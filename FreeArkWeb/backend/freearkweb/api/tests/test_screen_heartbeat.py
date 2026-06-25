@@ -42,7 +42,6 @@ def make_owner(specific_part='3-1-7-702', unique_id='aabbccddeeff', **kwargs):
         'unit': '1',
         'floor': '7',
         'room_number': '702',
-        'bind_status': '已绑定',
         'ip_address': '192.168.1.10',
         'unique_id': unique_id,
         'plc_ip_address': '192.168.1.11',

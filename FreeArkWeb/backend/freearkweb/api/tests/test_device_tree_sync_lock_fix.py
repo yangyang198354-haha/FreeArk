@@ -50,7 +50,6 @@ def _make_owner(specific_part: str, unique_id: str = 'mac_test_01') -> OwnerInfo
         unit='1单元',
         floor='1楼',
         room_number='101',
-        bind_status='已绑定',
         unique_id=unique_id,
     )
 

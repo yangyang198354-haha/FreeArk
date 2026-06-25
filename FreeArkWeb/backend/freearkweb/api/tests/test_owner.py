@@ -48,7 +48,6 @@ def make_owner(**kwargs):
         'unit': '1单元',
         'floor': '2楼',
         'room_number': '201',
-        'bind_status': '已绑定',
         'ip_address': '192.168.1.4',
         'unique_id': '89dbe11564b1a4e0',
         'plc_ip_address': '192.168.1.5',
@@ -73,7 +72,6 @@ class OwnerInfoModelTest(TestCase):
         self.assertEqual(owner.unit, '1单元')
         self.assertEqual(owner.floor, '2楼')
         self.assertEqual(owner.room_number, '201')
-        self.assertEqual(owner.bind_status, '已绑定')
         self.assertIsNotNone(owner.created_at)
         self.assertIsNotNone(owner.updated_at)
 
@@ -109,7 +107,6 @@ class OwnerInfoSerializerTest(TestCase):
             'unit': '1单元',
             'floor': '2楼',
             'room_number': '999',
-            'bind_status': '已绑定',
             'ip_address': '192.168.1.100',
             'unique_id': 'abc123',
             'plc_ip_address': '192.168.1.101',
@@ -188,7 +185,6 @@ class OwnerAPITest(TestCase):
                 unit='1单元',
                 floor='2楼',
                 room_number=str(200 + i),
-                bind_status='已绑定' if i % 2 == 0 else '未绑定',
                 ip_address=f'192.168.1.{i}',
                 unique_id=f'uid{i:04d}',
                 plc_ip_address=f'192.168.2.{i}',
@@ -201,7 +197,6 @@ class OwnerAPITest(TestCase):
             unit='1单元',
             floor='3楼',
             room_number='301',
-            bind_status='已绑定',
         )
 
     def _auth_admin(self):
@@ -263,14 +258,6 @@ class OwnerAPITest(TestCase):
             match = '201' in o['specific_part'] or '201' in o['room_number'] or '201' in (o['location_name'] or '')
             self.assertTrue(match, f"记录 {o} 不应在搜索结果中")
 
-    def test_tc_a_006_filter_by_bind_status(self):
-        """TC-A-006: 按绑定状态过滤"""
-        self._auth_admin()
-        resp = self.client.get('/api/owners/?bind_status=已绑定')
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(all(o['bind_status'] == '已绑定' for o in data['data']))
-
     # --- 创建 ---
 
     def test_tc_a_007_admin_create(self):
@@ -283,7 +270,6 @@ class OwnerAPITest(TestCase):
             'unit': '2单元',
             'floor': '5楼',
             'room_number': '501',
-            'bind_status': '已绑定',
         }
         resp = self.client.post('/api/owners/', payload, format='json')
         self.assertEqual(resp.status_code, 201)
@@ -341,19 +327,19 @@ class OwnerAPITest(TestCase):
     # --- 更新 ---
 
     def test_tc_a_013_admin_patch(self):
-        """TC-A-013: 管理员 PATCH bind_status 更新成功"""
-        owner = OwnerInfo.objects.filter(bind_status='已绑定').first()
+        """TC-A-013: 管理员 PATCH 更新成功"""
+        owner = OwnerInfo.objects.first()
         self._auth_admin()
-        resp = self.client.patch(f'/api/owners/{owner.id}/', {'bind_status': '未绑定'}, format='json')
+        resp = self.client.patch(f'/api/owners/{owner.id}/', {'floor': '9楼'}, format='json')
         self.assertEqual(resp.status_code, 200)
         owner.refresh_from_db()
-        self.assertEqual(owner.bind_status, '未绑定')
+        self.assertEqual(owner.floor, '9楼')
 
     def test_tc_a_014_regular_user_patch_forbidden(self):
         """TC-A-014: 普通业主（role=user）PATCH 返回 403（operator 已可修改，故改测业主）"""
         owner = OwnerInfo.objects.first()
         self._auth_resident()
-        resp = self.client.patch(f'/api/owners/{owner.id}/', {'bind_status': '未绑定'}, format='json')
+        resp = self.client.patch(f'/api/owners/{owner.id}/', {'floor': '9楼'}, format='json')
         self.assertEqual(resp.status_code, 403)
 
     # --- 删除 ---
@@ -427,7 +413,6 @@ class ImportAllOwnersCommandTest(TestCase):
                     'unit': val.get('单元', ''),
                     'floor': val.get('楼层', ''),
                     'room_number': str(val.get('户号', '')),
-                    'bind_status': val.get('绑定状态', ''),
                     'ip_address': val.get('IP地址', ''),
                     'unique_id': val.get('唯一标识符', ''),
                     'plc_ip_address': val.get('PLC IP地址', ''),

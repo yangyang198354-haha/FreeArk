@@ -89,7 +89,7 @@ class RoleApiAccessTest(TestCase):
         _, self.user_t = _make("rbac_user", "user")
         OwnerInfo.objects.create(
             specific_part="1-1-2-201", location_name="测试-201", building="1栋",
-            unit="1单元", floor="2楼", room_number="201", bind_status="已绑定",
+            unit="1单元", floor="2楼", room_number="201",
         )
 
     # ---- 业主接口（admin+operator 开放，user 拒绝，匿名 401） ----
@@ -110,7 +110,7 @@ class RoleApiAccessTest(TestCase):
         # OQ-02：operator 对业主信息有完整 CRUD
         payload = {
             "specific_part": "1-1-3-301", "location_name": "测试-301", "building": "1栋",
-            "unit": "1单元", "floor": "3楼", "room_number": "301", "bind_status": "未绑定",
+            "unit": "1单元", "floor": "3楼", "room_number": "301",
         }
         resp = _client(self.op_t).post("/api/owners/", payload, format="json")
         self.assertEqual(resp.status_code, 201)

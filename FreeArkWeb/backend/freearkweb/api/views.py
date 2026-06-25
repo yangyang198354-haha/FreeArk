@@ -1626,14 +1626,11 @@ class OwnerListCreateView(generics.ListCreateAPIView):
         queryset = OwnerInfo.objects.all().order_by('building', 'unit', 'room_number')
         building = self.request.GET.get('building')
         unit = self.request.GET.get('unit')
-        bind_status = self.request.GET.get('bind_status')
         search = self.request.GET.get('search')
         if building:
             queryset = queryset.filter(building=building)
         if unit:
             queryset = queryset.filter(unit=unit)
-        if bind_status:
-            queryset = queryset.filter(bind_status=bind_status)
         if search:
             queryset = queryset.filter(
                 Q(specific_part__icontains=search) |

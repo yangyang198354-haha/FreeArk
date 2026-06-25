@@ -301,8 +301,6 @@ class OwnerInfo(models.Model):
     floor = models.CharField(max_length=10, verbose_name='楼层', blank=True)
     # 户号，如 "201"
     room_number = models.CharField(max_length=10, verbose_name='户号')
-    # 绑定状态，如 "已绑定" / "未绑定"
-    bind_status = models.CharField(max_length=20, verbose_name='绑定状态', blank=True, db_index=True)
     # 设备 IP 地址
     ip_address = models.CharField(max_length=50, verbose_name='IP地址', blank=True)
     # 唯一标识符（screenMAC）
@@ -321,9 +319,7 @@ class OwnerInfo(models.Model):
         indexes = [
             models.Index(fields=['building'], name='owner_info_building_idx'),
             models.Index(fields=['unit'], name='owner_info_unit_idx'),
-            models.Index(fields=['bind_status'], name='owner_info_bind_status_idx'),
             models.Index(fields=['building', 'unit'], name='owner_info_building_unit_idx'),
-            models.Index(fields=['building', 'unit', 'bind_status'], name='owner_info_bldg_unit_bind_idx'),
         ]
 
     def __str__(self):
@@ -1117,7 +1113,8 @@ class OwnerUserBinding(models.Model):
     active=False 表示已解绑（保留历史记录，不物理删除，unbound_at 记录解绑时间）。
     active=True 的记录集合构成该用户当前的数据访问范围（specific_part IN [...]）。
 
-    注意：OwnerInfo.bind_status 字段语义为设备/PLC 绑定状态，本表不读写该字段。
+    注意：业主账号绑定状态完全由本表的 active 记录表达；OwnerInfo 上原有的
+    vestigial bind_status 字段已于"绑定状态列合并"清理中移除。
     """
     user = models.ForeignKey(
         'api.CustomUser',

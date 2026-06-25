@@ -57,7 +57,6 @@ def _owner(specific_part, unique_id=None, **over):
         location_name=f"测试-{specific_part}",
         building="1栋", unit="1单元", floor="2楼",
         room_number=specific_part.split("-")[-1],
-        bind_status="已绑定",
     )
     if unique_id is not None:
         kwargs["unique_id"] = unique_id

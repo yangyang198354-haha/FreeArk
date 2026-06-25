@@ -128,7 +128,7 @@ class OwnerInfoSerializer(serializers.ModelSerializer):
         model = OwnerInfo
         fields = [
             'id', 'specific_part', 'location_name', 'building', 'unit',
-            'floor', 'room_number', 'bind_status', 'ip_address',
+            'floor', 'room_number', 'ip_address',
             'unique_id', 'plc_ip_address', 'room_count', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'room_count', 'created_at', 'updated_at']

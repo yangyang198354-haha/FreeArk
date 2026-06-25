@@ -47,7 +47,6 @@ def _make_owner(specific_part, building="1", unit="1", room_number="101"):
             unit=unit,
             floor="1楼",
             room_number=room_number,
-            bind_status="已绑定",
             ip_address="192.168.1.1",
             unique_id=specific_part.replace("-", ""),
             plc_ip_address="192.168.2.1",
