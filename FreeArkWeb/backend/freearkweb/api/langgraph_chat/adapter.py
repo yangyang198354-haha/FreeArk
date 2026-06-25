@@ -190,69 +190,113 @@ class LangGraphAdapter:
         cls,
         message: str,
         session_key: str,
-        upload_id: Optional[str] = None,
+        upload_ids: Optional[list] = None,  # v1.9.0 新参数（list[str]）
+        upload_id: Optional[str] = None,    # v1.5.0 旧参数（向后兼容保留）
         user_id: Optional[int] = None,
         user_scope=None,  # v1.8.0 新增（MOD-180-10）：UserScope or None，向后兼容默认 None
     ) -> AsyncGenerator[tuple[str, str], None]:
         """
-        流式聊天入口（v1.5.0 扩展）。
+        流式聊天入口（v1.9.0 扩展）。
 
-        upload_id 非空时（图文混合消息）：
-          1. vision_service.get_upload(upload_id, user_id) → image_bytes
-             ImageExpiredError / ImageAccessDeniedError → re-raise（由 consumers 捕获）
-          2. await vision_service.analyze_image(image_bytes, message) → description
-             VisionServiceError → re-raise（由 consumers 捕获）
-          3. 释放 image_bytes 引用（REQ-NFR-002）
-          4. vision_service.delete_upload(upload_id)（释放临时存储）
-          5. enhanced_message = f"[用户图片分析：{description}]\n\n{message}"
-          6. 流结束后 yield ("persist_enhanced_message", persist_msg)
-             persist_msg = f"[图片描述：{description}] {message}"（用于持久化）
+        v1.9.0 变更（相对 v1.5.0）：
+          - 新增 upload_ids: list[str] 参数（多图路径，ADR-MI-001）
+          - 旧参数 upload_id: str 保留（向后兼容，自动包装为 upload_ids=[upload_id]）
+          - 多图 VLM：先 yield 所有进度帧，再并发分析（analyze_images_batch）
+          - 部分失败：占位文字注入（ADR-MI-004），yield image_analysis_partial kind
+          - 全部失败：raise VisionServiceError（与 v1.5.0 路径一致）
+          - 持久化：多图格式 "[图片1描述：<d1>] [图片2描述：<d2>] ... <原始文字>"
 
-        向后兼容：upload_id=None 时行为与 v1.4.1 完全一致。
+        向后兼容：upload_ids=None, upload_id=None 时行为与 v1.4.1 完全一致。
         """
+        import json as _json
+
         orch = _get_orch()  # 构造失败 → OpenClawUnavailableError，交由 consumers 降级
         config = orch._cfg(session_key)  # thread_id=session_key：interrupt/resume 同线程
 
-        vision_description: Optional[str] = None
-        enhanced_message = message
+        # 向后兼容：旧参数 upload_id（单数）→ upload_ids 列表
+        if upload_ids is None and upload_id is not None:
+            upload_ids = [upload_id]
 
-        # ── VLM 前置调用（仅当 upload_id 非空）────────────────────────────────
-        if upload_id is not None and user_id is not None:
-            # 1. 取图片字节（ImageExpiredError / ImageAccessDeniedError 由 consumers 捕获）
-            image_bytes = vision_service.get_upload(upload_id, user_id)
+        enhanced_message = message
+        persist_msg: Optional[str] = None  # 多图持久化消息（流结束后 yield）
+
+        # ── VLM 前置调用（仅当 upload_ids 非空，ADR-MI-001）──────────────────
+        if upload_ids is not None and user_id is not None:
+            total = len(upload_ids)
+
+            # 1. 逐图取字节（ImageExpiredError / ImageAccessDeniedError 由 consumers 捕获）
+            image_bytes_list = []
+            for uid in upload_ids:
+                image_bytes_list.append(vision_service.get_upload(uid, user_id))
+
+            # 2. 先 yield 所有进度帧（最简方案，无 Queue 协调复杂度，ADR-MI-001 注释）
+            #    进度帧立即发出（给用户期待感），然后 VLM 并发运行
+            for i in range(total):
+                yield ("vision_progress", f"正在分析第{i+1}/{total}张图片，请稍候…")
+
+            # 3. 并发调用 VLM（ADR-MI-001：asyncio.gather with return_exceptions=True）
             try:
-                # 2. 调用 VLM（VisionServiceError 由 consumers 捕获）
-                vision_description = await vision_service.analyze_image(
-                    image_bytes, message
+                results = await vision_service.analyze_images_batch(
+                    image_bytes_list, message
                 )
             finally:
-                # 3. 立即释放图片字节引用（REQ-NFR-002 内存约束）
-                del image_bytes
+                # 4. 立即释放图片字节引用（REQ-NFR-002 内存约束）
+                del image_bytes_list
 
-            # 4. VLM 完成后删除临时存储（释放 dict 内存）
-            vision_service.delete_upload(upload_id)
+            # 5. 逐图清理临时存储（VLM 完成后释放 dict 内存）
+            for uid in upload_ids:
+                vision_service.delete_upload(uid)
 
-            # 5. 构建注入 LangGraph 的增强消息（供 _route/_fan_out/_expert 使用）
-            enhanced_message = f"[用户图片分析：{vision_description}]\n\n{message}"
+            # 6. 构建注入 LangGraph 的增强消息（REQ-MI-005，ADR-MI-004 格式）
+            failed_indices = []
+            desc_lines = []
+            for i, result in enumerate(results):
+                if result is None:
+                    failed_indices.append(i)
+                    desc_lines.append(f"[用户图片{i+1}分析：图片分析失败，已跳过]")
+                else:
+                    desc_lines.append(f"[用户图片{i+1}分析：{result}]")
+
+            enhanced_message = "\n".join(desc_lines) + f"\n\n{message}"
+
+            # 7. 全部失败：raise VisionServiceError（与 v1.5.0 全失败降级路径一致）
+            if len(failed_indices) == total:
+                raise VisionServiceError(
+                    "图片分析暂时不可用，您可以用文字描述图片内容后重试"
+                )
+
+            # 8. 部分失败通知（非阻塞 kind，ADR-MI-004，REQ-MI-009）
+            #    consumers._pump 识别后发 IMAGE_ANALYSIS_PARTIAL WS 错误帧（非阻塞）
+            if failed_indices:
+                yield ("image_analysis_partial", _json.dumps({
+                    "failed_indices": failed_indices,
+                    "total": total,
+                }, ensure_ascii=False))
+
+            # 9. 构建持久化消息（REQ-MI-008：有序多图格式）
+            persist_parts = []
+            for i, result in enumerate(results):
+                if result is None:
+                    persist_parts.append(f"[图片{i+1}描述：图片分析失败]")
+                else:
+                    persist_parts.append(f"[图片{i+1}描述：{result}]")
+            persist_msg = " ".join(persist_parts) + f" {message}"
         # ── VLM 前置调用结束 ───────────────────────────────────────────────────
 
         try:
-            # v1.8.0 新增（MOD-180-10）：若 user_scope 非 None，写入初始 State
+            # 多图场景不再使用单图 vision_description 字段（描述已注入 enhanced_message）
             _payload: dict = {
                 "messages": [HumanMessage(content=enhanced_message)],
-                "vision_description": vision_description,
+                "vision_description": None,
             }
+            # v1.8.0（MOD-180-10）：若 user_scope 非 None，写入初始 State（数据隔离）
             if user_scope is not None:
                 _payload["user_scope"] = user_scope
             async for kind, text in _drive(orch, _payload, config):
                 yield (kind, text)
 
-            # 6. 流结束后，通过特殊 kind 回传持久化用的增强消息
-            if vision_description is not None:
-                # 持久化格式：[图片描述：<VLM输出>] <原始文字>
-                # 与 adapter 内部格式（[用户图片分析：...]）不同：
-                #   内部格式供 LLM 理解用，持久化格式供前端检测 [图片描述：前缀标注含图
-                persist_msg = f"[图片描述：{vision_description}] {message}"
+            # 10. 流结束后，通过特殊 kind 回传持久化用的增强消息（REQ-MI-008）
+            if persist_msg is not None:
                 yield ("persist_enhanced_message", persist_msg)
 
         except asyncio.TimeoutError:
