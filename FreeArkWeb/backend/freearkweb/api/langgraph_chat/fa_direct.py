@@ -14,7 +14,7 @@ api.langgraph_chat.fa_direct —— 工具层进程内直调（阶段 B：去自
 monkeypatch 成 DirectClient——16 个 handler 一行不改、输出字节级一致（只换传输层）。
 OpenClaw 是独立子进程，patch 仅在本 Django 进程生效，不影响 live OpenClaw 路径。
 
-鉴权：force_authenticate 以 openclaw-agent 身份调用（与 HTTP 路径同一身份），Tier-1
+鉴权：force_authenticate 以 energy-agent 服务账号身份调用（与 HTTP 路径同一身份），Tier-1
 只读视图均为全局系统数据、无 per-user 过滤；不需要 token，亦不绕过 view 的业务逻辑。
 
 异步安全：tools 经 `await tool.ainvoke()` 调用，langchain 把同步 tool 放线程池执行，
@@ -33,7 +33,7 @@ from django.db import OperationalError, close_old_connections
 
 logger = logging.getLogger("api.langgraph_chat.fa_direct")
 
-_AGENT_USER = None  # 缓存 openclaw-agent User（只读，跨调用复用）
+_AGENT_USER = None  # 缓存 energy-agent 服务账号 User（只读，跨调用复用）
 _FACTORY = None
 
 
@@ -41,7 +41,7 @@ def _agent_user():
     global _AGENT_USER
     if _AGENT_USER is None:
         from django.contrib.auth import get_user_model
-        _AGENT_USER = get_user_model().objects.get(username="openclaw-agent")
+        _AGENT_USER = get_user_model().objects.get(username="energy-agent")
     return _AGENT_USER
 
 

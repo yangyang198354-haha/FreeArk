@@ -652,7 +652,7 @@ class OrchestratorWriteGateTests(SimpleTestCase):
             m.assert_called_once()
             call_args = m.call_args.args
             self.assertEqual(call_args[0], "set_device_params")          # tool
-            self.assertEqual(call_args[2], "openclaw-agent::alice")      # operator 追溯
+            self.assertEqual(call_args[2], "energy-agent::alice")        # operator 追溯（服务账号改名后）
 
 
 # ===========================================================================

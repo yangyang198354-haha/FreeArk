@@ -2,12 +2,12 @@
 # 真机端到端基准启动脚本（仅在 Pi 上 /tmp/lg-poc 运行；不入仓，跑完即删）
 set -e
 
-# 1) 解封 openclaw-agent 会话（最小侵入：只重置 last_active_at，等价一次正常请求）
+# 1) 解封 energy-agent 会话（服务账号现已豁免不活跃超时；此步保留为兜底，等价一次正常请求）
 cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb
 /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py shell -c "from api.models import TokenActivity
 from rest_framework.authtoken.models import Token
 from django.utils.timezone import now
-t=Token.objects.get(user__username='openclaw-agent')
+t=Token.objects.get(user__username='energy-agent')
 TokenActivity.objects.update_or_create(token=t, defaults={'last_active_at': now()})
 print('session_reactivated')"
 

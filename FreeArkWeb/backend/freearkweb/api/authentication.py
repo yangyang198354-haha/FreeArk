@@ -61,6 +61,15 @@ class SlidingWindowTokenAuthentication(TokenAuthentication):
         # Step 1: 验证 token 存在（父类负责，不存在时抛 AuthenticationFailed）
         user, token = super().authenticate_credentials(key)
 
+        # Step 1.5: 服务账号豁免不活跃超时。
+        # 机器令牌（如 energy-agent，供 energy-expert 写设备参数）长期低频调用——
+        # 读工具走进程内直调不带 token、只有写才带 token，写又罕见，导致 last_active_at
+        # 轻易超过阈值被「人类会话超时」误杀（→ 401「会话已超时」）。服务账号不应被
+        # 不活跃超时判过期，故在此直接放行（不读写 TokenActivity）。
+        service_accounts = getattr(settings, 'SERVICE_ACCOUNT_USERNAMES', [])
+        if user.username in service_accounts:
+            return (user, token)
+
         # 延迟导入，避免在模块加载时触发 ORM（App Registry 尚未就绪的场景）
         from .models import TokenActivity
 

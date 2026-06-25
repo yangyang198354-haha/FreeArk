@@ -128,7 +128,7 @@ def _operator_from_state(state: State) -> str:
             break
     mt = _CHATUSER_RE.search(text)
     user = (mt.group(1).strip() if mt else "") or "unknown"
-    return f"openclaw-agent::{user}"
+    return f"energy-agent::{user}"
 
 
 def _preview_write(tool: str, args: dict) -> str:
