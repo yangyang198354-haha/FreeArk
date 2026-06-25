@@ -499,6 +499,11 @@ export default {
             if (data.token) {
               localStorage.setItem('userToken', data.token)
               localStorage.setItem('isAuthenticated', 'true')
+              // v1.6.0：登录即写入 userInfo（含 role），保证导航守卫能在首跳就按角色分流
+              // （普通业主 role='user' 直接重定向到 /user-landing，不闪过 /home）
+              if (data.user) {
+                localStorage.setItem('userInfo', JSON.stringify(data.user))
+              }
               const secure = window.location.protocol === 'https:'
               // 勾选"7天内保持登录"时 cookie 存 7 天，否则 1 天；
               // 真正的会话有效期由后端滑动窗口超时控制（见 remember_me）

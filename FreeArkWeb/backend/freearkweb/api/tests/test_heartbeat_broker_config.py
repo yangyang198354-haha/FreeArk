@@ -37,7 +37,7 @@ import api.views_heartbeat_config as hbc_views
 # 测试辅助
 # ---------------------------------------------------------------------------
 
-def _make_user(username='hbc_testuser', role='user', suffix=''):
+def _make_user(username='hbc_testuser', role='operator', suffix=''):
     user = CustomUser.objects.create_user(
         username=username + suffix, password='pass1234', role=role
     )
@@ -331,7 +331,7 @@ class TestHeartbeatBrokerConfigGetAPI(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        _, self.token = _make_user(username='hbc_get_user', role='user', suffix='')
+        _, self.token = _make_user(username='hbc_get_user', role='operator', suffix='')
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token}')
 
     @patch.object(hbc_views, '_read_hbc_config', return_value=dict(_VALID_CONFIG))
@@ -371,7 +371,7 @@ class TestHeartbeatBrokerConfigPutMqttAPI(TestCase):
     def setUp(self):
         self.client = APIClient()
         _, self.admin_token = _make_user(username='hbc_admin_mqtt', role='admin', suffix='')
-        _, self.user_token = _make_user(username='hbc_user_mqtt', role='user', suffix='')
+        _, self.user_token = _make_user(username='hbc_user_mqtt', role='operator', suffix='')
 
     def _admin_client(self):
         c = APIClient()

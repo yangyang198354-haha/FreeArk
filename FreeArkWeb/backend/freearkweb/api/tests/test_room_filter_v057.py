@@ -679,6 +679,8 @@ class TestGetDeviceRealtimeParamsWithRoomFilter(RoomFilterTestBase):
         super().setUp()
         _, self.token = _make_admin('admin_m2')
         self.client = APIClient()
+        # v1.6.0：realtime-params 已收紧为 IsOperatorOrAbove，需附带认证（此前接口公开未带）
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token}')
         # 创建系统级和房间型的 DeviceConfig
         _make_device_config('system_switch', 'main_thermostat', display_name='系统开关')
         _make_device_config('fourth_children_room_temperature', 'panel_fourth_children',

@@ -82,6 +82,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # v1.6.0 RBAC：拦截 user（业主）角色对业务 API 的访问（白名单外 /api/ 一律 403）
+    'api.middleware.UserRoleApiGuardMiddleware',
 ]
 
 ROOT_URLCONF = 'freearkweb.urls'

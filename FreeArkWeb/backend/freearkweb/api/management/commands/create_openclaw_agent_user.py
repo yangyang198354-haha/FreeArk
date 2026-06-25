@@ -5,7 +5,9 @@ Management Command: create_openclaw_agent_user
 
 用途（来自 DECISIONS-LOBSTER-001 CONFIRM-6）：
   - 为 FreeArk Skill 提供合法的 FreeArk 身份
-  - 账号规格：username=openclaw-agent，role=user，is_active=True
+  - 账号规格：username=openclaw-agent，role=operator，is_active=True
+    （v1.6.0：原 role=user 已改名为 operator——Agent 需通过 Token 调用设备/能耗等业务 API，
+     新 'user'=普通业主被中间件拦截，故服务账号必须为 operator）
   - 生成 DRF Token（无过期时间，与 DRF TokenAuthentication 兼容）
 
 使用方式：
@@ -52,7 +54,7 @@ class Command(BaseCommand):
         user, user_created = User.objects.get_or_create(
             username=username,
             defaults={
-                'role': 'user',
+                'role': 'operator',  # v1.6.0: Agent 需业务 API 访问权，用 operator（非被拦截的 user）
                 'is_active': True,
                 'is_staff': False,
                 'is_superuser': False,
@@ -75,10 +77,10 @@ class Command(BaseCommand):
                 user.save()
                 self.stdout.write(self.style.WARNING(f'[FIX] 用户 "{username}" 已重新激活'))
 
-        # 确认 role=user
-        if user.role != 'user':
+        # 确认 role=operator（v1.6.0：Agent 需业务 API 访问权）
+        if user.role != 'operator':
             self.stdout.write(self.style.WARNING(
-                f'[WARN] 当前 role={user.role}，期望 role=user（最小权限原则）。'
+                f'[WARN] 当前 role={user.role}，期望 role=operator（需访问业务 API）。'
                 f'请手动通过 Django admin 修正。'
             ))
 

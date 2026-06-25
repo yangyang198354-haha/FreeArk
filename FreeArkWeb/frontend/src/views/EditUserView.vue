@@ -44,8 +44,9 @@
           <el-col :span="12">
             <el-form-item label="角色">
               <el-select v-model="userForm.role" disabled style="width:100%;">
-                <el-option label="普通用户" value="user" />
                 <el-option label="管理员" value="admin" />
+                <el-option label="运维人员" value="operator" />
+                <el-option label="普通业主" value="user" />
               </el-select>
               <div class="field-hint">角色不可修改</div>
             </el-form-item>

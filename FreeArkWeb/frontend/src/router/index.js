@@ -44,25 +44,25 @@ const routes = [
     path: '/services',
     name: 'Services',
     component: () => import('../views/ServicesView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiresAdmin: true }  // v1.6.0: 服务管理仅 admin
   },
   {
     path: '/create-user',
     name: 'CreateUser',
     component: () => import('../views/CreateUserView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiresAdmin: true }  // v1.6.0: 用户管理仅 admin
   },
   {
     path: '/user-list',
     name: 'UserList',
     component: () => import('../views/UserListView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiresAdmin: true }  // v1.6.0: 用户管理仅 admin
   },
   {
     path: '/edit-user/:id',
     name: 'EditUser',
     component: () => import('../views/EditUserView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiresAdmin: true }  // v1.6.0: 用户管理仅 admin
   },
   {
     path: '/change-password',
@@ -220,6 +220,14 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
+    // v1.6.0 RBAC：user（普通业主/住户）登录后的占位落地页。
+    // 业务功能以后单独开发；user 角色访问任何其他业务页都会被守卫重定向到此。
+    path: '/user-landing',
+    name: 'UserLanding',
+    component: () => import('../views/UserLandingView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue')
@@ -240,6 +248,31 @@ router.beforeEach((to, from, next) => {
     next({ name: 'Login' })
     return
   }
+
+  // v1.6.0 RBAC：基于角色的访问控制（仅对已登录用户生效）
+  if (isLoggedIn) {
+    let role = null
+    try {
+      role = (JSON.parse(localStorage.getItem('userInfo') || '{}')).role || null
+    } catch (e) {
+      role = null
+    }
+    if (role === 'user') {
+      // user（普通业主）：除占位页外，任何页面都重定向到占位页
+      if (to.path !== '/user-landing') {
+        next({ path: '/user-landing' })
+        return
+      }
+      next()
+      return
+    }
+    // admin/operator 误入占位页 → 回首页
+    if (to.path === '/user-landing') {
+      next({ path: '/home' })
+      return
+    }
+  }
+
   if (requiresAdmin) {
     try {
       // 本项目 admin 概念是 userInfo.role==='admin'（与菜单 v-if 及后端 role 鉴权一致）；

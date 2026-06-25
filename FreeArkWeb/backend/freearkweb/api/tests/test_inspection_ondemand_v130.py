@@ -27,7 +27,7 @@ from inspection_agent import audit
 
 def _authed_client(username="ond_v130"):
     from api.models import CustomUser
-    user = CustomUser.objects.create_user(username=username, password="pass1234", role="user")
+    user = CustomUser.objects.create_user(username=username, password="pass1234", role="operator")
     token, _ = Token.objects.get_or_create(user=user)
     c = APIClient()
     c.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")

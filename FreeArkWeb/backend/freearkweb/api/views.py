@@ -127,6 +127,18 @@ class IsAdminUser(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'admin'
 
+class IsOperatorOrAbove(permissions.BasePermission):
+    """v1.6.0: 允许 admin 和 operator（运维人员）访问，拒绝 user（普通业主）与匿名用户。
+
+    用于业务数据接口的角色级保护——业主角色（role='user'）不得访问任何设备/能耗/业主数据。
+    与全局 UserRoleApiGuardMiddleware 形成双重保障（中间件兜底拦截 user，权限类显式声明意图）。
+    """
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated
+            and getattr(request.user, 'role', None) in ('admin', 'operator')
+        )
+
 # 用户相关视图
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -310,7 +322,7 @@ def health_check(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_usage_quantity(request):
     """
     获取能耗日用量报表数据（原有端点，保持不变）
@@ -362,7 +374,7 @@ def get_usage_quantity(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_usage_quantity_specific_time_period(request):
     """
     获取能耗报表数据（新端点）
@@ -467,7 +479,7 @@ def get_usage_quantity_specific_time_period(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_usage_quantity_monthly(request):
     """
     获取每月用量数据
@@ -574,7 +586,7 @@ def change_password(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_plc_connection_status(request):
     """
     获取PLC设备连接状态列表
@@ -640,7 +652,7 @@ def get_plc_connection_status(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_plc_connection_status_detail(request, specific_part):
     """
     获取单个PLC设备的连接状态详情
@@ -675,7 +687,7 @@ def get_plc_connection_status_detail(request, specific_part):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_plc_status_change_history(request, specific_part):
     """
     获取单个PLC设备的状态变化历史记录
@@ -726,7 +738,7 @@ def get_plc_status_change_history(request, specific_part):
 
 @csrf_exempt
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_bill_list(request):
     """
     获取历史用能数据
@@ -1295,7 +1307,7 @@ def dashboard_services(request):
 # ===========================================================================
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsAdminUser])  # v1.6.0: 服务管理仅 admin（operator 不可访问）
 def service_management_list(request):
     """
     服务管理 API 1：获取所有受监控服务的列表及状态。
@@ -1332,7 +1344,7 @@ def service_management_list(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsAdminUser])  # v1.6.0: 服务管理仅 admin（operator 不可访问）
 def service_management_detail(request, service_name):
     """
     服务管理 API 2：获取单个服务的详细运行信息（systemctl status 输出）。
@@ -1364,7 +1376,7 @@ def service_management_detail(request, service_name):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsAdminUser])  # v1.6.0: 服务管理仅 admin（operator 不可访问）
 def service_management_action(request, service_name):
     """
     服务管理 API 3：对指定服务执行 start / stop / restart 操作。
@@ -1589,9 +1601,9 @@ class OwnerListCreateView(generics.ListCreateAPIView):
     serializer_class = OwnerInfoSerializer
 
     def get_permissions(self):
-        if self.request.method in permissions.SAFE_METHODS:
-            return [permissions.IsAuthenticated()]
-        return [IsAdminUser()]
+        # v1.6.0: 业主信息管理对 admin+operator 全量 CRUD 开放（OQ-02 已确认）；
+        # user（业主）由 UserRoleApiGuardMiddleware 兜底拦截。
+        return [IsOperatorOrAbove()]
 
     def get_queryset(self):
         from django.db.models import Q, Count
@@ -1652,9 +1664,9 @@ class OwnerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OwnerInfoSerializer
 
     def get_permissions(self):
-        if self.request.method in permissions.SAFE_METHODS:
-            return [permissions.IsAuthenticated()]
-        return [IsAdminUser()]
+        # v1.6.0: 业主信息管理对 admin+operator 全量 CRUD 开放（OQ-02 已确认）；
+        # user（业主）由 UserRoleApiGuardMiddleware 兜底拦截。
+        return [IsOperatorOrAbove()]
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -1689,7 +1701,7 @@ class OwnerDeviceTreeView(generics.RetrieveAPIView):
     queryset = OwnerInfo.objects.prefetch_related(
         'floors__rooms__devices'
     )
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsOperatorOrAbove]  # v1.6.0: 业主设备树对 admin+operator 开放
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -1784,7 +1796,7 @@ def get_plc_latest_data(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_device_realtime_params(request):
     """
     GET /api/devices/realtime-params/?specific_part=9-1-31-3104[&group=hvac]
@@ -1878,7 +1890,7 @@ def get_device_realtime_params(request):
 # ===========================================================================
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsOperatorOrAbove])  # v1.6.0: 仅 admin/operator（匿名与业主均拒，OQ/AC-4.4）
 def get_device_param_history(request):
     """
     GET /api/devices/param-history/?specific_part=9-1-31-3104[&sub_type=main_thermostat][&param_name=living_room_temperature]

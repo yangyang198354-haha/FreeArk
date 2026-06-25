@@ -8,9 +8,15 @@ class CustomUser(AbstractUser):
     """自定义用户模型，扩展Django默认用户模型"""
     ROLE_CHOICES = (
         ('admin', '管理员'),
-        ('user', '普通用户'),
+        ('operator', '运维人员'),   # v1.6.0: 原 'user'（普通用户）改名为运维人员
+        ('user', '普通业主/住户'),  # v1.6.0: 新增——普通业主/住户，登录后仅占位页，无业务功能
     )
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
+    # v1.6.0: default='operator'。泛化创建的账号（内部/工具/未显式指定角色处）默认得到
+    # 运维级账号，与旧 'user'（普通用户=现运维）语义一致。两个例外显式处理：
+    #   - 管理员创建表单强制显式选择角色（UserCreateSerializer.role 必填）；
+    #   - 公开自助注册 user_register 强制 role='user'（最小权限业主，见 UserRegistrationSerializer），
+    #     防止自助注册获得运维/管理权限。
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='operator')
     department = models.CharField(max_length=100, blank=True, null=True)
     position = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

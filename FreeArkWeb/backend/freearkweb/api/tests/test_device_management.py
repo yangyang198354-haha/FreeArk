@@ -52,7 +52,7 @@ if _FREEARK_ROOT not in sys.path:
 # 测试辅助函数
 # ===========================================================================
 
-def _make_user(username="testuser", role="user"):
+def _make_user(username="testuser", role="operator"):
     user = CustomUser.objects.create_user(username=username, password="pass1234", role=role)
     token, _ = Token.objects.get_or_create(user=user)
     return user, token.key

@@ -45,7 +45,7 @@ from api.mqtt_handlers import PLCDataHandler, ConnectionStatusHandler
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_user(username="testuser", role="user", password="testpass123"):
+def make_user(username="testuser", role="operator", password="testpass123"):
     """创建并返回一个测试用户及其 Token"""
     user = CustomUser.objects.create_user(
         username=username,
@@ -54,6 +54,19 @@ def make_user(username="testuser", role="user", password="testpass123"):
     )
     token, _ = Token.objects.get_or_create(user=user)
     return user, token
+
+
+_AUTHED_CLIENT_SEQ = 0
+
+
+def _authed_client(role="operator"):
+    """v1.6.0：返回带 Token 的 Django 测试 Client（默认 operator）。
+    能耗/PLC/计费/设备参数等接口已收紧为 IsOperatorOrAbove，匿名/业主会被拒，
+    故这些接口的测试需以已认证的 admin/operator 身份发起。"""
+    global _AUTHED_CLIENT_SEQ
+    _AUTHED_CLIENT_SEQ += 1
+    _, token = make_user(username=f"authed_cli_{_AUTHED_CLIENT_SEQ}", role=role)
+    return Client(HTTP_AUTHORIZATION=f"Token {token.key}")
 
 
 def make_daily_record(
@@ -109,9 +122,9 @@ class CustomUserModelTest(TestCase):
     """CustomUser 模型基本功能测试"""
 
     def test_create_user_default_role(self):
-        """新建用户默认角色为 user"""
+        """v1.6.0：新建用户默认角色为 operator（泛化创建得运维级；公开注册另强制 user）"""
         user = CustomUser.objects.create_user(username="alice", password="pwd")
-        self.assertEqual(user.role, "user")
+        self.assertEqual(user.role, "operator")
 
     def test_create_admin_user(self):
         """创建 admin 角色用户"""
@@ -1009,7 +1022,7 @@ class UserManagementAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin, self.admin_token = make_user(username="admin1", role="admin", password="AdminPass1!")
-        self.regular, self.regular_token = make_user(username="regular1", role="user", password="UserPass1!")
+        self.regular, self.regular_token = make_user(username="regular1", role="operator", password="UserPass1!")
 
     def test_admin_can_list_users(self):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.admin_token.key}")
@@ -1063,7 +1076,7 @@ class UsageQuantityAPITest(TestCase):
     """日用量查询 API 测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         make_daily_record(
             specific_part="3-1-7-702",
             energy_mode="制冷",
@@ -1144,7 +1157,7 @@ class UsageQuantitySpecificTimePeriodAPITest(TestCase):
     """特定时间段汇总查询 API 测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         # 同一房间一月份三条日记录
         for day, initial, final in [(1, 1000, 1050), (15, 1050, 1080), (31, 1080, 1200)]:
             make_daily_record(
@@ -1215,7 +1228,7 @@ class UsageQuantityMonthlyAPITest(TestCase):
     """月度用量查询 API 测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         make_monthly_record(
             specific_part="3-1-7-702",
             energy_mode="制冷",
@@ -1290,7 +1303,7 @@ class PLCConnectionStatusAPITest(TestCase):
     """PLC 连接状态 API 测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         PLCConnectionStatus.objects.create(
             specific_part="3-1-7-702",
             building="3",
@@ -1394,7 +1407,7 @@ class BillingAPITest(TestCase):
     """历史用能账单 API 测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         OwnerInfo.objects.create(
             specific_part="3-1-7-702",
             building="3栋",
@@ -2142,7 +2155,7 @@ class UserDetailAPITest(TestCase):
             username="admin_det", role="admin", password="AdminDet1!"
         )
         self.target, self.target_token = make_user(
-            username="target_user", role="user", password="TargetPass1!"
+            username="target_user", role="operator", password="TargetPass1!"
         )
 
     def test_admin_can_retrieve_user(self):
@@ -2202,7 +2215,7 @@ class PLCStatusHistoryPaginationTest(TestCase):
     """PLC 状态变化历史分页测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         # 创建 5 条历史记录
         for i in range(5):
             PLCStatusChangeHistory.objects.create(
@@ -2249,7 +2262,7 @@ class UsageQuantityMonthlyFilterTest(TestCase):
     """月度用量按 building/unit/room_number 过滤测试"""
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         make_monthly_record(
             specific_part="3-1-7-702",
             energy_mode="制冷",
@@ -2301,6 +2314,8 @@ class IntegrationTestPLCToUsagePipeline(TestCase):
     """
 
     def setUp(self):
+        # v1.6.0：能耗/PLC 接口已收紧为 IsOperatorOrAbove，默认未认证 client 会 401，改用已认证 client
+        self.client = _authed_client()
         self.handler = PLCDataHandler()
         self.today = date.today()
         self.month_start = date(self.today.year, self.today.month, 1)
@@ -2390,7 +2405,7 @@ class IntegrationTestPLCToUsagePipeline(TestCase):
         self._send_plc_message("3-1-7-702", cold_value=5000, hot_value=3000)
         DailyUsageCalculator.calculate_daily_usage(self.today)
 
-        client = Client()
+        client = _authed_client()
         response = client.get(
             reverse("get-usage-quantity"),
             {"specific_part": "3-1-7-702", "energy_mode": "制冷"},
@@ -2410,7 +2425,7 @@ class IntegrationTestPLCToUsagePipeline(TestCase):
         )
         MonthlyUsageCalculator.calculate_monthly_usage(self.month_start)
 
-        client = Client()
+        client = _authed_client()
         response = client.get(
             reverse("get-usage-quantity-monthly"),
             {"specific_part": "3-1-7-702"},
@@ -2550,7 +2565,7 @@ class IntegrationTestPLCStatusFlow(TestCase):
 
     def setUp(self):
         self.handler = ConnectionStatusHandler()
-        self.client = Client()
+        self.client = _authed_client()
 
     def _online_payload(self, specific_part):
         return {
@@ -2655,7 +2670,7 @@ class IntegrationTestBillingCalculation(TestCase):
     UNIT_PRICE = 0.28
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         self.screen_mac = "BB:CC:DD:EE:FF:00"
         OwnerInfo.objects.create(
             specific_part="3-1-7-702",
@@ -2838,7 +2853,7 @@ class E2ETestBillingFlow(TestCase):
     """
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         self.api_client = APIClient()
         # 预置数据
         self.screen_mac = "CC:DD:EE:FF:00:11"
@@ -2941,7 +2956,7 @@ class E2ETestPaginationConsistency(TestCase):
     """
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         # 创建 7 条日用量记录（同一 specific_part，不同日期）
         for i in range(7):
             UsageQuantityDaily.objects.create(
@@ -3026,7 +3041,7 @@ class E2ETestFilterCombinations(TestCase):
     """
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
         # 构造多种组合的测试数据
         data_points = [
             ("3-1-7-702", "3", "1", "702", "制冷", date(2025, 1, 10)),
@@ -3170,7 +3185,7 @@ class E2ETestPLCStatisticsConsistency(TestCase):
     """
 
     def setUp(self):
-        self.client = Client()
+        self.client = _authed_client()
 
     def _create_devices(self, online_count, offline_count):
         for i in range(online_count):
@@ -3598,7 +3613,8 @@ class DphCleanupServiceWhitelistTest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user, self.token = make_user(username="dph_test_user")
+        # v1.6.0：服务管理接口已收紧为仅 admin，本套件验证服务可访问性故用 admin
+        self.user, self.token = make_user(username="dph_test_user", role="admin")
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
 
     # ------------------------------------------------------------------

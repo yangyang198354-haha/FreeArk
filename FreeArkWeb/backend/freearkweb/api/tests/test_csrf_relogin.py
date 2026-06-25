@@ -30,7 +30,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from api.models import CustomUser
 
 
-def _make_user(username='csrf_testuser', password='CsrfTest!123', role='user'):
+def _make_user(username='csrf_testuser', password='CsrfTest!123', role='operator'):
     """创建测试用户并返回 (user, token)"""
     user = CustomUser.objects.create_user(
         username=username, password=password, role=role

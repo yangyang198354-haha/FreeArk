@@ -15,7 +15,9 @@
         <el-table-column label="姓名" min-width="120">
           <template #default="{ row }">{{ formatFullName(row.first_name, row.last_name) }}</template>
         </el-table-column>
-        <el-table-column prop="role" label="角色" width="100" />
+        <el-table-column label="角色" width="100">
+          <template #default="{ row }">{{ roleLabel(row.role) }}</template>
+        </el-table-column>
         <el-table-column prop="department" label="部门" min-width="120" show-overflow-tooltip />
         <el-table-column prop="position" label="职位" min-width="120" show-overflow-tooltip />
         <el-table-column label="创建时间" min-width="160">
@@ -47,6 +49,8 @@ export default {
       catch (error) { console.error('加载用户列表失败:', error); ElMessage.error('加载用户列表失败') }
       finally { this.loading = false }
     },
+    // v1.6.0：角色英文值 → 中文名（admin/operator/user）
+    roleLabel(role) { return { admin: '管理员', operator: '运维人员', user: '普通业主' }[role] || role || '—' },
     editUser(userId) { this.$router.push(`/edit-user/${userId}`) },
     async deleteUser(userId) {
       try { await ElMessageBox.confirm('确定要删除这个用户吗？', '提示', { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }); await api.delete(`/api/users/${userId}/`); ElMessage.success('用户删除成功'); this.loadUsers() }

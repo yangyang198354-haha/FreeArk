@@ -62,7 +62,7 @@
           <el-menu-item index="/device-management/condensation-warnings">结露预警</el-menu-item>
         </el-sub-menu>
 
-        <el-menu-item index="/owner-management" v-if="userRole === 'admin'">
+        <el-menu-item index="/owner-management" v-if="userRole === 'admin' || userRole === 'operator'">
           <el-icon><House /></el-icon>
           <template #title><span>业主信息管理</span></template>
         </el-menu-item>
@@ -77,7 +77,7 @@
           <el-menu-item index="/usage-query">用量查询</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="services">
+        <el-sub-menu index="services" v-if="userRole === 'admin'">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>服务管理</span>

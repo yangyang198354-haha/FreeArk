@@ -40,7 +40,7 @@ from api.views import (
 # 辅助函数
 # ---------------------------------------------------------------------------
 
-def _make_user(username="svc_testuser", role="user"):
+def _make_user(username="svc_testuser", role="admin"):  # v1.6.0: 服务管理仅 admin，happy-path 默认用 admin
     user = CustomUser.objects.create_user(
         username=username, password="pass1234", role=role
     )
@@ -668,21 +668,27 @@ class TC_E2E_SM_US003_ServiceAction(TestCase):
 
 @tag('e2e')
 class TC_E2E_SM_NFR_AdminOnlyWrite(TestCase):
-    """TC-E2E-SM-NFR: 普通用户与管理员用户均可操作（IsAuthenticated 策略）"""
+    """TC-E2E-SM-NFR: v1.6.0 服务管理仅 admin——operator/普通业主不可操作。"""
 
-    def test_regular_user_can_call_action(self):
-        """普通用户（role=user）也可调用服务操作接口（当前策略为 IsAuthenticated）"""
-        _, token = _make_user("sm_regular_user")
+    def test_operator_cannot_call_action(self):
+        """v1.6.0 (OQ-01)：运维人员（role=operator）不能调用服务操作接口，返回 403"""
+        _, token = _make_user("sm_operator_user", role="operator")
         client = _make_authed_client(token)
 
-        success_run = MagicMock(returncode=0, stdout='', stderr='')
-        status_run = MagicMock(returncode=0, stdout='active\n', stderr='')
-        with patch('subprocess.run', side_effect=[success_run, status_run]):
-            resp = client.post(
-                '/api/services/freeark-backend/action/', {'action': 'restart'}, format='json'
-            )
-        # 普通用户可以执行（按需求为 IsAuthenticated，而非 admin only）
-        self.assertEqual(resp.status_code, 200)
+        # 权限在视图执行前拦截，subprocess 不会被调用，断言 403 即可
+        resp = client.post(
+            '/api/services/freeark-backend/action/', {'action': 'restart'}, format='json'
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_user_cannot_call_action(self):
+        """v1.6.0：普通业主（role=user）不能调用服务操作接口，返回 403（中间件拦截）"""
+        _, token = _make_user("sm_owner_user", role="user")
+        client = _make_authed_client(token)
+        resp = client.post(
+            '/api/services/freeark-backend/action/', {'action': 'restart'}, format='json'
+        )
+        self.assertEqual(resp.status_code, 403)
 
     def test_admin_user_can_call_action(self):
         """管理员用户（role=admin）可调用服务操作接口"""

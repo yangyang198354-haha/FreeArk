@@ -34,6 +34,15 @@ def make_admin(username='admin_cards', password='adminpass123'):
     return user, token.key
 
 
+def _make_operator(username='operator_cards', password='oppass123'):
+    # v1.6.0：常规授权用户（运维）。设备参数接口已收紧为 IsOperatorOrAbove。
+    user = CustomUser.objects.create_user(
+        username=username, password=password, role='operator'
+    )
+    token, _ = Token.objects.get_or_create(user=user)
+    return user, token.key
+
+
 def make_device_config(
     param_name='living_room_temperature',
     display_name='客厅实际温度',
@@ -537,16 +546,16 @@ class TestDeviceRealtimeParamsAPI(TestCase):
         self.assertEqual(str(hot['value']), '9455')
         self.assertFalse(hot['is_stale'])
 
-    # GWT-API-12: 未认证用户可以访问（AllowAny）
-    def test_unauthenticated_access_allowed(self):
+    # GWT-API-12: 未认证用户被拒绝（v1.6.0 收紧为 IsOperatorOrAbove）
+    def test_unauthenticated_access_denied(self):
         """
         Given: 未附带认证 Token 的请求
         When:  GET /api/devices/realtime-params/?specific_part=...
-        Then:  返回 200（AllowAny 权限）
+        Then:  返回 401（v1.6.0：接口已收紧，需 admin/operator）
         """
         anon_client = APIClient()
         resp = anon_client.get('/api/devices/realtime-params/', {'specific_part': SPECIFIC_PART})
-        self.assertEqual(resp.status_code, 200)
+        self.assertIn(resp.status_code, (401, 403))
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +568,9 @@ class TestDeviceParamHistoryAPI(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        # AllowAny 接口，无需认证
+        # v1.6.0：接口已收紧为 IsOperatorOrAbove，需认证（用 operator 代表常规授权用户）
+        _, _op_token = _make_operator()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {_op_token}')
 
         # 写入 5 条 living_room_temperature 历史记录，时间间隔 5 分钟
         base_ts = datetime(2026, 4, 19, 10, 0, 0)
@@ -807,16 +818,16 @@ class TestDeviceParamHistoryAPI(TestCase):
         collected_at = data['results'][0]['collected_at']
         self.assertEqual(collected_at, '2026-04-19 10:00:00')
 
-    # GWT-HIST-15: 未认证用户可以访问（AllowAny）
-    def test_unauthenticated_access_allowed(self):
+    # GWT-HIST-15: 未认证用户被拒绝（v1.6.0 收紧为 IsOperatorOrAbove）
+    def test_unauthenticated_access_denied(self):
         """
         Given: 未附带认证 Token 的请求
         When:  GET /api/devices/param-history/?specific_part=...
-        Then:  返回 200（AllowAny 权限）
+        Then:  返回 401（v1.6.0：接口已收紧，需 admin/operator）
         """
         anon_client = APIClient()
         resp = anon_client.get('/api/devices/param-history/', {'specific_part': SPECIFIC_PART})
-        self.assertEqual(resp.status_code, 200)
+        self.assertIn(resp.status_code, (401, 403))
 
     # GWT-HIST-16: page_size 默认值为 50
     def test_default_page_size_is_50(self):

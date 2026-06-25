@@ -84,7 +84,7 @@ class CreateWorkOrderProposalTest(TestCase):
 @tag('integration')
 class ListDetailTest(TestCase):
     def setUp(self):
-        self.client = _client('user')
+        self.client = _client('operator')
 
     def test_list_unauth_401(self):
         self.assertEqual(APIClient().get('/api/workorders/').status_code, 401)
@@ -133,7 +133,7 @@ class ListDetailTest(TestCase):
 class ApproveWriteTest(TestCase):
     def setUp(self):
         self.admin = _client('admin')
-        self.user = _client('user')
+        self.user = _client('operator')
         self.fe = _fault()
         self.wo = _wo(self.fe, proposed_tool='trigger_refresh',
                       proposed_args={'specific_part': '3-1-7-702'}, write_status='PENDING')
@@ -178,7 +178,7 @@ class ApproveWriteTest(TestCase):
 class ResolveTest(TestCase):
     def setUp(self):
         self.admin = _client('admin')
-        self.user = _client('user')
+        self.user = _client('operator')
         self.fe = _fault()
         self.wo = _wo(self.fe, status='OPEN')
 

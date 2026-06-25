@@ -56,9 +56,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="角色" prop="role">
-              <el-select v-model="userForm.role" style="width: 100%;">
-                <el-option label="普通用户" value="user" />
+              <el-select v-model="userForm.role" placeholder="请选择角色" style="width: 100%;">
                 <el-option label="管理员" value="admin" />
+                <el-option label="运维人员" value="operator" />
+                <el-option label="普通业主" value="user" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -94,7 +95,8 @@ export default {
   setup() {
     const createFormRef = ref(null)
     const loading = ref(false)
-    const userForm = reactive({ username: '', email: '', firstName: '', lastName: '', password: '', confirmPassword: '', role: 'user', department: '', position: '' })
+    // v1.6.0 (OQ-04)：role 默认空，强制管理员显式选择（admin/operator/user）
+    const userForm = reactive({ username: '', email: '', firstName: '', lastName: '', password: '', confirmPassword: '', role: '', department: '', position: '' })
 
     function validatePassword(rule, value, callback) {
       if (!value) { callback(new Error('请输入密码')); return }
@@ -113,7 +115,8 @@ export default {
       firstName: [{ required: true, message: '请输入名字', trigger: 'blur' }],
       lastName: [{ required: true, message: '请输入姓氏', trigger: 'blur' }],
       password: [{ required: true, validator: validatePassword, trigger: 'blur' }],
-      confirmPassword: [{ required: true, validator: validateConfirmPassword, trigger: 'blur' }]
+      confirmPassword: [{ required: true, validator: validateConfirmPassword, trigger: 'blur' }],
+      role: [{ required: true, message: '请选择角色', trigger: 'change' }]
     }
 
     async function handleSubmit() {
@@ -133,7 +136,7 @@ export default {
     }
 
     function resetForm() {
-      Object.assign(userForm, { username: '', email: '', firstName: '', lastName: '', password: '', confirmPassword: '', role: 'user', department: '', position: '' })
+      Object.assign(userForm, { username: '', email: '', firstName: '', lastName: '', password: '', confirmPassword: '', role: '', department: '', position: '' })
       if (createFormRef.value) createFormRef.value.clearValidate()
     }
 

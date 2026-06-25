@@ -1,8 +1,9 @@
 <template>
   <div class="app-container">
     <!-- 根据路由判断是否显示Layout组件 -->
-    <template v-if="$route.name === 'Login'">
-      <!-- 登录页面直接渲染 -->
+    <!-- v1.6.0：Login 与 UserLanding（业主占位页）不套用 Layout（无侧边菜单） -->
+    <template v-if="$route.name === 'Login' || $route.name === 'UserLanding'">
+      <!-- 登录页 / 业主占位页直接渲染 -->
       <router-view />
     </template>
     <template v-else>

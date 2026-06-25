@@ -123,6 +123,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
 
+        # v1.6.0 RBAC：普通业主（role='user'）无业务功能权限，拒绝聊天 WS 连接。
+        # WS 握手不经 HTTP 中间件（UserRoleApiGuardMiddleware 拦不到），故在此显式拦截，二者对齐。
+        if getattr(user, 'role', None) == 'user':
+            logger.warning('ChatConsumer: 普通业主(role=user)无聊天权限，拒绝连接')
+            await self.close(code=4003)
+            return
+
         self.user = user
         self._is_streaming = False
 

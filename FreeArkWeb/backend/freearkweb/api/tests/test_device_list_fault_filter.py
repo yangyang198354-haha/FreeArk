@@ -32,7 +32,7 @@ from api.models import (
 # Fixtures helpers
 # ---------------------------------------------------------------------------
 
-def _make_user(username="u_fff", role="user"):
+def _make_user(username="u_fff", role="operator"):
     user = CustomUser.objects.create_user(username=username, password="pass_fff", role=role)
     token, _ = Token.objects.get_or_create(user=user)
     return user, token.key

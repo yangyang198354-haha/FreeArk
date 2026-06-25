@@ -32,7 +32,7 @@ from api.views import (
 
 
 def _make_authed_client(username="reg_v120_user"):
-    user = CustomUser.objects.create_user(username=username, password="pass1234", role="user")
+    user = CustomUser.objects.create_user(username=username, password="pass1234", role="operator")
     token, _ = Token.objects.get_or_create(user=user)
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")

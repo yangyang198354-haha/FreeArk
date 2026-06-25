@@ -34,7 +34,7 @@ def make_admin(username='admin_test', password='adminpass123'):
 
 def make_user(username='user_test', password='userpass123'):
     user = CustomUser.objects.create_user(
-        username=username, password=password, role='user'
+        username=username, password=password, role='operator'
     )
     token, _ = Token.objects.get_or_create(user=user)
     return user, token.key
@@ -172,7 +172,12 @@ class OwnerAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin, self.admin_token = make_admin()
-        self.user, self.user_token = make_user()
+        self.user, self.user_token = make_user()  # v1.6.0: operator（可对业主信息 CRUD）
+        # v1.6.0: 普通业主（role='user'）——无任何业务权限，被中间件拦截
+        self.resident = CustomUser.objects.create_user(
+            username='resident_test', password='residentpass123', role='user'
+        )
+        self.resident_token = Token.objects.get_or_create(user=self.resident)[0].key
 
         # 创建 10 条测试记录
         for i in range(1, 11):
@@ -204,6 +209,10 @@ class OwnerAPITest(TestCase):
 
     def _auth_user(self):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.user_token}')
+
+    def _auth_resident(self):
+        # v1.6.0: 以普通业主（role='user'）身份认证——预期被中间件拦截
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.resident_token}')
 
     def _no_auth(self):
         self.client.credentials()
@@ -282,8 +291,8 @@ class OwnerAPITest(TestCase):
         self.assertTrue(OwnerInfo.objects.filter(specific_part='3-2-5-501').exists())
 
     def test_tc_a_008_regular_user_create_forbidden(self):
-        """TC-A-008: 普通用户 POST /api/owners/ 返回 403"""
-        self._auth_user()
+        """TC-A-008: 普通业主（role=user）POST /api/owners/ 返回 403（operator 已可创建，故改测业主）"""
+        self._auth_resident()
         payload = {
             'specific_part': '3-2-5-502',
             'building': '3栋',
@@ -341,9 +350,9 @@ class OwnerAPITest(TestCase):
         self.assertEqual(owner.bind_status, '未绑定')
 
     def test_tc_a_014_regular_user_patch_forbidden(self):
-        """TC-A-014: 普通用户 PATCH 返回 403"""
+        """TC-A-014: 普通业主（role=user）PATCH 返回 403（operator 已可修改，故改测业主）"""
         owner = OwnerInfo.objects.first()
-        self._auth_user()
+        self._auth_resident()
         resp = self.client.patch(f'/api/owners/{owner.id}/', {'bind_status': '未绑定'}, format='json')
         self.assertEqual(resp.status_code, 403)
 
@@ -359,9 +368,9 @@ class OwnerAPITest(TestCase):
         self.assertFalse(OwnerInfo.objects.filter(id=owner_id).exists())
 
     def test_tc_a_016_regular_user_delete_forbidden(self):
-        """TC-A-016: 普通用户 DELETE 返回 403"""
+        """TC-A-016: 普通业主（role=user）DELETE 返回 403（operator 已可删除，故改测业主）"""
         owner = OwnerInfo.objects.first()
-        self._auth_user()
+        self._auth_resident()
         resp = self.client.delete(f'/api/owners/{owner.id}/')
         self.assertEqual(resp.status_code, 403)
 

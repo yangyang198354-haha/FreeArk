@@ -42,6 +42,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
+        # v1.6.0 安全：公开自助注册强制为最小权限"普通业主"，忽略客户端传入的 role，
+        # 防止任何人自助注册为 operator/admin 绕过 RBAC。需要更高权限由管理员显式创建。
+        validated_data['role'] = 'user'
         user = CustomUser.objects.create_user(**validated_data)
         return user
 
@@ -69,6 +72,9 @@ class UserLoginSerializer(serializers.Serializer):
 class UserCreateSerializer(serializers.ModelSerializer):
     """管理员创建用户序列化器"""
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    # v1.6.0 (OQ-04)：创建用户必须显式选择角色（admin/operator/user），不沿用模型默认值。
+    # 非法值由 ChoiceField 校验，返回 400。
+    role = serializers.ChoiceField(choices=CustomUser.ROLE_CHOICES, required=True)
 
     class Meta:
         model = CustomUser

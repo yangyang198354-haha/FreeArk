@@ -39,7 +39,7 @@ from .fault_utils import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_user(username="testuser_fc", role="user", password="pass_fc_123"):
+def make_user(username="testuser_fc", role="operator", password="pass_fc_123"):
     user = CustomUser.objects.create_user(username=username, password=password, role=role)
     token, _ = Token.objects.get_or_create(user=user)
     return user, token

@@ -148,7 +148,7 @@ class TestRagUploadAPI(TestCase):
         self.admin = User.objects.create_user(
             username='admin_api', password='pass', is_staff=True, role='admin')
         self.normal = User.objects.create_user(
-            username='user_api', password='pass', is_staff=False, role='user')
+            username='user_api', password='pass', is_staff=False, role='operator')
         self.client = APIClient()
 
     def _auth(self, user):
