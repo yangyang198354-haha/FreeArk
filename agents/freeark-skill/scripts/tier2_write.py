@@ -37,14 +37,14 @@ def _client() -> FreeArkClient:
 
 def _build_operator(operator_override: str) -> str:
     """
-    验证并清洗 operator_override 字段（来自 Agent 传入，格式 openclaw-agent::<chatuser>）。
+    验证并清洗 operator_override 字段（来自 Agent 传入，格式 energy-agent::<chatuser>）。
 
     移植自：tier2_write.js buildOperator
     v2 注意：chatuser 已由 ChatConsumer 注入 [__freeark_user__:<username>] 前缀，
     Agent 从 system prompt 规则中提取并构造该字段。
     """
     if not operator_override:
-        return "openclaw-agent::unknown"
+        return "energy-agent::unknown"
     # 清洗非法字符，限长 80
     safe = re.sub(r"[^a-zA-Z0-9_@.:/-]", "_", operator_override)[:80]
     return safe
@@ -62,7 +62,7 @@ def freeark_write_device_params(params: dict) -> dict:
     Args:
         specific_part: 设备标识符，如 "3-1-7-702"（必须）
         items: 参数变更列表，每项 {param_name, new_value}（必须）
-        operator_override: "openclaw-agent::<chatuser>"（由 Agent 从 chatuser 前缀提取构造）
+        operator_override: "energy-agent::<chatuser>"（由 Agent 从 chatuser 前缀提取构造）
 
     移植自：tier2_write.js freeark_write_device_params
     """

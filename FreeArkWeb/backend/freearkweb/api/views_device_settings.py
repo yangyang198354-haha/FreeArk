@@ -245,13 +245,14 @@ def device_settings_write(request):
     batch_request_id = str(uuid.uuid4())
 
     # CONFIRM-7 (lobster-agent-api-channel): operator_override 追溯 chatuser
-    # 仅当认证用户为 openclaw-agent 且 operator_override 格式合法时才采用
+    # 仅当认证用户为 energy-agent（服务账号，原 openclaw-agent，OpenClaw 退役后改名）
+    # 且 operator_override 格式合法时才采用
     operator_override = ser.validated_data.get('operator_override', '')
     effective_operator = request.user.username
     if (
         operator_override
-        and request.user.username == 'openclaw-agent'
-        and operator_override.startswith('openclaw-agent::')
+        and request.user.username == 'energy-agent'
+        and operator_override.startswith('energy-agent::')
         and len(operator_override) <= 150
     ):
         effective_operator = operator_override
@@ -279,7 +280,7 @@ def device_settings_write(request):
                 param_name=param_name,
                 old_value=old_value,
                 new_value=str(new_value),
-                operator=effective_operator,  # CONFIRM-7: 使用 effective_operator（可为 openclaw-agent::<chatuser>）
+                operator=effective_operator,  # CONFIRM-7: 使用 effective_operator（可为 energy-agent::<chatuser>）
                 status='pending',
             )
             records.append(rec)

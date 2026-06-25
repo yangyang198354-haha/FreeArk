@@ -146,4 +146,4 @@ class WriteDelegationGateTests(SimpleTestCase):
             m.assert_called_once()
             args = m.call_args.args
             self.assertEqual(args[0], "set_device_params")          # 映射到能耗写工具
-            self.assertEqual(args[2], "openclaw-agent::alice")      # operator 追溯
+            self.assertEqual(args[2], "energy-agent::alice")        # operator 追溯（服务账号改名后）

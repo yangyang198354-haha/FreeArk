@@ -20,6 +20,7 @@ class WriteItemSerializer(serializers.Serializer):
 class DeviceSettingsBatchWriteSerializer(serializers.Serializer):
     specific_part = serializers.CharField(max_length=20)
     items = WriteItemSerializer(many=True, min_length=1)
-    # CONFIRM-7 (lobster-agent-api-channel): 允许 openclaw-agent 覆盖 operator 字段
-    # 格式要求: "openclaw-agent::<chatuser>"，仅当认证用户为 openclaw-agent 时视图层才采用此值
+    # CONFIRM-7 (lobster-agent-api-channel): 允许 energy-agent 覆盖 operator 字段
+    # 格式要求: "energy-agent::<chatuser>"，仅当认证用户为 energy-agent 时视图层才采用此值
+    # （服务账号原名 openclaw-agent，OpenClaw 退役后改名 energy-agent）
     operator_override = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')

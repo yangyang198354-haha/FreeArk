@@ -329,6 +329,16 @@ SESSION_EXTENDED_TIMEOUT = int(os.environ.get('SESSION_EXTENDED_TIMEOUT', 604800
 # 通过环境变量 ACTIVITY_THROTTLE_SECONDS 可覆盖（整数，秒）。
 ACTIVITY_THROTTLE_SECONDS = int(os.environ.get('ACTIVITY_THROTTLE_SECONDS', 300))
 
+# 服务账号用户名列表（机器令牌）。这些账号豁免 SlidingWindowTokenAuthentication 的
+# 不活跃超时——它们供后台 agent（如 energy-expert 经 energy-agent 令牌写设备参数）
+# 长期低频调用，不应被「人类会话超时」判过期（否则写操作 401「会话已超时」）。
+# 逗号分隔，通过环境变量 SERVICE_ACCOUNT_USERNAMES 可覆盖。
+SERVICE_ACCOUNT_USERNAMES = [
+    s.strip()
+    for s in os.environ.get('SERVICE_ACCOUNT_USERNAMES', 'energy-agent').split(',')
+    if s.strip()
+]
+
 # ===========================================================================
 # 微信小程序配置（v1.8.0_miniprogram_owner_account，REQ-AUTH-002）
 # ===========================================================================
