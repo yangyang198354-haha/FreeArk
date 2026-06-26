@@ -21,8 +21,10 @@
       <text class="header-subtitle">{{ currentDate }}</text>
     </view>
 
-    <!-- Metric cards grid -->
-    <view class="section">
+    <!-- 系统概览：仅 admin/operator 可见。
+         user（业主）角色被 UserRoleApiGuardMiddleware 拦截所有管理端接口（RBAC OQ-06），
+         fetchDashboard() 对 user 角色提前返回，因此本节对 user 隐藏以避免永久显示"--"。 -->
+    <view v-if="authStore.role !== 'user'" class="section">
       <text class="section-title">系统概览</text>
       <view class="metrics-grid">
         <MetricCard
@@ -55,11 +57,29 @@
       </view>
     </view>
 
-    <!-- Shortcut tiles -->
+    <!-- 业主端欢迎区（role=user）：替代系统概览指标卡 -->
+    <view v-else class="section">
+      <text class="section-title">我的设备</text>
+      <view class="owner-welcome">
+        <text class="owner-welcome-text">欢迎使用 FreeArk 业主端</text>
+        <text class="owner-welcome-sub">请通过下方「参数设置」管理您的房间设备</text>
+      </view>
+    </view>
+
+    <!-- 快捷入口
+         admin/operator：故障管理、结露预警、AI 问答、设备监控、能耗报表、巡检工单、个人中心
+         user（业主）：方舟智能体问答、参数设置、个人中心
+           — 管理端快捷入口对 user 隐藏，避免点进去因 UserRoleApiGuardMiddleware (RBAC OQ-06) 403。
+           — 个人中心(/api/auth/me/ 在白名单)保留，业主需要它登出和改密。 -->
     <view class="section">
       <text class="section-title">快捷入口</text>
       <view class="shortcuts-grid">
-        <view class="shortcut-tile" @tap="goTo('/subpackages/ops/pages/faults')">
+        <!-- 管理端入口：仅 admin/operator 可见 -->
+        <view
+          v-if="authStore.role !== 'user'"
+          class="shortcut-tile"
+          @tap="goTo('/subpackages/ops/pages/faults')"
+        >
           <text class="shortcut-icon">!</text>
           <text class="shortcut-label">故障管理</text>
           <view
@@ -67,26 +87,48 @@
             class="shortcut-badge"
           >{{ dashData.faultCount }}</view>
         </view>
-        <view class="shortcut-tile" @tap="goTo('/subpackages/ops/pages/condensation')">
+        <view
+          v-if="authStore.role !== 'user'"
+          class="shortcut-tile"
+          @tap="goTo('/subpackages/ops/pages/condensation')"
+        >
           <text class="shortcut-icon">~</text>
           <text class="shortcut-label">结露预警</text>
         </view>
+
+        <!-- 方舟智能体问答：全角色可见 -->
         <view class="shortcut-tile" @tap="goTo('/pages/chat/index')">
           <text class="shortcut-icon">AI</text>
-          <text class="shortcut-label">AI 问答</text>
+          <text class="shortcut-label">方舟智能体</text>
         </view>
-        <view class="shortcut-tile" @tap="goTo('/subpackages/monitor/pages/index')">
+
+        <!-- 管理端入口：仅 admin/operator 可见 -->
+        <view
+          v-if="authStore.role !== 'user'"
+          class="shortcut-tile"
+          @tap="goTo('/subpackages/monitor/pages/index')"
+        >
           <text class="shortcut-icon">M</text>
           <text class="shortcut-label">设备监控</text>
         </view>
-        <view class="shortcut-tile" @tap="goTo('/subpackages/energy/pages/index')">
+        <view
+          v-if="authStore.role !== 'user'"
+          class="shortcut-tile"
+          @tap="goTo('/subpackages/energy/pages/index')"
+        >
           <text class="shortcut-icon">E</text>
           <text class="shortcut-label">能耗报表</text>
         </view>
-        <view class="shortcut-tile" @tap="goTo('/subpackages/ops/pages/workorders')">
+        <view
+          v-if="authStore.role !== 'user'"
+          class="shortcut-tile"
+          @tap="goTo('/subpackages/ops/pages/workorders')"
+        >
           <text class="shortcut-icon">W</text>
           <text class="shortcut-label">巡检工单</text>
         </view>
+
+        <!-- 参数设置：仅 user（业主）可见，调用 /api/miniapp/ 白名单接口 -->
         <view
           v-if="authStore.role === 'user'"
           class="shortcut-tile"
@@ -95,6 +137,8 @@
           <text class="shortcut-icon">⚙</text>
           <text class="shortcut-label">参数设置</text>
         </view>
+
+        <!-- 个人中心：全角色可见（/api/auth/me/ 在 RBAC 白名单，不会 403） -->
         <view class="shortcut-tile" @tap="goTo('/pages/profile/index')">
           <text class="shortcut-icon">U</text>
           <text class="shortcut-label">个人中心</text>
@@ -151,6 +195,9 @@ const currentDate = computed(() => {
 })
 
 async function fetchDashboard() {
+  // user（业主）角色被后端 UserRoleApiGuardMiddleware 拦截所有 /api/dashboard/ 及管理端接口
+  // （RBAC OQ-06，middleware.py）。勿发管理端请求，否则每次进首页触发 4 个 403。
+  if (authStore.role === 'user') return
   errorMsg.value = ''
   try {
     const [plcRes, faultRes, summaryRes, condensationRes] = await Promise.allSettled([
@@ -328,5 +375,25 @@ function goTo(url) {
   text-align: center;
   color: #856404;
   font-size: 26rpx;
+}
+/* 业主端欢迎区（role=user，替代系统概览指标卡） */
+.owner-welcome {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.08);
+}
+.owner-welcome-text {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 12rpx;
+}
+.owner-welcome-sub {
+  display: block;
+  font-size: 26rpx;
+  color: #888;
+  line-height: 1.6;
 }
 </style>

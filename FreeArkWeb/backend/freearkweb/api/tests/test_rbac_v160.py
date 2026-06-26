@@ -152,6 +152,13 @@ class RoleApiAccessTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["data"]["role"], "operator")
 
+    # ---- v1.10.0：/api/memory/ 放行 user（业主端方舟智能体问答会话列表/历史，按 user 隔离） ----
+    def test_memory_me_user_not_blocked(self):
+        # 中间件不再拦截 user 访问 /api/memory/；会话列表按 user 隔离，应 200 而非 403
+        resp = _client(self.user_t).get("/api/memory/me/")
+        self.assertNotEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+
 
 # ---------------------------------------------------------------------------
 # 用户创建：角色校验

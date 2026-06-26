@@ -54,6 +54,10 @@ class UserRoleApiGuardMiddleware:
         # v1.8.0 新增：/api/miniapp/ 命名空间整体放行，各端点自配 IsOwnerUser 权限类
         if path.startswith('/api/miniapp/'):
             return False
+        # v1.10.0 新增：/api/memory/ 会话记忆按 user 隔离（业主只见自己会话），
+        # 放行以支持业主端"方舟智能体问答"的会话列表/历史，各端点自配 IsAuthenticated
+        if path.startswith('/api/memory/'):
+            return False
         user = self._resolve_token_user(request)
         return user is not None and getattr(user, 'role', None) == 'user'
 
