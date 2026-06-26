@@ -659,6 +659,9 @@ class PLCWriteRecord(models.Model):
     new_value = models.CharField(max_length=50)
     operator = models.CharField(max_length=150)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    # v1.10.0: 写入通道来源。's7'=web→datacollection→S7（历史默认），
+    # 'screen-mqtt'=小程序直连屏端 MQTT（客户端尽力上报审计）。
+    channel = models.CharField(max_length=16, null=True, blank=True, default='s7')
     error_message = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     acked_at = models.DateTimeField(null=True, blank=True)

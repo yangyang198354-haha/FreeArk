@@ -698,6 +698,77 @@ class ReasoningPassthroughTests(SimpleTestCase):
         self.assertNotIn("reasoning_content", gen.message.additional_kwargs)
         self.assertEqual(gen.message.content, "答案")
 
+    def test_stream_injects_reasoning_through_real_loop(self):
+        """覆盖生产钩子：_stream 真实循环（langchain 0.2.x 经此路径，非实例转换方法）
+        应把 delta.reasoning_content 注入 additional_kwargs。"""
+        from unittest.mock import MagicMock
+        from langchain_core.messages import HumanMessage
+        llm = self._make_llm()
+        chunks = [
+            {"choices": [{"delta": {"content": "", "reasoning_content": "想A"}, "finish_reason": None}]},
+            {"choices": [{"delta": {"content": "答案"}, "finish_reason": None}]},
+        ]
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def __iter__(self):
+                return iter(chunks)
+
+        mock_client = MagicMock()
+        mock_client.create.return_value = _Resp()
+        llm.client = mock_client
+
+        gens = list(llm._stream([HumanMessage(content="hi")]))
+        rc = [g.message.additional_kwargs.get("reasoning_content") for g in gens]
+        self.assertIn("想A", rc)
+        self.assertEqual("".join(g.message.content for g in gens), "答案")
+
+    def test_astream_injects_reasoning_through_real_loop(self):
+        """覆盖生产钩子：_astream（langgraph 实际走异步流）同样注入 reasoning_content。"""
+        from unittest.mock import MagicMock
+        from langchain_core.messages import HumanMessage
+        llm = self._make_llm()
+        chunks = [
+            {"choices": [{"delta": {"content": "", "reasoning_content": "想B"}, "finish_reason": None}]},
+            {"choices": [{"delta": {"content": "好"}, "finish_reason": None}]},
+        ]
+
+        class _AResp:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def __aiter__(self):
+                async def _g():
+                    for c in chunks:
+                        yield c
+                return _g()
+
+        async def _create(**kwargs):
+            return _AResp()
+
+        mock_async = MagicMock()
+        mock_async.create = _create
+        llm.async_client = mock_async
+
+        async def _collect():
+            out = []
+            async for g in llm._astream([HumanMessage(content="hi")]):
+                out.append(g)
+            return out
+
+        gens = async_to_sync(_collect)()
+        rc = [g.message.additional_kwargs.get("reasoning_content") for g in gens]
+        self.assertIn("想B", rc)
+        self.assertEqual("".join(g.message.content for g in gens), "好")
+
     def test_drive_yields_reasoning_before_content(self):
         """_drive：单专家路径下，先 yield ('reasoning', rc) 再 yield ('content', ...)。"""
         from langchain_core.messages import AIMessageChunk

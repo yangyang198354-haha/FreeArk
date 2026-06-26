@@ -346,6 +346,21 @@ SERVICE_ACCOUNT_USERNAMES = [
 WECHAT_MINIAPP_APPID = os.environ.get('WECHAT_MINIAPP_APPID', '')
 WECHAT_MINIAPP_SECRET = os.environ.get('WECHAT_MINIAPP_SECRET', '')
 
+# ===========================================================================
+# 屏端 MQTT broker（v1.10.0_miniprogram_param_settings）
+# ===========================================================================
+# 小程序业主端直连厂端 broker 收发参数（DeviceWrite/DeviceStatusUpdate）。
+# 这些连接参数经 /api/miniapp/device-settings/config/ 下发给已登录业主，
+# 不硬编码进仓库源码（ADR-07）。凭据走 .env。
+# ⚠️ 该 broker 为厂商共享云，admin/public 可读写全租户所有屏——客户端直连的
+#    全租户越权风险已在需求 OQ-10 书面接受。
+SCREEN_MQTT_PROTOCOL = os.environ.get('SCREEN_MQTT_PROTOCOL', 'wxs')
+SCREEN_MQTT_HOST = os.environ.get('SCREEN_MQTT_HOST', 'www.ttqingjiao.site')
+SCREEN_MQTT_PORT = int(os.environ.get('SCREEN_MQTT_PORT', '8084'))
+SCREEN_MQTT_PATH = os.environ.get('SCREEN_MQTT_PATH', '/mqtt')
+SCREEN_MQTT_USERNAME = os.environ.get('SCREEN_MQTT_USERNAME', 'admin')
+SCREEN_MQTT_PASSWORD = os.environ.get('SCREEN_MQTT_PASSWORD', 'public')
+
 # 静态文件配置
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 

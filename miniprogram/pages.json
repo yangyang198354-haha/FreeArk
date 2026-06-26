@@ -122,6 +122,17 @@
       ]
     },
     {
+      "root": "subpackages/control",
+      "pages": [
+        {
+          "path": "pages/param-settings",
+          "style": {
+            "navigationBarTitleText": "参数设置"
+          }
+        }
+      ]
+    },
+    {
       "root": "subpackages/ops",
       "pages": [
         {

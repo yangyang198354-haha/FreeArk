@@ -183,22 +183,106 @@ def _get_reasoning_chat_openai_cls():
     if _REASONING_LLM_CLS is None:
         from langchain_openai import ChatOpenAI  # 延迟 import，假模型路径不需要
 
+        # langchain_openai 0.2.x 起 _convert_chunk_to_generation_chunk 从 ChatOpenAI 的
+        # 实例方法改成了 chat_models.base 的模块级函数，ChatOpenAI 上已无此方法——
+        # 旧 super()._convert_chunk_to_generation_chunk(...) 会抛 AttributeError。
+        # 改为委托模块级函数再注入 reasoning_content，使本钩子在被直接调用时行为正确。
+        from langchain_openai.chat_models import base as _oai_base
+
+        def _inject_reasoning(gen, chunk):
+            try:
+                if gen is not None:
+                    choices = (chunk.get("choices")
+                               or chunk.get("chunk", {}).get("choices") or [])
+                    if choices:
+                        rc = _delta_get(choices[0].get("delta"), "reasoning_content")
+                        if rc:
+                            gen.message.additional_kwargs["reasoning_content"] = rc
+            except Exception:  # noqa: BLE001 防御：reasoning 提取绝不拖垮 content 流
+                pass
+            return gen
+
         class _ReasoningChatOpenAI(ChatOpenAI):
             def _convert_chunk_to_generation_chunk(
                     self, chunk, default_chunk_class, base_generation_info):
-                gen = super()._convert_chunk_to_generation_chunk(
+                gen = _oai_base._convert_chunk_to_generation_chunk(
                     chunk, default_chunk_class, base_generation_info)
-                try:
-                    if gen is not None:
-                        choices = (chunk.get("choices")
-                                   or chunk.get("chunk", {}).get("choices") or [])
-                        if choices:
-                            rc = _delta_get(choices[0].get("delta"), "reasoning_content")
-                            if rc:
-                                gen.message.additional_kwargs["reasoning_content"] = rc
-                except Exception:  # noqa: BLE001 防御：reasoning 提取绝不拖垮 content 流
-                    pass
-                return gen
+                return _inject_reasoning(gen, chunk)
+
+            # 注意（生产透传现状）：langchain_openai 0.2.x 的 ChatOpenAI._stream/_astream
+            # 直接调用模块级 _convert_chunk_to_generation_chunk，不经本实例方法。为让生产
+            # 流式真正透传 reasoning_content，这里覆盖 _stream/_astream，复用父类全部
+            # 取数逻辑（_get_request_payload/client.create），仅把分块转换换成本实例方法。
+            def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+                kwargs["stream"] = True
+                payload = self._get_request_payload(messages, stop=stop, **kwargs)
+                # 罕见的 Pydantic response_format 流式分支交回父类（本项目未用此路径；
+                # 该分支也不携带 reasoning_content，无需本子类透传）。
+                if isinstance(payload.get("response_format"), type):
+                    yield from super()._stream(
+                        messages, stop=stop, run_manager=run_manager, **kwargs)
+                    return
+                from langchain_core.messages import AIMessageChunk as _AIChunk
+                default_chunk_class = _AIChunk
+                base_generation_info = {}
+                if self.include_response_headers:
+                    raw = self.client.with_raw_response.create(**payload)
+                    response = raw.parse()
+                    base_generation_info = {"headers": dict(raw.headers)}
+                else:
+                    response = self.client.create(**payload)
+                with response:
+                    is_first = True
+                    for chunk in response:
+                        if not isinstance(chunk, dict):
+                            chunk = chunk.model_dump()
+                        gen = self._convert_chunk_to_generation_chunk(
+                            chunk, default_chunk_class,
+                            base_generation_info if is_first else {})
+                        if gen is None:
+                            continue
+                        default_chunk_class = gen.message.__class__
+                        logprobs = (gen.generation_info or {}).get("logprobs")
+                        if run_manager:
+                            run_manager.on_llm_new_token(
+                                gen.text, chunk=gen, logprobs=logprobs)
+                        is_first = False
+                        yield gen
+
+            async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+                kwargs["stream"] = True
+                payload = self._get_request_payload(messages, stop=stop, **kwargs)
+                if isinstance(payload.get("response_format"), type):
+                    async for _c in super()._astream(
+                            messages, stop=stop, run_manager=run_manager, **kwargs):
+                        yield _c
+                    return
+                from langchain_core.messages import AIMessageChunk as _AIChunk
+                default_chunk_class = _AIChunk
+                base_generation_info = {}
+                if self.include_response_headers:
+                    raw = await self.async_client.with_raw_response.create(**payload)
+                    response = raw.parse()
+                    base_generation_info = {"headers": dict(raw.headers)}
+                else:
+                    response = await self.async_client.create(**payload)
+                async with response:
+                    is_first = True
+                    async for chunk in response:
+                        if not isinstance(chunk, dict):
+                            chunk = chunk.model_dump()
+                        gen = self._convert_chunk_to_generation_chunk(
+                            chunk, default_chunk_class,
+                            base_generation_info if is_first else {})
+                        if gen is None:
+                            continue
+                        default_chunk_class = gen.message.__class__
+                        logprobs = (gen.generation_info or {}).get("logprobs")
+                        if run_manager:
+                            await run_manager.on_llm_new_token(
+                                gen.text, chunk=gen, logprobs=logprobs)
+                        is_first = False
+                        yield gen
 
         _REASONING_LLM_CLS = _ReasoningChatOpenAI
     return _REASONING_LLM_CLS

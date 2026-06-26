@@ -82,6 +82,14 @@ export const api = {
   // 改密 ChangePasswordView：POST /api/change-password/ {current_password,new_password} → {success}
   changePassword: (data) => http.post('/api/change-password/', data),
 
+  // 屏端 MQTT 参数配置（v1.10.0，业主端）
+  //   config：GET /api/miniapp/device-settings/config/
+  //     → {broker, topics, rooms:[{specific_part,location_name,screen_mac}], config:{writable_attrs,...}}
+  getDeviceSettingsConfig: () => http.get('/api/miniapp/device-settings/config/'),
+  //   audit（尽力上报）：POST /api/miniapp/device-settings/audit/
+  //     {request_id, specific_part, screen_mac, device_sn, result, items:[{attr_tag,attr_value,old_value}]}
+  reportDeviceSettingsAudit: (data) => http.post('/api/miniapp/device-settings/audit/', data),
+
   // Chat sessions
   getSessionList: (params) => http.get('/api/memory/me/', params),
   getSessionHistory: (sessionKey) => http.get(`/api/memory/session/${sessionKey}/history/`),

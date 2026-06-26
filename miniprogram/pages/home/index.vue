@@ -87,6 +87,14 @@
           <text class="shortcut-icon">W</text>
           <text class="shortcut-label">巡检工单</text>
         </view>
+        <view
+          v-if="authStore.role === 'user'"
+          class="shortcut-tile"
+          @tap="goTo('/subpackages/control/pages/param-settings')"
+        >
+          <text class="shortcut-icon">⚙</text>
+          <text class="shortcut-label">参数设置</text>
+        </view>
         <view class="shortcut-tile" @tap="goTo('/pages/profile/index')">
           <text class="shortcut-icon">U</text>
           <text class="shortcut-label">个人中心</text>
@@ -211,6 +219,7 @@ const NAV_ROUTES = [
   '/subpackages/ops/pages/faults',
   '/subpackages/ops/pages/condensation',
   '/subpackages/ops/pages/workorders',
+  '/subpackages/control/pages/param-settings',
   '/pages/profile/index',
 ]
 

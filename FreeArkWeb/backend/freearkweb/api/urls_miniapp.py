@@ -10,6 +10,7 @@ api.urls_miniapp — /api/miniapp/ 命名空间路由（v1.8.0_miniprogram_owner
 """
 from django.urls import path
 from . import views_miniapp
+from . import views_miniapp_device_settings as views_ds
 
 urlpatterns = [
     # 注册（AllowAny）：role 强制 user，由视图层保证；无需 IsOwnerUser
@@ -30,4 +31,12 @@ urlpatterns = [
     # 业主管理页账号绑定列（IsOperatorOrAbove）：web 端 admin/operator 专用
     path('admin/owner-bindings/', views_miniapp.owner_binding_list,
          name='miniapp-owner-binding-list'),
+
+    # v1.10.0 屏端 MQTT 参数配置（IsOwnerUser）
+    #   config：下发 broker 连接参数 + 业主自己房间(含 screenMac) + 可写白名单/标签
+    #   audit ：客户端尽力上报写操作审计，落 PLCWriteRecord(channel='screen-mqtt')
+    path('device-settings/config/', views_ds.device_settings_config,
+         name='miniapp-ds-config'),
+    path('device-settings/audit/', views_ds.device_settings_audit,
+         name='miniapp-ds-audit'),
 ]

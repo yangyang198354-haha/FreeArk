@@ -223,7 +223,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
 
         captured_messages = []
 
-        async def mock_stream_chat(message, session_key):
+        async def mock_stream_chat(message, session_key, upload_ids=None, user_id=None, **kwargs):
             captured_messages.append(message)
             yield ('content', '当前回答')
 
@@ -255,7 +255,7 @@ class ConsumerHistoryInjectionTest(TransactionTestCase):
         """无历史时，发给 OpenClaw 的 message 不含历史前缀标记。"""
         captured_messages = []
 
-        async def mock_stream_chat(message, session_key):
+        async def mock_stream_chat(message, session_key, upload_ids=None, user_id=None, **kwargs):
             captured_messages.append(message)
             yield ('content', '回复')
 
@@ -300,7 +300,7 @@ class ConsumerCrossUserIsolationTest(TransactionTestCase):
 
         captured_b_messages = []
 
-        async def mock_stream_chat(message, session_key):
+        async def mock_stream_chat(message, session_key, upload_ids=None, user_id=None, **kwargs):
             captured_b_messages.append(message)
             yield ('content', '用户B的回复')
 
@@ -418,7 +418,7 @@ class ConsumerInjectTurnsZeroTest(TransactionTestCase):
         """将 load_history 的返回 mock 为空（模拟 turns=0 效果），注入前缀应为空。"""
         captured_messages = []
 
-        async def mock_stream_chat(message, session_key):
+        async def mock_stream_chat(message, session_key, upload_ids=None, user_id=None, **kwargs):
             captured_messages.append(message)
             yield ('content', '回复')
 
