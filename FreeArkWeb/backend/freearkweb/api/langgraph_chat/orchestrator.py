@@ -5,7 +5,7 @@ api.langgraph_chat.orchestrator —— 编排图：supervisor 路由 + 专家并
 
   OpenClaw                              LangGraph 本图
   ─────────────────────────────────    ─────────────────────────────────
-  main agent 方舟龙虾                    route 节点（阶段D LLM 分类器）+ aggregate 节点
+  main agent 方舟智能体                  route 节点（阶段D LLM 分类器）+ aggregate 节点
   exec `openclaw agent --agent X`       Send(expert, payload)（进程内，无冷启动）
   串行委派 3 专家 ≈ 3×31s               Send fan-out 并行 ≈ max(单专家)
   freeark_tool.py 子进程                 fa_tools.@tool 进程内直调

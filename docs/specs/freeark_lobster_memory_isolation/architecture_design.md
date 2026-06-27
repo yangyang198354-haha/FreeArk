@@ -1,4 +1,4 @@
-# 架构设计文档 — 方舟龙虾记忆隔离
+# 架构设计文档 — 方舟智能体记忆隔离
 
 ```
 file_header:
@@ -68,7 +68,7 @@ ADR-001~008 定义继承自前序项目：
 
 **关键发现**：
 - username 已在消息前缀中（FACT-06），OpenClaw 端**理论上**能提取用户身份
-- `session_key` 是 OpenClaw 端多轮上下文的 key，决定"龙虾记得本次连接说了什么"
+- `session_key` 是 OpenClaw 端多轮上下文的 key，决定"智能体记得本次连接说了什么"
 - FreeArk 侧 ChatConsumer 是完全无状态的（不写 DB），所有跨连接记忆能力必须从架构层新增
 
 ---

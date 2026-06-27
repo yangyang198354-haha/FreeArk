@@ -1,4 +1,4 @@
-# 需求规格说明书 — 方舟龙虾语音输入
+# 需求规格说明书 — 方舟智能体语音输入
 
 ```
 file_header:
@@ -27,12 +27,12 @@ file_header:
 
 ## 0. 文档说明
 
-本文档是**增量需求规格**，描述 FreeArk 方舟龙虾 Web 聊天界面新增语音输入功能的需求。
+本文档是**增量需求规格**，描述 FreeArk 方舟智能体 Web 聊天界面新增语音输入功能的需求。
 
 **增量边界**：本文档仅描述语音输入功能（REQ-FUNC-018 起）带来的新需求，不重复已有功能（文字聊天、reasoning 流、memory 隔离）的需求。
 
 **来源约定**：
-- `[USER-VOICE-01]` = 用户原话："web ui 前端和龙虾聊天能增加语音输入吗，有无方案?"
+- `[USER-VOICE-01]` = 用户原话："web ui 前端和智能体聊天能增加语音输入吗，有无方案?"
 - `[USER-VOICE-02]` = 用户原话："我有豆包的语音模型服务，也有 secret key，可以集成吗"
 - `[USER-VOICE-03]` = 用户原话："选流式方案"
 - `[FACT-VOICE-01]` = ChatView.vue v1.1 实测：输入区为 el-input textarea，有发送按钮，无麦克风元素
@@ -131,7 +131,7 @@ file_header:
 - AC-023-01（填入输入框策略）：Given 识别完成，When 文字注入输入框，Then 用户可在发送前手动编辑、追加或清空文字，与正常文字输入体验一致。
 - AC-023-02（填入输入框策略）：Given 识别文字已注入输入框，Then 用户须主动点击发送或按 Enter 才触发聊天，不应自动发送。
 - AC-023-03（自动发送策略，如选用）：Given 识别完成且触发自动发送，Then 系统须给用户 2 秒以上的可取消窗口（倒计时显示，用户可点击取消），不得无预警直接发送。
-- AC-023-04：Given 识别完成后文字已注入（无论策略），When 聊天功能处于 isWaiting=true 状态（龙虾正在回复），Then 不允许触发新发送，须等待当前回复完成，与现有文字输入行为一致（参考 FACT-VOICE-05）。
+- AC-023-04：Given 识别完成后文字已注入（无论策略），When 聊天功能处于 isWaiting=true 状态（智能体正在回复），Then 不允许触发新发送，须等待当前回复完成，与现有文字输入行为一致（参考 FACT-VOICE-05）。
 
 ---
 
@@ -169,7 +169,7 @@ file_header:
 **描述**：语音输入需与现有 reasoning_stream 功能共存，不破坏 reasoning_token / stream_token 流式展示。
 
 **验收标准**：
-- AC-026-01：Given 龙虾正在回复（isWaiting=true，包含 reasoning 流进行中），When 用户点击语音输入按钮，Then 系统须禁止开始录音（或提示"请等待当前回复完成"），不在回复进行中同时开始录音。
+- AC-026-01：Given 智能体正在回复（isWaiting=true，包含 reasoning 流进行中），When 用户点击语音输入按钮，Then 系统须禁止开始录音（或提示"请等待当前回复完成"），不在回复进行中同时开始录音。
 - AC-026-02：Given 语音输入功能新增的 UI 元素（麦克风按钮等），When 渲染在 ChatView.vue 中，Then 不遮挡、不覆盖现有的 reasoning <details> 折叠区和 stream 消息气泡。
 - AC-026-03：Given 语音识别文字已注入输入框，When 用户发送此文字消息，Then 后续 ChatConsumer v1.3 的 chat_memory 注入逻辑（load_history + append_message）须正常运行，与文字输入行为完全一致。
 - AC-026-04：Given 语音输入 WS 连接（如单独 endpoint）存在，When 该连接出现错误，Then 不影响 /ws/chat/ 连接的 reasoning_stream 和 memory 功能（两个 WS 连接互相隔离）。

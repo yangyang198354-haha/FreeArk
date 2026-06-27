@@ -221,7 +221,7 @@ GET /api/devices/fault-count/
 
 **来源引用**：用户原始需求第 3 条
 
-**描述**：在 `agents/freeark-skill/SKILL.md` 中追加两个新的 Tier-1 只读工具，用于让 OpenClaw（方舟龙虾）能通过自然语言查询设备故障数量。
+**描述**：在 `agents/freeark-skill/SKILL.md` 中追加两个新的 Tier-1 只读工具，用于让方舟智能体能通过自然语言查询设备故障数量。
 
 **工具 1：`freeark_get_fault_count`**
 - 用途：查询指定专有部分的故障数量和故障详情

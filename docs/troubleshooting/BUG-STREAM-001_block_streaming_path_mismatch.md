@@ -1,4 +1,4 @@
-# BUG-STREAM-001 — 方舟龙虾聊天"不够流式"根因调查（blockStreamingDefault 误判 + reasoning 死分支）
+# BUG-STREAM-001 — 方舟智能体聊天"不够流式"根因调查（blockStreamingDefault 误判 + reasoning 死分支）
 
 | 字段 | 值 |
 |---|---|
@@ -6,7 +6,7 @@
 | 调查日期 | 2026-05-27 |
 | 涉及版本 | OpenClaw 2026.5.20；FreeArk adapter `openclaw_adapter.py` v1.3 |
 | 严重程度 | Low — 体验问题，不影响功能正确性；附带发现一处 adapter 隐藏 bug |
-| 影响面 | 「和方舟龙虾聊天」页面流式渲染粒度；adapter 的 reasoning 处理分支 |
+| 影响面 | 「和方舟智能体聊天」页面流式渲染粒度；adapter 的 reasoning 处理分支 |
 | 状态 | ✅ 已诊断；生产配置已回滚至默认；后续修复见 §7 |
 
 ---

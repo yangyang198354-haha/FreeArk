@@ -377,7 +377,7 @@ def _run(coro):
 | 方法-9 | `test_empty_delta_text_filtered`（line 347）|
 | 方法-10 | `test_events_for_other_runid_are_ignored`（line 534）|
 | 性质 | **产品代码 vs 测试代码不匹配**（需主控判断） |
-| 详情 | `OpenClawAdapter.stream_chat()` 当前 yield 的是 `('content', '你好')` 这样的 2-元组；测试期望 yield 的是纯字符串 `'你好'`。实际输出：`[('content', '你好'), ('content', '，'), ('content', '方舟龙虾')]`，期望：`['你好', '，', '方舟龙虾']` |
+| 详情 | `OpenClawAdapter.stream_chat()` 当前 yield 的是 `('content', '你好')` 这样的 2-元组；测试期望 yield 的是纯字符串 `'你好'`。实际输出：`[('content', '你好'), ('content', '，'), ('content', '方舟智能体')]`，期望：`['你好', '，', '方舟智能体']` |
 | 冲突溯源 | v1.4.0 的 LangGraph adapter 协议在 `test_langgraph_phase_a.LangGraphAdapterTests.test_stream_chat_yields_content_tuples` 中明确要求 yield `('content', text)` 元组（该测试被 skip，因 langgraph 未安装）。而 `TestStreamChat` 测试的是旧协议（纯字符串）。 |
 | 建议 | 不改产品代码；报告给主控：两套测试对 adapter 输出格式有冲突预期。主控需决定：① 统一为元组格式（改 `TestStreamChat` 期望），② 统一为字符串格式（改产品代码），③ 两个 adapter（LangGraph/OpenClaw）各有自己的输出格式。 |
 

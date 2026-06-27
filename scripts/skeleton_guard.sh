@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# skeleton_guard.sh — 方舟龙虾人格骨架文件保护脚本
+# skeleton_guard.sh — 方舟智能体人格骨架文件保护脚本
 #
 # ADR-011 方案 11-B（chattr +i）+ 11-C（Git 哈希追踪）
 # REQ-FUNC-015, REQ-NFR-012

@@ -1,6 +1,6 @@
 # 用 LangGraph 替换 OpenClaw 多 agent 编排 —— 方案 + PoC
 
-> 目标：**完全移除 OpenClaw**，用 LangChain/LangGraph 重建「方舟龙虾 + 3 专家」编排机制，
+> 目标：**完全移除 OpenClaw**，用 LangChain/LangGraph 重建「方舟智能体 + 3 专家」编排机制，
 > 显著降低延迟。本目录是可运行 PoC + 设计方案。
 
 ---
@@ -11,7 +11,7 @@
 
 ```
 浏览器 ──WS──> ChatConsumer ──aiohttp WS──> OpenClaw Gateway(systemd, Node.js)
-                                                  └─ main agent 方舟龙虾 (deepseek-v4-flash)
+                                                  └─ main agent 方舟智能体 (deepseek-v4-flash)
                                                        └─ exec `openclaw agent --agent X --json`   ← 每次子进程冷启动 + 反连 gateway
                                                             └─ 专家 agent ──exec python3 freeark_tool.py──> Django REST   ← 每个工具又一次子进程
 ```
@@ -48,7 +48,7 @@
 ### 组件逐项映射
 | OpenClaw 现状 | LangGraph 替代 | 本 PoC 文件 |
 | --- | --- | --- |
-| main agent 方舟龙虾 | `route` + `aggregate` 节点 | `orchestrator.py` |
+| main agent 方舟智能体 | `route` + `aggregate` 节点 | `orchestrator.py` |
 | exec `openclaw agent --agent X` | `Send("expert", payload)`（进程内并发） | `orchestrator.py:_fan_out` |
 | 专家 agent（systemPromptOverride） | `expert` 节点 + `EXPERT_PROMPTS` | `orchestrator.py` |
 | `freeark_tool.py` 子进程 + 16 个 handler | `@tool` 包装，**直接复用** `TIER1_HANDLERS` | `fa_tools.py` |

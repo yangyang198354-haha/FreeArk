@@ -10,7 +10,7 @@
 
 注意：本迁移只改 username，不动 token——FREEARK_AGENT_TOKEN 的值不变，认证不受影响。
 代码侧（authentication 服务账号白名单 / fa_direct 读身份 / orchestrator+视图 operator_override
-前缀 / 龙虾 skill tier2_write）已同步改为 energy-agent，须与本迁移一同部署。
+前缀 / AI agent skill tier2_write）已同步改为 energy-agent，须与本迁移一同部署。
 """
 from django.db import migrations
 

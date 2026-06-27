@@ -1,4 +1,4 @@
-# 模块设计文档（增量）— 方舟龙虾语音输入
+# 模块设计文档（增量）— 方舟智能体语音输入
 
 ```
 file_header:
@@ -334,7 +334,7 @@ VolcASRClient 的 `__aenter__` 中鉴权逻辑封装为内部方法 `_build_auth
 ```typescript
 // Props（TypeScript 类型化，满足接口类型化要求）
 interface STTButtonProps {
-  isWaiting: boolean    // 来自 ChatView.vue：龙虾是否正在回复中
+  isWaiting: boolean    // 来自 ChatView.vue：智能体是否正在回复中
                         // isWaiting=true 时禁用语音输入（REQ-FUNC-026 AC-026-01）
   wsToken: string       // DRF Token，用于 /ws/stt/?token=<wsToken> 鉴权
                         // 从 ChatView.vue 传入（已在 localStorage 中，安全）

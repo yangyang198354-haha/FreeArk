@@ -132,7 +132,7 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    // 方舟龙虾聊天页面（REQ-FUNC-001, REQ-FUNC-002；所有登录用户可见，无角色限制）
+    // 方舟智能体聊天页面（REQ-FUNC-001, REQ-FUNC-002；所有登录用户可见，无角色限制）
     path: '/chat',
     name: 'Chat',
     component: () => import('../views/ChatView.vue'),
