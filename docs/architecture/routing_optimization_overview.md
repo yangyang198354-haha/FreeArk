@@ -1,7 +1,7 @@
-# 意图路由优化总览（P1-3 / P0-1 / P0-2 / P1-2 / P1-1）
+# 意图路由优化总览（P1-3 / P0-1 / P0-2 / P1-2 / P1-1 / P2-1）
 
 **文档编号**: ARCH-ROUTING-OVERVIEW-001
-**状态**: 现状记录（5 项均已上线生产）
+**状态**: 现状记录（6 项均已上线生产）
 **最后更新**: 2026-06-27
 **适用代码**: `FreeArkWeb/backend/freearkweb/api/langgraph_chat/{router,orchestrator,semantic_router,adapter}.py`
 
@@ -31,8 +31,8 @@ _route(当前问题 text)
   ├─[2] 语义短路 (P1-1)              仅当前问题【零关键词】时：embed+各专家     ~0.4s(预热后)
   │        SemanticRouter.route()    范例最大余弦，top≥τ 且 margin≥δ → 单专家
   │
-  ├─[3] LLM 分类器 (阶段 D)          复合/域外/低置信；含护栏纠误             ~2.5s
-  │        classify_experts(router_llm,…)
+  ├─[3] LLM 分类器 (阶段 D)          复合/域外/低置信；提示含能力摘要(P2-1)；   ~2.5s
+  │        classify_experts(router_llm,…)   护栏纠误退居可选 backstop(P2-1)
   │
   └─ 兜底链：关键词命中 → 粘性(P0-2,上一轮专家) → 域外[](P1-2) → DEFAULT(energy)
 ```
@@ -52,6 +52,7 @@ _route(当前问题 text)
 | **P0-2** 粘性路由 | 零信号追问承接上一轮专家而非盲落 DEFAULT | `router.previous_turn_expert` + `classify_experts(sticky_hint=)` | `LANGGRAPH_ROUTER_STICKY`=True | e754eca |
 | **P1-2** 域外路径 | LLM 明确表态域外 → 通用应答节点（寒暄/能力引导），不塞能耗专家 | `router.parse_route_response_ex` + `orchestrator._general` 节点 | `LANGGRAPH_ROUTER_OOD_PATH`=True | 7094850 |
 | **P1-1** 语义路由 | 关键词盲点经 embedding 高置信短路（覆盖同义/无关键词单意图） | `semantic_router.SemanticRouter` | `LANGGRAPH_ROUTER_SEMANTIC`=True（代码默认 False，生产 .env 开）；`SEM_TAU`=0.65、`SEM_MARGIN`=0.05 | c91d943 / ee681df |
+| **P2-1** 能力路由 | 据工具表派生能力摘要注入 LLM 提示，按"谁有能力"分派；手写护栏转可选 backstop | `router.build_capability_digest` + `classify_experts(guard=)` | `LANGGRAPH_ROUTER_CAPABILITY_PROMPT`=True、`LANGGRAPH_ROUTER_GUARD`=True | bf83ce0 |
 
 ---
 
@@ -106,21 +107,26 @@ _route(当前问题 text)
 任一项异常时改对应 env 为 `False` + 重启 `freeark-backend` 即回退该层（其余层不受影响）：
 
 ```
+LANGGRAPH_ROUTER_CAPABILITY_PROMPT=False     # 回退 P2-1 预防层（路由 LLM 提示不含能力摘要）
+LANGGRAPH_ROUTER_GUARD=False                 # 退役 P2-1 backstop 护栏（验证充分后才建议）
 LANGGRAPH_ROUTER_SEMANTIC=False              # 回退 P1-1（恒走 LLM 分类器）
 LANGGRAPH_ROUTER_OOD_PATH=False              # 回退 P1-2（域外恒落 DEFAULT energy）
 LANGGRAPH_ROUTER_STICKY=False                # 回退 P0-2（零信号恒落 DEFAULT）
 LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT=False  # 回退 P0-1（恒走 LLM 分类器）
 ```
 
-生产 `.env`（Pi）当前 4 个布尔开关：前三者 True、`SEMANTIC` 2026-06-27 起 True；`SEM_TAU=0.65`、
-`SEM_MARGIN=0.05`。修改 `.env` 前务必备份（生产已有 `.env.bak.semantic.*` 等历史备份）。
+各开关代码默认值：`SEMANTIC`=False（生产 .env 显式开 True），其余布尔开关默认 True；
+`SEM_TAU=0.65`、`SEM_MARGIN=0.05`。`CAPABILITY_PROMPT`/`GUARD` 默认 True 随 P2-1 重启生效。
+修改生产 `.env`（Pi）前务必备份（已有 `.env.bak.semantic.*` 等历史备份）。
 
 ---
 
 ## 8. 后续可选（未立项）
 
-- **P2-1 能力/工具路由**：按专家持有的工具路由，逐步退役手写护栏 `_guard_against_misroute`。
-- **P2-2 专家注册表**：`EXPERT_NAMES`/`ROUTE_KEYWORDS`/范例/提示收敛为单一注册表，减少加专家的改动点。
+- **退役护栏 backstop**（P2-1 收尾）：P2-1 能力提示已上线作预防；待一个专门的"误路由测试集"
+  证明 LLM（带能力摘要）不再把数据查询分给 tool-less 专家后，置 `LANGGRAPH_ROUTER_GUARD=False`
+  退役确定性护栏。当前护栏仍 default-on 作廉价 backstop（且其历史事故已被 P0-1 关键词短路在前层拦下）。
+- **P2-2 专家注册表**：`EXPERT_NAMES`/`ROUTE_KEYWORDS`/范例/能力/提示收敛为单一注册表，减少加专家的改动点。
 - **P1-1 v2（视数据）**：若评测暴露 LLM 对追问自信误判，再考虑给 LLM 注入粘性提示；语义范例随
   生产真实问句扩充（评测集增长即范例增长）。
 - **关键词表瘦身**：语义层吸收长尾后，`ROUTE_KEYWORDS` 可冻结或精简（先靠评测集守住地板）。
