@@ -578,6 +578,55 @@ class LangGraphAdapterTests(SimpleTestCase):
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@tag('unit')
+class ClassifyStreamFailureTests(SimpleTestCase):
+    """adapter._classify_stream_failure：底层异常 → 分类降级异常 / None(代码 bug)。
+
+    动机见 RCA：原 `except Exception` 把代码 bug 也伪装成"暂时离线"误导排查。
+    """
+
+    def _classify(self, exc):
+        from api.langgraph_chat.adapter import _classify_stream_failure
+        return _classify_stream_failure(exc, "sess1234")
+
+    def test_code_bug_returns_none_for_reraise(self):
+        # 代码级 bug 不应伪装成"离线"：返回 None → 调用方原样 re-raise → INTERNAL_ERROR
+        for exc in (AttributeError("no attr"), TypeError("bad"), ImportError("m"),
+                    KeyError("k"), NameError("n"), IndexError("i"), AssertionError()):
+            self.assertIsNone(self._classify(exc),
+                              f"{type(exc).__name__} 应判为代码 bug(None)")
+
+    def test_context_length_exceeded(self):
+        from api.chat_exceptions import OpenClawUnavailableError
+        out = self._classify(RuntimeError("maximum context length is 65536 tokens"))
+        self.assertIsInstance(out, OpenClawUnavailableError)
+        self.assertEqual(out.code, "CONTEXT_LENGTH_EXCEEDED")
+        self.assertIn("过长", out.user_message)
+
+    def test_rate_limited(self):
+        out = self._classify(RuntimeError("429 Too Many Requests: rate limit reached"))
+        self.assertEqual(out.code, "RATE_LIMITED")
+        self.assertTrue(out.user_message)
+
+    def test_auth_config_error(self):
+        out = self._classify(RuntimeError("Error code: 401 - invalid api key"))
+        self.assertEqual(out.code, "LLM_CONFIG_ERROR")
+        self.assertTrue(out.user_message)
+
+    def test_generic_falls_back_to_offline(self):
+        # 未识别错误 → 默认"离线"：code 兼容旧值、user_message=None(consumers 用默认文案)
+        out = self._classify(RuntimeError("boom"))
+        self.assertEqual(out.code, "OPENCLAW_UNAVAILABLE")
+        self.assertIsNone(out.user_message)
+
+    def test_5xx_not_misclassified_as_auth(self):
+        # 5xx 不含鉴权/超限关键词 → 走默认离线，不应误命中 4xx 分支
+        out = self._classify(RuntimeError("Error code: 500 - internal server error"))
+        self.assertEqual(out.code, "OPENCLAW_UNAVAILABLE")
+        self.assertIsNone(out.user_message)
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
 @tag('unit')
 class OrchestratorWriteGateTests(SimpleTestCase):

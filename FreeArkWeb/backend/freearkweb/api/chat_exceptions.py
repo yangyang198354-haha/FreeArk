@@ -11,8 +11,21 @@ class ChatBackendUnavailableError(Exception):
 
     ChatConsumer 捕获此异常，映射至 OPENCLAW_UNAVAILABLE WS 错误码（向后兼容）。
     原名 OpenClawUnavailableError，退役 OpenClaw 后统一改名，消费端错误码不变。
+
+    可选携带分类信息（adapter._classify_stream_failure 产出）：
+      - user_message：面向用户的安全降级文案。None → consumers 用默认"暂时离线"。
+        绝不放原始异常细节（可能含内部实现/密钥片段），仅放可安全展示的提示。
+      - code：WS 错误码。默认 'OPENCLAW_UNAVAILABLE'（向后兼容）；分类后可为
+        CONTEXT_LENGTH_EXCEEDED / RATE_LIMITED / LLM_CONFIG_ERROR 等。前端对未知
+        error code 统一按 message 展示（ChatView.vue / 小程序 chat-ws 均如此），
+        故新增 code 无需前端联动。
     """
-    pass
+
+    def __init__(self, *args, user_message: str | None = None,
+                 code: str = "OPENCLAW_UNAVAILABLE"):
+        super().__init__(*args)
+        self.user_message = user_message
+        self.code = code
 
 
 # 向后兼容别名：现有 import OpenClawUnavailableError 的调用方可逐步迁移。

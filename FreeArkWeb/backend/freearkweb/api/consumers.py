@@ -494,10 +494,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         except OpenClawUnavailableError as exc:
             logger.warning('ChatConsumer: 聊天后端不可用: %s', exc)
+            # adapter._classify_stream_failure 可携带具体分类文案/错误码（context 超限、
+            # 限流、配置错误等）；无分类时回退默认"暂时离线"+ OPENCLAW_UNAVAILABLE。
             await self.send(json.dumps({
                 'type': 'error',
-                'code': 'OPENCLAW_UNAVAILABLE',
-                'message': '方舟智能体暂时离线，请稍后再试',
+                'code': getattr(exc, 'code', None) or 'OPENCLAW_UNAVAILABLE',
+                'message': getattr(exc, 'user_message', None) or '方舟智能体暂时离线，请稍后再试',
             }))
 
         except asyncio.TimeoutError:
@@ -655,8 +657,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except OpenClawUnavailableError as exc:
             logger.warning('ChatConsumer: confirm resume 不可用: %s', exc)
             await self.send(json.dumps({
-                'type': 'error', 'code': 'OPENCLAW_UNAVAILABLE',
-                'message': '方舟智能体暂时离线，请稍后再试',
+                'type': 'error',
+                'code': getattr(exc, 'code', None) or 'OPENCLAW_UNAVAILABLE',
+                'message': getattr(exc, 'user_message', None) or '方舟智能体暂时离线，请稍后再试',
             }))
         except asyncio.TimeoutError:
             logger.warning('ChatConsumer: confirm resume 超时')
@@ -845,11 +848,11 @@ class MiniAppChatConsumer(ChatConsumer):
                     )
                 )
 
-        except OpenClawUnavailableError:
+        except OpenClawUnavailableError as exc:
             await self.send(json.dumps({
                 'type': 'error',
-                'code': 'OPENCLAW_UNAVAILABLE',
-                'message': '方舟智能体暂时离线，请稍后再试',
+                'code': getattr(exc, 'code', None) or 'OPENCLAW_UNAVAILABLE',
+                'message': getattr(exc, 'user_message', None) or '方舟智能体暂时离线，请稍后再试',
             }))
         except asyncio.TimeoutError:
             await self.send(json.dumps({

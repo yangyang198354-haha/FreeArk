@@ -59,6 +59,75 @@ def _expert_cn(name: str) -> str:
     return _EXPERT_CN.get(name, name)
 
 
+def _classify_stream_failure(exc: Exception,
+                             session_key: Optional[str]) -> Optional[OpenClawUnavailableError]:
+    """把 _drive/astream 抛出的底层异常分类成面向用户的降级异常。
+
+    动机：原先 `except Exception` 一律包成"方舟智能体暂时离线"，把代码 bug
+    （如 langchain-openai 0.3.x 删函数引发的 AttributeError）也伪装成"离线"，
+    严重误导排查。此处按可识别特征分流：
+
+    返回值：
+      - OpenClawUnavailableError（带 user_message/code）：可归类的运行时失败，
+        consumers 据此给用户具体提示（context 超限 / 限流 / 配置错误 / 真·暂时不可用）。
+      - None：判定为代码级 bug / 未知内部错误——**不应伪装成"离线"**，调用方
+        原样 re-raise，由 consumers 的通用 except 映射为 INTERNAL_ERROR，便于暴露。
+
+    分类仅靠异常类型 + 文本特征（不硬依赖 openai SDK 异常类，避免导入耦合）。
+    """
+    sk = (session_key or "")[:8]
+
+    # 代码级 bug：类型/属性/导入等——这些不是"后端离线"，原样上抛以便被发现
+    if isinstance(exc, (AttributeError, TypeError, ImportError, NameError,
+                        KeyError, IndexError, AssertionError)):
+        return None
+
+    msg = str(exc).lower()
+
+    # 1. context / token 超限（多图描述 + 历史过长最常见）——用户可精简后重试
+    if any(k in msg for k in (
+        "context length", "context_length", "maximum context", "context window",
+        "maximum tokens", "max tokens", "too many tokens", "reduce the length",
+        "string too long", "exceeds the maximum",
+    )):
+        logger.warning("LangGraph 流式失败 session=%s [CONTEXT_LENGTH_EXCEEDED]: %s", sk, exc)
+        return OpenClawUnavailableError(
+            f"context length exceeded: {exc}",
+            user_message="本轮内容过长（含图片描述/历史对话），超出 AI 单次处理上限，"
+                         "请减少图片数量或精简问题后重试",
+            code="CONTEXT_LENGTH_EXCEEDED",
+        )
+
+    # 2. 限流 429 —— 稍候重试
+    if "rate limit" in msg or "ratelimit" in msg or "429" in msg or "too many requests" in msg:
+        logger.warning("LangGraph 流式失败 session=%s [RATE_LIMITED]: %s", sk, exc)
+        return OpenClawUnavailableError(
+            f"rate limited: {exc}",
+            user_message="AI 服务当前繁忙（请求过多），请稍候片刻再重试",
+            code="RATE_LIMITED",
+        )
+
+    # 3. 鉴权 / 配置错误 401/403 —— 非用户可修，提示联系管理员（运维看日志 ERROR）
+    if any(k in msg for k in (
+        "authentication", "invalid api key", "invalid_api_key", "incorrect api key",
+        "401", "403", "permission denied", "unauthorized",
+    )):
+        logger.error("LangGraph 流式失败 session=%s [LLM_CONFIG_ERROR]: %s", sk, exc)
+        return OpenClawUnavailableError(
+            f"auth/config error: {exc}",
+            user_message="AI 服务配置异常，请联系管理员",
+            code="LLM_CONFIG_ERROR",
+        )
+
+    # 4. 其它（5xx / 连接 / 超时类 / 未识别）—— 真·暂时不可用，走默认"离线"文案
+    logger.error("LangGraph 流式失败 session=%s: %s", sk, exc)
+    return OpenClawUnavailableError(
+        f"LangGraph 编排失败: {exc}",
+        user_message=None,  # consumers 用默认"方舟智能体暂时离线，请稍后再试"
+        code="OPENCLAW_UNAVAILABLE",
+    )
+
+
 _ORCH = None  # 进程常驻单例（惰性构造）
 
 
@@ -306,9 +375,13 @@ class LangGraphAdapter:
         except (ImageExpiredError, ImageAccessDeniedError, VisionServiceError):
             raise  # VLM 相关异常透传给 consumers 的专用 except 块
         except Exception as exc:  # noqa: BLE001
-            logger.error("LangGraph 流式失败 session=%s: %s",
-                         (session_key or "")[:8], exc)
-            raise OpenClawUnavailableError(f"LangGraph 编排失败: {exc}") from exc
+            classified = _classify_stream_failure(exc, session_key)
+            if classified is None:
+                # 代码级 bug：保留完整 traceback，原样上抛 → consumers INTERNAL_ERROR
+                logger.exception("LangGraph 流式异常(代码级) session=%s: %s",
+                                 (session_key or "")[:8], exc)
+                raise
+            raise classified from exc
 
     @classmethod
     async def resume_chat(cls, session_key: str,
@@ -326,6 +399,9 @@ class LangGraphAdapter:
         except OpenClawUnavailableError:
             raise
         except Exception as exc:  # noqa: BLE001
-            logger.error("LangGraph resume 失败 session=%s: %s",
-                         (session_key or "")[:8], exc)
-            raise OpenClawUnavailableError(f"LangGraph 恢复失败: {exc}") from exc
+            classified = _classify_stream_failure(exc, session_key)
+            if classified is None:
+                logger.exception("LangGraph resume 异常(代码级) session=%s: %s",
+                                 (session_key or "")[:8], exc)
+                raise
+            raise classified from exc
