@@ -553,22 +553,13 @@ async function initOwnerHome() {
   if (ownerLoading.value) return
   ownerLoading.value = true
 
-  // 并行：bind/status + device-settings/config（ADR-1110-07）
-  // config 已由 loadConfig() 取，这里仅补取 bind/status
+  // bind/status（config 已由 loadConfig() 取）。FND-009：原 Promise.allSettled 仅含 1 个
+  // promise 属冗余，直接 try/catch await 等价且更清晰。
   try {
-    const [bindRes] = await Promise.allSettled([
-      api.getBindStatus(),
-    ])
-
-    if (bindRes.status === 'fulfilled') {
-      const data = bindRes.value
-      bindStatus.value = (data.bindings || data || []).filter(b => b.specific_part)
-    } else {
-      // 网络不通，检测是否离线
-      isOffline.value = true
-      bindStatus.value = []
-    }
+    const data = await api.getBindStatus()
+    bindStatus.value = (data.bindings || data || []).filter(b => b.specific_part)
   } catch (e) {
+    // 网络不通，标记离线
     isOffline.value = true
     bindStatus.value = []
   } finally {
@@ -658,17 +649,20 @@ async function runRefreshPathA(specificPart, screenMac, deviceSns) {
   const ps = partState[specificPart]
   const TIMEOUT_MS = 10000  // 10s（INF-01，OQ-D 已采用默认）
 
-  // 注册一次性 DeviceStatusUpdate 监听，等待任意已知设备的更新
+  // 注册一次性 DeviceStatusUpdate 监听，等待**本套设备**的更新（FND-008：按 device_sn
+  // 过滤，避免并发刷新时收到他套响应而提前 resolve）。deviceSns 为空时不过滤（兜底）。
+  const snSet = new Set((deviceSns || []).map(String))
   let resolved = false
   let timer = null
   let off = null
 
-  await new Promise((resolve) => {
+  // outcome：收到的 parsed 对象 = 成功；null = 超时（FND-008 修复原 `timer===null` 永假的死分支）
+  const outcome = await new Promise((resolve) => {
     off = mqttClient.onDeviceUpdate((parsed) => {  // IFC-1110-FE-01-7
-      if (!resolved) {
-        resolved = true
-        resolve(parsed)
-      }
+      if (resolved) return
+      if (snSet.size > 0 && !snSet.has(String(parsed && parsed.deviceSn))) return
+      resolved = true
+      resolve(parsed)
     })
 
     timer = setTimeout(() => {
@@ -686,7 +680,7 @@ async function runRefreshPathA(specificPart, screenMac, deviceSns) {
   clearTimeout(timer)
   if (off) off()
 
-  if (!resolved || timer === null) {
+  if (outcome === null) {
     // 超时（DEV-01：仅提示，不降级路径B，用户已拍板）
     ps.refreshError = '设备未响应，请确认设备在线'
     return

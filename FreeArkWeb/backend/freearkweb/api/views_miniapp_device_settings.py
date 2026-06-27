@@ -22,16 +22,23 @@ v1.11.0 新增（/api/miniapp/owner/）:
 
 import logging
 import uuid
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import OwnerUserBinding, PLCWriteRecord
+from .models import (
+    OwnerUserBinding, PLCWriteRecord,
+    PLCLatestData, DeviceConfig, DeviceNode, OwnerInfo,
+)
 from .screen_param_config import get_screen_param_config, is_writable_attr
 from .utils_room_filter import get_available_sub_types, get_allowed_param_names
-from .views import IsOwnerUser, _ondemand_inflight, _ONDEMAND_INFLIGHT_TTL
+from .views import (
+    IsOwnerUser, _ondemand_inflight, _ONDEMAND_INFLIGHT_TTL,
+    _load_ondemand_broker_config,
+)
 
 logger = logging.getLogger('api.views_miniapp_device_settings')
 
@@ -196,9 +203,6 @@ def miniapp_owner_realtime_params(request):
     Response 400: {"success": false, "error": "specific_part 参数为必填项"}
     Response 403: {"detail": "无权访问该专有部分"}
     """
-    from datetime import datetime as _dt, timedelta as _td
-    from .models import PLCLatestData, DeviceConfig, DeviceNode, OwnerInfo
-
     specific_part = request.GET.get('specific_part', '').strip()
     if not specific_part:
         return Response(
@@ -229,7 +233,7 @@ def miniapp_owner_realtime_params(request):
     configs_qs = DeviceConfig.objects.filter(is_active=True).order_by('id')
 
     _STALE_MINUTES = 10
-    _stale_cutoff = _dt.now() - _td(minutes=_STALE_MINUTES)
+    _stale_cutoff = datetime.now() - timedelta(minutes=_STALE_MINUTES)
 
     result = {}
     for cfg in configs_qs:
@@ -269,11 +273,8 @@ def miniapp_owner_realtime_params(request):
             del result[group_key]
 
     # ── screen_mac（ADR-1110-02）─────────────────────────────────────────────
-    try:
-        owner_info = OwnerInfo.objects.get(specific_part=specific_part)
-        screen_mac = owner_info.unique_id or ''
-    except OwnerInfo.DoesNotExist:
-        screen_mac = ''
+    owner_info = OwnerInfo.objects.filter(specific_part=specific_part).first()
+    screen_mac = (owner_info.unique_id or '') if owner_info else ''
 
     # ── device_sns（ADR-1110-02，D-02）──────────────────────────────────────
     device_sns = list(
@@ -316,8 +317,6 @@ def _publish_ondemand_mqtt(specific_part: str):
     """
     import time as _time
     import json as _json
-    import os as _os
-    import datetime as _dt_mod
     import paho.mqtt.publish as mqtt_publish
 
     now = _time.monotonic()
@@ -328,27 +327,16 @@ def _publish_ondemand_mqtt(specific_part: str):
         )
         return 'duplicate', 'inflight'
 
-    mqtt_config_path = _os.path.join(
-        _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
-        'mqtt_config.json',
-    )
-    try:
-        with open(mqtt_config_path, 'r', encoding='utf-8') as f:
-            mqtt_cfg = _json.load(f)
-    except Exception:
-        mqtt_cfg = {}
-
-    broker_host = mqtt_cfg.get('host', '192.168.31.98')
-    broker_port = int(mqtt_cfg.get('port', 32788))
-    broker_user = mqtt_cfg.get('username') or None
-    broker_pass = mqtt_cfg.get('password') or None
+    # FND-004：broker 配置加载复用 views._load_ondemand_broker_config，消除与
+    # device_ondemand_refresh 的路径/解析重复（两入口同一份 mqtt_config.json 逻辑）。
+    broker_host, broker_port, broker_user, broker_pass = _load_ondemand_broker_config()
 
     request_topic = f'/datacollection/plc/ondemand/request/{specific_part}'
 
     _allowed_params = get_allowed_param_names(specific_part)
     payload_dict = {
         'specific_part': specific_part,
-        'requested_at': _dt_mod.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'requested_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
     if _allowed_params:
         payload_dict['allowed_params'] = _allowed_params
