@@ -31,7 +31,7 @@ from rest_framework.response import Response
 from .models import OwnerUserBinding, PLCWriteRecord
 from .screen_param_config import get_screen_param_config, is_writable_attr
 from .utils_room_filter import get_available_sub_types, get_allowed_param_names
-from .views import IsOwnerUser
+from .views import IsOwnerUser, _ondemand_inflight, _ONDEMAND_INFLIGHT_TTL
 
 logger = logging.getLogger('api.views_miniapp_device_settings')
 
@@ -298,9 +298,12 @@ def miniapp_owner_realtime_params(request):
 # @depends: IsOwnerUser, OwnerUserBinding, _publish_ondemand_mqtt（提取自 views.py）
 # ---------------------------------------------------------------------------
 
-# 进程内防重入缓存（与 views.py device_ondemand_refresh 共用相同 TTL 策略，独立字典）
-_owner_ondemand_inflight: dict = {}
-_OWNER_ONDEMAND_INFLIGHT_TTL = 25  # 秒
+# 进程内防重入缓存（FND-003 修复）：与 views.py device_ondemand_refresh **共用同一字典对象**，
+# 使 operator 入口(views.device_ondemand_refresh)与 owner 入口(本模块)跨入口防重入生效——
+# 同一 specific_part 在 TTL 内无论从哪个入口触发都只发布一次 MQTT。
+# 保留 _owner_ondemand_inflight 名称作为别名，向后兼容既有单测。
+_owner_ondemand_inflight: dict = _ondemand_inflight
+_OWNER_ONDEMAND_INFLIGHT_TTL = _ONDEMAND_INFLIGHT_TTL
 
 
 def _publish_ondemand_mqtt(specific_part: str):
