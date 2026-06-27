@@ -94,6 +94,22 @@ export const api = {
   getSessionList: (params) => http.get('/api/memory/me/', params),
   getSessionHistory: (sessionKey) => http.get(`/api/memory/session/${sessionKey}/history/`),
   deleteSession: (sessionKey) => http.del(`/api/memory/session/${sessionKey}/`),
+
+  // v1.11.0 业主端实时参数 + 按需采集（MOD-1110-FE-03）
+  // IFC-1110-FE-03-1: getOwnerRealtimeParams
+  //   GET /api/miniapp/owner/realtime-params/?specific_part={sp}
+  //   → 200: { success, specific_part, screen_mac, device_sns, data }
+  //   → 400: { success: false, error }
+  //   → 403: { detail }
+  getOwnerRealtimeParams: (specificPart) =>
+    http.get('/api/miniapp/owner/realtime-params/', { specific_part: specificPart }),
+
+  // IFC-1110-FE-03-2: ownerOndemandRefresh
+  //   POST /api/miniapp/owner/ondemand-refresh/ {specific_part}
+  //   → 202: { status: "accepted"|"duplicate", specific_part }
+  //   → 400/403/503: 错误响应
+  ownerOndemandRefresh: (specificPart) =>
+    http.post('/api/miniapp/owner/ondemand-refresh/', { specific_part: specificPart }),
 }
 
 export default api

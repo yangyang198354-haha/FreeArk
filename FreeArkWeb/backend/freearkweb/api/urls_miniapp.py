@@ -39,4 +39,12 @@ urlpatterns = [
          name='miniapp-ds-config'),
     path('device-settings/audit/', views_ds.device_settings_audit,
          name='miniapp-ds-audit'),
+
+    # v1.11.0 业主端设备实时参数 + 按需采集（IsOwnerUser + 归属过滤）
+    #   realtime-params：业主读自己绑定的专有部分实时参数，含 screen_mac/device_sns
+    #   ondemand-refresh：业主触发 PLC 按需采集（代理端点，归属过滤后转发）
+    path('owner/realtime-params/', views_ds.miniapp_owner_realtime_params,
+         name='miniapp-owner-realtime-params'),
+    path('owner/ondemand-refresh/', views_ds.miniapp_owner_ondemand_refresh,
+         name='miniapp-owner-ondemand-refresh'),
 ]
