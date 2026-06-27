@@ -238,7 +238,10 @@ export function useMqttClient() {
    * @returns {function} 注销函数（调用后取消监听）
    */
   function onDeviceUpdate(cb) {
-    _updateListeners.push(cb)
+    // FND-006：去重注册——同一回调引用重复注册只保留一次，避免 off() 仅删首个导致泄漏
+    if (_updateListeners.indexOf(cb) === -1) {
+      _updateListeners.push(cb)
+    }
     return function off() {
       const i = _updateListeners.indexOf(cb)
       if (i >= 0) _updateListeners.splice(i, 1)

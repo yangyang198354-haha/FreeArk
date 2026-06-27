@@ -19,9 +19,18 @@
 | 5维总体平均分 | 8.0 / 10 |
 | CRITICAL finding | 0 条 |
 | MAJOR finding | 2 条（**均已修复，2026-06-27**）|
-| MINOR finding | 5 条（DOCUMENTED，未修）|
+| MINOR finding | 7 条（FND-001/002/004/006/008/009 **已修**；FND-007 为测试覆盖缺口非代码缺陷，见下）|
 
-**结论**：无 CRITICAL 问题。2 条 MAJOR（FND-003 / FND-005）已于 2026-06-27 修复并经回归（后端 160 例通过）。
+**结论**：无 CRITICAL 问题。2 条 MAJOR + 6 条 MINOR 已于 2026-06-27 修复并经回归（后端 160 例通过）。
+
+### MINOR 修复记录（2026-06-27）
+- **FND-001**：`miniapp_owner_realtime_params` 的 model/datetime 局部 import 上移到模块顶部。
+- **FND-002**：`OwnerInfo.objects.get(...)` 改 `.filter(...).first()`，去掉 try/except。
+- **FND-004**：抽取 `views._load_ondemand_broker_config()`，operator/owner 两入口共用，消除 mqtt_config 路径/解析重复。
+- **FND-006**：`useMqttClient.onDeviceUpdate` 注册去重（同一回调引用只留一次）。
+- **FND-008**：`runRefreshPathA` 按 `device_sn` 过滤 DeviceStatusUpdate；**并修复原 `if (!resolved || timer===null)` 永假的死分支**（超时分支从不触发，改为以 Promise outcome===null 判定超时）。
+- **FND-009**：`initOwnerHome` 去掉单元素 `Promise.allSettled`，直接 await + try/catch。
+- **FND-007**：`useMqttClient` 无 vitest——属测试基建缺口（项目现有 MQTT 层 `screenMqtt.js` 同样不设 vitest），非代码缺陷；代码逻辑正确，暂不引入 MQTT mock 套件。保留为已知 backlog。
 
 ### MAJOR 修复记录（2026-06-27）
 - **FND-003**：`views_miniapp_device_settings._owner_ondemand_inflight` 改为 `views._ondemand_inflight` 的**别名（同一字典对象）**，operator/owner 两入口跨入口防重入生效；单测保留 `_owner_ondemand_inflight` 名称兼容。

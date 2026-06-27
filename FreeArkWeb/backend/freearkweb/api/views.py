@@ -2423,6 +2423,31 @@ _ondemand_inflight: dict = {}
 _ONDEMAND_INFLIGHT_TTL = 25  # 秒
 
 
+def _load_ondemand_broker_config():
+    """加载按需采集 MQTT broker 配置 (host, port, user, pass)。
+
+    供 operator 入口 (device_ondemand_refresh) 与 owner 入口
+    (views_miniapp_device_settings._publish_ondemand_mqtt) 共用，消除重复路径解析（FND-004）。
+    """
+    import json as _json
+    import os as _os
+    mqtt_config_path = _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+        'mqtt_config.json',
+    )
+    try:
+        with open(mqtt_config_path, 'r', encoding='utf-8') as f:
+            mqtt_cfg = _json.load(f)
+    except Exception:
+        mqtt_cfg = {}
+    return (
+        mqtt_cfg.get('host', '192.168.31.98'),
+        int(mqtt_cfg.get('port', 32788)),
+        mqtt_cfg.get('username') or None,
+        mqtt_cfg.get('password') or None,
+    )
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def device_ondemand_refresh(request):
@@ -2458,23 +2483,8 @@ def device_ondemand_refresh(request):
     # 向 MQTT broker 发布按需采集指令
     import json as _json
     import paho.mqtt.publish as mqtt_publish
-    from django.conf import settings as dj_settings
-    import os as _os
 
-    mqtt_config_path = _os.path.join(
-        _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
-        'mqtt_config.json',
-    )
-    try:
-        with open(mqtt_config_path, 'r', encoding='utf-8') as f:
-            mqtt_cfg = _json.load(f)
-    except Exception:
-        mqtt_cfg = {}
-
-    broker_host = mqtt_cfg.get('host', '192.168.31.98')
-    broker_port = int(mqtt_cfg.get('port', 32788))
-    broker_user = mqtt_cfg.get('username') or None
-    broker_pass = mqtt_cfg.get('password') or None
+    broker_host, broker_port, broker_user, broker_pass = _load_ondemand_broker_config()
 
     request_topic = f'/datacollection/plc/ondemand/request/{specific_part}'
     import datetime as _dt
