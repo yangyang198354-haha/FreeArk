@@ -47,8 +47,13 @@ const _activeSubscriptions = new Set()
 /** DeviceStatusUpdate 全局回调列表（onDeviceUpdate 注册，返回注销函数） */
 const _updateListeners = []
 
-/** 是否正在连接中（防并发 connect 竞争） */
-let _connecting = false
+/**
+ * 在途连接 Promise（FND-005 修复）：发起连接时创建唯一 Promise，
+ * 并发 acquire() 复用同一个并 await 它，彻底消除原 setInterval 轮询的竞态窗口
+ * （并发场景偶发多次 CONNECT_FAILED reject）。null = 当前无在途连接。
+ * @type {Promise<void>|null}
+ */
+let _connectPromise = null
 
 /** 当前 broker/topics 配置（用于相同配置时跳过重新连接） */
 let _currentBroker = null
@@ -80,7 +85,7 @@ function _teardown() {
   _currentBroker = null
   _currentTopics = null
   _refCount = 0
-  _connecting = false
+  _connectPromise = null
 }
 
 // ── 公开 composable 工厂 ─────────────────────────────────────────────────────
@@ -111,49 +116,38 @@ export function useMqttClient() {
       return
     }
 
-    if (_connecting) {
-      // 正在连接中，等待完成
-      console.log('[useMqttClient] acquire: 连接中，等待...')
-      await _waitConnected(12000)
+    // 已有在途连接：复用同一 Promise（FND-005：并发 acquire 均 await 同一结果，
+    // 不再各自轮询，消除竞态误判）。await 会随该连接的成功/失败一并 resolve/reject。
+    if (_connectPromise) {
+      console.log('[useMqttClient] acquire: 复用在途连接 Promise，等待...')
+      await _connectPromise
       return
     }
 
-    // 需要新建连接
-    _connecting = true
-    if (_instance) {
-      // 旧实例存在但未连接，清理后重建
-      try { _instance.disconnect() } catch (e) { /* ignore */ }
-      _instance = null
-      _activeSubscriptions.clear()
-    }
-
-    _setupInstance(broker, topics)
-    try {
+    // 发起新连接：创建唯一在途 Promise 存入模块级变量，供并发 acquire 复用。
+    _connectPromise = (async () => {
+      if (_instance) {
+        // 旧实例存在但未连接，清理后重建
+        try { _instance.disconnect() } catch (e) { /* ignore */ }
+        _instance = null
+        _activeSubscriptions.clear()
+      }
+      _setupInstance(broker, topics)
       await _instance.connect()
       _connected.value = true
       console.log('[useMqttClient] acquire: 连接成功')
+    })()
+
+    try {
+      await _connectPromise
     } catch (e) {
       console.error('[useMqttClient] acquire: 连接失败:', e && e.message)
-      _teardown()
-      _connecting = false
+      _teardown()   // 注意：_teardown 内会把 _connectPromise 置回 null
       throw e
+    } finally {
+      // 成功路径在此清空在途 Promise（失败路径已由 _teardown 清空，重复赋 null 无害）
+      _connectPromise = null
     }
-    _connecting = false
-  }
-
-  /**
-   * 等待 _connected 变为 true（供并发 acquire 等待使用）。
-   * @param {number} timeoutMs
-   */
-  function _waitConnected(timeoutMs) {
-    return new Promise((resolve, reject) => {
-      if (_connected.value) { resolve(); return }
-      const timer = setTimeout(() => reject(new Error('CONNECT_TIMEOUT')), timeoutMs)
-      const check = setInterval(() => {
-        if (_connected.value) { clearInterval(check); clearTimeout(timer); resolve() }
-        if (!_connecting && !_connected.value) { clearInterval(check); clearTimeout(timer); reject(new Error('CONNECT_FAILED')) }
-      }, 100)
-    })
   }
 
   /**
