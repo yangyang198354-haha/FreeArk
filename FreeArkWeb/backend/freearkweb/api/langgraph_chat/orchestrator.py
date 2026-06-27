@@ -54,8 +54,9 @@ from .adapter import INTERNAL_NOSTREAM_TAG
 from .fa_tools import (TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write,
                        get_last_search_images, prepare_search_images_sink)
 from .prompts import EXPERT_PROMPTS
-from .router import (_current_query, _keyword_hits, classify_experts,
-                     keyword_shortcircuit_target, previous_turn_expert)
+from .router import (_current_query, _keyword_hits, build_capability_digest,
+                     classify_experts, keyword_shortcircuit_target,
+                     previous_turn_expert)
 
 
 # ── 阶段 G：跨 agent 子委托（expert→expert）─────────────────────────────
@@ -391,6 +392,12 @@ class Orchestrator:
             if not getattr(settings, "LANGGRAPH_USE_FAKE_LLM", False):
                 threading.Thread(target=self._semantic_router._ensure_loaded,
                                  daemon=True, name="semantic-exemplar-warm").start()
+        # P2-1：能力（工具）感知路由。能力摘要由真实工具表派生（单一真源、随工具自维护），
+        # 注入路由 LLM 提示作误路由「预防层」；护栏 _guard_against_misroute 退居可选 backstop。
+        self.guard_enabled = getattr(settings, "LANGGRAPH_ROUTER_GUARD", True)
+        self._capability_digest = (
+            build_capability_digest(TOOLS_BY_EXPERT)
+            if getattr(settings, "LANGGRAPH_ROUTER_CAPABILITY_PROMPT", True) else "")
         self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
@@ -420,7 +427,9 @@ class Orchestrator:
         # P0-2：算出上一轮专家作粘性兜底信号（仅当前问题零信号时被 classify_experts 采用）。
         sticky = previous_turn_expert(text) if self.sticky_routing else None
         chosen = await classify_experts(self.router_llm, text, sticky_hint=sticky,
-                                        allow_ood=self.ood_path)
+                                        allow_ood=self.ood_path,
+                                        capability_digest=self._capability_digest,
+                                        guard=self.guard_enabled)
         plan = [(name, text) for name in chosen]
         # 空 plan（P1-2 域外）：暂存全文供 _fan_out 转交 general 节点。
         return {"plan": plan, "route_text": text}

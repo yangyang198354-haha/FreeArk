@@ -337,6 +337,92 @@ class RouterShortCircuitTargetTests(SimpleTestCase):
 
 
 @tag('unit')
+class CapabilityDigestTests(SimpleTestCase):
+    """P2-1：build_capability_digest 据工具表派生能力摘要（纯函数，不依赖 langchain）。"""
+
+    class _FakeTool:
+        def __init__(self, name, description):
+            self.name = name
+            self.description = description
+
+    def test_brief_strips_write_prefix_and_takes_first_sentence(self):
+        from api.langgraph_chat.router import _tool_brief
+        self.assertEqual(_tool_brief("[写操作·需用户确认] 修改三恒设备参数。下发到 PLC。"),
+                         "修改三恒设备参数")
+        self.assertEqual(_tool_brief("查询某专有部分的日用电量。日期可选。"),
+                         "查询某专有部分的日用电量")
+
+    def test_digest_lists_each_expert_tools(self):
+        from api.langgraph_chat.router import build_capability_digest
+        tbe = {
+            "energy-expert": [self._FakeTool("get_usage_daily", "查询日用电量。")],
+            "sanheng-knowledge": [self._FakeTool("search_sanheng_knowledge", "在三恒知识库检索。")],
+        }
+        d = build_capability_digest(tbe)
+        self.assertIn("energy-expert", d)
+        self.assertIn("查询日用电量", d)
+        self.assertIn("三恒知识库检索", d)
+
+    def test_digest_empty_inputs(self):
+        from api.langgraph_chat.router import build_capability_digest
+        self.assertEqual(build_capability_digest({}), "")
+        self.assertEqual(build_capability_digest(None), "")
+
+    def test_digest_from_real_tools_distinguishes_experts(self):
+        # 真实工具表：能力摘要应体现 energy 有用电量、inspection 有 PLC/故障、sanheng 仅知识检索
+        import os
+        os.environ.setdefault("FREEARK_POC_MOCK", "1")
+        from api.langgraph_chat.fa_tools import TOOLS_BY_EXPERT
+        from api.langgraph_chat.router import build_capability_digest
+        d = build_capability_digest(TOOLS_BY_EXPERT)
+        self.assertIn("用电量", d)        # energy 专属
+        self.assertIn("PLC", d)           # inspection 专属
+        self.assertIn("知识库", d)         # sanheng 专属
+        # sanheng 行不含数据查询工具名（佐证「无数据工具」可被 LLM 推断）
+        sanheng_line = [ln for ln in d.splitlines() if ln.startswith("- sanheng-knowledge")][0]
+        self.assertNotIn("用电量", sanheng_line)
+        self.assertNotIn("PLC", sanheng_line)
+
+
+@tag('unit')
+class ClassifyGuardFlagTests(SimpleTestCase):
+    """P2-1：guard 开关——关掉时跳过确定性护栏（供能力提示验证后退役护栏）。"""
+
+    def _c(self, raw, text, guard):
+        from api.langgraph_chat.router import classify_experts
+        return async_to_sync(classify_experts)(_StubLLM(raw), text, guard=guard)
+
+    def test_guard_on_corrects_misroute(self):
+        # 默认 guard=True：数据查询被 LLM 误判 sanheng → 护栏据关键词改派
+        self.assertEqual(self._c('["sanheng-knowledge"]', "当前系统有多少故障", True),
+                         ["inspection-expert"])
+
+    def test_guard_off_keeps_llm_result(self):
+        # guard=False：不纠正，保留 LLM 的（错误）结果 → 验证开关确实绕过护栏
+        self.assertEqual(self._c('["sanheng-knowledge"]', "当前系统有多少故障", False),
+                         ["sanheng-knowledge"])
+
+    def test_capability_digest_injected_into_system_prompt(self):
+        # capability_digest 非空 → 拼入 system 提示（用捕获消息的 stub 验证）
+        from api.langgraph_chat.router import classify_experts_llm_ex
+
+        class _CaptureLLM:
+            captured = None
+
+            async def ainvoke(self, messages, **kw):
+                _CaptureLLM.captured = messages
+
+                class _M:
+                    content = '["energy-expert"]'
+                return _M()
+
+        llm = _CaptureLLM()
+        async_to_sync(classify_experts_llm_ex)(llm, "查能耗", "【能力】- energy: 用电量")
+        sys_msg = _CaptureLLM.captured[0][1]
+        self.assertIn("【能力】", sys_msg)
+
+
+@tag('unit')
 class PreviousTurnExpertTests(SimpleTestCase):
     """P0-2：previous_turn_expert 纯函数——从历史块取最后一轮用户问题反推上一轮专家。"""
 
@@ -748,6 +834,32 @@ class OrchestratorSemanticTests(SimpleTestCase):
         mc.assert_awaited_once()
         self.assertEqual({n for n, _ in out["plan"]},
                          {"energy-expert", "inspection-expert"})
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
+class OrchestratorCapabilityTests(SimpleTestCase):
+    """P2-1：orchestrator 据 settings 装配能力摘要 + 护栏开关。"""
+
+    def test_capability_digest_built_and_guard_on_by_default(self):
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        self.assertTrue(orch.guard_enabled)
+        self.assertIn("energy-expert", orch._capability_digest)
+        self.assertIn("用电量", orch._capability_digest)
+
+    @override_settings(LANGGRAPH_ROUTER_CAPABILITY_PROMPT=False)
+    def test_capability_prompt_can_be_disabled(self):
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        self.assertEqual(orch._capability_digest, "")
+
+    @override_settings(LANGGRAPH_ROUTER_GUARD=False)
+    def test_guard_can_be_disabled(self):
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        self.assertFalse(orch.guard_enabled)
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")

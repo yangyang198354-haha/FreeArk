@@ -425,6 +425,12 @@ LANGGRAPH_ROUTER_SEMANTIC = os.environ.get(
     'LANGGRAPH_ROUTER_SEMANTIC', 'False') == 'True'
 LANGGRAPH_ROUTER_SEM_TAU = float(os.environ.get('LANGGRAPH_ROUTER_SEM_TAU', '0.65'))
 LANGGRAPH_ROUTER_SEM_MARGIN = float(os.environ.get('LANGGRAPH_ROUTER_SEM_MARGIN', '0.05'))
+# P2-1：能力（工具）感知路由。CAPABILITY_PROMPT=True 时把各专家工具能力摘要注入路由 LLM
+# 提示（预防把需某工具的问题分给无该工具的专家）。GUARD=True 保留确定性护栏
+# _guard_against_misroute 作 backstop；能力提示验证充分后可置 False 退役护栏。
+LANGGRAPH_ROUTER_CAPABILITY_PROMPT = os.environ.get(
+    'LANGGRAPH_ROUTER_CAPABILITY_PROMPT', 'True') == 'True'
+LANGGRAPH_ROUTER_GUARD = os.environ.get('LANGGRAPH_ROUTER_GUARD', 'True') == 'True'
 # freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')

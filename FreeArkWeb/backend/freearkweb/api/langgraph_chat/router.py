@@ -187,14 +187,55 @@ def parse_route_response(raw: Optional[str]) -> Optional[List[str]]:
     return parse_route_response_ex(raw)[0]
 
 
-async def classify_experts_llm_ex(llm, text: str) -> tuple[Optional[List[str]], bool]:
+# ── P2-1：能力（工具）感知路由提示 ───────────────────────────────────────────
+def _tool_brief(description: str) -> str:
+    """取工具描述首句（到第一个 。/换行前），去掉 [写操作·需用户确认] 这类前缀标注，精简。"""
+    d = (description or "").strip()
+    if d.startswith("["):
+        end = d.find("]")
+        if end != -1:
+            d = d[end + 1:].strip()
+    for sep in ("。", "\n"):
+        i = d.find(sep)
+        if i != -1:
+            d = d[:i]
+            break
+    return d.strip()
+
+
+def build_capability_digest(tools_by_expert) -> str:
+    """据各专家持有的工具（@tool 的 .name/.description）生成能力摘要，供注入路由 LLM 提示，
+    使其据「谁有能力处理」分派——避免把需某工具的问题分给无该工具的专家（P2-1：护栏的**预防层**，
+    从源头减少误路由，使确定性护栏 _guard_against_misroute 退居 backstop）。
+
+    纯函数：只读传入工具对象的 .description，**不 import langchain/fa_tools**（保持本模块离线可测；
+    工具表由 orchestrator 传入）。传入空/异常 → 返回空串（调用方据此不注入，行为同 P2-1 前）。"""
+    try:
+        if not tools_by_expert:
+            return ""
+        lines = ["【各专家可用能力——据此判断谁能处理；不要把需要某工具的问题分给没有该工具的专家】"]
+        for expert, tools in tools_by_expert.items():
+            briefs = "；".join(
+                _tool_brief(getattr(t, "description", "")) for t in (tools or []))
+            lines.append(f"- {expert}：{briefs or '无任何工具（仅据通用知识作答，不能查询数据或执行操作）'}")
+        return "\n".join(lines)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+async def classify_experts_llm_ex(llm, text: str,
+                                  capability_digest: str = "") -> tuple[Optional[List[str]], bool]:
     """调 LLM 分类器 → (专家列表 or None, llm_said_ood)。任何异常/解析失败 → (None, False)。
 
     llm_said_ood：LLM 成功返回了"不属任何专家"的明确表态（见 parse_route_response_ex）。
+    capability_digest（P2-1）非空时拼到 system 提示尾部，令 LLM 据工具能力分派（预防误路由）。
     用 tuple 格式消息，避免本模块顶层依赖 langchain（便于离线单测用 stub）。"""
     try:
+        system = ROUTER_SYSTEM_PROMPT
+        if capability_digest:
+            system = ROUTER_SYSTEM_PROMPT + "\n\n" + capability_digest
         ai = await llm.ainvoke([
-            ("system", ROUTER_SYSTEM_PROMPT),
+            ("system", system),
             ("human", (text or "").strip()[:2000]),
         ])
         raw = getattr(ai, "content", None)
@@ -241,7 +282,9 @@ def _guard_against_misroute(names: List[str], query: str) -> List[str]:
 
 async def classify_experts(llm, text: str,
                            sticky_hint: Optional[str] = None,
-                           allow_ood: bool = False) -> List[str]:
+                           allow_ood: bool = False,
+                           capability_digest: str = "",
+                           guard: bool = True) -> List[str]:
     """阶段 D 路由入口：路由决策只看「当前问题」（剥历史前缀，防历史污染路由）。
 
     兜底优先级（高→低）：
@@ -255,14 +298,18 @@ async def classify_experts(llm, text: str,
         （parse 出空数组而非解析失败）、且无关键词、无粘性时才返回；否则仍落 DEFAULT。
         粘性优先于域外：有上一轮专家时优先承接对话，避免把追问误判为闲聊。
 
-    向后兼容：sticky_hint=None 且 allow_ood=False（默认）时行为与 P1-2 前完全一致——
-    既有调用/测试零影响（绝不返回 []）。llm 为 None 时走关键词路由（无 LLM 即无 OOD 信号）。"""
+    P2-1：capability_digest 非空时注入路由 LLM 提示（按工具能力分派，预防误路由）；guard=False
+    时跳过确定性护栏 _guard_against_misroute（供能力提示验证充分后灰度退役护栏）。
+
+    向后兼容：sticky_hint=None、allow_ood=False、capability_digest=""、guard=True（默认）时行为与
+    P2-1 前完全一致——既有调用/测试零影响。llm 为 None 时走关键词路由（无 LLM 即无 OOD 信号）。"""
     query = _current_query(text)  # 路由只用当前问题，不掺历史
     llm_said_ood = False
     if llm is not None:
-        names, llm_said_ood = await classify_experts_llm_ex(llm, query)
+        names, llm_said_ood = await classify_experts_llm_ex(llm, query, capability_digest)
         if names:
-            return _guard_against_misroute(names, query)
+            # P2-1：能力提示是预防层；确定性护栏退居可选 backstop（guard=False 可关，灰度退役）。
+            return _guard_against_misroute(names, query) if guard else names
     # 零信号兜底：关键词命中 → 粘性（上一轮专家）→ 域外[] → DEFAULT。
     hits = _keyword_hits(query)
     if hits:
