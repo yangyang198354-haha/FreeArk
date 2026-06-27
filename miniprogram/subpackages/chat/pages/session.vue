@@ -233,7 +233,7 @@ onLoad((options) => {
   sessionKeyParam.value = options.session_key || null
 
   // 后端 LLM 自动路由专家，不向用户暴露；标题统一用助手品牌名
-  uni.setNavigationBarTitle({ title: '方舟龙虾' })
+  uni.setNavigationBarTitle({ title: '方舟智能体' })
 
   // Reset store for this session
   chatStore.resetSession()

@@ -493,19 +493,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # ─────────────────────────────────────────────────────────────────────────
 
         except OpenClawUnavailableError as exc:
-            logger.warning('ChatConsumer: OpenClaw 不可用: %s', exc)
+            logger.warning('ChatConsumer: 聊天后端不可用: %s', exc)
             await self.send(json.dumps({
                 'type': 'error',
                 'code': 'OPENCLAW_UNAVAILABLE',
-                'message': '方舟龙虾暂时离线，请稍后再试',
+                'message': '方舟智能体暂时离线，请稍后再试',
             }))
 
         except asyncio.TimeoutError:
-            logger.warning('ChatConsumer: OpenClaw 响应超时')
+            logger.warning('ChatConsumer: 聊天后端响应超时')
             await self.send(json.dumps({
                 'type': 'error',
                 'code': 'TIMEOUT',
-                'message': '方舟龙虾响应超时，请重试',
+                'message': '方舟智能体响应超时，请重试',
             }))
 
         except Exception as exc:
@@ -637,7 +637,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             adapter = get_chat_adapter()
             resume = getattr(adapter, 'resume_chat', None)
             if resume is None:
-                # 当前后端（OpenClaw）不支持写确认门——正常不会走到此分支
+                # LangGraph 已支持写确认门（resume_chat）；此分支为兜底防御，正常不会走到
                 await self.send(json.dumps({
                     'type': 'error', 'code': 'INTERNAL_ERROR',
                     'message': '当前后端不支持写确认',
@@ -656,13 +656,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.warning('ChatConsumer: confirm resume 不可用: %s', exc)
             await self.send(json.dumps({
                 'type': 'error', 'code': 'OPENCLAW_UNAVAILABLE',
-                'message': '方舟龙虾暂时离线，请稍后再试',
+                'message': '方舟智能体暂时离线，请稍后再试',
             }))
         except asyncio.TimeoutError:
             logger.warning('ChatConsumer: confirm resume 超时')
             await self.send(json.dumps({
                 'type': 'error', 'code': 'TIMEOUT',
-                'message': '方舟龙虾响应超时，请重试',
+                'message': '方舟智能体响应超时，请重试',
             }))
         except Exception as exc:
             logger.exception('ChatConsumer: confirm resume 异常: %s', exc)
