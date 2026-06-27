@@ -47,4 +47,11 @@ urlpatterns = [
          name='miniapp-owner-realtime-params'),
     path('owner/ondemand-refresh/', views_ds.miniapp_owner_ondemand_refresh,
          name='miniapp-owner-ondemand-refresh'),
+
+    # v1.11.1 业主设备树结构骨架端点（IsOwnerUser + 归属过滤）
+    #   structure：返回 rooms/system_devices 结构骨架 + params_skeleton（DeviceConfig）
+    #              不含任何 PLCLatestData 字段，与实时数据完全解耦（REQ-FUNC-001-C）
+    #              前端结构缓存 TTL=24h；sync_status="pending" 时前端缩短至 5min
+    path('owner/structure/', views_ds.miniapp_owner_structure,
+         name='miniapp-owner-structure'),
 ]
