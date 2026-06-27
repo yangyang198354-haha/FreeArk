@@ -1,4 +1,4 @@
-# 模块设计文档 v2 — 方舟龙虾 API 通道与知识增强
+# 模块设计文档 v2 — 方舟智能体 API 通道与知识增强
 
 ```
 file_header:
@@ -210,7 +210,7 @@ class FreeArkClient:
 name: freeark-skill
 version: 2.0.0
 description: |
-  方舟龙虾专用 API 工具集。通过此 Skill，你可以查询 FreeArk 系统的设备状态、
+  方舟智能体专用 API 工具集。通过此 Skill，你可以查询 FreeArk 系统的设备状态、
   能耗数据、PLC 参数，以及执行受控的设备参数下发操作。
   所有数据来自树莓派本地的 FreeArk REST API（http://127.0.0.1:8000）。
 
@@ -415,7 +415,7 @@ tools:
 
 # FreeArk Skill
 
-方舟龙虾专用工具集，提供对 FreeArk 三恒系统管理平台的 API 访问能力。
+方舟智能体专用工具集，提供对 FreeArk 三恒系统管理平台的 API 访问能力。
 
 ## 使用说明
 
@@ -440,7 +440,7 @@ tools:
 
 ---
 
-## MOD-AG-01（更新）：方舟龙虾 Agent 配置
+## MOD-AG-01（更新）：方舟智能体 Agent 配置
 
 **位置**：`~/.openclaw/openclaw.json`（Pi 本地，不入仓库）；system prompt 源文件入仓库
 
@@ -450,7 +450,7 @@ tools:
 {
   "agent": {
     "main": {
-      "name": "方舟龙虾",
+      "name": "方舟智能体",
       "systemPrompt": "<从仓库 docs/sdlc/lobster-agent-api-channel/agent_system_prompt_v2.md 读取>",
       "skills": ["freeark-skill"]
     }

@@ -1,4 +1,4 @@
-# 生产部署报告 — 方舟龙虾 API 通道与知识增强
+# 生产部署报告 — 方舟智能体 API 通道与知识增强
 
 ```
 deployment_report:
@@ -26,7 +26,7 @@ deployment_report:
 | `openclaw-agent` 服务账号 (DB) | ✅ DEPLOYED | id=8, role=user, Token 在 DB |
 | Token 写入 openclaw.json | ❌ ROLLED BACK | 因 Skill 配置错误连同 skills 段一起回滚 |
 | Skill 19 个 tool (Tier-1+Tier-2) | ❌ NOT ACTIVE | OpenClaw Skill schema 不接受我们的 JS 包格式 |
-| Agent 身份 "方舟龙虾" + systemPrompt | ❌ NOT ACTIVE | 与 Skill 配置一起回滚 |
+| Agent 身份 "方舟智能体" + systemPrompt | ❌ NOT ACTIVE | 与 Skill 配置一起回滚 |
 
 **整体状态：PARTIAL_SUCCESS** — 后端面（ChatConsumer chatuser 注入、`operator_override` 字段、`openclaw-agent` 服务账号）已上线并独立工作；Skill 层和 Agent 自定义层因架构设计错误未生效，配置已回滚到部署前。生产对外功能无中断。
 

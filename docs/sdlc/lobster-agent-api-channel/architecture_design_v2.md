@@ -1,4 +1,4 @@
-# 架构设计文档 v2 — 方舟龙虾 API 通道与知识增强
+# 架构设计文档 v2 — 方舟智能体 API 通道与知识增强
 
 ```
 file_header:
@@ -47,7 +47,7 @@ file_header:
            └─ /ws/chat/ → Channels ChatConsumer (已改: chatuser 前缀注入)
                               └─ OpenClawAdapter (aiohttp WS, RPC v4)
                                      └─ OpenClaw Gateway (127.0.0.1:18789)
-                                            ├─ [MODIFIED] main agent "方舟龙虾"
+                                            ├─ [MODIFIED] main agent "方舟智能体"
                                             │      ├─ 三恒/HVAC/FreeArk 知识 (system prompt)
                                             │      └─ freeark-skill（via SKILL.md 注册）
                                             └─ DeepSeek v4-flash
@@ -285,7 +285,7 @@ FreeArk/
 {
   "agent": {
     "main": {
-      "name": "方舟龙虾",
+      "name": "方舟智能体",
       "systemPrompt": "<从仓库 agent_system_prompt_v2.md 读取内容，长度约 3000-5000 字>",
       "skills": ["freeark-skill"]
     }

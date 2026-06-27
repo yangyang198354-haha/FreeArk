@@ -1,4 +1,4 @@
-# 用户故事 v2 — 方舟龙虾 API 通道与知识增强
+# 用户故事 v2 — 方舟智能体 API 通道与知识增强
 
 ```
 file_header:
@@ -28,7 +28,7 @@ file_header:
 | 运维工程师 | FreeArk 日常运维人员，通过 Web 界面监控三恒系统 |
 | 暖通工程师 | HVAC 专业人员，负责设备参数调试和问题诊断 |
 | 系统管理员 | FreeArk 管理员（role=admin），拥有所有写权限 |
-| 方舟龙虾 | OpenClaw main agent，本次改造的目标 AI Agent |
+| 方舟智能体 | OpenClaw main agent，本次改造的目标 AI Agent |
 | 部署工程师 | 负责在 Pi 上部署和验证 Skill 的工程师（新增，PoC 场景）|
 
 ---

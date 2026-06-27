@@ -282,7 +282,7 @@ $SSH 'cat ~/.openclaw/openclaw.json | python3 -m json.tool'
 | 不确定项 | 为何关键 | 对应命令 |
 |---------|---------|---------|
 | SKILL.md frontmatter 精确字段名（name/description/tools/commands/exec 等） | 决定 freeark-skill/SKILL.md 的写法 | 命令 D/E/F |
-| agent.main.skills 字段格式（数组？对象？还是 allowBundled 等效名字？） | 决定如何将 freeark-skill 关联到方舟龙虾 agent | 命令 A/I |
+| agent.main.skills 字段格式（数组？对象？还是 allowBundled 等效名字？） | 决定如何将 freeark-skill 关联到方舟智能体 agent | 命令 A/I |
 | secrets 段是否存在，Token 注入方式 | 决定 FREEARK_AGENT_TOKEN 的安全存储方式 | 命令 A |
 | Skill CLI 执行体的 stdin/stdout 协议（JSON? 纯文本? 自定义帧?） | 决定 CLI 工具的实现语言和 I/O 格式 | 命令 D/E/F |
 | `load.extraDirs` 是父目录还是 Skill 目录本身 | 决定 agents/ 目录的放置位置 | 命令 A + 实验 |
