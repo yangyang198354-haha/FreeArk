@@ -598,6 +598,141 @@ class OrchestratorShortCircuitTests(SimpleTestCase):
         self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
 
 
+@tag('unit')
+class SemanticRouterPureTests(SimpleTestCase):
+    """P1-1：语义路由纯逻辑（score_experts / decide / route_with_vector），离线、stub 向量、无网络。"""
+
+    def _np(self):
+        import numpy as np
+        return np
+
+    def _mats(self):
+        # 3 个专家，每个 1~2 条范例向量（2 维，便于手算余弦）。
+        import numpy as np
+        def n(v):
+            v = np.asarray(v, dtype=np.float32)
+            return v / (np.linalg.norm(v) + 1e-9)
+        return {
+            "energy-expert": np.array([n([1.0, 0.0])]),
+            "inspection-expert": np.array([n([0.0, 1.0])]),
+            "sanheng-knowledge": np.array([n([-1.0, 0.0])]),
+        }
+
+    def test_score_experts_orders_by_max_cosine(self):
+        from api.langgraph_chat.semantic_router import score_experts
+        scored = score_experts([1.0, 0.0], self._mats())  # 与 energy 完全同向
+        self.assertEqual(scored[0][0], "energy-expert")
+        self.assertAlmostEqual(scored[0][1], 1.0, places=4)
+
+    def test_decide_routes_on_high_conf(self):
+        from api.langgraph_chat.semantic_router import decide
+        # top 0.9 ≥ τ0.65，margin 0.9-0.2=0.7 ≥ δ0.05 → 命中
+        self.assertEqual(decide([("energy-expert", 0.9), ("x", 0.2)], 0.65, 0.05),
+                         "energy-expert")
+
+    def test_decide_abstains_below_tau(self):
+        from api.langgraph_chat.semantic_router import decide
+        self.assertIsNone(decide([("energy-expert", 0.5), ("x", 0.1)], 0.65, 0.05))
+
+    def test_decide_abstains_low_margin(self):
+        from api.langgraph_chat.semantic_router import decide
+        # 两专家都高分、margin 小（复合/模糊）→ 穿透 LLM
+        self.assertIsNone(decide([("a", 0.80), ("b", 0.78)], 0.65, 0.05))
+
+    def test_decide_empty(self):
+        from api.langgraph_chat.semantic_router import decide
+        self.assertIsNone(decide([], 0.65, 0.05))
+
+    def test_route_with_vector_no_exemplars_returns_none(self):
+        from api.langgraph_chat.semantic_router import SemanticRouter
+        r = SemanticRouter()
+        self.assertIsNone(r.route_with_vector([1.0, 0.0]))  # 未加载范例 → None
+
+    def test_route_with_vector_hits(self):
+        from api.langgraph_chat.semantic_router import SemanticRouter
+        r = SemanticRouter(tau=0.65, margin=0.05)
+        r._exemplars = self._mats()
+        r._loaded = True
+        self.assertEqual(r.route_with_vector([1.0, 0.05]), "energy-expert")
+        self.assertEqual(r.route_with_vector([0.05, 1.0]), "inspection-expert")
+
+    def test_load_exemplars_excludes_composite_and_ood(self):
+        # 范例只取单专家类别；composite/out_of_domain 不入范例
+        from api.langgraph_chat.semantic_router import load_exemplar_texts
+        groups = load_exemplar_texts()
+        self.assertTrue(set(groups).issubset(
+            {"energy-expert", "inspection-expert", "sanheng-knowledge"}))
+        # 至少三个专家各有若干范例
+        self.assertTrue(all(len(groups.get(e, [])) >= 3 for e in
+                            ("energy-expert", "inspection-expert", "sanheng-knowledge")))
+
+    def test_route_fail_open_on_embed_error(self):
+        # embedding 抛错 → route() 返回 None（fail-open，穿透 LLM）
+        from unittest import mock
+        from api.langgraph_chat.semantic_router import SemanticRouter
+        r = SemanticRouter()
+        r._exemplars = self._mats()
+        r._loaded = True
+        with mock.patch("api.rag_service.RagEmbedder") as M:
+            M.return_value.embed_query.side_effect = RuntimeError("embed down")
+            out = async_to_sync(r.route)("查能耗")
+        self.assertIsNone(out)
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
+class OrchestratorSemanticTests(SimpleTestCase):
+    """P1-1：_route 集成——语义层在关键词短路后、LLM 前；命中跳过 LLM，未命中穿透。"""
+
+    def _route(self, orch, text):
+        from langchain_core.messages import HumanMessage
+        return async_to_sync(orch._route)({"messages": [HumanMessage(content=text)]})
+
+    @override_settings(LANGGRAPH_ROUTER_SEMANTIC=False)
+    def test_disabled_by_default_no_semantic_router(self):
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        self.assertIsNone(orch._semantic_router)
+
+    @override_settings(LANGGRAPH_ROUTER_SEMANTIC=True)
+    def test_semantic_hit_skips_llm(self):
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        self.assertIsNotNone(orch._semantic_router)
+        # 语义命中 inspection（无关键词的问题）→ 跳过 LLM 分类器
+        orch._semantic_router.route = mock.AsyncMock(return_value="inspection-expert")
+        with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
+                        new=mock.AsyncMock(return_value=["energy-expert"])) as mc:
+            out = self._route(orch, "设备最近怪怪的")  # 无关键词
+        self.assertEqual([n for n, _ in out["plan"]], ["inspection-expert"])
+        mc.assert_not_called()
+
+    @override_settings(LANGGRAPH_ROUTER_SEMANTIC=True)
+    def test_semantic_miss_falls_through_to_llm(self):
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        orch._semantic_router.route = mock.AsyncMock(return_value=None)  # 语义未命中
+        with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
+                        new=mock.AsyncMock(return_value=["sanheng-knowledge"])) as mc:
+            out = self._route(orch, "设备最近怪怪的")
+        self.assertEqual([n for n, _ in out["plan"]], ["sanheng-knowledge"])
+        mc.assert_awaited_once()
+
+    @override_settings(LANGGRAPH_ROUTER_SEMANTIC=True)
+    def test_keyword_shortcircuit_precedes_semantic(self):
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        # 关键词命中（"用电量"→energy）应在语义层之前，语义 route 不被调用
+        orch._semantic_router.route = mock.AsyncMock(return_value="inspection-expert")
+        out = self._route(orch, "查一下用电量")
+        self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
+        orch._semantic_router.route.assert_not_called()
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
 @tag('unit')

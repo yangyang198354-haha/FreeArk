@@ -417,6 +417,14 @@ LANGGRAPH_ROUTER_STICKY = os.environ.get(
 # 节点（友好寒暄 + 引导能力介绍），而非盲目塞给能耗专家。置 'False' 回退到「域外恒落 DEFAULT」。
 LANGGRAPH_ROUTER_OOD_PATH = os.environ.get(
     'LANGGRAPH_ROUTER_OOD_PATH', 'True') == 'True'
+# P1-1：语义路由（关键词短路与 LLM 之间的高置信中间层，复用 RAG embedding）。
+# **默认 False**：首次往路由热路径加远端 embedding 调用，保守默认关，灰度验证后再 env 开。
+# 命中条件：查询对各专家范例的最大余弦 top ≥ TAU 且与次高 margin ≥ MARGIN（Phase-0 PoC 标定）。
+# fail-open：embedding 不可用/异常 → 穿透 LLM 分类器（今天的行为）。
+LANGGRAPH_ROUTER_SEMANTIC = os.environ.get(
+    'LANGGRAPH_ROUTER_SEMANTIC', 'False') == 'True'
+LANGGRAPH_ROUTER_SEM_TAU = float(os.environ.get('LANGGRAPH_ROUTER_SEM_TAU', '0.65'))
+LANGGRAPH_ROUTER_SEM_MARGIN = float(os.environ.get('LANGGRAPH_ROUTER_SEM_MARGIN', '0.05'))
 # freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')

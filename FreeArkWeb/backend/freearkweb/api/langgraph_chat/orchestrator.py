@@ -376,6 +376,14 @@ class Orchestrator:
         self.sticky_routing = getattr(settings, "LANGGRAPH_ROUTER_STICKY", True)
         # P1-2 域外/闲聊路径开关（默认 True；置 False 域外恒落 DEFAULT）。
         self.ood_path = getattr(settings, "LANGGRAPH_ROUTER_OOD_PATH", True)
+        # P1-1 语义路由（默认 False；关键词短路与 LLM 之间的高置信中间层）。
+        self.semantic_routing = getattr(settings, "LANGGRAPH_ROUTER_SEMANTIC", False)
+        self._semantic_router = None
+        if self.semantic_routing:
+            from .semantic_router import SemanticRouter
+            self._semantic_router = SemanticRouter(
+                tau=getattr(settings, "LANGGRAPH_ROUTER_SEM_TAU", 0.65),
+                margin=getattr(settings, "LANGGRAPH_ROUTER_SEM_MARGIN", 0.05))
         self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
@@ -392,6 +400,12 @@ class Orchestrator:
             target = keyword_shortcircuit_target(text)
             if target is not None:
                 return {"plan": [(target, text)]}
+        # P1-1：语义高置信短路（关键词够不着时）。命中单专家 → 跳过 LLM；
+        # 未命中 / fail-open → 穿透到下方 LLM 分类器。只看当前问题（剥历史）。
+        if self._semantic_router is not None:
+            sem = await self._semantic_router.route(_current_query(text))
+            if sem is not None:
+                return {"plan": [(sem, text)]}
         # P0-2：算出上一轮专家作粘性兜底信号（仅当前问题零信号时被 classify_experts 采用）。
         sticky = previous_turn_expert(text) if self.sticky_routing else None
         chosen = await classify_experts(self.router_llm, text, sticky_hint=sticky,
