@@ -48,7 +48,7 @@ redis>=5.0,<6.0
 #    与现有 channels_redis 4.x / redis-py 5.x 同环境装一次，跑 WS 真收发确认无依赖冲突。
 langgraph>=0.2.50,<0.4
 langchain-core>=0.3.20,<0.4
-langchain-openai>=0.2.10,<0.4
+langchain-openai>=0.2.10,<0.3
 
 # ── RAG 知识库依赖（v1.4.0_sanheng_rag）──────────────────────────────────
 # .docx 解析（纯 Python，aarch64 无特殊处理）

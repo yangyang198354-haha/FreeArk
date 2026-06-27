@@ -205,8 +205,18 @@ def _get_reasoning_chat_openai_cls():
         class _ReasoningChatOpenAI(ChatOpenAI):
             def _convert_chunk_to_generation_chunk(
                     self, chunk, default_chunk_class, base_generation_info):
-                gen = _oai_base._convert_chunk_to_generation_chunk(
-                    chunk, default_chunk_class, base_generation_info)
+                # langchain_openai <0.3: module-level function in chat_models.base
+                # langchain_openai 0.3+: module-level function removed; ChatOpenAI
+                # may expose it again as an instance method — try super() as fallback.
+                _fn = getattr(_oai_base, '_convert_chunk_to_generation_chunk', None)
+                if _fn is not None:
+                    gen = _fn(chunk, default_chunk_class, base_generation_info)
+                else:
+                    try:
+                        gen = super()._convert_chunk_to_generation_chunk(
+                            chunk, default_chunk_class, base_generation_info)
+                    except AttributeError:
+                        gen = None  # degrade: chunk skipped in stream loop
                 return _inject_reasoning(gen, chunk)
 
             # 注意（生产透传现状）：langchain_openai 0.2.x 的 ChatOpenAI._stream/_astream
