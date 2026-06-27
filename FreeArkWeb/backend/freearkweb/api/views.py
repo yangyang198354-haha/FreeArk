@@ -1709,7 +1709,7 @@ class OwnerDeviceTreeView(generics.RetrieveAPIView):
     """
     GET /api/owners/<pk>/device-tree/
     返回指定业主的完整设备树：楼层 → 房间 → 设备
-    权限：所有登录用户（IsAuthenticated）
+    权限：IsOperatorOrAbove（admin/operator 可见全部业主）
     """
     queryset = OwnerInfo.objects.prefetch_related(
         'floors__rooms__devices'

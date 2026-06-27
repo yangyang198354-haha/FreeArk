@@ -14,6 +14,7 @@
  */
 
 import mqtt from 'mqtt/dist/mqtt.js'
+import { buildUniStream } from './uniMqttStream'
 
 // ── 纯逻辑（可单测）──────────────────────────────────────────────────────────
 
@@ -70,6 +71,19 @@ export function buildDeviceWrite(screenMac, deviceSn, items, requestId) {
   }
 }
 
+/** 构造 DeviceStatusRead envelope（云→屏，主动拉取当前值）。屏端会回一条 DeviceStatusUpdate。 */
+export function buildDeviceRead(screenMac, deviceSn) {
+  return {
+    header: {
+      name: 'DeviceStatusRead',
+      messageId: String(Date.now()),
+      sn: normalizeSn(deviceSn),
+      screenMac,
+    },
+    payload: { data: { deviceSn: normalizeSn(deviceSn) } },
+  }
+}
+
 /** 判断一条 DeviceStatusUpdate 是否反映了目标值（写确认，ADR-04）。 */
 export function valueReflectsTarget(payloadObj, deviceSn, attrTag, target) {
   const parsed = parseDeviceUpdate(payloadObj)
@@ -99,26 +113,53 @@ export class ScreenMqtt {
 
   connect() {
     const b = this.broker
-    const url = `${b.protocol}://${b.host}:${b.port}${b.path || ''}`
+    // 直接用自定义 uni.connectSocket 流构造 MqttClient，绕开 mqtt.js v4 在
+    // uni-app+vite 微信小程序里全不可用的自带传输（wx.js / ws.js / 协议探测）。
+    const opts = {
+      protocol: b.protocol,        // 'wxs'（buildUniStream 内部映射 wss）
+      hostname: b.host,
+      host: b.host,
+      port: b.port,
+      path: b.path || '/mqtt',
+      username: b.username,
+      password: b.password,
+      clientId: 'mp-owner-' + genRequestId(),
+      keepalive: 30,
+      reconnectPeriod: 3000,
+      connectTimeout: 8000,
+      clean: true,
+      protocolId: 'MQTT',
+      protocolVersion: 4,
+    }
+    console.log('[ScreenMqtt] connect (custom uni stream) host=', b.host, 'user=', b.username)
     return new Promise((resolve, reject) => {
       let settled = false
-      this.client = mqtt.connect(url, {
-        username: b.username,
-        password: b.password,
-        clientId: 'mp-owner-' + genRequestId(),
-        keepalive: 30,
-        reconnectPeriod: 3000,
-        connectTimeout: 8000,
-      })
+      const finish = (fn, arg) => { if (!settled) { settled = true; fn(arg) } }
+      const hardTimer = setTimeout(() => {
+        console.error('[ScreenMqtt] HARD TIMEOUT 12s — 未收到 CONNACK')
+        try { this.client && this.client.end(true) } catch (e) { /* ignore */ }
+        finish(reject, new Error('CONNECT_TIMEOUT'))
+      }, 12000)
+
+      this.client = new mqtt.MqttClient(buildUniStream(opts), opts)
       this.client.on('connect', () => {
+        console.log('[ScreenMqtt] event: connect (CONNACK ok)')
         this._connected = true
-        if (!settled) { settled = true; resolve() }
+        clearTimeout(hardTimer)
+        finish(resolve)
       })
       this.client.on('message', (topic, payload) => this._onMessage(topic, payload))
       this.client.on('error', (err) => {
-        if (!settled) { settled = true; reject(err) }
+        console.error('[ScreenMqtt] event: error ->', err && err.message)
+        clearTimeout(hardTimer)
+        finish(reject, err)
       })
-      this.client.on('close', () => { this._connected = false })
+      this.client.on('reconnect', () => console.log('[ScreenMqtt] event: reconnect'))
+      this.client.on('offline', () => console.warn('[ScreenMqtt] event: offline'))
+      this.client.on('close', () => {
+        console.warn('[ScreenMqtt] event: close')
+        this._connected = false
+      })
     })
   }
 
@@ -134,6 +175,16 @@ export class ScreenMqtt {
     try { obj = JSON.parse(payload.toString()) } catch (e) { return }
     const parsed = parseDeviceUpdate(obj)
     if (parsed) this._updateCbs.forEach((cb) => cb(parsed))
+  }
+
+  /** 主动拉取一批 deviceSn 的当前值（发 DeviceStatusRead，屏端会回 DeviceStatusUpdate）。 */
+  readStatus(screenMac, deviceSns) {
+    if (!this.client) return
+    const topic = fillTopic(this.topics.write_downlink, screenMac)
+    for (const sn of deviceSns) {
+      const msg = buildDeviceRead(screenMac, sn)
+      this.client.publish(topic, JSON.stringify(msg), { qos: 0 })
+    }
   }
 
   /** 发布写命令，返回 requestId。 */

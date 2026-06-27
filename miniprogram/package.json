@@ -19,6 +19,8 @@
     "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5010320260611001",
     "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010320260611001",
     "cross-env": "^10.1.0",
+    "events": "^3.3.0",
+    "util": "^0.12.5",
     "vite": "^5.2.8",
     "vitest": "^2.1.9"
   }
