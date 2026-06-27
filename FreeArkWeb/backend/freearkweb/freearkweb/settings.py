@@ -408,6 +408,11 @@ LANGGRAPH_LLM_TIMEOUT = int(os.environ.get('LANGGRAPH_LLM_TIMEOUT', '60'))
 # 置 'False' 一键回退到「恒走 LLM 分类器」。0 命中或 ≥2 命中（撞车/复合）仍走 LLM。
 LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT = os.environ.get(
     'LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT', 'True') == 'True'
+# P0-2：粘性路由。当前问题零信号（LLM 空 + 无关键词）时，承接上一轮专家而非盲目落
+# DEFAULT，接住「那上个月呢」这类追问。仅作零信号兜底，不覆盖关键词/LLM 明确判断。
+# 置 'False' 一键回退到「零信号恒落 DEFAULT_EXPERT」。
+LANGGRAPH_ROUTER_STICKY = os.environ.get(
+    'LANGGRAPH_ROUTER_STICKY', 'True') == 'True'
 # freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')

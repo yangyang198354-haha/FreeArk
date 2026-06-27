@@ -63,7 +63,11 @@ python manage.py test api.tests.test_routing_eval --settings=freearkweb.test_set
 - **分类别准确率**：定位哪类意图最弱
 - **关键词地板回归**：`keyword_floor=true` 用例离线若不精确命中即回归（P0-1 地基）
 
-### 基线（2026-06-27，38 用例）
+### 基线（2026-06-27，38 用例；后随 P0-2 增至 42 用例）
+
+> 下表为 P0-1 落地时的 38 用例快照。P0-2 新增 4 条 sticky 用例后共 42 条；纯关键词离线
+> 因含 2 条"故意够不着"的零信号追问降至 33/42=78.6%，但 P0-2 粘性可恢复其中 3 条
+> （报告"P0-2 粘性可恢复"行）。floor 回归仍 0。
 
 | 指标 | 离线(关键词地板) | live(router_llm temp0, 真 DeepSeek) |
 |---|---|---|
@@ -98,6 +102,25 @@ python manage.py test api.tests.test_routing_eval --settings=freearkweb.test_set
   在离线与 live 下结果一致且全对，故短路省下的是纯延迟、不动正确性。
 - **残留风险**：含数据关键词的纯知识问题（如"故障率怎么定义"命中"故障"）会被短路到数据专家。
   关键词表已刻意规避（不收"控制/调节"等）；如生产暴露新例 → 加入本数据集并按需收窄，或关开关。
+
+## P0-2 粘性路由（已实现，2026-06-27）
+
+`orchestrator._route` 在当前问题**零路由信号**（LLM 返回空 + 无关键词）时，承接**上一轮专家**
+而非盲目落 `DEFAULT_EXPERT=energy`，接住"那上个月呢/再详细点"这类自身无领域词的追问。
+
+- **上一轮专家来源**：聊天历史只存 role/content（`chat_memory`），不记录每轮专家。故
+  `router.previous_turn_expert(text)` 从注入的历史块（`[历史记忆开始]...[历史记忆结束]`）取
+  **最后一轮用户问题**做关键词路由反推（唯一命中才用）。这是当前架构下最稳的来源——历史前缀
+  每轮必带，无需改 schema、无额外 LLM 调用。
+- **严格安全**：仅改"零信号"兜底分支。关键词命中 / P0-1 短路 / LLM 明确结果**全不经过**粘性，
+  故粘性**不可能**让任何当前正确的路由变差（topic-switch 如"现在看故障"自带关键词→短路，永不触发粘性）。
+- **开关**：`settings.LANGGRAPH_ROUTER_STICKY`（env 同名，默认 `True`）。置 `False` 回退"零信号恒落 DEFAULT"。
+- **不变式（test_routing_eval）**：① followup 用例经粘性精确恢复 expected；② 凡当前自带关键词的用例，
+  开/关粘性结果完全一致（`test_sticky_never_overrides_keyword_hit`）。
+- **覆盖**：数据集 4 条 sticky 用例，报告"P0-2 粘性可恢复 3/42"（3 条零信号追问被正确承接；
+  stick-004 是 topic-switch 反例，验证粘性不越界）。
+- **残留**：若 LLM 对追问**自信地**误判（返回非空但错），粘性（仅兜底）不介入。如评测暴露此类，
+  再考虑 v2 给 LLM 注入粘性提示；当前刻意不做以控风险。
 
 ## 如何增长
 

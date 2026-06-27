@@ -61,6 +61,11 @@ DATA_EXPERTS = ("energy-expert", "inspection-expert")
 # 护栏关键词只匹配当前问题，避免历史里的数据词误触发、把正当的 sanheng 路由改掉。
 _CURRENT_QUERY_RE = re.compile(r"\[__freeark_user__:[^\]]*\]\s*(.*)\Z", re.DOTALL)
 
+# 历史记忆块（chat_memory.build_inject_prefix 写入）：[历史记忆开始]...[历史记忆结束]。
+# P0-2 粘性路由从中取「上一轮用户问题」推断上一轮专家。
+_HISTORY_BLOCK_RE = re.compile(r"\[历史记忆开始\](.*?)\[历史记忆结束\]", re.DOTALL)
+_HISTORY_USER_LINE_RE = re.compile(r"^用户:\s*(.+)$", re.MULTILINE)
+
 
 def _current_query(text: str) -> str:
     """剥掉历史记忆前缀，取最后一个 __freeark_user__ 标签之后的当前问题；无标签则原样。"""
@@ -99,6 +104,27 @@ def keyword_shortcircuit_target(text: str) -> Optional[str]:
     专家。关键词表已刻意规避（如不收"控制/调节"）；如生产暴露新例，加入 routing_eval 数据集
     并按需收窄，或置开关为 False 一键回退恒走 LLM。"""
     hits = _keyword_hits(_current_query(text))
+    return hits[0] if len(hits) == 1 else None
+
+
+def previous_turn_expert(text: str) -> Optional[str]:
+    """P0-2 粘性路由：从注入的历史记忆块里取**最后一轮用户问题**，关键词路由出上一轮专家。
+
+    唯一命中才返回（与短路同口径，避免歧义续接）；无历史块 / 取不到用户行 / 0 或 ≥2 命中
+    → None。纯函数、离线可测、零额外 LLM 调用。
+
+    用途：当前问题零路由信号（无关键词且 LLM 返回空）时，用它替代盲目的 DEFAULT_EXPERT，
+    接住「那上个月呢/再详细点」这类自身无领域词的追问。只作 fallback，不覆盖关键词/LLM/短路。
+
+    注：聊天历史只存 role/content（见 chat_memory），不记录每轮专家；故从上一轮用户问题
+    的关键词反推，而非读结构化的"上轮专家"——这是当前架构下最稳的来源（历史前缀每轮必带）。"""
+    m = _HISTORY_BLOCK_RE.search(text or "")
+    if not m:
+        return None
+    users = _HISTORY_USER_LINE_RE.findall(m.group(1))
+    if not users:
+        return None
+    hits = _keyword_hits(users[-1])  # 仅看最近一轮用户问题
     return hits[0] if len(hits) == 1 else None
 
 
@@ -192,17 +218,30 @@ def _guard_against_misroute(names: List[str], query: str) -> List[str]:
     return names
 
 
-async def classify_experts(llm, text: str) -> List[str]:
+async def classify_experts(llm, text: str,
+                           sticky_hint: Optional[str] = None) -> List[str]:
     """阶段 D 路由入口：路由决策只看「当前问题」（剥历史前缀，防历史污染路由）→
-    LLM 分类器 → 护栏纠误（防数据查询落到无该工具的专家）→ 关键词兜底 → DEFAULT_EXPERT。
+    LLM 分类器 → 护栏纠误（防数据查询落到无该工具的专家）→ 关键词兜底 →
+    P0-2 粘性兜底（sticky_hint）→ DEFAULT_EXPERT。
 
-    注：历史仅供专家**作答**时参考（consumers 注入），不参与**路由**决策——路由是对当前
-    意图分类，掺入历史会被前文话题带偏（生产实例：故障-heavy 历史把能耗查询带偏到 inspection）。
+    注：历史仅供专家**作答**时参考（consumers 注入），不参与**路由意图分类**——掺入历史会被
+    前文话题带偏（生产实例：故障-heavy 历史把能耗查询带偏到 inspection）。粘性路由是例外且
+    受控：仅当当前问题**零信号**（LLM 空 + 无关键词）时，才用 sticky_hint（上一轮专家）替代
+    盲目 DEFAULT，接住追问；绝不覆盖关键词/LLM 的明确判断。sticky_hint 由 orchestrator 经
+    previous_turn_expert 计算后传入（受 LANGGRAPH_ROUTER_STICKY 开关控制）。
 
+    sticky_hint=None（默认）时行为与 P0-2 前完全一致——既有调用/测试零影响。
     llm 为 None 时直接走关键词路由（供不想付 LLM 调用的场景）。"""
     query = _current_query(text)  # 路由只用当前问题，不掺历史
     if llm is not None:
         names = await classify_experts_llm(llm, query)
         if names:
             return _guard_against_misroute(names, query)
-    return route_experts(query)  # 关键词路由自带 DEFAULT_EXPERT 兜底
+    # 零信号兜底：当前问题关键词命中 → 用之；否则粘性（上一轮专家）；再否则 DEFAULT。
+    hits = _keyword_hits(query)
+    if hits:
+        return hits
+    if sticky_hint in EXPERT_NAMES:
+        logger.info("router 粘性兜底：当前问题零信号，承接上一轮专家 %s", sticky_hint)
+        return [sticky_hint]
+    return [DEFAULT_EXPERT]

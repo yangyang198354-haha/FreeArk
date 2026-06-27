@@ -24,7 +24,8 @@ from typing import Callable, Iterable, List, Optional
 
 # 合法专家集合与 category 取值（dataset 校验用）。
 # 从 router 复用 EXPERT_NAMES，避免两处漂移；router 顶层 langchain-free，import 安全。
-from ..router import EXPERT_NAMES, keyword_shortcircuit_target
+from ..router import (EXPERT_NAMES, _current_query, _keyword_hits,
+                      keyword_shortcircuit_target, previous_turn_expert)
 
 VALID_CATEGORIES = (
     "knowledge",      # 三恒原理/说明书/技术文档 → sanheng-knowledge
@@ -145,6 +146,12 @@ def evaluate(classifier: Callable[[str], Iterable[str]],
 
     # P0-1：短路可达 = 唯一无撞车关键词命中（这些查询将跳过 LLM 分类器）。
     sc_reachable = sum(1 for c in cases if keyword_shortcircuit_target(c.query) is not None)
+    # P0-2：粘性可恢复 = 当前问题零关键词（会落兜底）且上一轮专家恰好等于 expected。
+    sticky_recoverable = sum(
+        1 for c in cases
+        if not _keyword_hits(_current_query(c.query))
+        and previous_turn_expert(c.query) is not None
+        and [previous_turn_expert(c.query)] == c.expected)
 
     total = len(cases)
     exact_count = sum(1 for r in results if r.exact)
@@ -164,6 +171,7 @@ def evaluate(classifier: Callable[[str], Iterable[str]],
         "keyword_floor_total": floor_total,
         "keyword_floor_failures": floor_failures,
         "shortcircuit_reachable": sc_reachable,
+        "sticky_recoverable": sticky_recoverable,
         "mismatches": mismatches,
         "results": results,
     }
@@ -186,9 +194,12 @@ def format_report(result: dict, mode: str = "offline", show_mismatches: bool = T
     lines.append(f"micro 标签       : P={m['precision']:.1%}  R={m['recall']:.1%}  "
                  f"F1={m['f1']:.1%}  (tp={m['tp']} fp={m['fp']} fn={m['fn']})")
     sc = result.get("shortcircuit_reachable", 0)
+    st = result.get("sticky_recoverable", 0)
     lines.append(f"P0-1 短路可达    : {sc}/{result['total']} = {sc / result['total']:.1%}"
                  if result['total'] else "P0-1 短路可达    : 0")
     lines.append("  （这些查询唯一命中关键词，将跳过 LLM 分类器省 ~2s/条）")
+    lines.append(f"P0-2 粘性可恢复  : {st}/{result['total']}"
+                 + "（零信号追问由上一轮专家正确承接，否则盲落 DEFAULT）")
     lines.append("")
     lines.append("--- 分类别准确率 ---")
     for cat, b in sorted(result["by_category"].items()):

@@ -336,6 +336,75 @@ class RouterShortCircuitTargetTests(SimpleTestCase):
         self.assertEqual(self._t(text), "sanheng-knowledge")
 
 
+@tag('unit')
+class PreviousTurnExpertTests(SimpleTestCase):
+    """P0-2：previous_turn_expert 纯函数——从历史块取最后一轮用户问题反推上一轮专家。"""
+
+    def _p(self, text):
+        from api.langgraph_chat.router import previous_turn_expert
+        return previous_turn_expert(text)
+
+    def _q(self, prev_user, current):
+        return (f"[历史记忆开始]\n用户: {prev_user}\n助手: 略\n[历史记忆结束]\n"
+                f"[__freeark_user__:u] {current}")
+
+    def test_prev_inspection(self):
+        self.assertEqual(self._p(self._q("现在有哪些设备故障", "那严重吗")),
+                         "inspection-expert")
+
+    def test_prev_energy(self):
+        self.assertEqual(self._p(self._q("今天的总能耗是多少", "那上个月呢")),
+                         "energy-expert")
+
+    def test_prev_sanheng(self):
+        self.assertEqual(self._p(self._q("三恒恒氧原理是什么", "再细讲讲")),
+                         "sanheng-knowledge")
+
+    def test_takes_last_user_turn(self):
+        # 多轮历史：取**最近**一轮用户问题（故障），不取更早的能耗
+        text = ("[历史记忆开始]\n用户: 今天能耗多少\n助手: 8647\n"
+                "用户: 有哪些设备故障\n助手: 3处\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 那严重吗")
+        self.assertEqual(self._p(text), "inspection-expert")
+
+    def test_no_history_block_returns_none(self):
+        self.assertIsNone(self._p("现在有哪些设备故障"))
+
+    def test_ambiguous_prev_returns_none(self):
+        # 上一轮用户问题撞车（能耗+故障）→ 非唯一命中 → None（不强行粘）
+        self.assertIsNone(self._p(self._q("对比能耗和故障", "然后呢")))
+
+
+@tag('unit')
+class ClassifyStickyFallbackTests(SimpleTestCase):
+    """P0-2：classify_experts 的 sticky_hint 兜底——仅零信号时采用，绝不覆盖关键词/LLM。"""
+
+    def _c(self, llm, text, sticky):
+        from api.langgraph_chat.router import classify_experts
+        return async_to_sync(classify_experts)(llm, text, sticky_hint=sticky)
+
+    def test_sticky_used_on_zero_signal(self):
+        # LLM 空 + 当前无关键词 → 用 sticky（而非 DEFAULT energy）
+        out = self._c(_StubLLM("[]"), "那严重吗", "inspection-expert")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_sticky_ignored_when_keyword_hits(self):
+        # 当前问题有关键词(故障)→inspection 胜出，sticky(energy) 不参与
+        out = self._c(_StubLLM("乱码"), "现在有设备故障吗", "energy-expert")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_sticky_ignored_when_llm_confident(self):
+        # LLM 明确返回 inspection → 直接用，sticky(sanheng) 不参与
+        out = self._c(_StubLLM('["inspection-expert"]'), "看看设备状况", "sanheng-knowledge")
+        self.assertEqual(out, ["inspection-expert"])
+
+    def test_invalid_sticky_falls_to_default(self):
+        # sticky 非法/None + 零信号 → DEFAULT energy（与 P0-2 前一致）
+        self.assertEqual(self._c(_StubLLM("[]"), "随便聊聊", "not-an-expert"),
+                         ["energy-expert"])
+        self.assertEqual(self._c(_StubLLM("[]"), "随便聊聊", None), ["energy-expert"])
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @tag('unit')
 class ChatBackendFactoryTests(SimpleTestCase):
@@ -434,6 +503,29 @@ class OrchestratorShortCircuitTests(SimpleTestCase):
         self.assertEqual({n for n, _ in out["plan"]},
                          {"energy-expert", "inspection-expert"})
         mc.assert_awaited_once()   # ≥2 命中不短路 → 走分类器
+
+    def test_route_passes_sticky_on_zero_signal_followup(self):
+        # 零信号追问（当前无关键词）+ inspection 历史 → _route 经 classify_experts
+        # 用粘性落 inspection（而非盲落 DEFAULT energy）。用 fake LLM（返回非 JSON → 兜底）。
+        from api.langgraph_chat.orchestrator import Orchestrator
+        from langchain_core.messages import HumanMessage
+        orch = Orchestrator(latency=0.0)
+        self.assertTrue(orch.sticky_routing)  # 默认开
+        text = ("[历史记忆开始]\n用户: 现在有哪些设备故障\n助手: 3处\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 那严重吗")
+        out = async_to_sync(orch._route)({"messages": [HumanMessage(content=text)]})
+        self.assertEqual([n for n, _ in out["plan"]], ["inspection-expert"])
+
+    def test_sticky_disabled_falls_to_default(self):
+        from api.langgraph_chat.orchestrator import Orchestrator
+        from langchain_core.messages import HumanMessage
+        orch = Orchestrator(latency=0.0)
+        orch.sticky_routing = False
+        text = ("[历史记忆开始]\n用户: 现在有哪些设备故障\n助手: 3处\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 那严重吗")
+        out = async_to_sync(orch._route)({"messages": [HumanMessage(content=text)]})
+        # 关掉粘性 → 零信号落 DEFAULT energy
+        self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")

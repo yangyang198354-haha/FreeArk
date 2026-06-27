@@ -23,14 +23,21 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, tag
 
 from api.langgraph_chat.router import (
-    classify_experts, keyword_shortcircuit_target)
+    classify_experts, keyword_shortcircuit_target, previous_turn_expert)
 from api.langgraph_chat.routing_eval.harness import (
     VALID_CATEGORIES, evaluate, format_report, load_dataset)
 
 
 def _offline(query: str):
-    """生产同款入口、llm=None → 纯关键词路由 + DEFAULT 兜底（确定性）。"""
+    """生产同款入口、llm=None → 纯关键词路由 + DEFAULT 兜底（确定性，**不含粘性**）。
+    保持"关键词地板"语义纯粹：粘性恢复由 _offline_sticky / 专门测试覆盖。"""
     return async_to_sync(classify_experts)(None, query)
+
+
+def _offline_sticky(query: str):
+    """离线 + P0-2 粘性：零信号时承接上一轮专家（与 orchestrator._route 离线行为一致）。"""
+    sticky = previous_turn_expert(query)
+    return async_to_sync(classify_experts)(None, query, sticky_hint=sticky)
 
 
 @tag('unit')
@@ -92,3 +99,29 @@ class RoutingEvalDatasetTests(SimpleTestCase):
         self.assertEqual(violations, [],
                          "P0-1 短路零精度损失不变式被破坏：\n" + "\n".join(violations))
         self.assertGreater(fired, 0, "无任何短路触发，数据集异常")
+
+    def test_sticky_recovers_followups_offline(self):
+        """P0-2：标 followup 的零信号追问，纯关键词会盲落 DEFAULT、粘性能精确恢复 expected。"""
+        regressions = []   # 纯关键词错 → 粘性应修对
+        for c in self.cases:
+            if "followup" not in c.tags:
+                continue
+            sticky_out = set(_offline_sticky(c.query))
+            if sticky_out != set(c.expected):
+                regressions.append(
+                    f"[{c.id}] 粘性后仍错：期望={c.expected} 实得={sorted(sticky_out)}")
+        self.assertEqual(regressions, [],
+                         "P0-2 粘性未能恢复追问：\n" + "\n".join(regressions))
+
+    def test_sticky_never_overrides_keyword_hit(self):
+        """P0-2 安全不变式：当前问题自带关键词时（topic-switch），粘性绝不改变结果。
+        即 _offline_sticky 与 _offline（无粘性）对所有"当前有关键词"用例结果一致。"""
+        from api.langgraph_chat.router import _current_query, _keyword_hits
+        diffs = []
+        for c in self.cases:
+            if not _keyword_hits(_current_query(c.query)):
+                continue  # 只看当前自带关键词的用例
+            if set(_offline_sticky(c.query)) != set(_offline(c.query)):
+                diffs.append(c.id)
+        self.assertEqual(diffs, [],
+                         f"粘性覆盖了关键词命中（不应发生）：{diffs}")

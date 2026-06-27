@@ -53,7 +53,8 @@ from .adapter import INTERNAL_NOSTREAM_TAG
 from .fa_tools import (TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write,
                        get_last_search_images, prepare_search_images_sink)
 from .prompts import EXPERT_PROMPTS
-from .router import classify_experts, keyword_shortcircuit_target
+from .router import (classify_experts, keyword_shortcircuit_target,
+                     previous_turn_expert)
 
 
 # ── 阶段 G：跨 agent 子委托（expert→expert）─────────────────────────────
@@ -356,6 +357,8 @@ class Orchestrator:
         # P0-1 关键词短路开关（默认 True；置 False 恒走 LLM 分类器）。
         self.keyword_shortcircuit = getattr(
             settings, "LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT", True)
+        # P0-2 粘性路由开关（默认 True；置 False 零信号恒落 DEFAULT）。
+        self.sticky_routing = getattr(settings, "LANGGRAPH_ROUTER_STICKY", True)
         self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
@@ -372,7 +375,9 @@ class Orchestrator:
             target = keyword_shortcircuit_target(text)
             if target is not None:
                 return {"plan": [(target, text)]}
-        chosen = await classify_experts(self.router_llm, text)
+        # P0-2：算出上一轮专家作粘性兜底信号（仅当前问题零信号时被 classify_experts 采用）。
+        sticky = previous_turn_expert(text) if self.sticky_routing else None
+        chosen = await classify_experts(self.router_llm, text, sticky_hint=sticky)
         plan = [(name, text) for name in chosen]
         return {"plan": plan}
 
