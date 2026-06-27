@@ -53,8 +53,8 @@ from .adapter import INTERNAL_NOSTREAM_TAG
 from .fa_tools import (TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write,
                        get_last_search_images, prepare_search_images_sink)
 from .prompts import EXPERT_PROMPTS
-from .router import (classify_experts, keyword_shortcircuit_target,
-                     previous_turn_expert)
+from .router import (_current_query, classify_experts,
+                     keyword_shortcircuit_target, previous_turn_expert)
 
 
 # ── 阶段 G：跨 agent 子委托（expert→expert）─────────────────────────────
@@ -65,6 +65,19 @@ from .router import (classify_experts, keyword_shortcircuit_target,
 # 对应 inspection-expert SYSTEM_PROMPT 的 delegations 契约。
 DELEGATING_EXPERTS = ("inspection-expert",)
 MAX_EXPERT_STEPS = 8  # 单专家 ReAct + 委托链步数上限（防失控循环）
+
+# P1-2：域外/闲聊通用应答节点的系统提示。用于路由判定「不属任何专家」的寒暄/自我介绍/
+# 跑题问题——友好简短回应并引导到能力范围，绝不假装查数据/调工具，绝不暴露内部分工。
+GENERAL_PROMPT = (
+    "你就是方舟智能体本人，一个面向三恒（恒温/恒湿/恒氧）住宅系统的智能助手。\n"
+    "用户这条消息是日常寒暄、自我介绍询问，或与你的专业领域无关的闲聊（不涉及具体的能耗用电、"
+    "设备故障巡检、三恒系统知识查询）。请用简洁、友好的中文自然回应：\n"
+    "- 若是打招呼或问「你是谁/你能做什么」：一两句话说明你能帮忙查能耗用电与看板、排查设备"
+    "故障与 PLC 巡检、解答三恒系统原理与设备说明书知识，并邀请对方提出具体问题。\n"
+    "- 若是感谢/告别：礼貌简短回应即可。\n"
+    "- 若是其它跑题闲聊：友好回应一句，并温和地把话题引回你能帮上忙的方向。\n"
+    "严禁编造任何设备/能耗/故障数据，严禁假装调用工具或查询，严禁提及「专家/路由/转交」等内部分工。"
+)
 
 
 @tool
@@ -98,6 +111,8 @@ READ_DELEGATION_NAMES = {"delegate_knowledge", "delegate_read"}
 class State(TypedDict, total=False):
     messages: Annotated[List[BaseMessage], operator.add]
     plan: List[Tuple[str, str]]
+    # P1-2：route 节点暂存当前消息全文，供空 plan（域外）时 _fan_out 转交 general 节点。
+    route_text: str
     # expert_results 项两种形态（append-only reducer）：
     #   {"expert": name, "answer": str}                         普通答复（aggregate 取用）
     #   {"expert": name, "pending_write": {"tool","args"}}      待确认写（gate 处理，aggregate 忽略）
@@ -359,6 +374,8 @@ class Orchestrator:
             settings, "LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT", True)
         # P0-2 粘性路由开关（默认 True；置 False 零信号恒落 DEFAULT）。
         self.sticky_routing = getattr(settings, "LANGGRAPH_ROUTER_STICKY", True)
+        # P1-2 域外/闲聊路径开关（默认 True；置 False 域外恒落 DEFAULT）。
+        self.ood_path = getattr(settings, "LANGGRAPH_ROUTER_OOD_PATH", True)
         self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
@@ -377,17 +394,26 @@ class Orchestrator:
                 return {"plan": [(target, text)]}
         # P0-2：算出上一轮专家作粘性兜底信号（仅当前问题零信号时被 classify_experts 采用）。
         sticky = previous_turn_expert(text) if self.sticky_routing else None
-        chosen = await classify_experts(self.router_llm, text, sticky_hint=sticky)
+        chosen = await classify_experts(self.router_llm, text, sticky_hint=sticky,
+                                        allow_ood=self.ood_path)
         plan = [(name, text) for name in chosen]
-        return {"plan": plan}
+        # 空 plan（P1-2 域外）：暂存全文供 _fan_out 转交 general 节点。
+        return {"plan": plan, "route_text": text}
 
     def _fan_out(self, state: State):
         # 条件边：一次返回多个 Send → LangGraph 并发执行（核心并行点）
         # v1.8.0 新增：透传 user_scope 到每个 expert 子节点 State（MOD-180-07）
+        plan = state.get("plan") or []
+        if not plan:
+            # P1-2 域外：无专家应答 → 通用应答节点（友好寒暄/能力引导，不调工具）。
+            return [Send("general", {
+                "query": state.get("route_text", ""), "messages": [],
+                "user_scope": state.get("user_scope"),
+            })]
         return [Send("expert", {
             "name": name, "query": q, "messages": [],
             "user_scope": state.get("user_scope"),
-        }) for name, q in state["plan"]]
+        }) for name, q in plan]
 
     # ── expert：单专家 ReAct（读工具内联；写工具延迟到 gate；委托专家可子委托同侪）──
     async def _expert(self, state: State):
@@ -635,15 +661,32 @@ class Orchestrator:
             "related_images": unique_images,   # v1.4.1 新增：写入 State 字段（IFC-141-503）
         }
 
+    # ── general：P1-2 域外/闲聊通用应答（无工具、无写、不进 gate）────────────
+    async def _general(self, state: State):
+        """路由判定「不属任何专家」时的通用应答：友好寒暄 + 能力引导。
+
+        纯 LLM 自然语言（不 bind 任何工具），token 经 adapter._drive 直接流给用户
+        （node=='general' 标记为 user-stream）。结果写入 expert_results，由 aggregate
+        统一打包进 messages（单结果直接取用，无二次 LLM 调用、不重复流）。"""
+        query = _current_query(state.get("query", ""))  # 剥历史/标签，只留当前问题
+        msgs: List[BaseMessage] = [
+            SystemMessage(content=GENERAL_PROMPT + _date_hint()),
+            HumanMessage(content=query),
+        ]
+        ai = await self.llm.ainvoke(msgs)
+        return {"expert_results": [{"expert": "__general__", "answer": ai.content}]}
+
     def _build(self):
         g = StateGraph(State)
         g.add_node("route", self._route)
         g.add_node("expert", self._expert)
+        g.add_node("general", self._general)   # P1-2 域外通用应答
         g.add_node("gate", self._gate)
         g.add_node("aggregate", self._aggregate)
         g.add_edge(START, "route")
-        g.add_conditional_edges("route", self._fan_out, ["expert"])
+        g.add_conditional_edges("route", self._fan_out, ["expert", "general"])
         g.add_edge("expert", "gate")        # 所有专家分支汇聚到 gate（写确认门）
+        g.add_edge("general", "aggregate")  # 通用应答无写，跳过 gate 直接打包
         g.add_edge("gate", "aggregate")
         g.add_edge("aggregate", END)
         # MemorySaver：interrupt/resume 在同一 WS 连接=同一 worker 进程内完成（决策E）。

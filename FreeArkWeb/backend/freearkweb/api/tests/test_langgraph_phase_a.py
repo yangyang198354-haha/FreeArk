@@ -405,6 +405,76 @@ class ClassifyStickyFallbackTests(SimpleTestCase):
         self.assertEqual(self._c(_StubLLM("[]"), "随便聊聊", None), ["energy-expert"])
 
 
+@tag('unit')
+class ParseRouteResponseExTests(SimpleTestCase):
+    """P1-2：parse_route_response_ex 区分「LLM 明确域外」与「解析失败」。"""
+
+    def _p(self, raw):
+        from api.langgraph_chat.router import parse_route_response_ex
+        return parse_route_response_ex(raw)
+
+    def test_empty_array_is_ood(self):
+        # 字面 [] → 无专家 + saw_empty=True（可信域外信号）
+        self.assertEqual(self._p("[]"), (None, True))
+
+    def test_invalid_names_array_is_ood(self):
+        # 解析出数组但无合法专家（["foo"]）→ saw_empty=True
+        self.assertEqual(self._p('["foo","bar"]'), (None, True))
+
+    def test_no_array_is_not_ood(self):
+        # 根本无可解析数组 → saw_empty=False（解析失败，不可当域外）
+        self.assertEqual(self._p("我不确定"), (None, False))
+        self.assertEqual(self._p(""), (None, False))
+        self.assertEqual(self._p(None), (None, False))
+
+    def test_valid_experts_not_ood(self):
+        self.assertEqual(self._p('["energy-expert"]'), (["energy-expert"], False))
+
+    def test_back_compat_parse_route_response(self):
+        # 旧签名仍返回列表/None（域外/失败都 None）
+        from api.langgraph_chat.router import parse_route_response
+        self.assertIsNone(parse_route_response("[]"))
+        self.assertEqual(parse_route_response('["energy-expert"]'), ["energy-expert"])
+
+
+@tag('unit')
+class ClassifyOODTests(SimpleTestCase):
+    """P1-2：classify_experts 的 allow_ood 域外路径——LLM 明确域外才返回 []。"""
+
+    def _c(self, llm, text, allow_ood, sticky=None):
+        from api.langgraph_chat.router import classify_experts
+        return async_to_sync(classify_experts)(
+            llm, text, sticky_hint=sticky, allow_ood=allow_ood)
+
+    def test_ood_returns_empty_when_enabled(self):
+        # LLM 明确 [] + 无关键词 + 无粘性 + allow_ood → []
+        self.assertEqual(self._c(_StubLLM("[]"), "你好啊", True), [])
+
+    def test_ood_disabled_falls_to_default(self):
+        # allow_ood=False（默认/开关关）→ 仍落 DEFAULT energy（向后兼容）
+        self.assertEqual(self._c(_StubLLM("[]"), "你好啊", False), ["energy-expert"])
+
+    def test_parse_failure_not_treated_as_ood(self):
+        # LLM 输出无法解析（非 []）→ 不当域外 → DEFAULT（避免把失败误判闲聊）
+        self.assertEqual(self._c(_StubLLM("我不确定"), "你好啊", True), ["energy-expert"])
+
+    def test_keyword_overrides_ood(self):
+        # 当前问题有关键词 → 关键词胜，绝不因 LLM 说 [] 就当域外
+        self.assertEqual(self._c(_StubLLM("[]"), "现在有设备故障吗", True),
+                         ["inspection-expert"])
+
+    def test_sticky_takes_precedence_over_ood(self):
+        # 零信号 + LLM[] 但有上一轮专家 → 优先承接对话（粘性），不当域外。
+        # sticky_hint 由 orchestrator 经 previous_turn_expert 计算后传入（此处复刻）。
+        from api.langgraph_chat.router import previous_turn_expert
+        text = ("[历史记忆开始]\n用户: 现在有哪些设备故障\n助手: 3处\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 那然后呢")
+        sticky = previous_turn_expert(text)
+        self.assertEqual(sticky, "inspection-expert")  # 前置：粘性确实算得出
+        self.assertEqual(self._c(_StubLLM("[]"), text, True, sticky=sticky),
+                         ["inspection-expert"])
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @tag('unit')
 class ChatBackendFactoryTests(SimpleTestCase):
@@ -526,6 +596,62 @@ class OrchestratorShortCircuitTests(SimpleTestCase):
         out = async_to_sync(orch._route)({"messages": [HumanMessage(content=text)]})
         # 关掉粘性 → 零信号落 DEFAULT energy
         self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
+class OrchestratorOODTests(SimpleTestCase):
+    """P1-2：域外问题路由到 general 通用应答节点（空 plan）。"""
+
+    def _orch_ood(self):
+        # fake 路由器返回非 JSON，故用 StubLLM("[]") 模拟 LLM 明确域外信号。
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        orch.router_llm = _StubLLM("[]")
+        return orch
+
+    def test_route_empty_plan_on_ood(self):
+        from langchain_core.messages import HumanMessage
+        orch = self._orch_ood()
+        self.assertTrue(orch.ood_path)
+        out = async_to_sync(orch._route)({"messages": [HumanMessage(content="你好啊")]})
+        self.assertEqual(out["plan"], [])              # 空 plan = 域外
+        self.assertEqual(out["route_text"], "你好啊")    # 暂存全文供 general
+
+    def test_fan_out_routes_empty_plan_to_general(self):
+        orch = self._orch_ood()
+        sends = orch._fan_out({"plan": [], "route_text": "你好啊"})
+        self.assertEqual(len(sends), 1)
+        self.assertEqual(sends[0].node, "general")
+        self.assertEqual(sends[0].arg["query"], "你好啊")
+
+    def test_fan_out_disabled_ood_falls_to_expert(self):
+        # plan 非空（域外关闭时落 DEFAULT energy）→ 正常走 expert
+        orch = self._orch_ood()
+        sends = orch._fan_out({"plan": [("energy-expert", "你好啊")], "route_text": "你好啊"})
+        self.assertEqual([s.node for s in sends], ["expert"])
+
+    def test_general_node_produces_answer(self):
+        orch = self._orch_ood()
+        out = async_to_sync(orch._general)({"query": "你好啊"})
+        r = out["expert_results"][0]
+        self.assertEqual(r["expert"], "__general__")
+        self.assertTrue(r["answer"])
+        self.assertNotIn("pending_write", r)   # 通用应答无写，不触发 gate
+
+    def test_run_end_to_end_ood(self):
+        # 端到端：你好 → route 空 plan → general → aggregate → 返回通用答复
+        orch = self._orch_ood()
+        res = async_to_sync(orch.run)("你好啊", thread_id="ood-e2e")
+        self.assertEqual(res["experts"], ["__general__"])
+        self.assertTrue(res["answer"])
+
+    def test_run_keyword_question_unaffected(self):
+        # 有关键词的正常问题不受 OOD 影响（仍走专家）
+        orch = self._orch_ood()
+        res = async_to_sync(orch.run)("查一下今天的能耗看板", thread_id="ood-kw")
+        self.assertEqual(res["experts"], ["energy-expert"])
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")

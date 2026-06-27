@@ -189,9 +189,11 @@ async def _drive(orch, payload, config) -> AsyncGenerator[tuple[str, str], None]
             # 非流式模型只产终态 AIMessage 时全被挡掉 → 由循环后 seen_any 兜底补发一次。
             if not isinstance(chunk, AIMessageChunk):
                 continue
-            # 仅透传"会呈现给用户"的节点：单专家透 expert token，多专家透 aggregate。
+            # 仅透传"会呈现给用户"的节点：单专家透 expert token，多专家透 aggregate，
+            # P1-2 域外透 general（通用应答 token 直接流；其 aggregate 单结果不再调 LLM、不重复流）。
             is_user_stream = (
                 (node == "expert" and num_experts == 1)
+                or node == "general"
                 or (node == "aggregate" and num_experts != 1)
             )
             if not is_user_stream:

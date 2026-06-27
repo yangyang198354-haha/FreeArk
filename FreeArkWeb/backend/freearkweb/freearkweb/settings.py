@@ -413,6 +413,10 @@ LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT = os.environ.get(
 # 置 'False' 一键回退到「零信号恒落 DEFAULT_EXPERT」。
 LANGGRAPH_ROUTER_STICKY = os.environ.get(
     'LANGGRAPH_ROUTER_STICKY', 'True') == 'True'
+# P1-2：域外/闲聊路径。LLM 明确表态问题不属任何专家（且无关键词/粘性）时，路由到通用应答
+# 节点（友好寒暄 + 引导能力介绍），而非盲目塞给能耗专家。置 'False' 回退到「域外恒落 DEFAULT」。
+LANGGRAPH_ROUTER_OOD_PATH = os.environ.get(
+    'LANGGRAPH_ROUTER_OOD_PATH', 'True') == 'True'
 # freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')

@@ -40,6 +40,21 @@ def _offline_sticky(query: str):
     return async_to_sync(classify_experts)(None, query, sticky_hint=sticky)
 
 
+class _EmptyArrayLLM:
+    """模拟 LLM 明确表态域外（返回 []）。offline 无 LLM，故 OOD 路径需 stub 验证。"""
+    async def ainvoke(self, messages, **kwargs):
+        class _M:
+            content = "[]"
+        return _M()
+
+
+def _ood_classify(query: str):
+    """P1-2：LLM 明确域外 + allow_ood + 粘性。复刻 orchestrator._route 的域外判定路径。"""
+    sticky = previous_turn_expert(query)
+    return async_to_sync(classify_experts)(
+        _EmptyArrayLLM(), query, sticky_hint=sticky, allow_ood=True)
+
+
 @tag('unit')
 class RoutingEvalDatasetTests(SimpleTestCase):
     """数据集完整性 + 离线评测地基。"""
@@ -125,3 +140,30 @@ class RoutingEvalDatasetTests(SimpleTestCase):
                 diffs.append(c.id)
         self.assertEqual(diffs, [],
                          f"粘性覆盖了关键词命中（不应发生）：{diffs}")
+
+    def test_ood_cases_route_to_general_with_llm_signal(self):
+        """P1-2：out_of_domain 用例（expected==[]）在 LLM 明确域外 + allow_ood 时路由到空
+        （= 通用应答节点）。offline 无 LLM 故用 stub 复刻 _route 域外判定。"""
+        misses = []
+        for c in self.cases:
+            if c.category != "out_of_domain":
+                continue
+            out = _ood_classify(c.query)
+            if out != c.expected:   # expected == []
+                misses.append(f"[{c.id}] {c.query[:20]!r} 期望=[] 实得={out}")
+        self.assertEqual(misses, [],
+                         "P1-2 域外用例未路由到通用应答：\n" + "\n".join(misses))
+
+    def test_ood_path_never_hijacks_domain_questions(self):
+        """P1-2 安全不变式：对非域外用例（有明确专家），即便 LLM 信号被模拟为 []，
+        关键词/粘性仍应把它们留在正确专家，绝不因 allow_ood 误判为闲聊（返回 []）。
+        仅检查 keyword_floor=true 用例（关键词确定性命中）。"""
+        hijacked = []
+        for c in self.cases:
+            if c.category == "out_of_domain" or not c.keyword_floor:
+                continue
+            out = _ood_classify(c.query)
+            if out == []:
+                hijacked.append(f"[{c.id}] {c.query[:20]!r} 被误判域外")
+        self.assertEqual(hijacked, [],
+                         "P1-2 域外路径劫持了领域问题：\n" + "\n".join(hijacked))

@@ -148,13 +148,19 @@ ROUTER_SYSTEM_PROMPT = (
 _JSON_ARRAY_RE = re.compile(r"\[.*?\]", re.DOTALL)
 
 
-def parse_route_response(raw: Optional[str]) -> Optional[List[str]]:
-    """从 LLM 原始输出解析专家名数组。
+def parse_route_response_ex(raw: Optional[str]) -> tuple[Optional[List[str]], bool]:
+    """解析 LLM 原始输出 → (合法专家名列表 or None, saw_empty)。
 
-    鲁棒处理：散文包裹、```json 围栏、多个数组片段、非法元素。
-    返回去重保序的合法专家名列表；解析不出任何合法专家 → None（交上层兜底）。"""
+    返回值两个分量：
+      - 专家列表：去重保序的合法专家名；解析不出任何合法专家 → None。
+      - saw_empty（P1-2 域外信号）：是否**成功解析出一个 JSON 数组、但其中无任何合法专家**
+        （字面 `[]` 或 `["foo"]` 之类）。区分「LLM 明确表态不属任何领域」(saw_empty=True)
+        与「输出根本无法解析/异常」(saw_empty=False)——前者才是可信的 OOD 信号。
+
+    鲁棒处理：散文包裹、```json 围栏、多个数组片段、非法元素。"""
     if not raw:
-        return None
+        return None, False
+    saw_array = False
     for m in _JSON_ARRAY_RE.finditer(raw):
         try:
             arr = json.loads(m.group(0))
@@ -162,19 +168,29 @@ def parse_route_response(raw: Optional[str]) -> Optional[List[str]]:
             continue
         if not isinstance(arr, list):
             continue
+        saw_array = True
         seen, out = set(), []
         for x in arr:
             if isinstance(x, str) and x in EXPERT_NAMES and x not in seen:
                 seen.add(x)
                 out.append(x)
         if out:
-            return out
-    return None
+            return out, False
+    return None, saw_array  # 有数组但无合法专家 → saw_empty=True（OOD）；无数组 → False
 
 
-async def classify_experts_llm(llm, text: str) -> Optional[List[str]]:
-    """调 LLM 分类器选专家；任何异常/解析失败/空命中 → None（不抛错）。
+def parse_route_response(raw: Optional[str]) -> Optional[List[str]]:
+    """从 LLM 原始输出解析专家名数组（兼容旧签名；仅返回专家列表，丢弃 saw_empty）。
 
+    鲁棒处理：散文包裹、```json 围栏、多个数组片段、非法元素。
+    返回去重保序的合法专家名列表；解析不出任何合法专家 → None（交上层兜底）。"""
+    return parse_route_response_ex(raw)[0]
+
+
+async def classify_experts_llm_ex(llm, text: str) -> tuple[Optional[List[str]], bool]:
+    """调 LLM 分类器 → (专家列表 or None, llm_said_ood)。任何异常/解析失败 → (None, False)。
+
+    llm_said_ood：LLM 成功返回了"不属任何专家"的明确表态（见 parse_route_response_ex）。
     用 tuple 格式消息，避免本模块顶层依赖 langchain（便于离线单测用 stub）。"""
     try:
         ai = await llm.ainvoke([
@@ -184,10 +200,15 @@ async def classify_experts_llm(llm, text: str) -> Optional[List[str]]:
         raw = getattr(ai, "content", None)
         if raw is None and isinstance(ai, str):
             raw = ai
-        return parse_route_response(raw)
+        return parse_route_response_ex(raw)
     except Exception as exc:  # noqa: BLE001
         logger.warning("classify_experts_llm 失败，回退关键词路由: %s", exc)
-        return None
+        return None, False
+
+
+async def classify_experts_llm(llm, text: str) -> Optional[List[str]]:
+    """兼容旧签名：仅返回专家列表（丢弃 OOD 信号）。"""
+    return (await classify_experts_llm_ex(llm, text))[0]
 
 
 def _guard_against_misroute(names: List[str], query: str) -> List[str]:
@@ -219,29 +240,37 @@ def _guard_against_misroute(names: List[str], query: str) -> List[str]:
 
 
 async def classify_experts(llm, text: str,
-                           sticky_hint: Optional[str] = None) -> List[str]:
-    """阶段 D 路由入口：路由决策只看「当前问题」（剥历史前缀，防历史污染路由）→
-    LLM 分类器 → 护栏纠误（防数据查询落到无该工具的专家）→ 关键词兜底 →
-    P0-2 粘性兜底（sticky_hint）→ DEFAULT_EXPERT。
+                           sticky_hint: Optional[str] = None,
+                           allow_ood: bool = False) -> List[str]:
+    """阶段 D 路由入口：路由决策只看「当前问题」（剥历史前缀，防历史污染路由）。
 
-    注：历史仅供专家**作答**时参考（consumers 注入），不参与**路由意图分类**——掺入历史会被
-    前文话题带偏（生产实例：故障-heavy 历史把能耗查询带偏到 inspection）。粘性路由是例外且
-    受控：仅当当前问题**零信号**（LLM 空 + 无关键词）时，才用 sticky_hint（上一轮专家）替代
-    盲目 DEFAULT，接住追问；绝不覆盖关键词/LLM 的明确判断。sticky_hint 由 orchestrator 经
-    previous_turn_expert 计算后传入（受 LANGGRAPH_ROUTER_STICKY 开关控制）。
+    兜底优先级（高→低）：
+      LLM 命中非空（经护栏）→ 关键词命中 → P0-2 粘性（sticky_hint，上一轮专家）
+      → P1-2 域外（allow_ood 且 LLM 明确表态不属任何领域）返回 **[]** → DEFAULT_EXPERT。
 
-    sticky_hint=None（默认）时行为与 P0-2 前完全一致——既有调用/测试零影响。
-    llm 为 None 时直接走关键词路由（供不想付 LLM 调用的场景）。"""
+    设计要点：
+      - 历史不参与路由意图分类（掺入会被前文带偏）；粘性/域外均为受控例外，仅在当前问题
+        **零信号**时介入，绝不覆盖关键词/LLM 的明确判断。
+      - **返回 []** 表示「无专家应答，交通用应答节点」（P1-2）。仅当 LLM 可信地表态域外
+        （parse 出空数组而非解析失败）、且无关键词、无粘性时才返回；否则仍落 DEFAULT。
+        粘性优先于域外：有上一轮专家时优先承接对话，避免把追问误判为闲聊。
+
+    向后兼容：sticky_hint=None 且 allow_ood=False（默认）时行为与 P1-2 前完全一致——
+    既有调用/测试零影响（绝不返回 []）。llm 为 None 时走关键词路由（无 LLM 即无 OOD 信号）。"""
     query = _current_query(text)  # 路由只用当前问题，不掺历史
+    llm_said_ood = False
     if llm is not None:
-        names = await classify_experts_llm(llm, query)
+        names, llm_said_ood = await classify_experts_llm_ex(llm, query)
         if names:
             return _guard_against_misroute(names, query)
-    # 零信号兜底：当前问题关键词命中 → 用之；否则粘性（上一轮专家）；再否则 DEFAULT。
+    # 零信号兜底：关键词命中 → 粘性（上一轮专家）→ 域外[] → DEFAULT。
     hits = _keyword_hits(query)
     if hits:
         return hits
     if sticky_hint in EXPERT_NAMES:
         logger.info("router 粘性兜底：当前问题零信号，承接上一轮专家 %s", sticky_hint)
         return [sticky_hint]
+    if allow_ood and llm_said_ood:
+        logger.info("router 域外路径：LLM 明确表态不属任何专家且无关键词/粘性 → 通用应答")
+        return []
     return [DEFAULT_EXPERT]

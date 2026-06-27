@@ -122,6 +122,25 @@ python manage.py test api.tests.test_routing_eval --settings=freearkweb.test_set
 - **残留**：若 LLM 对追问**自信地**误判（返回非空但错），粘性（仅兜底）不介入。如评测暴露此类，
   再考虑 v2 给 LLM 注入粘性提示；当前刻意不做以控风险。
 
+## P1-2 域外/闲聊路径（已实现，2026-06-27）
+
+LLM 明确表态问题**不属任何专家**（且无关键词、无粘性）时，路由到 `general` 通用应答节点
+（友好寒暄 + 能力引导），而非盲目塞给能耗专家。解决"你好/你是谁/今天天气/谢谢再见"被
+能耗专家别扭作答的问题（评测 4 条 OOD 用例）。
+
+- **关键区分**：`parse_route_response_ex` 把"LLM 解析出空数组（`[]`/`["foo"]`）"与"输出无法
+  解析/异常"分开——只有前者（`saw_empty=True`）才是可信的域外信号，后者仍按解析失败兜底。
+  这避免把 LLM 偶发故障误判成闲聊。
+- **优先级**：LLM 命中 → 关键词 → 粘性 → **域外 `[]`** → DEFAULT。域外在粘性之后：有上一轮
+  专家时优先承接对话（追问不被误判为闲聊）；故域外主要在**会话起始**的寒暄触发（无粘性）。
+- **图路径**：`route` 空 plan → `_fan_out` 转 `Send("general")` → `_general`（纯 LLM 无工具）
+  → `aggregate` 打包。`general` 节点 token 经 `adapter._drive` 直接流（`node=='general'`）。
+- **开关**：`settings.LANGGRAPH_ROUTER_OOD_PATH`（env 同名，默认 `True`）。置 `False` 域外恒落 DEFAULT。
+- **离线 vs live**：域外检测**依赖 LLM**——offline（无 LLM）无法判定，故 4 条 OOD 用例在
+  offline 报告里仍计为 miss（out_of_domain 0/4），属预期。live 下 LLM 返回 `[]` → general 节点。
+  单测用 stub 模拟 `[]` 验证（`test_ood_cases_route_to_general_with_llm_signal`），并有安全不变式
+  `test_ood_path_never_hijacks_domain_questions`（关键词命中的领域问题绝不被误判域外）。
+
 ## 如何增长
 
 1. 新事故/新意图 → 在 `dataset.jsonl` 追加一行（保持一行一对象）。
