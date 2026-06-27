@@ -8,6 +8,10 @@
 **作者**: Claude（应用户「启动 P1-1，先出需求/架构方案」）
 **前置**: P1-3 路由评测集、P0-1 关键词短路、P0-2 粘性路由、P1-2 域外路径（均已上线）
 
+> ⚠️ **2026-06-27 更正**：本文多处「bge-m3 / SiliconFlow / 1024 维」为提案期假设。Phase-0 PoC 实测
+> 生产 embedding 已切换为 **doubao 多模态（dim 2048，逐条 HTTP）**；接口经 `RagEmbedder` 封装不影响
+> 集成，但事实以 [phase0_poc_results.md](phase0_poc_results.md) 为准（含 PoC 全部数据与 GO 判定）。
+
 ---
 
 ## 版本历史

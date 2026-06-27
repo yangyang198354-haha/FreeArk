@@ -7,6 +7,10 @@
 **创建日期**: 2026-06-27
 **对应需求**: REQ-SPEC-SR-v1120-001
 
+> ⚠️ **2026-06-27 更正**：文中 bge-m3/1024 维为提案期假设；Phase-0 实测生产 embedding 为
+> doubao 多模态 dim 2048（逐条 HTTP）。经 `RagEmbedder` 封装不影响本设计的集成方式。
+> τ/δ 初值由 PoC 标定为 τ=0.65、δ=0.05。详见 requirements/v1.12.0_semantic_routing/phase0_poc_results.md。
+
 ---
 
 ## 1. 设计目标与定位
