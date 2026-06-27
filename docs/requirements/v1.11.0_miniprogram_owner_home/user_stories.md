@@ -54,6 +54,8 @@
 
 **Then** 卡片展开，显示来自**新 miniapp 业主端点**（归属过滤）的该套**房间分组**：`panel_*` sub_type 即房间（标题用 `sub_type_display`，如"书房""儿童房"），其下列出参数的 `display_name`（或 `param_name` fallback）与当前 `value`；系统级 sub_type 归入"全屋系统"分区
 > ✅ **OQ-A 已解决**：复用 `get_available_sub_types`（v0.5.7 房型过滤）+ realtime 分组逻辑，参数已天然按房间(panel_*)归类，无降级（见 spec §6.2 OQ-A）。
+>
+> ⚠️ **v1.11.1 修订**：本 AC-2 已被 `requirements_spec_v1.11.1_structure_enhancement.md` 中 US-OWNER-001 AC-2（v1.11.1 修订版）取代。v1.11.1 修订版要求：（1）结构来自设备树，不依赖 PLCLatestData；（2）房间标题用 `device_room.room_name`；（3）所有房间均显示，无数据的参数显示"—"。
 
 ---
 
@@ -320,3 +322,105 @@
 | OQ-D | MQTT 超时时长（默认 10s）、单用户最大绑定数（默认 10） | 前端 | 无意见即采用默认 |
 
 **已决策（摘要，全文见 spec §6.1）**：D-01 房间层级真实存在；D-02 deviceSn 取自 DB；D-03 TTL 5min/无清缓存按钮；D-04 性能后置/接受并行；D-05 owner 归属过滤 + admin/operator 由现有 operator 端点全量可见；D-06 MQTT 单实例；D-07 替换现有页面。
+
+---
+
+## v1.11.1 补充用户故事（结构展示增强，2026-06-27）
+
+> 本节为 v1.11.0 「我的房产」的修正增补，对应 `requirements_spec_v1.11.1_structure_enhancement.md`。
+> 修订了 US-OWNER-001 的部分验收标准（AC-2 需更新），并新增 US-OWNER-006。
+
+### US-OWNER-001 修订的验收标准（AC-2 supersede）
+
+**AC-2（v1.11.1 修订版，取代 v1.11.0 US-OWNER-001 AC-2）**
+
+**Given** 业主已进入结构展示页，看到专有部分列表
+
+**When** 业主点击某一专有部分（套）卡片的展开控件
+
+**Then**
+1. 页面立即渲染来自 `owner_structure_{specific_part}` 本地缓存（若存在）的完整房间骨架：所有已绑定房间（`device_room.room_name`，如"书房"、"儿童房"、"主卧"等）均显示，参数值行显示为占位符"—"或"采集中…"
+2. 若无结构缓存，显示"加载中…"，等待 `GET /api/miniapp/owner/structure/` 响应后渲染骨架
+3. 骨架渲染完成（无论来自缓存还是接口）后，**所有房间/面板均可见**，即使某些房间当前无 PLCLatestData 记录
+4. 同时后台异步请求 `GET /api/miniapp/owner/realtime-params/` 获取参数值，值返回后叠加到骨架（无需重绘骨架结构，仅更新参数值）
+5. 房间标题使用 `device_room.room_name`（如"书房"），而非 `sub_type_display`（如"书房温控"）
+
+---
+
+### US-OWNER-006：骨架-值两阶段渲染（新增）
+
+**来源**：REQ-FUNC-001（v1.11.1 修订版）、REQ-FUNC-006、REQ-FUNC-004（v1.11.1 修订版）
+
+**角色**：已绑定专有部分的业主
+
+**描述**：As a 业主，I want to 点击展开专有部分时立即看到所有房间和面板的完整列表（即使参数值还在加载），So that 我能确认"我的所有房间都在这里"，不会误以为某个房间丢失了。
+
+---
+
+**AC-1：缓存命中时的即时骨架渲染**
+
+**Given** 业主此前已经查看过该专有部分，本地存在 `owner_structure_{specific_part}` 的结构缓存
+
+**When** 业主点击展开该专有部分
+
+**Then** 100ms 内渲染完整房间骨架（所有 `device_room` 记录对应的房间均可见），参数值行显示占位符"—"；同时后台发起参数值请求；不出现"只有一个房间"或房间缺失的情况
+
+---
+
+**AC-2：无结构缓存时的完整骨架加载**
+
+**Given** 业主首次查看该专有部分，本地无结构缓存
+
+**When** 业主点击展开
+
+**Then** 展开区显示"加载中…"，系统请求 `GET /api/miniapp/owner/structure/?specific_part=X`；接口返回后，展示所有房间（以 `room_name` 为标题）及其设备行（参数值占位符"—"）；响应写入 `owner_structure_{specific_part}` 缓存；同时发起参数值请求
+
+---
+
+**AC-3：参数值异步叠加**
+
+**Given** 骨架已渲染（所有房间可见，值为"—"），后台参数值请求成功返回
+
+**When** `GET /api/miniapp/owner/realtime-params/` 响应到达
+
+**Then** 各参数行的"—"被替换为实际值（或"N/A"若后台返回 null）；骨架结构（房间列表、面板列表）不发生变化（无闪烁、无布局重绘）；有实时数据的参数显示真实值，无数据的仍显示"—"并标注 `is_stale` 样式
+
+---
+
+**AC-4：无实时数据的房间仍完整显示**
+
+**Given** 某个房间（如"书房"）下的所有设备当前在 PLCLatestData 中均无记录（如设备从未上报或超时未采集）
+
+**When** 页面加载或刷新
+
+**Then** "书房"房间卡片仍完整显示（不从列表中消失），其下参数行以"—"占位；其他有数据的房间正常显示实际值；不出现"书房"缺失导致用户误以为绑定异常的情况
+
+---
+
+**AC-5：真实房间名显示**
+
+**Given** `device_room.room_name` 字段有值（如"书房"、"儿童房"）
+
+**When** 页面展示房间标题
+
+**Then** 房间标题显示 `device_room.room_name`（"书房"），而非 `sub_type_display`（"书房温控"）或 sub_type key（"panel_study_room"）；若 `room_name` 为空，fallback 到 `ori_room_name`，再 fallback 到 `sub_type_display`
+
+---
+
+**AC-6：结构缓存优先、值缓存优先（两层缓存）**
+
+**Given** 业主重新进入页面，本地同时有 `owner_structure_{specific_part}` 和 `owner_realtime_{specific_part}` 缓存
+
+**When** 业主展开该专有部分
+
+**Then** 结构缓存立即渲染骨架（<100ms），同时将值缓存中的参数值叠加到骨架（< 200ms 完成两层渲染）；时间戳标签同时显示值缓存的时效（"更新于 N 分钟前"）；后台异步更新两层缓存
+
+---
+
+**AC-7：设备树未同步时的降级**
+
+**Given** 业主已绑定专有部分，但后端 `device_floor` 表中无该 specific_part 的记录（设备树尚未同步）
+
+**When** 调用 `GET /api/miniapp/owner/structure/?specific_part=X`
+
+**Then** 前端收到"设备树尚未同步"响应，展开区显示"您的房间结构尚未就绪，请等待设备初始化后刷新"提示；不显示空白卡片；提供"刷新"按钮

@@ -110,6 +110,23 @@ export const api = {
   //   → 400/403/503: 错误响应
   ownerOndemandRefresh: (specificPart) =>
     http.post('/api/miniapp/owner/ondemand-refresh/', { specific_part: specificPart }),
+
+  // v1.11.1 业主设备树结构骨架端点（MOD-1111-FE-02）
+  // IFC-1111-FE-02-1: getOwnerStructure
+  //   GET /api/miniapp/owner/structure/?specific_part={sp}
+  //   → 200 (sync_status="ok"):
+  //     { success, specific_part, sync_status, rooms, system_devices, device_sns }
+  //     rooms: [{room_id, room_name, ori_room_name,
+  //              devices:[{device_sn, device_name, sub_type, product_code,
+  //                        params:[{param_name, display_name}]}]}]
+  //     system_devices: [{device_sn, device_name, sub_type, product_code, params:[...]}]
+  //   → 200 (sync_status="pending"):
+  //     { success, specific_part, sync_status:"pending", sync_status_detail,
+  //       rooms:[], system_devices:[], device_sns:[] }
+  //   → 400: { success: false, error: "specific_part 参数为必填项" }
+  //   → 403: { detail: "无权访问该专有部分" }
+  getOwnerStructure: (specificPart) =>
+    http.get('/api/miniapp/owner/structure/', { specific_part: specificPart }),
 }
 
 export default api

@@ -1,22 +1,26 @@
 <!--
-  @module MOD-1110-FE-02
-  @implements IFC-1110-FE-02-1 (initOwnerHome), IFC-1110-FE-02-2 (toggleExpand),
+  @module MOD-1110-FE-02, MOD-1111-FE-01
+  @implements IFC-1110-FE-02-1 (initOwnerHome), IFC-1110-FE-02-2 (toggleExpand/v1.11.1),
               IFC-1110-FE-02-3 (loadRealtimeParams), IFC-1110-FE-02-4 (onRefresh),
               IFC-1110-FE-02-5 (runRefreshPathA), IFC-1110-FE-02-6 (runRefreshPathB),
               IFC-1110-FE-02-7 (writeCache), IFC-1110-FE-02-8 (readCache),
-              IFC-1110-FE-02-9 (goToSettings)
-  @depends MOD-1110-FE-01 (useMqttClient.js), MOD-1110-FE-03 (api.js 新增项)
+              IFC-1110-FE-02-9 (goToSettings),
+              IFC-1111-FE-01-1 (loadStructure), IFC-1111-FE-01-2 (writeStructureCache),
+              IFC-1111-FE-01-3 (readStructureCache), IFC-1111-FE-01-4 (getParamsForSubType),
+              IFC-1111-FE-01-5 (resolveRoomName), IFC-1111-FE-01-6 (connectRoom/v1.11.1)
+  @depends MOD-1110-FE-01 (useMqttClient.js), MOD-1111-FE-02 (api.js 新增 getOwnerStructure)
   @author sub_agent_software_developer
-  @description 业主端·我的房产（房间结构） + 参数设置（v1.11.0）一体页。
-    上区：我的房产 — 套卡片 → 展开 → 房间分组 → 参数 + 可写标注 + 刷新
-    下区：参数设置（原有写链路，零语义变更，通过 useMqttClient 单例迁移）
+  @description 业主端·我的房产（房间结构） + 参数设置（v1.11.0/v1.11.1）一体页。
+    上区：我的房产 — 套卡片 → 展开 → 两阶段渲染（骨架先行 + 值叠加）
+    下区：参数设置（原有写链路，零语义变更）
 
-    关键设计：
-    - ADR-1110-04: MQTT 单例由 useMqttClient 管理（acquire/release 引用计数）
-    - ADR-1110-06: 缓存读写同步（getStorageSync/setStorageSync）
-    - ADR-1110-07: 实时参数懒加载（展开时才请求）
-    - ADR-1110-05: 垂直二区布局，"去设置"用 pageScrollTo 到锚点 #param-settings-anchor
-    - DEV-01: 路径A超时仅提示，不自动降级路径B（用户已拍板）
+    v1.11.1 关键变更：
+    - ADR-1111-04: 两阶段渲染（结构骨架 Phase 1 + 值叠加 Phase 2）
+    - ADR-1111-05: 以 sub_type+param_name 为对齐键叠加参数值
+    - ADR-1111-06: connectRoom 改用 DB 全量 device_sns 发现，弃用 probeNeighbors
+    - 结构缓存 owner_structure_{sp} TTL 24h（pending 时前端逻辑缩为 5min）
+    - 值缓存 owner_realtime_{sp} TTL 5min（不变）
+    - probeNeighbors 保留代码，调用路径已注释 DEPRECATED
 -->
 <template>
   <view class="ps-page">
@@ -65,66 +69,124 @@
           </view>
         </view>
 
-        <!-- 展开内容 -->
+        <!-- 展开内容（v1.11.1 两阶段渲染：结构骨架 + 值叠加，ADR-1111-04）-->
         <view v-if="partState[part.specific_part] && partState[part.specific_part].expanded" class="part-expand">
 
-          <!-- 时间戳标签（REQ-FUNC-004）-->
+          <!-- 时间戳标签（REQ-FUNC-004，值层 TTL 5min）-->
           <text v-if="partState[part.specific_part].tsLabel" class="ts-label">
             {{ partState[part.specific_part].tsLabel }}
           </text>
 
-          <!-- 错误提示（路径A超时/刷新失败，DEV-01）-->
+          <!-- 刷新错误提示（路径A超时/刷新失败，DEV-01）-->
           <view v-if="partState[part.specific_part].refreshError" class="refresh-error-msg">
             <text>{{ partState[part.specific_part].refreshError }}</text>
           </view>
 
-          <!-- loading 状态（US-OWNER-004 AC-3）-->
-          <view v-if="partState[part.specific_part].loading" class="tip-loading">
+          <!-- Phase 1: 结构骨架加载中（无结构缓存，等待 structure 接口）-->
+          <view v-if="partState[part.specific_part].structureLoading" class="tip-loading">
             <text>加载中…</text>
           </view>
 
-          <!-- 参数分组（group → sub_type → params）-->
-          <view v-else-if="partState[part.specific_part].data">
-            <view
-              v-for="(group, gKey) in partState[part.specific_part].data"
-              :key="gKey"
-              class="group-block"
-            >
-              <view
-                v-for="(sub, sKey) in group.sub_types"
-                :key="sKey"
-                class="room-block"
-              >
-                <!-- 房间标题（panel_* = sub_type_display；系统级 = "全屋系统"）-->
-                <text class="room-title">{{ sub.display }}</text>
-                <view
-                  v-for="param in sub.params"
-                  :key="param.param_name"
-                  class="param-row"
-                >
-                  <text class="param-name">{{ param.display_name || param.param_name }}</text>
-                  <view class="param-right">
-                    <text class="param-value">{{ param.value != null ? param.value : '—' }}</text>
-                    <view v-if="isWritable(param.param_name)" class="param-badges">
-                      <text class="badge-writable">可设置</text>
-                      <view
-                        class="btn-go-settings"
-                        @tap.stop="goToSettings(part.specific_part)"
-                      >
-                        <text>去设置</text>
-                      </view>
-                    </view>
-                    <text v-else class="badge-readonly">只读</text>
-                  </view>
-                </view>
-              </view>
+          <!-- OQ-E5: 设备树未同步（sync_status="pending"）-->
+          <view
+            v-else-if="partState[part.specific_part].structure && partState[part.specific_part].structure.sync_status === 'pending'"
+            class="sync-pending"
+          >
+            <text class="sync-pending-text">您的房间结构尚未就绪，请等待设备初始化后刷新</text>
+            <view class="retry-btn" @tap.stop="loadStructure(part.specific_part, true)">
+              <text>刷新</text>
             </view>
           </view>
 
-          <!-- 无数据降级（REQ-FUNC-005）-->
-          <view v-else class="tip-error">
-            <text>{{ partState[part.specific_part].errorMsg || '获取设备数据失败，请点击重试' }}</text>
-            <view class="retry-btn" @tap.stop="onRefresh(part.specific_part)">
+          <!-- Phase 1 渲染完成：结构骨架（rooms + system_devices）-->
+          <view
+            v-else-if="partState[part.specific_part].structure && partState[part.specific_part].structure.rooms !== undefined"
+          >
+            <!-- 面板房间（按 device_room 真实房间名，OQ-E2）-->
+            <view
+              v-for="room in partState[part.specific_part].structure.rooms"
+              :key="room.room_id"
+              class="room-block"
+            >
+              <text class="room-title">{{ resolveRoomName(room) }}</text>
+              <view v-for="device in room.devices" :key="device.device_sn">
+                <!-- 骨架参数行（来自 DeviceConfig，OQ-1111-A Option A）+ 值叠加（ADR-1111-05）-->
+                <template v-if="device.params && device.params.length > 0">
+                  <view
+                    v-for="param in device.params"
+                    :key="param.param_name"
+                    class="param-row"
+                  >
+                    <text class="param-name">{{ param.display_name || param.param_name }}</text>
+                    <view class="param-right">
+                      <text class="param-value">
+                        {{ getOverlayValue(partState[part.specific_part].data, device.sub_type, param.param_name, partState[part.specific_part].loading) }}
+                      </text>
+                      <view v-if="isWritable(param.param_name)" class="param-badges">
+                        <text class="badge-writable">可设置</text>
+                        <view
+                          class="btn-go-settings"
+                          @tap.stop="goToSettings(part.specific_part)"
+                        >
+                          <text>去设置</text>
+                        </view>
+                      </view>
+                      <text v-else class="badge-readonly">只读</text>
+                    </view>
+                  </view>
+                </template>
+                <!-- 无参数定义时占位（sub_type 未知或 DeviceConfig 无记录）-->
+                <view v-else class="no-params-placeholder">
+                  <text>{{ partState[part.specific_part].loading ? '采集中…' : '暂无参数定义' }}</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 全屋系统分区（ADR-1111-03，OQ-E4：名称用 device_name）-->
+            <view
+              v-if="partState[part.specific_part].structure.system_devices && partState[part.specific_part].structure.system_devices.length > 0"
+              class="room-block system-block"
+            >
+              <text class="room-title">全屋系统</text>
+              <view
+                v-for="dev in partState[part.specific_part].structure.system_devices"
+                :key="dev.device_sn"
+              >
+                <text class="device-name-system">{{ dev.device_name }}</text>
+                <template v-if="dev.params && dev.params.length > 0">
+                  <view
+                    v-for="param in dev.params"
+                    :key="param.param_name"
+                    class="param-row"
+                  >
+                    <text class="param-name">{{ param.display_name || param.param_name }}</text>
+                    <view class="param-right">
+                      <text class="param-value">
+                        {{ getOverlayValue(partState[part.specific_part].data, dev.sub_type, param.param_name, partState[part.specific_part].loading) }}
+                      </text>
+                      <text class="badge-readonly">{{ isWritable(param.param_name) ? '可设置' : '只读' }}</text>
+                    </view>
+                  </view>
+                </template>
+                <view v-else class="no-params-placeholder">
+                  <text>{{ partState[part.specific_part].loading ? '采集中…' : '暂无参数定义' }}</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- rooms 和 system_devices 均为空（设备树同步但无设备）-->
+            <view
+              v-if="partState[part.specific_part].structure.rooms.length === 0 && (!partState[part.specific_part].structure.system_devices || partState[part.specific_part].structure.system_devices.length === 0)"
+              class="tip-loading"
+            >
+              <text>当前专有部分暂无设备信息</text>
+            </view>
+          </view>
+
+          <!-- 结构加载失败降级（REQ-FUNC-005）-->
+          <view v-else-if="!partState[part.specific_part].structureLoading" class="tip-error">
+            <text>{{ partState[part.specific_part].errorMsg || '获取设备结构失败，请点击重试' }}</text>
+            <view class="retry-btn" @tap.stop="loadStructure(part.specific_part, true)">
               <text>重试</text>
             </view>
           </view>
@@ -214,9 +276,10 @@
 
 <script setup>
 /**
- * @module MOD-1110-FE-02
- * @implements IFC-1110-FE-02-1 ~ IFC-1110-FE-02-9
- * @depends MOD-1110-FE-01 (useMqttClient), MOD-1110-FE-03 (api.js 新增项)
+ * @module MOD-1110-FE-02, MOD-1111-FE-01
+ * @implements IFC-1110-FE-02-1 ~ IFC-1110-FE-02-9 (v1.11.0)
+ *             IFC-1111-FE-01-1 ~ IFC-1111-FE-01-6 (v1.11.1 新增/改造)
+ * @depends MOD-1110-FE-01 (useMqttClient), MOD-1111-FE-02 (api.js getOwnerStructure)
  */
 import { ref, computed, reactive } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
@@ -355,6 +418,7 @@ async function connectRoom() {
   if (_offDeviceUpdate) { _offDeviceUpdate(); _offDeviceUpdate = null }
 
   const mac = room.screen_mac
+  const sp = room.specific_part   // v1.11.1: DB 全量 SN 发现需要 specific_part
 
   // 注册 DeviceStatusUpdate 回调（通过单例 composable，ADR-1110-04）
   _offDeviceUpdate = mqttClient.onDeviceUpdate((p) => {
@@ -367,7 +431,8 @@ async function connectRoom() {
     if (!knownSns.has(sn)) {
       knownSns.add(sn)
       persistSns(mac)
-      if (!firstProbeDone) { firstProbeDone = true; probeNeighbors(mac, p.deviceSn) }
+      // probeNeighbors DEPRECATED v1.11.1 — replaced by structure-cache DB discovery (ADR-1111-06)
+      // if (!firstProbeDone) { firstProbeDone = true; probeNeighbors(mac, p.deviceSn) }
     }
   })
 
@@ -377,13 +442,28 @@ async function connectRoom() {
     mqttClient.subscribe(mac)                               // IFC-1110-FE-01-3
     console.log('[param-settings] subscribed uplink for', mac)
 
-    // 主动拉取：缓存过的 deviceSn 立即读
-    const cached = loadSns(mac)
-    if (cached.length) {
-      cached.forEach(s => knownSns.add(s))
+    // ── v1.11.1: DB 全量 SN 发现（ADR-1111-06），替代 probeNeighbors ──────────────
+    // 优先级 1: partState[sp].device_sns（realtime-params 已返回）
+    // 优先级 2: owner_structure_{sp} 缓存的 device_sns（loadStructure 已写入）
+    // 优先级 3: ds_sns_{mac} 遗留缓存（v1.11.0 兼容，IFC-1110-FE-01-4 降级）
+    // 优先级 4: 空列表（不主动 publishRead，等待设备自发上报）
+    let allSns = []
+    if (partState[sp] && partState[sp].device_sns && partState[sp].device_sns.length > 0) {
+      allSns = partState[sp].device_sns.map(String)
+    } else {
+      const { data: structCache } = readStructureCache(sp)  // IFC-1111-FE-01-3
+      if (structCache && structCache.device_sns && structCache.device_sns.length > 0) {
+        allSns = structCache.device_sns.map(String)
+      } else {
+        allSns = loadSns(mac)  // 遗留缓存（v1.11.0 兼容 fallback）
+      }
+    }
+
+    if (allSns.length > 0) {
+      allSns.forEach(s => knownSns.add(s))
       firstProbeDone = true
-      mqttClient.publishRead(mac, cached)                   // IFC-1110-FE-01-4
-      console.log('[param-settings] active read cached sns:', cached.join(','))
+      mqttClient.publishRead(mac, allSns)                   // IFC-1110-FE-01-4
+      console.log('[param-settings] connectRoom DB-discovered sns:', allSns.join(','))
     }
   } catch (e) {
     console.error('[param-settings] connectRoom FAILED:', e && e.message)
@@ -533,16 +613,20 @@ function buildTsLabel(ts, suffix = '') {
 function _initPartState(specificPart) {
   if (!partState[specificPart]) {
     partState[specificPart] = {
+      // ── v1.11.0 字段（保持不变）──
       expanded: false,
-      loading: false,
+      loading: false,         // 值层 loading（realtime-params 请求）
       refreshing: false,
       refreshLockUntil: 0,
-      data: null,
+      data: null,             // realtime-params data 字段（值层）
       screen_mac: '',
-      device_sns: [],
+      device_sns: [],         // 来自 realtime-params 或结构端点
       tsLabel: '',
       errorMsg: null,
       refreshError: null,
+      // ── v1.11.1 新增：结构层（ADR-1111-04）──
+      structureLoading: false,  // 结构骨架 loading（structure 请求）
+      structure: null,          // 结构端点响应（来自缓存或接口）
     }
   }
 }
@@ -629,18 +713,158 @@ async function loadRealtimeParams(specificPart, forceRefresh = false) {
   }
 }
 
-// ── IFC-1110-FE-02-2: toggleExpand ──────────────────────────────────────────
+// ── IFC-1111-FE-01-2: writeStructureCache ───────────────────────────────────
+
+function writeStructureCache(specificPart, data) {
+  try {
+    const ttlMs = data && data.sync_status === 'pending' ? 5 * 60 * 1000 : 24 * 60 * 60 * 1000
+    uni.setStorageSync(`owner_structure_${specificPart}`, JSON.stringify(data))
+    uni.setStorageSync(`owner_structure_${specificPart}_ts`, new Date().toISOString())
+    // sync_status=pending 时在 localStorage 额外存 TTL 标记，供读取时判断是否过期
+    uni.setStorageSync(`owner_structure_${specificPart}_ttl`, ttlMs)
+  } catch (e) {
+    console.warn('[param-settings] writeStructureCache 失败:', e)
+  }
+}
+
+// ── IFC-1111-FE-01-3: readStructureCache ────────────────────────────────────
+
+function readStructureCache(specificPart) {
+  try {
+    const raw = uni.getStorageSync(`owner_structure_${specificPart}`)
+    const tsRaw = uni.getStorageSync(`owner_structure_${specificPart}_ts`)
+    const ttlMs = uni.getStorageSync(`owner_structure_${specificPart}_ttl`) || (24 * 60 * 60 * 1000)
+    const data = raw ? JSON.parse(raw) : null
+    const ts = tsRaw ? new Date(tsRaw) : null
+    // TTL 到期时（pending 5min / ok 24h）视为无效，强制重取
+    const expired = ts ? (Date.now() - ts.getTime() > ttlMs) : true
+    return { data: expired ? null : data, ts, rawData: data }
+  } catch (e) {
+    return { data: null, ts: null, rawData: null }
+  }
+}
+
+// ── IFC-1111-FE-01-1: loadStructure ─────────────────────────────────────────
+
+async function loadStructure(specificPart, forceRefresh = false) {
+  const ps = partState[specificPart]
+  if (!ps) return
+
+  // 步骤1：同步读结构缓存
+  const { data: cachedStructure } = readStructureCache(specificPart)
+
+  if (!forceRefresh && cachedStructure) {
+    // 缓存命中：直接渲染骨架（< 100ms，ADR-1111-04）
+    ps.structure = cachedStructure
+    ps.structureLoading = false
+    return
+  }
+
+  // 步骤2：缓存未命中或强制刷新 → 调结构接口
+  // FND-004 修复：网络错误指数退避自动重试（最多 3 次，间隔 0 / 0.5s / 1.5s），
+  // 弱网首次失败不再停留空白骨架；重试耗尽后回退过期缓存，再不行才提示手动刷新。
+  ps.structureLoading = true
+  const BACKOFF_MS = [0, 500, 1500]
+  for (let attempt = 0; attempt < BACKOFF_MS.length; attempt++) {
+    if (BACKOFF_MS[attempt] > 0) {
+      await new Promise(r => setTimeout(r, BACKOFF_MS[attempt]))
+    }
+    try {
+      const res = await api.getOwnerStructure(specificPart)
+      if (res && res.success !== false) {
+        ps.structure = res
+        ps.errorMsg = null
+        writeStructureCache(specificPart, res)  // IFC-1111-FE-01-2
+      } else {
+        // 业务失败（success:false，如 403/参数错误）非网络抖动，不重试
+        ps.errorMsg = (res && res.error) ? res.error : '获取设备结构失败，请点击重试'
+        ps.structure = null
+      }
+      ps.structureLoading = false
+      return
+    } catch (e) {
+      // 网络错误：未到最后一次则退避后重试
+      if (attempt < BACKOFF_MS.length - 1) continue
+      // 重试耗尽：降级用过期缓存（即使 TTL 超期，rawData 仍可显示）
+      const { rawData } = readStructureCache(specificPart)
+      if (rawData) {
+        ps.structure = rawData
+        ps.errorMsg = null
+      } else {
+        ps.errorMsg = '获取设备结构失败，请点击重试'
+        ps.structure = null
+      }
+      ps.structureLoading = false
+    }
+  }
+}
+
+// ── IFC-1111-FE-01-4: getParamsForSubType（realtime 值查找，ADR-1111-05）───
+
+/**
+ * 从 realtime-params data 中提取指定 sub_type 的参数列表。
+ * 扫描 data[groupKey].sub_types[subType].params，未找到返回 []。
+ */
+function getParamsForSubType(realtimeData, subType) {
+  if (!realtimeData || !subType) return []
+  for (const group of Object.values(realtimeData)) {
+    if (!group || !group.sub_types) continue
+    const subData = group.sub_types[subType]
+    if (subData && subData.params) return subData.params
+  }
+  return []
+}
+
+/**
+ * 叠加对齐：从 realtime data 中查找 subType+paramName 的值（ADR-1111-05）。
+ * 未找到返回占位符（加载中时显示"采集中…"，否则"—"）。
+ */
+function getOverlayValue(realtimeData, subType, paramName, isLoading) {
+  if (!realtimeData || !subType || !paramName) {
+    return isLoading ? '采集中…' : '—'
+  }
+  for (const group of Object.values(realtimeData)) {
+    if (!group || !group.sub_types) continue
+    const subData = group.sub_types[subType]
+    if (!subData || !subData.params) continue
+    const param = subData.params.find(p => p.param_name === paramName)
+    if (param && param.value != null) return param.value
+  }
+  return isLoading ? '采集中…' : '—'
+}
+
+// ── IFC-1111-FE-01-5: resolveRoomName（OQ-E2 fallback 链）─────────────────
+
+/**
+ * 房间名 fallback 链（OQ-E2，OQ-1111-C）：
+ *   room.room_name → room.ori_room_name → '未知房间'
+ */
+function resolveRoomName(room) {
+  return room.room_name || room.ori_room_name || '未知房间'
+}
+
+// ── IFC-1110-FE-02-2（v1.11.1 改造）: toggleExpand ──────────────────────────
 
 async function toggleExpand(specificPart) {
   _initPartState(specificPart)
   const ps = partState[specificPart]
   ps.expanded = !ps.expanded
 
-  if (ps.expanded) {
-    // 展开时执行缓存先行 + 后台刷新（ADR-1110-07）
-    await loadRealtimeParams(specificPart)
+  if (!ps.expanded) return  // 折叠：保留数据，下次展开立即渲染缓存
+
+  // Phase 1：结构骨架（串行，骨架就绪后才进入 Phase 2，ADR-1111-04）
+  await loadStructure(specificPart)   // IFC-1111-FE-01-1
+
+  // Phase 1.5：值缓存立即叠加（同步，骨架完成后立即执行）
+  const { data: cachedVal, ts: cachedVts } = readCache(specificPart)  // IFC-1110-FE-02-8
+  if (cachedVal) {
+    ps.data = cachedVal
+    ps.tsLabel = buildTsLabel(cachedVts)
+    ps.loading = false
   }
-  // 折叠时保留数据（不清空，下次展开立即渲染缓存）
+
+  // Phase 2：后台值更新（异步，不阻塞骨架渲染，ADR-1111-04）
+  loadRealtimeParams(specificPart)    // IFC-1110-FE-02-3（不 await）
 }
 
 // ── IFC-1110-FE-02-5: runRefreshPathA ───────────────────────────────────────
@@ -876,6 +1100,24 @@ onUnload(() => {
 .tip-error text { font-size: 26rpx; color: #666; }
 .retry-btn { margin-top: 16rpx; display: inline-block; padding: 10rpx 28rpx; background: #1a73e8; border-radius: 8rpx; }
 .retry-btn text { color: #fff; font-size: 24rpx; }
+
+/* ── v1.11.1 新增样式（两阶段渲染）─────────────────────────────────────── */
+/* 设备树未同步提示（OQ-E5）*/
+.sync-pending { text-align: center; padding: 24rpx 16rpx; }
+.sync-pending-text { font-size: 26rpx; color: #999; display: block; margin-bottom: 16rpx; }
+
+/* 全屋系统分区标题缩进与风格区分（ADR-1111-03）*/
+.system-block { margin-top: 8rpx; border-top: 2rpx dashed #e5e7eb; padding-top: 8rpx; }
+
+/* 系统级设备名称行（OQ-E4：显示 device_name）*/
+.device-name-system {
+  font-size: 24rpx; color: #888; display: block;
+  padding: 4rpx 0 2rpx; font-style: italic;
+}
+
+/* 无参数定义时占位（sub_type 未知或 DeviceConfig 无记录）*/
+.no-params-placeholder { padding: 8rpx 0; }
+.no-params-placeholder text { font-size: 24rpx; color: #bbb; }
 
 /* ── 区域二：参数设置（原有样式，零改动）────────────────────────────────── */
 .param-settings-section { display: flex; flex-direction: column; min-height: 60vh; }

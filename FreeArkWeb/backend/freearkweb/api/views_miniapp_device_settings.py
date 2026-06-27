@@ -1,5 +1,5 @@
 """
-api.views_miniapp_device_settings — 小程序业主端·屏端 MQTT 参数配置 API（v1.10.0/v1.11.0）
+api.views_miniapp_device_settings — 小程序业主端·屏端 MQTT 参数配置 API（v1.10.0/v1.11.0/v1.11.1）
 
 挂载于 /api/miniapp/device-settings/（urls_miniapp.py 注册）。
 架构：小程序**直连**厂端 MQTT broker 收发（DeviceWrite/DeviceStatusUpdate），
@@ -11,13 +11,18 @@ v1.11.0 新增（/api/miniapp/owner/）:
   GET  owner/realtime-params/    业主实时参数（IsOwnerUser + OwnerUserBinding 归属过滤）
   POST owner/ondemand-refresh/   业主 PLC 按需采集代理（IsOwnerUser + 归属过滤）
 
+v1.11.1 新增（/api/miniapp/owner/）:
+  GET  owner/structure/          业主设备树结构骨架（IsOwnerUser + 归属过滤，不含 PLCLatestData）
+                                 结构与实时数据完全解耦，REQ-FUNC-001-C 结构完整性保证。
+
 安全（ADR-01/06/07，OQ-10 全租户风险已书面接受）：
   - 两端点均 IsOwnerUser；config 只下发业主**自己**已绑定房间的 screenMac；
   - audit 校验 screen_mac 必须属于请求业主的 active 绑定，否则 403；
   - 越权写无法在后端拦截（直连），此为已接受残余风险。
 
-@module MOD-1100-BE, MOD-1110-BE-01, MOD-1110-BE-02
-@implements REQ-FUNC-001/004/007/008（v1.10.0）；REQ-FUNC-001/003（v1.11.0）；REQ-NFUNC-004
+@module MOD-1100-BE, MOD-1110-BE-01, MOD-1110-BE-02, MOD-1111-BE-01
+@implements REQ-FUNC-001/004/007/008（v1.10.0）；REQ-FUNC-001/003（v1.11.0）；
+            REQ-FUNC-001（v1.11.1修订版）/REQ-FUNC-001-C/REQ-FUNC-006；REQ-NFUNC-004
 """
 
 import logging
@@ -32,9 +37,13 @@ from rest_framework.response import Response
 from .models import (
     OwnerUserBinding, PLCWriteRecord,
     PLCLatestData, DeviceConfig, DeviceNode, OwnerInfo,
+    DeviceFloor, DeviceRoom,
 )
 from .screen_param_config import get_screen_param_config, is_writable_attr
-from .utils_room_filter import get_available_sub_types, get_allowed_param_names
+from .utils_room_filter import (
+    get_available_sub_types, get_allowed_param_names,
+    _match_panel_sub_types,  # ADR-1111-02: 面板 sub_type 推导（只读复用）
+)
 from .views import (
     IsOwnerUser, _ondemand_inflight, _ONDEMAND_INFLIGHT_TTL,
     _load_ondemand_broker_config,
@@ -414,3 +423,188 @@ def miniapp_owner_ondemand_refresh(request):
     # outcome == 'accepted' 或 'duplicate'，均返回 202
     return Response({'status': outcome, 'specific_part': specific_part},
                     status=status.HTTP_202_ACCEPTED)
+
+
+# ===========================================================================
+# v1.11.1 业主设备树结构骨架端点（IsOwnerUser + OwnerUserBinding 归属过滤）
+# 与实时数据完全解耦，不含任何 PLCLatestData 字段（REQ-FUNC-001-C）
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# MOD-1111-BE-01: miniapp_owner_structure
+# IFC-1111-BE-01: GET /api/miniapp/owner/structure/?specific_part=X
+# @depends: IsOwnerUser, OwnerUserBinding, DeviceFloor, DeviceRoom, DeviceNode,
+#           DeviceConfig, _match_panel_sub_types（utils_room_filter，只读）
+# ---------------------------------------------------------------------------
+
+# sub_type 推导常量（ADR-1111-02）
+# 来源：fault_consumer/constants.py SUB_TYPE_ROOM_FILTER 实测验证
+_PRODUCT_CODE_TO_SUB_TYPE: dict = {
+    '260001': 'main_thermostat',
+    '130004': 'fresh_air',
+    '270001': 'hydraulic_module',
+    '250001': 'energy_meter',
+    '100007': 'air_quality',
+}
+_PANEL_PRODUCT_CODE: str = '120003'
+
+
+def _infer_sub_type(product_code: str, ori_room_name: str) -> str:
+    """推导 DeviceNode → sub_type（ADR-1111-02）。
+
+    面板设备（product_code='120003'）：调用 _match_panel_sub_types([ori_room_name]) 取首个结果。
+    系统级设备：查 _PRODUCT_CODE_TO_SUB_TYPE 字典。
+    未知 product_code：返回空字符串（前端叠加时跳过，不影响骨架展示）。
+    """
+    if product_code == _PANEL_PRODUCT_CODE:
+        matched = _match_panel_sub_types([ori_room_name])
+        return next(iter(matched), '')
+    return _PRODUCT_CODE_TO_SUB_TYPE.get(product_code, '')
+
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_owner_structure(request):
+    """业主专属设备树结构骨架端点（v1.11.1，MOD-1111-BE-01）。
+
+    GET /api/miniapp/owner/structure/?specific_part=3-1-7-702
+
+    - 严格归属校验：specific_part 必须属于请求业主的 active 绑定（REQ-NFUNC-004）。
+    - 遍历 DeviceFloor → DeviceRoom → DeviceNode（prefetch_related，2 次 DB 往返）。
+    - sub_type 推导：ADR-1111-02（product_code 查表 / _match_panel_sub_types）。
+    - 分组：is_panel_room（_match_panel_sub_types 非空）→ rooms[]；其余 → system_devices[]（ADR-1111-03）。
+    - params_skeleton（OQ-1111-A 选 Option A）：批量查 DeviceConfig，为每个设备附 params 定义列表。
+    - 不含任何 PLCLatestData 字段（REQ-FUNC-001-C）。
+    - 设备树未同步（DeviceFloor 无记录）→ sync_status="pending" + 空数组（OQ-E5）。
+
+    Response 200:
+    {
+      "success": true,
+      "specific_part": str,
+      "sync_status": "ok" | "pending",
+      "sync_status_detail": str,     # sync_status="pending" 时填充
+      "rooms": [{room_id, room_name, ori_room_name,
+                 devices:[{device_sn, device_name, sub_type, product_code,
+                           params:[{param_name, display_name}]}]}],
+      "system_devices": [{device_sn, device_name, sub_type, product_code,
+                          params:[{param_name, display_name}]}],
+      "device_sns": [int],           # 所有设备 SN 扁平列表，供前端 connectRoom 使用
+    }
+    Response 400: {"success": false, "error": "specific_part 参数为必填项"}
+    Response 403: {"detail": "无权访问该专有部分"}
+    """
+    specific_part = request.GET.get('specific_part', '').strip()
+    if not specific_part:
+        return Response(
+            {'success': False, 'error': 'specific_part 参数为必填项'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ── 归属校验（REQ-NFUNC-004，与 miniapp_owner_realtime_params 范式一致）────
+    allowed_parts = {
+        b.owner.specific_part
+        for b in OwnerUserBinding.objects
+        .filter(user=request.user, active=True)
+        .select_related('owner')
+    }
+    if specific_part not in allowed_parts:
+        logger.warning(
+            'miniapp_owner_structure: 越权访问 specific_part=%s user=%s',
+            specific_part, request.user.username,
+        )
+        return Response({'detail': '无权访问该专有部分'}, status=status.HTTP_403_FORBIDDEN)
+
+    # ── 设备树遍历（prefetch_related，一次批量查询）────────────────────────────
+    floors = list(
+        DeviceFloor.objects
+        .filter(owner__specific_part=specific_part)
+        .prefetch_related('rooms__devices')
+        .select_related('owner')
+    )
+
+    sync_status = 'ok' if floors else 'pending'
+
+    rooms_list = []
+    system_devices = []
+    all_device_sns = []
+
+    # device_entries_by_sub_type：sub_type → 待附 params 的 entry 列表
+    # 用于批量填充 params_skeleton（OQ-1111-A Option A）
+    device_entries_by_sub_type: dict = {}
+    all_sub_types_seen: set = set()
+
+    for floor in floors:
+        for room in floor.rooms.all():
+            # 分组判定（ADR-1111-03）：_match_panel_sub_types 非空 → 面板房间
+            panel_sub_types = _match_panel_sub_types([room.ori_room_name])
+            is_panel_room = bool(panel_sub_types)
+
+            room_devices = []
+            for device in room.devices.all():
+                sub_type = _infer_sub_type(device.product_code, room.ori_room_name)
+                entry = {
+                    'device_sn': device.device_sn,
+                    'device_name': device.device_name,
+                    'sub_type': sub_type,
+                    'product_code': device.product_code,
+                    'params': [],  # 下方批量填充（OQ-1111-A）
+                }
+                all_device_sns.append(device.device_sn)
+                if sub_type:
+                    all_sub_types_seen.add(sub_type)
+                    device_entries_by_sub_type.setdefault(sub_type, []).append(entry)
+
+                if is_panel_room:
+                    room_devices.append(entry)
+                else:
+                    system_devices.append(entry)
+
+            if is_panel_room:
+                rooms_list.append({
+                    'room_id': room.id,
+                    'room_name': room.room_name or '',
+                    'ori_room_name': room.ori_room_name or '',
+                    'devices': room_devices,
+                })
+
+    # ── params_skeleton（OQ-1111-A Option A）────────────────────────────────
+    # 批量查 DeviceConfig，按 sub_type 分组后附到各 device entry。
+    # 不查 PLCLatestData，不含 value 字段——骨架仅含 param_name/display_name。
+    if all_sub_types_seen:
+        configs_qs = (
+            DeviceConfig.objects
+            .filter(sub_type__in=all_sub_types_seen, is_active=True)
+            .order_by('id')
+            .values('sub_type', 'param_name', 'display_name')
+        )
+        sub_type_params_map: dict = {}
+        for cfg in configs_qs:
+            sub_type_params_map.setdefault(cfg['sub_type'], []).append({
+                'param_name': cfg['param_name'],
+                'display_name': cfg['display_name'],
+            })
+
+        for sub_type, entries in device_entries_by_sub_type.items():
+            params = sub_type_params_map.get(sub_type, [])
+            for entry in entries:
+                entry['params'] = params
+
+    # ── 构造响应 ─────────────────────────────────────────────────────────────
+    resp: dict = {
+        'success': True,
+        'specific_part': specific_part,
+        'sync_status': sync_status,
+        'rooms': rooms_list,
+        'system_devices': system_devices,
+        'device_sns': all_device_sns,
+    }
+    if sync_status == 'pending':
+        resp['sync_status_detail'] = '设备树尚未同步，请稍后刷新'
+
+    logger.info(
+        'miniapp_owner_structure: user=%s specific_part=%s sync_status=%s '
+        'rooms=%d system_devices=%d device_sns=%d',
+        request.user.username, specific_part, sync_status,
+        len(rooms_list), len(system_devices), len(all_device_sns),
+    )
+    return Response(resp)
