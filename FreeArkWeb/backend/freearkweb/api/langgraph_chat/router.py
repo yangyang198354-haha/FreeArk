@@ -29,33 +29,15 @@ from typing import List, Optional
 
 logger = logging.getLogger("api.langgraph_chat.router")
 
-# 合法专家集合（分类结果只接受这三者之一）。
-EXPERT_NAMES = ("energy-expert", "inspection-expert", "sanheng-knowledge")
+# P2-2：专家元数据收敛到 experts 注册表（单一真源）。以下常量从注册表**派生**——
+# 保留原符号名作别名，引用/测试零改动；关键词选词原则等说明已随数据迁入 experts.py。
+# （experts 模块 langchain-free，本模块"顶层禁 langchain"约束不破。）
+from . import experts as _experts
 
-DEFAULT_EXPERT = "energy-expert"
-
-# ── 关键词路由（阶段 A 保留：LLM 不可用时的确定性兜底 + 离线单测基准）──────────
-# energy-expert 兼"操控"：除能耗读词外，含 Tier-2 写/控制类动作词（set_device_params /
-# trigger_refresh 归 energy）。控制词（2026-06-14 补）选**动作性强、与知识问题低撞车**者：
-# 收 刷新/采集/下发/触发/设定；**不收** 控制/调节（"三恒怎么控制温度的原理"是知识问题，
-# 收了会让护栏把这类纯知识问题误改派到 energy）。
-ROUTE_KEYWORDS = {
-    "energy-expert": ("能耗", "用电", "用量", "电费", "看板", "节能", "kwh",
-                      "刷新", "采集", "下发", "触发", "设定"),
-    "inspection-expert": ("故障", "巡检", "plc", "离线", "在线", "传感器", "报警"),
-    # sanheng-knowledge = 知识库/RAG 专家：除三恒原理概念外，亦覆盖设备说明书/技术文档类
-    # 问题（接口标准、型号、接线、尺寸图、说明书等）——这些答案在 RAG 知识库里，须路由到
-    # 唯一持有 search_sanheng_knowledge 工具的本专家。词选**与数据域低撞车**者，避免误把
-    # 数据查询(能耗/故障)拽进来；故不收"参数/数据"等泛词（与 energy 实时参数查询易冲突）。
-    "sanheng-knowledge": ("三恒", "恒温", "恒湿", "恒氧", "原理", "为什么",
-                          "接口", "型号", "说明书", "接线", "图纸", "尺寸",
-                          "热量表", "计量表", "主控箱", "手操器", "新风机",
-                          "modbus", "485", "毛细管"),
-}
-
-
-# 数据域专家（持有查询/写工具）；sanheng-knowledge 无工具、纯知识问答。
-DATA_EXPERTS = ("energy-expert", "inspection-expert")
+EXPERT_NAMES = _experts.names()             # 合法专家集合（分类结果只接受其中之一）
+DEFAULT_EXPERT = _experts.default_expert()  # 零信号兜底默认专家
+ROUTE_KEYWORDS = _experts.keywords_map()    # 关键词路由命中词（确定性兜底 + P0-1 短路基准）
+DATA_EXPERTS = _experts.data_experts()      # 数据域专家（持查询/写工具）；sanheng 无工具纯知识
 
 # 从含历史前缀 + [__freeark_user__:..] 标签的整块里抽「当前问题」（最后一个标签之后）。
 # 护栏关键词只匹配当前问题，避免历史里的数据词误触发、把正当的 sanheng 路由改掉。

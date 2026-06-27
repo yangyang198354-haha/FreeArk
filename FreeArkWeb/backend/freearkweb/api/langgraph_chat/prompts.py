@@ -32,7 +32,10 @@ from pathlib import Path
 
 logger = logging.getLogger("api.langgraph_chat.prompts")
 
-_EXPERTS = ("energy-expert", "inspection-expert", "sanheng-knowledge")
+# P2-2：专家清单 + 内置兜底提示从 experts 注册表派生（单一真源）。
+from . import experts as _experts
+
+_EXPERTS = _experts.names()
 
 # 提示文件优先级：LangGraph 运行时版 > OpenClaw 版。
 _PROMPT_FILENAMES = ("SYSTEM_PROMPT.langgraph.md", "SYSTEM_PROMPT.md")
@@ -44,12 +47,8 @@ _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 def _strip_comments(text: str) -> str:
     return _HTML_COMMENT_RE.sub("", text).strip()
 
-# 内置兜底（PoC 精简版）。生产装载成功后会被覆盖。
-_FALLBACK_PROMPTS = {
-    "energy-expert": "你是 FreeArk 能耗分析专家，基于用电/看板数据给出节能与异常判断。",
-    "inspection-expert": "你是 FreeArk 巡检诊断专家，结合 PLC 状态与故障汇总定位设备问题。",
-    "sanheng-knowledge": "你是三恒系统知识专家，依据恒温恒湿恒氧原理回答原理性问题。",
-}
+# 内置兜底（PoC 精简版）。生产装载成功后会被覆盖。源自 experts 注册表（P2-2）。
+_FALLBACK_PROMPTS = _experts.fallback_prompts()
 
 
 def _agents_dir() -> Path:

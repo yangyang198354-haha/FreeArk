@@ -65,7 +65,9 @@ from .router import (_current_query, _keyword_hits, build_capability_digest,
 # 递归）：knowledge/read 内联跑只读子专家、结果回灌发起方继续推理；write 转为
 # pending_write 走**现有 _gate interrupt 确认门**（复用，不另起确认路径）。
 # 对应 inspection-expert SYSTEM_PROMPT 的 delegations 契约。
-DELEGATING_EXPERTS = ("inspection-expert",)
+# P2-2：可委托专家清单从 experts 注册表派生（单一真源）。
+from .experts import delegating_experts as _delegating_experts
+DELEGATING_EXPERTS = _delegating_experts()
 MAX_EXPERT_STEPS = 8  # 单专家 ReAct + 委托链步数上限（防失控循环）
 
 # P1-2：域外/闲聊通用应答节点的系统提示。用于路由判定「不属任何专家」的寒暄/自我介绍/

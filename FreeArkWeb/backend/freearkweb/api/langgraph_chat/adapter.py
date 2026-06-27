@@ -48,11 +48,9 @@ INTERNAL_NOSTREAM_TAG = "fa_internal_nostream"
 # 思考过程（折叠框）展示用：专家内部 id → 面向用户的中文标签。阶段(b) 编排步骤进度。
 # 仅用于 reasoning 流（可折叠的"思考过程"），绝不进入正式答复——答复保持第一人称、
 # 不暴露内部分工（见 PR#46 orchestrator._aggregate 的"严禁提及专家/路由"约束）。
-_EXPERT_CN = {
-    "energy-expert": "能耗分析",
-    "inspection-expert": "巡检诊断",
-    "sanheng-knowledge": "三恒知识",
-}
+# P2-2：中文标签从 experts 注册表派生（单一真源）。
+from . import experts as _experts
+_EXPERT_CN = _experts.cn_map()
 
 
 def _expert_cn(name: str) -> str:

@@ -337,6 +337,52 @@ class RouterShortCircuitTargetTests(SimpleTestCase):
 
 
 @tag('unit')
+class ExpertRegistryTests(SimpleTestCase):
+    """P2-2：专家注册表 = 单一真源。golden 值锁定 + 各模块派生常量与注册表一致。"""
+
+    def test_registry_golden_values(self):
+        from api.langgraph_chat import experts as E
+        self.assertEqual(E.names(),
+                         ("energy-expert", "inspection-expert", "sanheng-knowledge"))
+        self.assertEqual(E.default_expert(), "energy-expert")
+        self.assertEqual(E.data_experts(), ("energy-expert", "inspection-expert"))
+        self.assertEqual(E.delegating_experts(), ("inspection-expert",))
+        self.assertEqual(E.cn_map(), {
+            "energy-expert": "能耗分析",
+            "inspection-expert": "巡检诊断",
+            "sanheng-knowledge": "三恒知识",
+        })
+        self.assertEqual(E.keywords_map()["inspection-expert"],
+                         ("故障", "巡检", "plc", "离线", "在线", "传感器", "报警"))
+        self.assertEqual(E.keywords_map()["energy-expert"][:3], ("能耗", "用电", "用量"))
+        self.assertIn("能耗分析专家", E.fallback_prompts()["energy-expert"])
+        # 恰好一个默认专家
+        self.assertEqual(sum(1 for s in E.EXPERT_SPECS if s.is_default), 1)
+
+    def test_router_and_prompts_derived_from_registry(self):
+        from api.langgraph_chat import experts as E
+        from api.langgraph_chat import router as R
+        from api.langgraph_chat import prompts as P
+        self.assertEqual(R.EXPERT_NAMES, E.names())
+        self.assertEqual(R.DEFAULT_EXPERT, E.default_expert())
+        self.assertEqual(R.ROUTE_KEYWORDS, E.keywords_map())
+        self.assertEqual(R.DATA_EXPERTS, E.data_experts())
+        self.assertEqual(P._EXPERTS, E.names())
+        self.assertEqual(P._FALLBACK_PROMPTS, E.fallback_prompts())
+
+    @unittest.skipUnless(LANGGRAPH_AVAILABLE, "需 langgraph/langchain-core")
+    def test_langgraph_consumers_match_registry(self):
+        from api.langgraph_chat import experts as E
+        import api.langgraph_chat.adapter as ad
+        import api.langgraph_chat.orchestrator as orch_mod
+        from api.langgraph_chat.fa_tools import TOOLS_BY_EXPERT
+        self.assertEqual(ad._EXPERT_CN, E.cn_map())
+        self.assertEqual(orch_mod.DELEGATING_EXPERTS, E.delegating_experts())
+        # 工具表的专家集合必须与注册表一致（防加专家漏挂工具 / 反之）
+        self.assertEqual(set(TOOLS_BY_EXPERT.keys()), set(E.names()))
+
+
+@tag('unit')
 class CapabilityDigestTests(SimpleTestCase):
     """P2-1：build_capability_digest 据工具表派生能力摘要（纯函数，不依赖 langchain）。"""
 
