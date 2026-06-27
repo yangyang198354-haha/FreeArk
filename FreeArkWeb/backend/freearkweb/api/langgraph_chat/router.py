@@ -82,6 +82,26 @@ def route_experts(text: str) -> List[str]:
     return _keyword_hits(text) or [DEFAULT_EXPERT]
 
 
+def keyword_shortcircuit_target(text: str) -> Optional[str]:
+    """P0-1 关键词短路判定：当前问题**唯一且无撞车**地命中某专家关键词时返回该专家，
+    否则 None（→ 应交 LLM 分类器）。
+
+    判据来自 routing_eval 评测（2026-06-27，见 routing_eval/README.md）：唯一关键词命中
+    的用例，关键词路由与真实 LLM 路由都 100% 命中——这些查询可跳过 LLM 分类器省 ~2s/条、
+    零精度损失。0 命中（需语义判断，如无关键词的知识/巡检问题）或 ≥2 命中（撞车/复合，
+    交 LLM 决断）一律**不**短路。
+
+    只看当前问题（剥历史前缀），与 classify_experts 的路由口径一致。纯函数、离线可测。
+    实际短路在 orchestrator._route 执行（受 settings.LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT
+    开关控制）；classify_experts 不变，故护栏/兜底测试与本短路解耦。
+
+    残留风险：含数据关键词的纯知识问题（如「故障率怎么定义」命中"故障"）会被短路到数据
+    专家。关键词表已刻意规避（如不收"控制/调节"）；如生产暴露新例，加入 routing_eval 数据集
+    并按需收窄，或置开关为 False 一键回退恒走 LLM。"""
+    hits = _keyword_hits(_current_query(text))
+    return hits[0] if len(hits) == 1 else None
+
+
 # ── LLM 分类器（阶段 D）──────────────────────────────────────────────────────
 ROUTER_SYSTEM_PROMPT = (
     "你是 FreeArk（自由方舟）智能客服的意图路由器。根据用户问题，判断应由哪些专家处理。\n"

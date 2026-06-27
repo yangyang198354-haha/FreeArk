@@ -53,7 +53,7 @@ from .adapter import INTERNAL_NOSTREAM_TAG
 from .fa_tools import (TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write,
                        get_last_search_images, prepare_search_images_sink)
 from .prompts import EXPERT_PROMPTS
-from .router import classify_experts
+from .router import classify_experts, keyword_shortcircuit_target
 
 
 # ── 阶段 G：跨 agent 子委托（expert→expert）─────────────────────────────
@@ -350,8 +350,12 @@ def _make_router_llm(main_llm, latency: float | None = None):
 class Orchestrator:
     def __init__(self, latency: float | None = None,
                  delegating_experts: tuple[str, ...] = DELEGATING_EXPERTS):
+        from django.conf import settings
         self.llm = _make_llm(latency)
         self.router_llm = _make_router_llm(self.llm, latency)
+        # P0-1 关键词短路开关（默认 True；置 False 恒走 LLM 分类器）。
+        self.keyword_shortcircuit = getattr(
+            settings, "LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT", True)
         self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
@@ -362,6 +366,12 @@ class Orchestrator:
             if isinstance(m, HumanMessage):
                 text = (m.content or "")
                 break
+        # P0-1：唯一无撞车关键词命中 → 直接用之、跳过 LLM 分类器（省 ~2s，零精度损失，
+        # 依据见 routing_eval）。0/≥2 命中（需语义判断 / 撞车 / 复合）仍交 classify_experts。
+        if self.keyword_shortcircuit:
+            target = keyword_shortcircuit_target(text)
+            if target is not None:
+                return {"plan": [(target, text)]}
         chosen = await classify_experts(self.router_llm, text)
         plan = [(name, text) for name in chosen]
         return {"plan": plan}

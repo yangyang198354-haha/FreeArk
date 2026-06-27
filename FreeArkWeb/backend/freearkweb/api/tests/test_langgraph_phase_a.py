@@ -296,6 +296,46 @@ class RouterClassifierTests(SimpleTestCase):
         self.assertEqual(out, ["energy-expert"])
 
 
+@tag('unit')
+class RouterShortCircuitTargetTests(SimpleTestCase):
+    """P0-1：keyword_shortcircuit_target 纯函数——唯一无撞车关键词命中才短路。
+    纯关键词逻辑，不依赖 langgraph。"""
+
+    def _t(self, text):
+        from api.langgraph_chat.router import keyword_shortcircuit_target
+        return keyword_shortcircuit_target(text)
+
+    def test_single_hit_energy(self):
+        self.assertEqual(self._t("查一下用电量"), "energy-expert")
+
+    def test_single_hit_inspection(self):
+        self.assertEqual(self._t("现在有哪些设备故障"), "inspection-expert")
+
+    def test_single_hit_sanheng(self):
+        self.assertEqual(self._t("三恒的恒氧原理是什么"), "sanheng-knowledge")
+
+    def test_control_keyword_single_hit_energy(self):
+        self.assertEqual(self._t("把702的温度设定到24度"), "energy-expert")
+
+    def test_zero_hit_returns_none(self):
+        # 无任何关键词 → 需 LLM 语义判断，不短路
+        self.assertIsNone(self._t("看一下设备运行状况"))
+        self.assertIsNone(self._t("你好啊"))
+
+    def test_collision_two_hits_returns_none(self):
+        # "在线率"含"在线"(inspection) + "能耗"(energy) 撞车 → 不短路，交 LLM
+        self.assertIsNone(self._t("当前系统总能耗和在线率是多少"))
+
+    def test_composite_returns_none(self):
+        self.assertIsNone(self._t("对比能耗看板与 PLC 故障巡检"))
+
+    def test_uses_current_query_strips_history(self):
+        # 历史里全是数据词，当前问题是纯知识 → 只看当前问题 → sanheng 单命中
+        text = ("[历史记忆开始]\n用户: 能耗和故障\n助手: ...\n[历史记忆结束]\n"
+                "[__freeark_user__:u] 三恒恒湿的原理是什么")
+        self.assertEqual(self._t(text), "sanheng-knowledge")
+
+
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 A 离线测试")
 @tag('unit')
 class ChatBackendFactoryTests(SimpleTestCase):
@@ -348,6 +388,52 @@ class OrchestratorRoutingTests(SimpleTestCase):
         # 并行与串行命中的专家集合必须一致（仅并发度不同）
         self.assertEqual(set(parallel["experts"]), set(serial["experts"]))
         self.assertEqual(len(parallel["experts"]), 3)
+
+
+@unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
+@override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
+@tag('unit')
+class OrchestratorShortCircuitTests(SimpleTestCase):
+    """P0-1：_route 在唯一关键词命中时短路、跳过 classify_experts（LLM 分类器）。"""
+
+    def _route(self, orch, text):
+        from langchain_core.messages import HumanMessage
+        return async_to_sync(orch._route)({"messages": [HumanMessage(content=text)]})
+
+    def test_shortcircuit_skips_classifier(self):
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        self.assertTrue(orch.keyword_shortcircuit)  # 默认开
+        with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
+                        new=mock.AsyncMock(return_value=["sanheng-knowledge"])) as mc:
+            out = self._route(orch, "查一下用电量")
+        self.assertEqual(out["plan"], [("energy-expert", "查一下用电量")])
+        mc.assert_not_called()   # 短路：未调 LLM 分类器
+
+    def test_disabled_falls_through_to_classifier(self):
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        orch.keyword_shortcircuit = False
+        with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
+                        new=mock.AsyncMock(return_value=["sanheng-knowledge"])) as mc:
+            out = self._route(orch, "查一下用电量")
+        # 关掉短路 → 用分类器结果（此处 mock 成 sanheng）而非关键词 energy
+        self.assertEqual(out["plan"], [("sanheng-knowledge", "查一下用电量")])
+        mc.assert_awaited_once()
+
+    def test_no_shortcircuit_on_composite_calls_classifier(self):
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
+                        new=mock.AsyncMock(
+                            return_value=["energy-expert", "inspection-expert"])) as mc:
+            out = self._route(orch, "对比能耗和设备故障")
+        self.assertEqual({n for n, _ in out["plan"]},
+                         {"energy-expert", "inspection-expert"})
+        mc.assert_awaited_once()   # ≥2 命中不短路 → 走分类器
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")

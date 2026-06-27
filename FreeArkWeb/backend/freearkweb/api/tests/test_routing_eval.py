@@ -22,7 +22,8 @@ os.environ.setdefault("FREEARK_POC_MOCK", "1")
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, tag
 
-from api.langgraph_chat.router import classify_experts
+from api.langgraph_chat.router import (
+    classify_experts, keyword_shortcircuit_target)
 from api.langgraph_chat.routing_eval.harness import (
     VALID_CATEGORIES, evaluate, format_report, load_dataset)
 
@@ -71,3 +72,23 @@ class RoutingEvalDatasetTests(SimpleTestCase):
                          format_report(result, mode="offline"))
         # 报告可渲染（不抛错）
         self.assertIn("路由评测报告", format_report(result, mode="offline"))
+
+    def test_shortcircuit_zero_regression_invariant(self):
+        """P0-1 零精度损失不变式：凡短路触发（keyword_shortcircuit_target 非 None）的用例，
+        其结果 [target] 必精确等于 expected，且该用例必为 keyword_floor=true。
+
+        这把「短路只在它一定对的地方触发」钉成回归门——P0-1 安全的核心保证。"""
+        violations = []
+        fired = 0
+        for c in self.cases:
+            target = keyword_shortcircuit_target(c.query)
+            if target is None:
+                continue
+            fired += 1
+            if [target] != c.expected:
+                violations.append(f"[{c.id}] 短路→{target} 但 expected={c.expected}")
+            if not c.keyword_floor:
+                violations.append(f"[{c.id}] 短路触发却 keyword_floor=false")
+        self.assertEqual(violations, [],
+                         "P0-1 短路零精度损失不变式被破坏：\n" + "\n".join(violations))
+        self.assertGreater(fired, 0, "无任何短路触发，数据集异常")

@@ -24,7 +24,7 @@ from typing import Callable, Iterable, List, Optional
 
 # 合法专家集合与 category 取值（dataset 校验用）。
 # 从 router 复用 EXPERT_NAMES，避免两处漂移；router 顶层 langchain-free，import 安全。
-from ..router import EXPERT_NAMES
+from ..router import EXPERT_NAMES, keyword_shortcircuit_target
 
 VALID_CATEGORIES = (
     "knowledge",      # 三恒原理/说明书/技术文档 → sanheng-knowledge
@@ -143,6 +143,9 @@ def evaluate(classifier: Callable[[str], Iterable[str]],
         if not exact:
             mismatches.append(results[-1])
 
+    # P0-1：短路可达 = 唯一无撞车关键词命中（这些查询将跳过 LLM 分类器）。
+    sc_reachable = sum(1 for c in cases if keyword_shortcircuit_target(c.query) is not None)
+
     total = len(cases)
     exact_count = sum(1 for r in results if r.exact)
     precision = tp / (tp + fp) if (tp + fp) else 1.0
@@ -160,6 +163,7 @@ def evaluate(classifier: Callable[[str], Iterable[str]],
         "by_category": by_cat,
         "keyword_floor_total": floor_total,
         "keyword_floor_failures": floor_failures,
+        "shortcircuit_reachable": sc_reachable,
         "mismatches": mismatches,
         "results": results,
     }
@@ -181,6 +185,10 @@ def format_report(result: dict, mode: str = "offline", show_mismatches: bool = T
                  f"准确率 {acc:.1%}")
     lines.append(f"micro 标签       : P={m['precision']:.1%}  R={m['recall']:.1%}  "
                  f"F1={m['f1']:.1%}  (tp={m['tp']} fp={m['fp']} fn={m['fn']})")
+    sc = result.get("shortcircuit_reachable", 0)
+    lines.append(f"P0-1 短路可达    : {sc}/{result['total']} = {sc / result['total']:.1%}"
+                 if result['total'] else "P0-1 短路可达    : 0")
+    lines.append("  （这些查询唯一命中关键词，将跳过 LLM 分类器省 ~2s/条）")
     lines.append("")
     lines.append("--- 分类别准确率 ---")
     for cat, b in sorted(result["by_category"].items()):

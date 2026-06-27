@@ -84,6 +84,21 @@ python manage.py test api.tests.test_routing_eval --settings=freearkweb.test_set
 且**无撞车**时才短路、否则走 LLM"是**零精度损失**的——可为约 30 条单意图查询省 ~2s/条而不牺牲
 任何已知用例。这正是 P0-1 缺的量化依据。
 
+## P0-1 关键词短路（已实现，2026-06-27）
+
+`orchestrator._route` 在**唯一无撞车关键词命中**时直接采用关键词结果、**跳过 LLM 分类器**
+（省 ~2s/条）。判定函数 `router.keyword_shortcircuit_target(text)`：当前问题恰好命中 1 个专家
+关键词 → 返回该专家；0 命中（需语义判断）或 ≥2 命中（撞车/复合）→ None（交 LLM）。
+
+- **开关**：`settings.LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT`（env 同名，默认 `True`）。置 `False`
+  一键回退「恒走 LLM 分类器」。`classify_experts`/护栏/兜底链均不变，与短路解耦。
+- **零精度损失保证**：`test_routing_eval.test_shortcircuit_zero_regression_invariant` 钉死——凡短路
+  触发的用例，`[target]` 必等于 `expected` 且必为 `keyword_floor=true`。即短路只在"它一定对"处触发。
+- **覆盖率**：本数据集 38 条中 **27 条（71.1%）短路可达**（评测报告"P0-1 短路可达"行）。这 27 条
+  在离线与 live 下结果一致且全对，故短路省下的是纯延迟、不动正确性。
+- **残留风险**：含数据关键词的纯知识问题（如"故障率怎么定义"命中"故障"）会被短路到数据专家。
+  关键词表已刻意规避（不收"控制/调节"等）；如生产暴露新例 → 加入本数据集并按需收窄，或关开关。
+
 ## 如何增长
 
 1. 新事故/新意图 → 在 `dataset.jsonl` 追加一行（保持一行一对象）。

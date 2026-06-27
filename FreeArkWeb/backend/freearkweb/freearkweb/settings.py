@@ -403,6 +403,11 @@ LANGGRAPH_ROUTER_MODEL = os.environ.get('LANGGRAPH_ROUTER_MODEL', '')
 DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
 DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
 LANGGRAPH_LLM_TIMEOUT = int(os.environ.get('LANGGRAPH_LLM_TIMEOUT', '60'))
+# P0-1：路由关键词短路。唯一无撞车关键词命中时，orchestrator._route 直接用关键词结果、
+# 跳过 LLM 分类器（省 ~2s/条；零精度损失，依据见 api/langgraph_chat/routing_eval）。
+# 置 'False' 一键回退到「恒走 LLM 分类器」。0 命中或 ≥2 命中（撞车/复合）仍走 LLM。
+LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT = os.environ.get(
+    'LANGGRAPH_ROUTER_KEYWORD_SHORTCIRCUIT', 'True') == 'True'
 # freeark-skill / agents 目录定位（默认仓内相对路径；Pi 上可经 env 指向真实路径）
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')
