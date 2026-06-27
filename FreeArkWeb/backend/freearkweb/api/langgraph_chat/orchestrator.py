@@ -40,6 +40,7 @@ import asyncio
 import datetime
 import operator
 import re
+import threading
 from typing import Annotated, List, Optional, Tuple, TypedDict
 
 from langchain_core.messages import (
@@ -53,7 +54,7 @@ from .adapter import INTERNAL_NOSTREAM_TAG
 from .fa_tools import (TOOLS_BY_EXPERT, WRITE_TOOL_NAMES, execute_write,
                        get_last_search_images, prepare_search_images_sink)
 from .prompts import EXPERT_PROMPTS
-from .router import (_current_query, classify_experts,
+from .router import (_current_query, _keyword_hits, classify_experts,
                      keyword_shortcircuit_target, previous_turn_expert)
 
 
@@ -384,6 +385,12 @@ class Orchestrator:
             self._semantic_router = SemanticRouter(
                 tau=getattr(settings, "LANGGRAPH_ROUTER_SEM_TAU", 0.65),
                 margin=getattr(settings, "LANGGRAPH_ROUTER_SEM_MARGIN", 0.05))
+            # 后台预热范例向量：首次 route 触发的话约 50s（35 范例×逐条远端 embed），
+            # 会拖垮首个用户请求。启动时后台线程预热，不阻塞构造。fake 模式（测试/CI）跳过
+            # （无真实 embedding 端点，且避免测试里起网络线程）。
+            if not getattr(settings, "LANGGRAPH_USE_FAKE_LLM", False):
+                threading.Thread(target=self._semantic_router._ensure_loaded,
+                                 daemon=True, name="semantic-exemplar-warm").start()
         self.delegating_experts = set(delegating_experts)
         self.graph = self._build()
 
@@ -400,12 +407,16 @@ class Orchestrator:
             target = keyword_shortcircuit_target(text)
             if target is not None:
                 return {"plan": [(target, text)]}
-        # P1-1：语义高置信短路（关键词够不着时）。命中单专家 → 跳过 LLM；
-        # 未命中 / fail-open → 穿透到下方 LLM 分类器。只看当前问题（剥历史）。
+        # P1-1：语义高置信短路——**仅当当前问题零关键词信号**时（关键词够不着的盲点）。
+        # 关键词命中 1 个已被上方 P0-1 短路；命中 ≥2 个=复合意图，必须交 LLM 做多专家
+        # fan-out（语义层只产单专家，会丢掉其余领域——Phase-2 灰度实测 "对比能耗和故障"
+        # 被误短路为单 inspection 的教训）。命中单专家 → 跳过 LLM；未命中/fail-open → 穿透。
         if self._semantic_router is not None:
-            sem = await self._semantic_router.route(_current_query(text))
-            if sem is not None:
-                return {"plan": [(sem, text)]}
+            cq = _current_query(text)
+            if not _keyword_hits(cq):   # 零关键词才语义短路；≥2 命中(复合)直落 LLM
+                sem = await self._semantic_router.route(cq)
+                if sem is not None:
+                    return {"plan": [(sem, text)]}
         # P0-2：算出上一轮专家作粘性兜底信号（仅当前问题零信号时被 classify_experts 采用）。
         sticky = previous_turn_expert(text) if self.sticky_routing else None
         chosen = await classify_experts(self.router_llm, text, sticky_hint=sticky,

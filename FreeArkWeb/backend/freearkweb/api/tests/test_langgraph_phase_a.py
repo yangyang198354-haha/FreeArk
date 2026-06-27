@@ -732,6 +732,23 @@ class OrchestratorSemanticTests(SimpleTestCase):
         self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
         orch._semantic_router.route.assert_not_called()
 
+    @override_settings(LANGGRAPH_ROUTER_SEMANTIC=True)
+    def test_semantic_skipped_on_composite_keywords(self):
+        # Phase-2 灰度教训：复合关键词（能耗+故障）绝不可被语义短路成单专家，必须交 LLM。
+        from unittest import mock
+        from api.langgraph_chat.orchestrator import Orchestrator
+        orch = Orchestrator(latency=0.0)
+        orch._semantic_router.route = mock.AsyncMock(return_value="inspection-expert")
+        with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
+                        new=mock.AsyncMock(
+                            return_value=["energy-expert", "inspection-expert"])) as mc:
+            out = self._route(orch, "对比能耗和设备故障")  # ≥2 关键词命中=复合
+        # 语义被跳过（≥2 关键词），交 LLM 多专家
+        orch._semantic_router.route.assert_not_called()
+        mc.assert_awaited_once()
+        self.assertEqual({n for n, _ in out["plan"]},
+                         {"energy-expert", "inspection-expert"})
+
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
 @override_settings(LANGGRAPH_USE_FAKE_LLM=True, CHAT_BACKEND="langgraph")
