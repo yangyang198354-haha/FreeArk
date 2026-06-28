@@ -761,6 +761,14 @@ class MiniAppChatConsumer(ChatConsumer):
         self.user_scope = await sync_to_async(build_user_scope)(user)
 
         await self.accept()
+        # 与父类 ChatConsumer.connect() 对齐：accept() 后必须发送 connected 帧，
+        # 前端凭此帧（而非 onOpen）才把 wsConnected 置真、解禁输入框。
+        # 此前本覆盖漏发该帧，导致小程序聊天输入框永久灰显、无法输入（见 BUG 修复）。
+        await self.send(json.dumps({
+            'type': 'connected',
+            'session_id': self.session_key,
+            'session_key': self.session_key,
+        }))
         logger.info(
             'MiniAppChatConsumer: 连接接受 user=%s role=%s bound_parts=%s',
             user.username,

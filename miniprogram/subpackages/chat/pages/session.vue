@@ -134,9 +134,13 @@ function initWs() {
       if (last) last.confirmActions = actions
     },
     onError(err) {
+      // 连接异常也要复位 connecting，否则断连横幅(v-if=!wsConnected && !connecting)永不显示
+      connecting.value = false
       uni.showToast({ title: err.message || '发生错误', icon: 'none' })
     },
     onClose(code) {
+      // 复位 connecting，让"连接已断开，点击重连"横幅能正常出现
+      connecting.value = false
       chatStore.setConnected(false, null, null)
       if (code === 4001) {
         // Auth failure — force re-login
