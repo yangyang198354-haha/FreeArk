@@ -321,6 +321,21 @@ const hasDevices = computed(() => Object.keys(devices).length > 0)
 const deviceList = computed(() => {
   const wa = config.value.writable_attrs || {}
   const roleMap = config.value.product_code_role || {}
+
+  // v1.11.3: 构建 deviceSn → 房间名 Map（ADR-1113-01 Option B，REQ-FUNC-001/003/004）
+  // deviceList 在此读取 partState[currentSp].structure，Vue3 reactive 自动追踪依赖（ADR-1113-03）
+  const currentSp = currentRoom.value?.specific_part
+  const structure = currentSp ? partState[currentSp]?.structure : null
+  const roomNameMap = new Map()
+  if (structure?.rooms) {
+    for (const room of structure.rooms) {
+      const name = resolveRoomName(room)
+      for (const device of (room.devices || [])) {
+        roomNameMap.set(String(device.device_sn), name)  // String() 归一化（REQ-FUNC-003）
+      }
+    }
+  }
+
   return Object.keys(devices).sort().map((sn) => {
     const d = devices[sn]
     const writable = Object.keys(d.attrs)
@@ -341,7 +356,8 @@ const deviceList = computed(() => {
     return {
       deviceSn: sn,
       productCode: d.productCode,
-      role: roleMap[d.productCode] || `设备 ${d.productCode || ''}`,
+      // 三层优先级（REQ-FUNC-001/002）：房间名 → roleMap → 兜底
+      role: roomNameMap.get(sn) ?? roleMap[d.productCode] ?? `设备 ${d.productCode || ''}`,
       writable,
     }
   }).filter(d => d.writable.length > 0)
@@ -469,6 +485,10 @@ async function connectRoom() {
     console.error('[param-settings] connectRoom FAILED:', e && e.message)
     uni.showToast({ title: '设备通道连接失败：' + (e && e.message || ''), icon: 'none' })
   }
+
+  // v1.11.3: 主动加载 structure，确保 deviceList 房间名映射就绪（REQ-FUNC-005，ADR-1113-02）
+  _initPartState(sp)      // 防御性确保 partState[sp] 存在（_initPartState 是幂等函数）
+  loadStructure(sp)       // 缓存命中时同步赋值，缓存未命中时异步更新（不 await，不阻塞 MQTT）
 }
 
 // deviceSn 缓存（按 screenMac）+ 邻近探测
