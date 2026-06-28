@@ -1,5 +1,5 @@
 """
-api.views_miniapp_device_settings — 小程序业主端·屏端 MQTT 参数配置 API（v1.10.0/v1.11.0/v1.11.1）
+api.views_miniapp_device_settings — 小程序业主端·屏端 MQTT 参数配置 API（v1.10.0/v1.11.0/v1.11.1/v1.11.2）
 
 挂载于 /api/miniapp/device-settings/（urls_miniapp.py 注册）。
 架构：小程序**直连**厂端 MQTT broker 收发（DeviceWrite/DeviceStatusUpdate），
@@ -15,14 +15,22 @@ v1.11.1 新增（/api/miniapp/owner/）:
   GET  owner/structure/          业主设备树结构骨架（IsOwnerUser + 归属过滤，不含 PLCLatestData）
                                  结构与实时数据完全解耦，REQ-FUNC-001-C 结构完整性保证。
 
+v1.11.2 变更：
+  GET  owner/realtime-params/ — 新增 PANEL_DISPLAY_MAP，对 panel_* sub_type 的 display
+       字段覆写为纯房间名（书房/次卧/主卧/儿童房），去除"-温控面板"后缀。
+       系统级 sub_type（main_thermostat 等）通过 fallback 保持 DB 原值。
+       不修改 DB 字段 sub_type_display，Web 端视图路径天然不受影响。
+       @implements REQ-FUNC-001/002（v1.11.2）；REQ-NFUNC-001/002/003/004
+
 安全（ADR-01/06/07，OQ-10 全租户风险已书面接受）：
   - 两端点均 IsOwnerUser；config 只下发业主**自己**已绑定房间的 screenMac；
   - audit 校验 screen_mac 必须属于请求业主的 active 绑定，否则 403；
   - 越权写无法在后端拦截（直连），此为已接受残余风险。
 
-@module MOD-1100-BE, MOD-1110-BE-01, MOD-1110-BE-02, MOD-1111-BE-01
+@module MOD-1100-BE, MOD-1110-BE-01, MOD-1110-BE-02, MOD-1111-BE-01, MOD-1120-BE
 @implements REQ-FUNC-001/004/007/008（v1.10.0）；REQ-FUNC-001/003（v1.11.0）；
-            REQ-FUNC-001（v1.11.1修订版）/REQ-FUNC-001-C/REQ-FUNC-006；REQ-NFUNC-004
+            REQ-FUNC-001（v1.11.1修订版）/REQ-FUNC-001-C/REQ-FUNC-006；REQ-NFUNC-004；
+            REQ-FUNC-001/002（v1.11.2）；REQ-NFUNC-001/002/003/004（v1.11.2）
 """
 
 import logging
@@ -53,6 +61,18 @@ logger = logging.getLogger('api.views_miniapp_device_settings')
 
 # 客户端上报的结果 → PLCWriteRecord.status（复用既有 choices，迁移仅加 channel）
 _RESULT_TO_STATUS = {'success': 'success', 'timeout': 'timeout', 'failed': 'failed'}
+
+# 小程序端温控面板 sub_type → 纯房间名（不含"-温控面板"后缀）
+# 来源：utils_room_filter.py SUB_TYPE_TO_ROOM_KEYWORDS 注释 +
+#        Web RoomHistoryView.vue ROOM_TABS 对照（study_room→书房 / bedroom→次卧 / children_room→主卧）
+# ⚠ 注意：panel_bedroom → 次卧（非主卧），panel_children_room → 主卧（非儿童房）
+#   此反直觉映射已由业务方最终确认（REQ-FUNC-002 关键陷阱，v1.11.2 2026-06-28）
+PANEL_DISPLAY_MAP: dict[str, str] = {
+    'panel_study_room':      '书房',
+    'panel_bedroom':         '次卧',   # ⚠ 非"主卧"
+    'panel_children_room':   '主卧',   # ⚠ 非"儿童房"
+    'panel_fourth_children': '儿童房',
+}
 
 
 def _owner_rooms(user):
@@ -256,7 +276,7 @@ def miniapp_owner_realtime_params(request):
             result[group_key] = {'display': cfg.group_display, 'sub_types': {}}
         if sub_key not in result[group_key]['sub_types']:
             result[group_key]['sub_types'][sub_key] = {
-                'display': cfg.sub_type_display,
+                'display': PANEL_DISPLAY_MAP.get(sub_key, cfg.sub_type_display),
                 'params': [],
             }
 
