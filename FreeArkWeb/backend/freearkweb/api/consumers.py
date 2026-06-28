@@ -793,15 +793,22 @@ class MiniAppChatConsumer(ChatConsumer):
         upload_ids=None/user_id=None；签名形参 upload_ids 仅用于与父类 receive() 的调用约定
         对齐（v1.9.0 多图后父类以 upload_ids= 关键字调用），以备未来扩展。
         """
-        # 注入 chatuser 前缀（与父类一致）
-        try:
-            history = await sync_to_async(
-                chat_memory.load_history_by_session
-            )(self.session_key)
-            inject_prefix = chat_memory.build_inject_prefix(history)
-        except Exception as exc:
-            logger.warning('MiniAppChatConsumer: load_history_by_session 失败，以空历史继续: %s', exc)
-            inject_prefix = ''
+        # 确保会话已创建（须先于历史加载：load_history_by_session 需 ChatSession 对象，
+        # 且恢复已有会话时 _ensure_session_created 会查询并复用，填充 self.chat_session）。
+        await self._ensure_session_created(user_message)
+
+        # 加载本会话历史并构建注入前缀（与父类一致：按 session 对象查询）。
+        # 此前误传 self.session_key 字符串 → filter(session=<str>) 必失败、被吞 → 注入前缀恒空，
+        # 多轮对话 AI 丢失上下文记忆。改为按 self.chat_session 对象查询。
+        inject_prefix = ''
+        if self.chat_session is not None:
+            try:
+                history = await sync_to_async(
+                    chat_memory.load_history_by_session
+                )(self.chat_session)
+                inject_prefix = chat_memory.build_inject_prefix(history)
+            except Exception as exc:
+                logger.warning('MiniAppChatConsumer: load_history_by_session 失败，以空历史继续: %s', exc)
 
         chat_user = getattr(self.user, 'username', 'unknown')
         augmented_message = (
@@ -809,8 +816,15 @@ class MiniAppChatConsumer(ChatConsumer):
             f"[__freeark_user__:{chat_user}] {user_message}"
         )
 
-        # 确保会话已创建
-        await self._ensure_session_created(user_message)
+        # 写入用户消息记录（纯文字；小程序业主端不支持图文，无 upload_ids 分支）。
+        # 此前本覆盖完全漏写 user 消息 → 会话历史缺用户侧、/history/ 只见 AI 回复。
+        if self.chat_session is not None:
+            try:
+                await sync_to_async(chat_memory.append_message)(
+                    self.chat_session, 'user', user_message,
+                )
+            except Exception as exc:
+                logger.error('MiniAppChatConsumer: append_message(user) 失败: %s', exc)
 
         try:
             adapter = get_chat_adapter()
@@ -829,11 +843,19 @@ class MiniAppChatConsumer(ChatConsumer):
                 self._confirm_accumulated = accumulated_content
                 return
 
-            # 持久化 assistant 消息
-            if self._session_created and accumulated_content:
+            # 发送 stream_end —— 与父类 _finalize_turn 对齐（本覆盖此前漏发该帧）。
+            # 前端凭此帧把 assistant 占位气泡 streaming 置否、解禁底部输入框；
+            # 缺帧会导致小程序首轮回复后 isStreaming 恒真、输入框永久无法编辑。
+            # 注：小程序业主端不支持图文（upload_id 恒为 None），故无 related_images 字段；
+            # 且 connect() 覆盖未初始化 self._related_images，此处不得引用它。
+            await self.send(json.dumps({'type': 'stream_end'}))
+
+            # 持久化 assistant 消息（按 session 对象写入，与父类 _finalize_turn 一致）。
+            # 此前误传 self.session_key 字符串 → append 必失败、仅靠 disconnect 的 _pending 兜底补写。
+            if self.chat_session is not None and accumulated_content:
                 try:
                     await sync_to_async(chat_memory.append_message)(
-                        self.session_key, 'assistant', accumulated_content)
+                        self.chat_session, 'assistant', accumulated_content)
                     self._pending_assistant_content = ''
                 except Exception as exc:
                     self._pending_assistant_content = accumulated_content
