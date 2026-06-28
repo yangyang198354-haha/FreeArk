@@ -62,15 +62,31 @@ class MQTTClient:
         
         # 连接状态
         self.connected = False
-        
+
         # 用户定义的回调函数
         self.message_callback: Optional[Callable[[str, Dict], None]] = None
+
+        # 已注册订阅 [(topic, qos), ...]，用于断线重连后自动恢复订阅。
+        # paho 默认 clean_session=True：断线重连不保留任何订阅，broker 端不再投递，
+        # 而 socket 仍 ESTAB、_on_connect 仍报成功 → 订阅端"静默失聪"。
+        # （2026-06-27 broker 中断后 PLCWriteSubscriber 即因此漏收全部写命令，
+        #  写操作永久卡 pending、设备无动作。）
+        self._subscriptions: list = []
     
     def _on_connect(self, client, userdata, flags, rc):
         """连接回调函数"""
         if rc == 0:
             self.connected = True
             logger.info(f"✅ 成功连接到MQTT服务器: {self.host}:{self.port}")
+            # 重连后恢复订阅（修复 clean_session 重连丢订阅导致的静默失聪）。
+            # 首次连接时 _subscriptions 尚为空（订阅在 connect 返回后由 subscribe() 注册），
+            # 此处不重复下发；其后任何自动重连都会在这里重新订阅全部 topic。
+            for topic, qos in list(self._subscriptions):
+                try:
+                    self.client.subscribe(topic, qos=qos)
+                    logger.info(f"🔄 重连后恢复订阅: {topic} (QoS: {qos})")
+                except Exception as e:
+                    logger.error(f"❌ 重连后恢复订阅失败: {topic} - {e}")
         else:
             self.connected = False
             logger.error(f"❌ 连接MQTT服务器失败，返回代码: {rc}")
@@ -181,15 +197,20 @@ class MQTTClient:
         返回:
         - 是否订阅成功
         """
+        # 先登记订阅，使断线重连后 _on_connect 能自动恢复（即便此刻未连接，
+        # 连接建立时也会补订阅）。
+        if not any(t == topic for t, _ in self._subscriptions):
+            self._subscriptions.append((topic, qos))
+
+        # 设置用户定义的回调函数（即使当前未连接也先保存，重连后沿用）
+        if callback:
+            self.message_callback = callback
+
         if not self.connected:
-            logger.info(f"❌ 订阅主题失败: 未连接到MQTT服务器")
+            logger.info(f"❌ 订阅主题失败: 未连接到MQTT服务器（已登记，连接后自动订阅）")
             return False
-        
+
         try:
-            # 设置用户定义的回调函数（如果提供）
-            if callback:
-                self.message_callback = callback
-            
             # 订阅主题
             result, mid = self.client.subscribe(topic, qos=qos)
             

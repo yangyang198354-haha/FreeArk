@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import threading
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -48,16 +49,28 @@ class PLCWriteSubscriber:
         logger.info('PLCWriteSubscriber 线程已启动')
 
     def _run(self):
-        self._client = MQTTClient(
-            host=self._broker,
-            port=self._port,
-            client_id=f'plc-write-sub-{os.getpid()}',
-        )
-        if not self._client.connect():
-            logger.error('PLCWriteSubscriber: 无法连接到 MQTT broker %s:%s', self._broker, self._port)
-            return
+        # 连接重试：初次连不上不再让线程直接 return 而永久死掉（历史教训：
+        # broker 启动时刻不可用 → 线程退出 → 写命令订阅彻底缺失、写操作永久 pending）。
+        # 连上后 paho loop_start 维持自动重连，叠加 MQTTClient._on_connect 的订阅恢复，
+        # 之后任何 broker 中断都能自愈，无需重启服务。
+        while True:
+            self._client = MQTTClient(
+                host=self._broker,
+                port=self._port,
+                client_id=f'plc-write-sub-{os.getpid()}',
+            )
+            if self._client.connect():
+                break
+            logger.error('PLCWriteSubscriber: 无法连接到 MQTT broker %s:%s，10s 后重试',
+                         self._broker, self._port)
+            try:
+                self._client.disconnect()  # 停掉失败实例的 loop 线程，避免泄漏
+            except Exception:
+                pass
+            time.sleep(10)
         self._client.subscribe(COMMAND_TOPIC, qos=1, callback=self._on_command)
-        logger.info('PLCWriteSubscriber 已订阅 %s', COMMAND_TOPIC)
+        logger.info('PLCWriteSubscriber 已连接并订阅 %s (broker=%s:%s)',
+                    COMMAND_TOPIC, self._broker, self._port)
         # v0.4.3 Bug D: MQTTClient.connect() 内部已经 loop_start() 启动后台 paho 线程。
         # 再调用 loop_forever() 会触发"双 loop"冲突（paho _thread is not None 时立即返回/raise），
         # 导致 _on_message 回调无法触发，订阅消息全部丢失。
