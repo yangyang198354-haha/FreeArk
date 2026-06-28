@@ -115,7 +115,9 @@ onShow(() => {
 })
 
 function openSession(session) {
-  const key = session.session_key || session.key
+  // 列表接口的 session_key 是截断显示值（8 位 + '...'，见后端 get_sessions）；
+  // 恢复会话必须用完整 UUID session_key_full，否则取历史 404 且会话续接到错误的 key。
+  const key = session.session_key_full || session.session_key || session.key
   uni.navigateTo({
     url: `/subpackages/chat/pages/session?session_key=${key}`,
   })

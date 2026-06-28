@@ -107,8 +107,10 @@ function initWs() {
       // Only here — NOT in onOpen — do we mark the connection live
       chatStore.setConnected(true, sessionKey, sessionId)
       connecting.value = false
-      // Load history if resuming an existing session
-      if (sessionKey) {
+      // Load history only when resuming an existing session (opened with a session_key param).
+      // A brand-new session gets a freshly-generated session_key from the backend that has no
+      // DB row yet (ADR-001: connect 不落库，首条消息才建 session)，对它取历史必然 404。
+      if (sessionKeyParam.value) {
         loadHistory(sessionKey)
       }
     },
