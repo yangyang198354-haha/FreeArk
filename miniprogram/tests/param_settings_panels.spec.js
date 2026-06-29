@@ -14,6 +14,7 @@ import {
   panelHasControls,
   formatValue,
   buildDetailRows,
+  buildCard,
 } from '../utils/paramPanels.js'
 
 // 模拟后端 config.writable_attrs（与 screen_param_config.py 对齐）
@@ -28,12 +29,25 @@ const WA = {
   wind_speed: { control: 'select', label: '风速', options: [{ value: 'normal', label: '普通' }, { value: 'high_speed', label: '高速' }] },
   humidification_enable: { control: 'toggle', label: '加湿', options: [{ value: 'off', label: '关' }, { value: 'on', label: '开' }] },
 }
-// 模拟后端 config.readonly_attrs（屏端自描述「只读」展示白名单）
+// 模拟后端 config.readonly_attrs（屏端自描述「只读」展示白名单，含各卡片版面引用的 tag）
 const RA = {
   temp: { label: '当前温度', unit: '℃' },
   humidity: { label: '当前湿度', unit: '%' },
+  dew_point_temp: { label: '露点温度', unit: '℃' },
+  NTC_temp: { label: '探头温度(NTC)', unit: '℃' },
   condensation_alarm: { label: '结露报警', options: [{ value: '0', label: '正常' }, { value: '1', label: '报警' }] },
+  '2nd_inwater_temp_detect': { label: '二次进水温度', unit: '℃' },
+  '2nd_outwater_temp_detect': { label: '二次出水温度', unit: '℃' },
+  primary_valve_opening: { label: '一次阀开度', unit: '%' },
+  fan_speed: { label: '风机转速', unit: 'rpm' },
+  pau_out_temp: { label: '送风温度', unit: '℃' },
+  filter_working_time: { label: '滤网已运行', unit: 'h' },
+  total_cold_quantity: { label: '累计冷量' },
+  total_hot_quantity: { label: '累计热量' },
   co2: { label: 'CO₂', unit: 'ppm' },
+  pm25: { label: 'PM2.5', unit: 'µg/m³' },
+  hcho: { label: '甲醛', unit: 'mg/m³' },
+  tvoc: { label: 'TVOC', unit: 'mg/m³' },
 }
 const CONFIG = { writable_attrs: WA, readonly_attrs: RA, product_code_role: { 250001: '能量计', 100007: '空气质量' } }
 
@@ -284,5 +298,79 @@ describe('buildDetailRows', () => {
 
   it('值为空串的项不渲染', () => {
     expect(buildDetailRows({ temp: '' }, WA, RA).length).toBe(0)
+  })
+})
+
+// ── buildCard：米家风卡片视图模型 ────────────────────────────────────────────
+// 工具：用 buildControls 造真实控件，组一个面板设备
+function panelDev(sn, pc) {
+  return { deviceSn: String(sn), productCode: pc, controls: buildControls({ product_code: pc, params: [] }, WA), allParams: [] }
+}
+
+describe('buildCard', () => {
+  it('客厅(260001)：switch 抽为头部开关、temp_set 为卡面控件、temp 大字、humidity/露点小字、NTC_temp 进查看全部', () => {
+    const panel = { id: 'sys-260001', title: '客厅', devices: [panelDev(2222, '260001')] }
+    const attrs = { 2222: { switch: 'off', temp: '24.5', humidity: '55.0', temp_set: '26.0', NTC_temp: '24.5', comm_fault_timeout: 'normal', error_1: '0' } }
+    const card = buildCard(panel, attrs, CONFIG)
+    expect(card.icon).toBe('🌡')
+    expect(card.switchCtl.w.tag).toBe('switch')
+    expect(card.controls.map((c) => c.w.tag)).toEqual(['temp_set'])
+    expect(card.big.map((m) => m.tag)).toEqual(['temp'])
+    expect(card.big[0].value).toBe('24.5℃')
+    expect(card.small.map((m) => m.tag)).toEqual(['humidity', 'dew_point_temp'])
+    expect(card.small.find((m) => m.tag === 'humidity').value).toBe('55.0%') // 原值拼单位，不做小数裁剪
+    expect(card.small.find((m) => m.tag === 'dew_point_temp').value).toBe('—') // 无值占位
+    expect(card.rest.map((r) => r.tag)).toEqual(['NTC_temp']) // comm_fault/error 被过滤
+  })
+
+  it('主机(270001)：system_switch 头部、mode(dots) 排首位、能源供应/阀开度进查看全部', () => {
+    const panel = { id: 'sys-270001', title: '主机', devices: [panelDev(9001, '270001')] }
+    const attrs = { 9001: {
+      system_switch: 'on', mode: 'cold', energy_saving_sign: 'off', energy_supply_mode: 'cold',
+      '2nd_inwater_temp_detect': '15.5', '2nd_outwater_temp_detect': '22.8', primary_valve_opening: '0.3', comm_fault_timeout: 'normal',
+    } }
+    const card = buildCard(panel, attrs, CONFIG)
+    expect(card.icon).toBe('🔥')
+    expect(card.switchCtl.w.tag).toBe('system_switch')
+    expect(card.controls.map((c) => c.w.tag)).toEqual(['mode', 'energy_saving_sign']) // primaryTags 把 mode 排首
+    expect(card.controls[0].w.control).toBe('dots')
+    expect(card.small.map((m) => m.tag)).toEqual(['2nd_inwater_temp_detect', '2nd_outwater_temp_detect'])
+    expect(card.small[0].value).toBe('15.5℃')
+    expect(card.rest.map((r) => r.tag)).toEqual(['energy_supply_mode', 'primary_valve_opening'])
+  })
+
+  it('空气品质(100007)：无开关无控件，co2/pm25/hcho/tvoc 进网格', () => {
+    const panel = { id: 'sys-extra-100007', title: '空气质量', devices: [panelDev(7002, '100007')] }
+    const attrs = { 7002: { co2: '606', pm25: '0', hcho: '0.000', tvoc: '0.000', comm_fault_timeout: 'normal', error_265: '0' } }
+    const card = buildCard(panel, attrs, CONFIG)
+    expect(card.icon).toBe('🌫️')
+    expect(card.switchCtl).toBeNull()
+    expect(card.controls).toEqual([])
+    expect(card.grid.map((m) => m.tag)).toEqual(['co2', 'pm25', 'hcho', 'tvoc'])
+    expect(card.grid.find((m) => m.tag === 'co2').value).toBe('606ppm')
+    expect(card.rest).toEqual([]) // 网格已展示 + 诊断过滤
+  })
+
+  it('新风合并卡(130004+10016)：控件来自 10016（风速/加湿），小字来自 130004（送风/滤网），无头部开关', () => {
+    const panel = { id: 'sys-130004-10016', title: '新风', devices: [panelDev(9002, '130004'), panelDev(9005, '10016')] }
+    const attrs = {
+      9002: { fan_speed: '1674', pau_out_temp: '15.4', filter_working_time: '653', out_temp_set: '13.0', comm_fault_timeout: 'normal' },
+      9005: { wind_speed: 'normal', humidification_enable: 'off' },
+    }
+    const card = buildCard(panel, attrs, CONFIG)
+    expect(card.icon).toBe('💨')
+    expect(card.switchCtl).toBeNull() // 10016 无 system_switch 控件 → 不出头部开关
+    expect(card.controls.map((c) => c.w.tag)).toEqual(['wind_speed', 'humidification_enable'])
+    expect(card.small.map((m) => m.tag)).toEqual(['pau_out_temp', 'filter_working_time'])
+    expect(card.small.find((m) => m.tag === 'pau_out_temp').value).toBe('15.4℃')
+    // out_temp_set/fan_speed 未在卡面突出 → 进查看全部
+    expect(card.rest.map((r) => r.tag)).toEqual(['out_temp_set', 'fan_speed'])
+  })
+
+  it('风速 select 控件携带 options 供分段 chips 渲染', () => {
+    const panel = { id: 'sys-130004-10016', title: '新风', devices: [panelDev(9005, '10016')] }
+    const ws = buildCard(panel, { 9005: {} }, CONFIG).controls.find((c) => c.w.tag === 'wind_speed')
+    expect(ws.w.control).toBe('select')
+    expect(ws.w.options.map((o) => o.value)).toEqual(['normal', 'high_speed'])
   })
 })

@@ -219,3 +219,101 @@ export function buildDetailRows(attrs, writableAttrs, readonlyAttrs) {
   pushFrom(readonlyAttrs, false)
   return rows
 }
+
+// ── v1.13.0 卡片流（米家风）：每个面板渲染为一张设备卡 ────────────────────────
+// 按 product_code 定义卡片版面：图标 / 头部主开关 / 卡面突出的只读指标（大字+小字+网格）。
+// 卡面的「可写控件」直接取设备 controls（buildControls 产物），故此处不重复列控件 tag——
+// 只声明 primaryTags 用来把最常用控件排到最前。其余写法（点选即生效/写确认）零变更。
+export const CARD_LAYOUT = {
+  '270001': { icon: '🔥', switchTag: 'system_switch', primaryTags: ['mode'],
+    bigTags: [], smallTags: ['2nd_inwater_temp_detect', '2nd_outwater_temp_detect'], gridTags: [] },
+  '130004': { icon: '💨', switchTag: null, primaryTags: [],
+    bigTags: [], smallTags: ['pau_out_temp', 'filter_working_time'], gridTags: [] },
+  '10016':  { icon: '💨', switchTag: 'system_switch', primaryTags: ['wind_speed', 'humidification_enable'],
+    bigTags: [], smallTags: [], gridTags: [] },
+  '260001': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
+    bigTags: ['temp'], smallTags: ['humidity', 'dew_point_temp'], gridTags: [] },
+  '120003': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
+    bigTags: ['temp'], smallTags: ['humidity', 'dew_point_temp'], gridTags: [] },
+  '250001': { icon: '📊', switchTag: null, primaryTags: [],
+    bigTags: ['total_cold_quantity', 'total_hot_quantity'], smallTags: [], gridTags: [] },
+  '100007': { icon: '🌫️', switchTag: null, primaryTags: [],
+    bigTags: [], smallTags: [], gridTags: ['co2', 'pm25', 'hcho', 'tvoc'] },
+}
+const DEFAULT_LAYOUT = { icon: '📋', switchTag: null, primaryTags: [], bigTags: [], smallTags: [], gridTags: [] }
+
+function layoutFor(productCode) {
+  return CARD_LAYOUT[String(productCode == null ? '' : productCode)] || DEFAULT_LAYOUT
+}
+
+function defOf(tag, config) {
+  const wa = (config && config.writable_attrs) || {}
+  const ra = (config && config.readonly_attrs) || {}
+  return wa[tag] || ra[tag] || null
+}
+
+/** 单个突出指标视图：{tag,label,value}；无值显示 '—'（保持版面稳定，值通常 ~1s 内到达）。 */
+function metricOf(tag, sn, attrsBySn, config) {
+  const def = defOf(tag, config)
+  const raw = (attrsBySn && attrsBySn[String(sn)]) ? attrsBySn[String(sn)][tag] : undefined
+  const value = (raw === null || raw === undefined || raw === '') ? '—' : formatAttr(raw, def || {})
+  return { tag, label: (def && def.label) || tag, value }
+}
+
+/** 控件排序权重：primaryTags 列出的在前（按列出顺序），其余保持原序在后。 */
+function controlRank(tag, primaryTags) {
+  const i = (primaryTags || []).indexOf(tag)
+  return i >= 0 ? i : (primaryTags || []).length + 1
+}
+
+/**
+ * 把一个面板（buildPanels 产物）转成「米家风」卡片视图模型（纯函数）。
+ * @param panel    {id,title,devices:[{deviceSn,productCode,controls,allParams}]}
+ * @param attrsBySn { [sn]: {tag:val} } 屏端实时值（渲染期传入；纯函数不读 MQTT）
+ * @param config   后端 config（writable_attrs/readonly_attrs/...）
+ * @returns {id,title,icon,switchCtl,controls,big,small,grid,rest}
+ *   switchCtl/controls 元素 = {sn,productCode,w}（w 为控件定义，供写链路与渲染）
+ *   big/small/grid/rest 元素 = {tag,label,value(已格式化)}（rest 另含 writable 标记）
+ */
+export function buildCard(panel, attrsBySn, config) {
+  const a = attrsBySn || {}
+  const devs = (panel && panel.devices) || []
+  const icon = layoutFor(devs[0] && devs[0].productCode).icon
+
+  let switchCtl = null
+  const controls = []
+  const big = [], small = [], grid = []
+  const shown = new Set()
+
+  // 头部主开关 + 卡面可写控件
+  for (const d of devs) {
+    const lay = layoutFor(d.productCode)
+    const sorted = (d.controls || []).slice().sort((x, y) => controlRank(x.tag, lay.primaryTags) - controlRank(y.tag, lay.primaryTags))
+    for (const w of sorted) {
+      const slot = { sn: d.deviceSn, productCode: d.productCode, w }
+      if (!switchCtl && w.tag === lay.switchTag && (w.tag === 'switch' || w.tag === 'system_switch')) {
+        switchCtl = slot
+      } else {
+        controls.push(slot)
+      }
+      shown.add(w.tag)
+    }
+  }
+
+  // 卡面突出指标（只读）
+  for (const d of devs) {
+    const lay = layoutFor(d.productCode)
+    for (const t of (lay.bigTags || [])) { big.push(metricOf(t, d.deviceSn, a, config)); shown.add(t) }
+    for (const t of (lay.smallTags || [])) { small.push(metricOf(t, d.deviceSn, a, config)); shown.add(t) }
+    for (const t of (lay.gridTags || [])) { grid.push(metricOf(t, d.deviceSn, a, config)); shown.add(t) }
+  }
+
+  // 「查看全部」：屏端实推的其余白名单项（排除已在卡面展示的 tag）
+  const rest = []
+  for (const d of devs) {
+    const rows = buildDetailRows(a[String(d.deviceSn)], config && config.writable_attrs, config && config.readonly_attrs)
+    for (const r of rows) if (!shown.has(r.tag)) rest.push(r)
+  }
+
+  return { id: panel.id, title: panel.title, icon, switchCtl, controls, big, small, grid, rest }
+}
