@@ -49,6 +49,20 @@ SCREEN_WRITABLE_ATTRS = {
         'control': 'toggle', 'label': '离家节能',
         'options': [{'value': 'off', 'label': '未启用'}, {'value': 'on', 'label': '启用'}],
     },
+    # 新风·风速 / 加湿（v1.12.0 #2）——实测在「面板控制器」productCode 10016 上（deviceSn 22153，房间 3-1-702）。
+    # 2026-06-29 写抓包确认：wind_speed 写值 normal / high_speed；humidification_enable 写值 on / off（开关型）。
+    # 用户确认风速仅两档（普通 / 高速），无低档。
+    'wind_speed': {
+        'control': 'select', 'label': '风速',
+        'options': [
+            {'value': 'normal', 'label': '普通'},      # ✅ 写确认
+            {'value': 'high_speed', 'label': '高速'},  # ✅ 写确认
+        ],
+    },
+    'humidification_enable': {
+        'control': 'toggle', 'label': '加湿',
+        'options': [{'value': 'off', 'label': '关'}, {'value': 'on', 'label': '开'}],
+    },
 }
 
 # productCode → 设备角色显示名（小程序按设备分组展示用）

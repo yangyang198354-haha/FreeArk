@@ -1,285 +1,174 @@
 <!--
-  @module MOD-1110-FE-02, MOD-1111-FE-01
-  @implements IFC-1110-FE-02-1 (initOwnerHome), IFC-1110-FE-02-2 (toggleExpand/v1.11.1),
-              IFC-1110-FE-02-3 (loadRealtimeParams), IFC-1110-FE-02-4 (onRefresh),
-              IFC-1110-FE-02-5 (runRefreshPathA), IFC-1110-FE-02-6 (runRefreshPathB),
-              IFC-1110-FE-02-7 (writeCache), IFC-1110-FE-02-8 (readCache),
-              IFC-1110-FE-02-9 (goToSettings),
-              IFC-1111-FE-01-1 (loadStructure), IFC-1111-FE-01-2 (writeStructureCache),
-              IFC-1111-FE-01-3 (readStructureCache), IFC-1111-FE-01-4 (getParamsForSubType),
-              IFC-1111-FE-01-5 (resolveRoomName), IFC-1111-FE-01-6 (connectRoom/v1.11.1)
-  @depends MOD-1110-FE-01 (useMqttClient.js), MOD-1111-FE-02 (api.js 新增 getOwnerStructure)
-  @author sub_agent_software_developer
-  @description 业主端·我的房产（房间结构） + 参数设置（v1.11.0/v1.11.1）一体页。
-    上区：我的房产 — 套卡片 → 展开 → 两阶段渲染（骨架先行 + 值叠加）
-    下区：参数设置（原有写链路，零语义变更）
+  @module MOD-1120-FE-02
+  @author Claude (v1.12.0 参数设置页重设计)
+  @depends MOD-1110-FE-01 (useMqttClient.js), MOD-1120-FE-01 (paramPanels.js),
+           MOD-API (api.js: getDeviceSettingsConfig / getOwnerStructure / reportDeviceSettingsAudit)
+  @description 业主端·参数设置（v1.12.0）。
 
-    v1.11.1 关键变更：
-    - ADR-1111-04: 两阶段渲染（结构骨架 Phase 1 + 值叠加 Phase 2）
-    - ADR-1111-05: 以 sub_type+param_name 为对齐键叠加参数值
-    - ADR-1111-06: connectRoom 改用 DB 全量 device_sns 发现，弃用 probeNeighbors
-    - 结构缓存 owner_structure_{sp} TTL 24h（pending 时前端逻辑缩为 5min）
-    - 值缓存 owner_realtime_{sp} TTL 5min（不变）
-    - probeNeighbors 保留代码，调用路径已注释 DEPRECATED
+    单一页面：按预设类型纵向排列设备/房间面板
+      主机（集中供暖）→ 新风 → 主温控 → 各房间 → 其余系统设备
+    每个面板两个 tab：
+      tab1「设置」 —— OQ-01 精选可写属性的编辑控件，点选即生效（去抖 600ms 自动下发；运行模式用四圆点控件）；
+                      写链路（DeviceWrite/写确认/审计）继承 v1.10.0，零语义变更
+      tab2「详细」 —— 该设备全部属性（含只读）的当前值，仅展示不可编辑（C-07）
+
+    数据来源：
+      骨架  = GET /api/miniapp/owner/structure/（device_sn/product_code/sub_type/params 定义）
+              端侧缓存 owner_structure_{sp}，TTL 30 天（OQ-03）；每次进入页面后台静默重拉一次
+              （兑现「硬件若变化、重新进入小程序即可更新」），不提供手动刷新按钮。
+      值    = MQTT DeviceStatusUpdate，按 device_sn + param_name(=attrTag) 对齐（单一实时来源）。
+
+    相对 v1.11.x 的移除：折叠卡片「我的房产」区域、REST realtime-params 值管线、
+      手动刷新/按需采集（onRefresh/runRefreshPathA/B）。写链路与 MQTT composable 保持不变。
 -->
 <template>
   <view class="ps-page">
 
-    <!-- ══ 区域一：我的房产（v1.11.0 新增）══════════════════════════════════ -->
-    <view class="owner-home-section">
-      <view class="section-header">
-        <text class="section-title">我的房产</text>
-      </view>
+    <view v-if="loading" class="tip"><text>加载中…</text></view>
 
-      <!-- 离线横幅（REQ-FUNC-005）-->
-      <view v-if="isOffline" class="offline-banner">
-        <text>当前离线，显示缓存数据</text>
-      </view>
-
-      <!-- config 获取失败提示（REQ-FUNC-002 降级）-->
-      <view v-if="configFailed" class="config-warn-banner">
-        <text>参数配置获取失败，可设置参数标注不可用</text>
-      </view>
-
-      <!-- 无绑定（US-OWNER-001 AC-4）-->
-      <view v-if="!ownerLoading && bindStatus.length === 0" class="tip">
-        <text>您还没有绑定专有部分</text>
-        <view class="link-btn" @tap="goBind"><text>去绑定</text></view>
-      </view>
-
-      <!-- 套卡片列表 -->
-      <view
-        v-for="part in bindStatus"
-        :key="part.specific_part"
-        class="part-card"
-      >
-        <!-- 卡片头：location_name + 展开/折叠 + 刷新按钮 -->
-        <view class="part-card-header" @tap="toggleExpand(part.specific_part)">
-          <text class="part-name">{{ part.location_name || part.specific_part }}</text>
-          <view class="part-header-right">
-            <view
-              v-if="partState[part.specific_part] && partState[part.specific_part].expanded"
-              class="refresh-btn"
-              :class="{ 'refresh-btn-busy': partState[part.specific_part].refreshing }"
-              @tap.stop="onRefresh(part.specific_part)"
-            >
-              <text>{{ partState[part.specific_part].refreshing ? '刷新中…' : '刷新' }}</text>
-            </view>
-            <text class="expand-arrow">{{ partState[part.specific_part] && partState[part.specific_part].expanded ? '▲' : '▼' }}</text>
-          </view>
-        </view>
-
-        <!-- 展开内容（v1.11.1 两阶段渲染：结构骨架 + 值叠加，ADR-1111-04）-->
-        <view v-if="partState[part.specific_part] && partState[part.specific_part].expanded" class="part-expand">
-
-          <!-- 时间戳标签（REQ-FUNC-004，值层 TTL 5min）-->
-          <text v-if="partState[part.specific_part].tsLabel" class="ts-label">
-            {{ partState[part.specific_part].tsLabel }}
-          </text>
-
-          <!-- 刷新错误提示（路径A超时/刷新失败，DEV-01）-->
-          <view v-if="partState[part.specific_part].refreshError" class="refresh-error-msg">
-            <text>{{ partState[part.specific_part].refreshError }}</text>
-          </view>
-
-          <!-- Phase 1: 结构骨架加载中（无结构缓存，等待 structure 接口）-->
-          <view v-if="partState[part.specific_part].structureLoading" class="tip-loading">
-            <text>加载中…</text>
-          </view>
-
-          <!-- OQ-E5: 设备树未同步（sync_status="pending"）-->
-          <view
-            v-else-if="partState[part.specific_part].structure && partState[part.specific_part].structure.sync_status === 'pending'"
-            class="sync-pending"
-          >
-            <text class="sync-pending-text">您的房间结构尚未就绪，请等待设备初始化后刷新</text>
-            <view class="retry-btn" @tap.stop="loadStructure(part.specific_part, true)">
-              <text>刷新</text>
-            </view>
-          </view>
-
-          <!-- Phase 1 渲染完成：结构骨架（rooms + system_devices）-->
-          <view
-            v-else-if="partState[part.specific_part].structure && partState[part.specific_part].structure.rooms !== undefined"
-          >
-            <!-- 面板房间（按 device_room 真实房间名，OQ-E2）-->
-            <view
-              v-for="room in partState[part.specific_part].structure.rooms"
-              :key="room.room_id"
-              class="room-block"
-            >
-              <text class="room-title">{{ resolveRoomName(room) }}</text>
-              <view v-for="device in room.devices" :key="device.device_sn">
-                <!-- 骨架参数行（来自 DeviceConfig，OQ-1111-A Option A）+ 值叠加（ADR-1111-05）-->
-                <template v-if="device.params && device.params.length > 0">
-                  <view
-                    v-for="param in device.params"
-                    :key="param.param_name"
-                    class="param-row"
-                  >
-                    <text class="param-name">{{ param.display_name || param.param_name }}</text>
-                    <view class="param-right">
-                      <text class="param-value">
-                        {{ getOverlayValue(partState[part.specific_part].data, device.sub_type, param.param_name, partState[part.specific_part].loading) }}
-                      </text>
-                      <view v-if="isWritable(param.param_name)" class="param-badges">
-                        <text class="badge-writable">可设置</text>
-                        <view
-                          class="btn-go-settings"
-                          @tap.stop="goToSettings(part.specific_part)"
-                        >
-                          <text>去设置</text>
-                        </view>
-                      </view>
-                      <text v-else class="badge-readonly">只读</text>
-                    </view>
-                  </view>
-                </template>
-                <!-- 无参数定义时占位（sub_type 未知或 DeviceConfig 无记录）-->
-                <view v-else class="no-params-placeholder">
-                  <text>{{ partState[part.specific_part].loading ? '采集中…' : '暂无参数定义' }}</text>
-                </view>
-              </view>
-            </view>
-
-            <!-- 全屋系统分区（ADR-1111-03，OQ-E4：名称用 device_name）-->
-            <view
-              v-if="partState[part.specific_part].structure.system_devices && partState[part.specific_part].structure.system_devices.length > 0"
-              class="room-block system-block"
-            >
-              <text class="room-title">全屋系统</text>
-              <view
-                v-for="dev in partState[part.specific_part].structure.system_devices"
-                :key="dev.device_sn"
-              >
-                <text class="device-name-system">{{ dev.device_name }}</text>
-                <template v-if="dev.params && dev.params.length > 0">
-                  <view
-                    v-for="param in dev.params"
-                    :key="param.param_name"
-                    class="param-row"
-                  >
-                    <text class="param-name">{{ param.display_name || param.param_name }}</text>
-                    <view class="param-right">
-                      <text class="param-value">
-                        {{ getOverlayValue(partState[part.specific_part].data, dev.sub_type, param.param_name, partState[part.specific_part].loading) }}
-                      </text>
-                      <text class="badge-readonly">{{ isWritable(param.param_name) ? '可设置' : '只读' }}</text>
-                    </view>
-                  </view>
-                </template>
-                <view v-else class="no-params-placeholder">
-                  <text>{{ partState[part.specific_part].loading ? '采集中…' : '暂无参数定义' }}</text>
-                </view>
-              </view>
-            </view>
-
-            <!-- rooms 和 system_devices 均为空（设备树同步但无设备）-->
-            <view
-              v-if="partState[part.specific_part].structure.rooms.length === 0 && (!partState[part.specific_part].structure.system_devices || partState[part.specific_part].structure.system_devices.length === 0)"
-              class="tip-loading"
-            >
-              <text>当前专有部分暂无设备信息</text>
-            </view>
-          </view>
-
-          <!-- 结构加载失败降级（REQ-FUNC-005）-->
-          <view v-else-if="!partState[part.specific_part].structureLoading" class="tip-error">
-            <text>{{ partState[part.specific_part].errorMsg || '获取设备结构失败，请点击重试' }}</text>
-            <view class="retry-btn" @tap.stop="loadStructure(part.specific_part, true)">
-              <text>重试</text>
-            </view>
-          </view>
-
-        </view>
-      </view>
-
-      <!-- 加载状态（ownerLoading 期间）-->
-      <view v-if="ownerLoading" class="tip">
-        <text>加载中…</text>
-      </view>
+    <view v-else-if="rooms.length === 0" class="tip">
+      <text>您还没有绑定专有部分</text>
+      <view class="link-btn" @tap="goBind"><text>去绑定</text></view>
     </view>
 
-    <!-- ══ 区域二：参数设置（原有内容，零语义变更）════════════════════════ -->
-    <view class="param-settings-section" id="param-settings-anchor">
-
-      <!-- 房间选择（多房间时）-->
-      <view v-if="rooms.length > 1" class="room-bar">
-        <text class="room-label">房间</text>
+    <template v-else>
+      <!-- 套户选择条（多套户时为选择器，单套户时显示名称 + 连接状态）-->
+      <view v-if="rooms.length > 1" class="unit-bar">
+        <text class="unit-label">房产</text>
         <picker :range="roomLabels" :value="roomIndex" @change="onRoomChange">
-          <view class="room-pick">{{ currentRoom ? (currentRoom.location_name || currentRoom.specific_part) : '请选择' }} ›</view>
+          <view class="unit-pick">{{ currentRoom ? (currentRoom.location_name || currentRoom.specific_part) : '请选择' }} ›</view>
         </picker>
+        <text class="conn-dot" :class="{ on: mqttConnected }">{{ mqttConnected ? '已连接' : '连接中…' }}</text>
       </view>
-      <view v-else-if="currentRoom" class="room-bar">
-        <text class="room-single">{{ currentRoom.location_name || currentRoom.specific_part }}</text>
+      <view v-else-if="currentRoom" class="unit-bar">
+        <text class="unit-single">{{ currentRoom.location_name || currentRoom.specific_part }}</text>
         <text class="conn-dot" :class="{ on: mqttConnected }">{{ mqttConnected ? '已连接' : '连接中…' }}</text>
       </view>
 
-      <scroll-view scroll-y class="ps-body">
-        <view v-if="loading" class="tip"><text>加载中…</text></view>
-        <view v-else-if="rooms.length === 0" class="tip">
-          <text>您还没有绑定专有部分</text>
-          <view class="link-btn" @tap="goBind"><text>去绑定</text></view>
-        </view>
-        <view v-else-if="!hasDevices" class="tip"><text>正在获取设备数据…（请确保设备在线）</text></view>
+      <!-- 结构骨架加载中（无任何缓存可渲染）-->
+      <view v-if="curStructureLoading && !curStructure" class="tip"><text>正在获取设备结构…</text></view>
 
-        <template v-else>
-          <view v-for="dev in deviceList" :key="dev.deviceSn" class="dev-card">
-            <view class="dev-head">
-              <text class="dev-role">{{ dev.role }}</text>
-              <text class="dev-sn">#{{ dev.deviceSn }}</text>
-            </view>
+      <!-- 设备树未同步（sync_status=pending）-->
+      <view v-else-if="curSyncPending" class="tip">
+        <text>您的房间结构尚未就绪，请等待设备初始化后再试</text>
+        <view class="link-btn" @tap="reloadStructure"><text>重试</text></view>
+      </view>
 
-            <view v-for="w in dev.writable" :key="w.tag" class="attr-row">
-              <text class="attr-label">{{ w.label }}</text>
+      <!-- 结构加载失败且无缓存可降级 -->
+      <view v-else-if="curError && !curStructure" class="tip">
+        <text>{{ curError }}</text>
+        <view class="link-btn" @tap="reloadStructure"><text>重试</text></view>
+      </view>
 
-              <!-- toggle -->
-              <switch
-                v-if="w.control === 'toggle'"
-                :checked="curVal(dev.deviceSn, w.tag) === 'on'"
-                @change="onToggle(dev, w.tag, $event)"
-              />
+      <!-- 结构就绪但无设备 -->
+      <view v-else-if="panels.length === 0" class="tip"><text>当前房产暂无设备信息</text></view>
 
-              <!-- select -->
-              <picker
-                v-else-if="w.control === 'select'"
-                :range="w.optionLabels"
-                :value="selIndex(dev.deviceSn, w)"
-                @change="onSelect(dev, w, $event)"
-              >
-                <view class="sel-val">{{ curLabel(dev.deviceSn, w) }} ›</view>
-              </picker>
-
-              <!-- number -->
-              <view v-else-if="w.control === 'number'" class="num-ctl">
-                <view class="num-btn" @tap="onStep(dev, w, -1)">−</view>
-                <text class="num-val">{{ curVal(dev.deviceSn, w.tag) }}{{ w.unit || '' }}</text>
-                <view class="num-btn" @tap="onStep(dev, w, 1)">＋</view>
-              </view>
-            </view>
-
-            <view
-              v-if="hasPending(dev.deviceSn)"
-              class="apply-btn"
-              :class="{ busy: applyingSn === dev.deviceSn }"
-              @tap="applyDevice(dev)"
-            >
-              <text>{{ applyingSn === dev.deviceSn ? '下发中…' : '下发更改' }}</text>
+      <!-- 面板列表（纵向排列）-->
+      <template v-else>
+        <view v-for="panel in panels" :key="panel.id" class="panel-card">
+          <view class="panel-head">
+            <text class="panel-title">{{ panel.title }}</text>
+            <view class="tab-bar">
+              <view
+                class="tab"
+                :class="{ active: tabOf(panel.id) === 'set' }"
+                @tap="setTab(panel.id, 'set')"
+              ><text>设置</text></view>
+              <view
+                class="tab"
+                :class="{ active: tabOf(panel.id) === 'detail' }"
+                @tap="setTab(panel.id, 'detail')"
+              ><text>详细</text></view>
             </view>
           </view>
-        </template>
-      </scroll-view>
-    </view>
+
+          <!-- tab1「设置」：可写控件 + 下发 -->
+          <view v-if="tabOf(panel.id) === 'set'" class="panel-body">
+            <template v-for="dev in panel.devices" :key="dev.deviceSn">
+              <view v-if="dev.controls.length > 0" class="dev-block">
+                <text v-if="panel.devices.length > 1 && dev.deviceName" class="dev-sub-name">{{ dev.deviceName }}</text>
+
+                <!-- 圆点型（运行模式）：整行独占，四个圆点点选即生效（#5/#6）-->
+                <view v-for="w in dev.controls.filter((c) => c.control === 'dots')" :key="w.tag" class="dots-row">
+                  <text class="attr-label">{{ w.label }}</text>
+                  <view class="dots-ctl">
+                    <view
+                      v-for="opt in w.options"
+                      :key="opt.value"
+                      class="dot-item"
+                      @tap="onPickDot(dev, w, opt.value)"
+                    >
+                      <view class="dot" :class="{ on: curVal(dev.deviceSn, w.tag) === opt.value }"></view>
+                      <text class="dot-label" :class="{ on: curVal(dev.deviceSn, w.tag) === opt.value }">{{ opt.label }}</text>
+                    </view>
+                  </view>
+                </view>
+
+                <!-- 其余控件（开关/选择/数值）：点选/调整即生效（#5）-->
+                <view v-for="w in dev.controls.filter((c) => c.control !== 'dots')" :key="w.tag" class="attr-row">
+                  <text class="attr-label">{{ w.label }}</text>
+
+                  <switch
+                    v-if="w.control === 'toggle'"
+                    :checked="curVal(dev.deviceSn, w.tag) === 'on'"
+                    @change="onToggle(dev, w.tag, $event)"
+                  />
+
+                  <picker
+                    v-else-if="w.control === 'select'"
+                    :range="w.optionLabels"
+                    :value="selIndex(dev.deviceSn, w)"
+                    @change="onSelect(dev, w, $event)"
+                  >
+                    <view class="sel-val">{{ curLabel(dev.deviceSn, w) }} ›</view>
+                  </picker>
+
+                  <view v-else-if="w.control === 'number'" class="num-ctl">
+                    <view class="num-btn" @tap="onStep(dev, w, -1)">−</view>
+                    <text class="num-val">{{ curVal(dev.deviceSn, w.tag) ?? '—' }}{{ w.unit || '' }}</text>
+                    <view class="num-btn" @tap="onStep(dev, w, 1)">＋</view>
+                  </view>
+                </view>
+              </view>
+            </template>
+
+            <view v-if="!panelHasControls(panel)" class="no-set-tip">
+              <text>此设备无可设置项</text>
+            </view>
+          </view>
+
+          <!-- tab2「详细」：全部属性（含只读）当前值，仅展示（C-07）-->
+          <view v-else class="panel-body">
+            <template v-for="dev in panel.devices" :key="dev.deviceSn">
+              <text v-if="panel.devices.length > 1 && dev.deviceName" class="dev-sub-name">{{ dev.deviceName }}</text>
+
+              <view v-if="dev.allParams.length > 0">
+                <view v-for="p in dev.allParams" :key="p.param_name" class="param-row">
+                  <text class="param-name">{{ p.display_name || p.param_name }}</text>
+                  <view class="param-right">
+                    <text class="param-value">{{ detailVal(dev.deviceSn, p.param_name) }}</text>
+                    <text :class="isWritable(p.param_name) ? 'badge-writable' : 'badge-readonly'">
+                      {{ isWritable(p.param_name) ? '可设置' : '只读' }}
+                    </text>
+                  </view>
+                </view>
+              </view>
+              <view v-else class="no-params-placeholder">
+                <text>{{ mqttConnected ? '采集中…' : '暂无参数定义' }}</text>
+              </view>
+            </template>
+          </view>
+        </view>
+      </template>
+    </template>
 
   </view>
 </template>
 
 <script setup>
 /**
- * @module MOD-1110-FE-02, MOD-1111-FE-01
- * @implements IFC-1110-FE-02-1 ~ IFC-1110-FE-02-9 (v1.11.0)
- *             IFC-1111-FE-01-1 ~ IFC-1111-FE-01-6 (v1.11.1 新增/改造)
- * @depends MOD-1110-FE-01 (useMqttClient), MOD-1111-FE-02 (api.js getOwnerStructure)
+ * @module MOD-1120-FE-02
+ * @depends MOD-1110-FE-01 (useMqttClient), MOD-1120-FE-01 (paramPanels)
  */
 import { ref, computed, reactive } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
@@ -287,94 +176,88 @@ import { useAuthStore } from '@/store/auth'
 import { api } from '@/utils/api'
 import { buildWriteItems } from '@/utils/screenMqtt'
 import { useMqttClient } from '@/utils/useMqttClient'
+import { buildPanels, panelHasControls, formatValue } from '@/utils/paramPanels'
 
 const authStore = useAuthStore()
-
-// ── MQTT 单例 composable（MOD-1110-FE-01，ADR-1110-04）──────────────────────
 const mqttClient = useMqttClient()
 
-// ── 区域二：参数设置 原有 state（零语义变更）───────────────────────────────
-
+// ── 配置 / 套户 / MQTT 实时值 state ──────────────────────────────────────────
 const loading = ref(true)
-const rooms = ref([])
+const rooms = ref([])               // config.rooms：[{specific_part, location_name, screen_mac}]
 const roomIndex = ref(0)
 const broker = ref(null)
 const topics = ref(null)
 const config = ref({ writable_attrs: {}, product_code_role: {}, mode_energy_link: {}, link_product_codes: [] })
 
-const devices = reactive({})        // deviceSn -> {productCode, attrs:{tag:val}}
-const edits = reactive({})          // deviceSn -> {tag: newVal}
-const mqttConnected = computed(() => mqttClient.connected.value)
+const devices = reactive({})        // deviceSn → {productCode, attrs:{tag:val}}（MQTT 实时值）
+const edits = reactive({})          // deviceSn → {tag: newVal}（待下发）
 const applyingSn = ref('')
+const mqttConnected = computed(() => mqttClient.connected.value)
 
-let knownSns = new Set()   // 本次连接已发现的 deviceSn（含缓存载入）
-let firstProbeDone = false // 是否已做过首次邻近探测
-
-// onDeviceUpdate 注销函数（onUnload 时调用）
+let knownSns = new Set()
 let _offDeviceUpdate = null
 
 const currentRoom = computed(() => rooms.value[roomIndex.value] || null)
-const roomLabels = computed(() => rooms.value.map(r => r.location_name || r.specific_part))
-const hasDevices = computed(() => Object.keys(devices).length > 0)
+const roomLabels = computed(() => rooms.value.map((r) => r.location_name || r.specific_part))
 
-// 设备列表（含可写属性定义），按 deviceSn 排序
-const deviceList = computed(() => {
-  const wa = config.value.writable_attrs || {}
-  const roleMap = config.value.product_code_role || {}
+// ── 结构骨架 state（按 specific_part）───────────────────────────────────────
+const partState = reactive({})      // sp → {structure, structureLoading, errorMsg}
 
-  // v1.11.3: 构建 deviceSn → 房间名 Map（ADR-1113-01 Option B，REQ-FUNC-001/003/004）
-  // deviceList 在此读取 partState[currentSp].structure，Vue3 reactive 自动追踪依赖（ADR-1113-03）
-  const currentSp = currentRoom.value?.specific_part
-  const structure = currentSp ? partState[currentSp]?.structure : null
-  const roomNameMap = new Map()
-  if (structure?.rooms) {
-    for (const room of structure.rooms) {
-      const name = resolveRoomName(room)
-      for (const device of (room.devices || [])) {
-        roomNameMap.set(String(device.device_sn), name)  // String() 归一化（REQ-FUNC-003）
-      }
-    }
+/** 结构缓存 TTL：30 天（OQ-03，硬件结构基本不变）；sync_status=pending 时 5 分钟。 */
+const STRUCT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const STRUCT_TTL_PENDING_MS = 5 * 60 * 1000
+
+function _initPartState(sp) {
+  if (!partState[sp]) {
+    partState[sp] = { structure: null, structureLoading: false, errorMsg: null }
   }
+}
 
-  return Object.keys(devices).sort().map((sn) => {
-    const d = devices[sn]
-    const writable = Object.keys(d.attrs)
-      .filter((tag) => wa[tag])
-      .map((tag) => {
-        const c = wa[tag]
-        return {
-          tag,
-          label: c.label || tag,
-          control: c.control,
-          unit: c.unit,
-          step: c.step || 1,
-          min: c.min, max: c.max,
-          options: c.options || [],
-          optionLabels: (c.options || []).map(o => o.label),
-        }
-      })
-    return {
-      deviceSn: sn,
-      productCode: d.productCode,
-      // 三层优先级（REQ-FUNC-001/002）：房间名 → roleMap → 兜底
-      role: roomNameMap.get(sn) ?? roleMap[d.productCode] ?? `设备 ${d.productCode || ''}`,
-      writable,
-    }
-  }).filter(d => d.writable.length > 0)
+// ── 当前套户视图（结构状态 + 面板）────────────────────────────────────────────
+const curPart = computed(() => {
+  const sp = currentRoom.value?.specific_part
+  return sp ? partState[sp] : null
 })
+const curStructure = computed(() => curPart.value?.structure || null)
+const curStructureLoading = computed(() => !!curPart.value?.structureLoading)
+const curSyncPending = computed(() => curStructure.value?.sync_status === 'pending')
+const curError = computed(() => curPart.value?.errorMsg || '')
 
+const panels = computed(() => buildPanels(curStructure.value, config.value))
+
+// ── tab 状态（panelId → 'set' | 'detail'，默认 'set'）─────────────────────────
+const tabState = reactive({})
+function tabOf(id) { return tabState[id] || 'set' }
+function setTab(id, t) { tabState[id] = t }
+
+// ── 值展示 / 可写判定 ────────────────────────────────────────────────────────
+function isWritable(paramName) {
+  const wa = config.value.writable_attrs
+  return !!(wa && wa[paramName])
+}
+
+/** tab2「详细」单元格值：MQTT 实时值格式化；未收到时按连接状态显示占位。 */
+function detailVal(sn, paramName) {
+  const d = devices[String(sn)]
+  const raw = d ? d.attrs[paramName] : undefined
+  const formatted = formatValue(paramName, raw, config.value.writable_attrs)
+  if (formatted != null) return formatted
+  return mqttConnected.value ? '采集中…' : '—'
+}
+
+// ── tab1「设置」控件读写（写链路继承 v1.10.0，零语义变更）────────────────────
 function curVal(sn, tag) {
   if (edits[sn] && edits[sn][tag] !== undefined) return edits[sn][tag]
   return devices[sn] ? devices[sn].attrs[tag] : undefined
 }
 function curLabel(sn, w) {
   const v = curVal(sn, w.tag)
-  const opt = w.options.find(o => o.value === v)
+  const opt = w.options.find((o) => o.value === v)
   return opt ? opt.label : (v ?? '—')
 }
 function selIndex(sn, w) {
   const v = curVal(sn, w.tag)
-  const i = w.options.findIndex(o => o.value === v)
+  const i = w.options.findIndex((o) => o.value === v)
   return i >= 0 ? i : 0
 }
 function hasPending(sn) {
@@ -384,13 +267,18 @@ function setEdit(sn, tag, val) {
   if (!edits[sn]) edits[sn] = {}
   edits[sn][tag] = val
 }
-
 function onToggle(dev, tag, e) {
   setEdit(dev.deviceSn, tag, e.detail.value ? 'on' : 'off')
+  scheduleFlush(dev)
 }
 function onSelect(dev, w, e) {
   const opt = w.options[e.detail.value]
-  if (opt) setEdit(dev.deviceSn, w.tag, opt.value)
+  if (opt) { setEdit(dev.deviceSn, w.tag, opt.value); scheduleFlush(dev) }
+}
+function onPickDot(dev, w, value) {
+  if (curVal(dev.deviceSn, w.tag) === value) return  // 点当前态不重复下发
+  setEdit(dev.deviceSn, w.tag, value)
+  scheduleFlush(dev)
 }
 function onStep(dev, w, dir) {
   const cur = parseFloat(curVal(dev.deviceSn, w.tag))
@@ -400,112 +288,19 @@ function onStep(dev, w, dir) {
   if (w.max !== undefined) next = Math.min(w.max, next)
   next = Number.isInteger(w.step) ? String(next) : next.toFixed(1)
   setEdit(dev.deviceSn, w.tag, String(next))
+  scheduleFlush(dev)   // 数值连点会被去抖合并（见 scheduleFlush）
 }
 
-// ── 区域二 连接管理（已迁移到 useMqttClient，ADR-1110-04）──────────────────
-
-async function loadConfig() {
-  loading.value = true
-  try {
-    const res = await api.getDeviceSettingsConfig()
-    broker.value = res.broker
-    topics.value = res.topics
-    config.value = res.config || config.value
-    rooms.value = res.rooms || []
-    if (rooms.value.length > 0) await connectRoom()
-  } catch (err) {
-    uni.showToast({ title: '加载配置失败，请重试', icon: 'none' })
-  } finally {
-    loading.value = false
-  }
-}
-
-async function connectRoom() {
-  const room = currentRoom.value
-  if (!room || !room.screen_mac) return
-
-  // 清空旧设备状态（连接切换）
-  Object.keys(devices).forEach(k => delete devices[k])
-  Object.keys(edits).forEach(k => delete edits[k])
-  knownSns = new Set()
-  firstProbeDone = false
-
-  // 注销旧的 onDeviceUpdate 监听
-  if (_offDeviceUpdate) { _offDeviceUpdate(); _offDeviceUpdate = null }
-
-  const mac = room.screen_mac
-  const sp = room.specific_part   // v1.11.1: DB 全量 SN 发现需要 specific_part
-
-  // 注册 DeviceStatusUpdate 回调（通过单例 composable，ADR-1110-04）
-  _offDeviceUpdate = mqttClient.onDeviceUpdate((p) => {
-    const prev = devices[p.deviceSn] || { productCode: p.productCode, attrs: {} }
-    devices[p.deviceSn] = {
-      productCode: p.productCode != null ? p.productCode : prev.productCode,
-      attrs: { ...prev.attrs, ...p.attrs },
-    }
-    const sn = String(p.deviceSn)
-    if (!knownSns.has(sn)) {
-      knownSns.add(sn)
-      persistSns(mac)
-      // probeNeighbors DEPRECATED v1.11.1 — replaced by structure-cache DB discovery (ADR-1111-06)
-      // if (!firstProbeDone) { firstProbeDone = true; probeNeighbors(mac, p.deviceSn) }
-    }
-  })
-
-  try {
-    console.log('[param-settings] connectRoom screen_mac=', mac)
-    await mqttClient.acquire(broker.value, topics.value)   // IFC-1110-FE-01-1
-    mqttClient.subscribe(mac)                               // IFC-1110-FE-01-3
-    console.log('[param-settings] subscribed uplink for', mac)
-
-    // ── v1.11.1: DB 全量 SN 发现（ADR-1111-06），替代 probeNeighbors ──────────────
-    // 优先级 1: partState[sp].device_sns（realtime-params 已返回）
-    // 优先级 2: owner_structure_{sp} 缓存的 device_sns（loadStructure 已写入）
-    // 优先级 3: ds_sns_{mac} 遗留缓存（v1.11.0 兼容，IFC-1110-FE-01-4 降级）
-    // 优先级 4: 空列表（不主动 publishRead，等待设备自发上报）
-    let allSns = []
-    if (partState[sp] && partState[sp].device_sns && partState[sp].device_sns.length > 0) {
-      allSns = partState[sp].device_sns.map(String)
-    } else {
-      const { data: structCache } = readStructureCache(sp)  // IFC-1111-FE-01-3
-      if (structCache && structCache.device_sns && structCache.device_sns.length > 0) {
-        allSns = structCache.device_sns.map(String)
-      } else {
-        allSns = loadSns(mac)  // 遗留缓存（v1.11.0 兼容 fallback）
-      }
-    }
-
-    if (allSns.length > 0) {
-      allSns.forEach(s => knownSns.add(s))
-      firstProbeDone = true
-      mqttClient.publishRead(mac, allSns)                   // IFC-1110-FE-01-4
-      console.log('[param-settings] connectRoom DB-discovered sns:', allSns.join(','))
-    }
-  } catch (e) {
-    console.error('[param-settings] connectRoom FAILED:', e && e.message)
-    uni.showToast({ title: '设备通道连接失败：' + (e && e.message || ''), icon: 'none' })
-  }
-
-  // v1.11.3: 主动加载 structure，确保 deviceList 房间名映射就绪（REQ-FUNC-005，ADR-1113-02）
-  _initPartState(sp)      // 防御性确保 partState[sp] 存在（_initPartState 是幂等函数）
-  loadStructure(sp)       // 缓存命中时同步赋值，缓存未命中时异步更新（不 await，不阻塞 MQTT）
-}
-
-// deviceSn 缓存（按 screenMac）+ 邻近探测
-const snCacheKey = (mac) => `ds_sns_${mac}`
-function loadSns(mac) {
-  try { const a = uni.getStorageSync(snCacheKey(mac)); return Array.isArray(a) ? a.map(String) : [] } catch (e) { return [] }
-}
-function persistSns(mac) {
-  try { uni.setStorageSync(snCacheKey(mac), Array.from(knownSns)) } catch (e) { /* ignore */ }
-}
-function probeNeighbors(mac, sn) {
-  const base = parseInt(sn, 10)
-  if (isNaN(base) || !mqttClient.connected.value) return
-  const range = []
-  for (let d = -8; d <= 8; d++) { const v = base + d; if (v > 0 && v !== base) range.push(String(v)) }
-  mqttClient.publishRead(mac, range)                        // IFC-1110-FE-01-4
-  console.log('[param-settings] probe neighbors around', sn)
+// 点选即生效（#5）：控件变更后去抖 600ms 自动下发该设备的待发改动（替代「下发更改」按钮）。
+// 去抖让数值步进连点合并为一次写，避免刷屏式下发。
+const _flushTimers = {}
+function scheduleFlush(dev) {
+  const sn = dev.deviceSn
+  if (_flushTimers[sn]) clearTimeout(_flushTimers[sn])
+  _flushTimers[sn] = setTimeout(() => {
+    delete _flushTimers[sn]
+    applyDevice(dev)
+  }, 600)
 }
 
 async function applyDevice(dev) {
@@ -514,7 +309,8 @@ async function applyDevice(dev) {
   if (!mqttClient.connected.value || !room) {
     uni.showToast({ title: '通道未连接', icon: 'none' }); return
   }
-  if (applyingSn.value) return
+  if (!hasPending(sn)) return
+  if (applyingSn.value) { scheduleFlush(dev); return }  // 有写在途，稍后重排，勿丢改动
   applyingSn.value = sn
   const pending = { ...edits[sn] }
   const auditItems = []
@@ -525,14 +321,14 @@ async function applyDevice(dev) {
     const oldVal = devices[sn] ? devices[sn].attrs[tag] : ''
     const items = buildWriteItems(dev.productCode, tag, target, config.value)
     try {
-      mqttClient.publishWrite(room.screen_mac, sn, items)   // IFC-1110-FE-01-5
-      await mqttClient.waitConfirm(sn, tag, target, 8000)   // IFC-1110-FE-01-6
+      mqttClient.publishWrite(room.screen_mac, sn, items)
+      await mqttClient.waitConfirm(sn, tag, target, 8000)
       okCount++
-      items.forEach(it => auditItems.push({ attr_tag: it.attrTag, attr_value: it.attrValue, old_value: it.attrTag === tag ? String(oldVal ?? '') : '' }))
+      items.forEach((it) => auditItems.push({ attr_tag: it.attrTag, attr_value: it.attrValue, old_value: it.attrTag === tag ? String(oldVal ?? '') : '' }))
       if (edits[sn]) delete edits[sn][tag]
     } catch (e) {
       failCount++
-      items.forEach(it => auditItems.push({ attr_tag: it.attrTag, attr_value: it.attrValue, old_value: '' }))
+      items.forEach((it) => auditItems.push({ attr_tag: it.attrTag, attr_value: it.attrValue, old_value: '' }))
     }
   }
 
@@ -550,620 +346,295 @@ async function applyDevice(dev) {
   }
 
   applyingSn.value = ''
-  if (failCount === 0) uni.showToast({ title: '下发成功', icon: 'success' })
-  else if (okCount === 0) uni.showToast({ title: '未确认，请重试或刷新', icon: 'none' })
+  if (failCount === 0) uni.showToast({ title: '已生效', icon: 'success' })
+  else if (okCount === 0) uni.showToast({ title: '未确认，请重试', icon: 'none' })
   else uni.showToast({ title: `部分成功（${okCount}/${okCount + failCount}）`, icon: 'none' })
+
+  // 在途写期间若又产生新改动，排一次后续 flush 以排空（点选即生效语义）
+  if (hasPending(sn)) scheduleFlush(dev)
 }
 
+// ── 套户切换 ─────────────────────────────────────────────────────────────────
 function onRoomChange(e) {
-  roomIndex.value = e.detail.value
-  connectRoom()
+  selectUnit(Number(e.detail.value))
 }
 
-// ── 区域一：我的房产 state（v1.11.0 新增）────────────────────────────────────
+async function selectUnit(idx) {
+  roomIndex.value = idx
+  const sp = currentRoom.value?.specific_part
+  if (!sp) return
+  _initPartState(sp)
+  await loadStructure(sp)   // 缓存优先即时渲染；缓存未命中时 await 网络
+  await connectRoom()       // 用结构 device_sns 主动拉取 MQTT 实时值
+}
 
-/** GET /api/miniapp/bind/status/ 的 bindings 数组 */
-const bindStatus = ref([])
-const ownerLoading = ref(false)
-const isOffline = ref(false)
-const configFailed = ref(false)
-
-/**
- * 每个 specific_part 的展开/加载/数据状态字典。
- * key = specific_part string
- * value = {
- *   expanded: boolean,
- *   loading: boolean,
- *   refreshing: boolean,
- *   refreshLockUntil: number,  // Date.now() + 3000，最短锁定到期时刻
- *   data: object | null,       // realtime-params 的 data 字段
- *   screen_mac: string,
- *   device_sns: number[],
- *   tsLabel: string,
- *   errorMsg: string | null,
- *   refreshError: string | null,
- * }
- */
-const partState = reactive({})
-
-/** 缓存 TTL（5 分钟，ADR-1110-06 / D-03）*/
-const CACHE_TTL_MS = 5 * 60 * 1000
-
-// ── IFC-1110-FE-02-7: writeCache ────────────────────────────────────────────
-
-function writeCache(specificPart, data) {
+// ── 配置加载 + MQTT 连接 ─────────────────────────────────────────────────────
+async function loadConfig() {
+  loading.value = true
   try {
-    uni.setStorageSync(`owner_realtime_${specificPart}`, JSON.stringify(data))
-    uni.setStorageSync(`owner_realtime_${specificPart}_ts`, new Date().toISOString())
-  } catch (e) {
-    console.warn('[param-settings] writeCache 失败:', e)
-  }
-}
-
-// ── IFC-1110-FE-02-8: readCache ─────────────────────────────────────────────
-
-function readCache(specificPart) {
-  try {
-    const raw = uni.getStorageSync(`owner_realtime_${specificPart}`)
-    const tsRaw = uni.getStorageSync(`owner_realtime_${specificPart}_ts`)
-    const data = raw ? JSON.parse(raw) : null
-    const ts = tsRaw ? new Date(tsRaw) : null
-    return { data, ts }
-  } catch (e) {
-    return { data: null, ts: null }
-  }
-}
-
-// ── 时间戳标签工具 ───────────────────────────────────────────────────────────
-
-function buildTsLabel(ts, suffix = '') {
-  if (!ts) return ''
-  const diffMs = Date.now() - ts.getTime()
-  const mins = Math.floor(diffMs / 60000)
-  if (mins < 1) return `刚刚更新${suffix}`
-  const stale = diffMs > CACHE_TTL_MS
-  const timeStr = mins < 60 ? `${mins} 分钟前` : `${Math.floor(mins / 60)} 小时前`
-  const prefix = stale ? '数据可能已过时（更新于 ' : '更新于 '
-  const postfix = stale ? '）' : ''
-  return `${prefix}${timeStr}${postfix}${suffix}`
-}
-
-// ── 初始化 partState ─────────────────────────────────────────────────────────
-
-function _initPartState(specificPart) {
-  if (!partState[specificPart]) {
-    partState[specificPart] = {
-      // ── v1.11.0 字段（保持不变）──
-      expanded: false,
-      loading: false,         // 值层 loading（realtime-params 请求）
-      refreshing: false,
-      refreshLockUntil: 0,
-      data: null,             // realtime-params data 字段（值层）
-      screen_mac: '',
-      device_sns: [],         // 来自 realtime-params 或结构端点
-      tsLabel: '',
-      errorMsg: null,
-      refreshError: null,
-      // ── v1.11.1 新增：结构层（ADR-1111-04）──
-      structureLoading: false,  // 结构骨架 loading（structure 请求）
-      structure: null,          // 结构端点响应（来自缓存或接口）
-    }
-  }
-}
-
-// ── IFC-1110-FE-02-1: initOwnerHome ─────────────────────────────────────────
-
-async function initOwnerHome() {
-  if (ownerLoading.value) return
-  ownerLoading.value = true
-
-  // bind/status（config 已由 loadConfig() 取）。FND-009：原 Promise.allSettled 仅含 1 个
-  // promise 属冗余，直接 try/catch await 等价且更清晰。
-  try {
-    const data = await api.getBindStatus()
-    bindStatus.value = (data.bindings || data || []).filter(b => b.specific_part)
-  } catch (e) {
-    // 网络不通，标记离线
-    isOffline.value = true
-    bindStatus.value = []
+    const res = await api.getDeviceSettingsConfig()
+    broker.value = res.broker
+    topics.value = res.topics
+    config.value = res.config || config.value
+    rooms.value = res.rooms || []
+    if (rooms.value.length > 0) await selectUnit(0)
+  } catch (err) {
+    uni.showToast({ title: '加载配置失败，请重试', icon: 'none' })
   } finally {
-    ownerLoading.value = false
-  }
-
-  // 初始化每个 specific_part 的 partState
-  for (const part of bindStatus.value) {
-    _initPartState(part.specific_part)
+    loading.value = false
   }
 }
 
-// ── IFC-1110-FE-02-3: loadRealtimeParams ────────────────────────────────────
+async function connectRoom() {
+  const room = currentRoom.value
+  if (!room || !room.screen_mac) return
 
-async function loadRealtimeParams(specificPart, forceRefresh = false) {
-  const ps = partState[specificPart]
-  if (!ps) return
+  // 切换套户：清空旧设备/编辑状态
+  Object.keys(devices).forEach((k) => delete devices[k])
+  Object.keys(edits).forEach((k) => delete edits[k])
+  knownSns = new Set()
+  if (_offDeviceUpdate) { _offDeviceUpdate(); _offDeviceUpdate = null }
 
-  // 步骤1：同步读取缓存（ADR-1110-06）
-  const { data: cachedData, ts: cachedTs } = readCache(specificPart)
+  const mac = room.screen_mac
+  const sp = room.specific_part
 
-  if (!forceRefresh && cachedData) {
-    // 有缓存，立即渲染
-    ps.data = cachedData
-    ps.tsLabel = buildTsLabel(cachedTs)
-    ps.loading = false
-    ps.errorMsg = null
-  } else if (!cachedData) {
-    // 无缓存，显示 loading
-    ps.loading = true
-    ps.data = null
-  }
+  _offDeviceUpdate = mqttClient.onDeviceUpdate((p) => {
+    const prev = devices[p.deviceSn] || { productCode: p.productCode, attrs: {} }
+    devices[p.deviceSn] = {
+      productCode: p.productCode != null ? p.productCode : prev.productCode,
+      attrs: { ...prev.attrs, ...p.attrs },
+    }
+    const sn = String(p.deviceSn)
+    if (!knownSns.has(sn)) { knownSns.add(sn); persistSns(mac) }
+  })
 
-  // 步骤2：后台异步刷新
   try {
-    const res = await api.getOwnerRealtimeParams(specificPart)
-    if (res && res.success) {
-      ps.data = res.data || null
-      ps.screen_mac = res.screen_mac || ''
-      ps.device_sns = res.device_sns || []
-      ps.tsLabel = buildTsLabel(new Date())
-      ps.errorMsg = null
-      ps.loading = false
-      // 写缓存（ADR-1110-06）
-      writeCache(specificPart, res.data || {})
-    } else {
-      // API 返回非 success（403/400 等）
-      if (!cachedData) {
-        ps.errorMsg = res && res.error ? res.error : '获取设备数据失败，请点击重试'
-        ps.loading = false
-      } else {
-        ps.tsLabel = buildTsLabel(cachedTs, '（刷新失败）')
-      }
+    await mqttClient.acquire(broker.value, topics.value)
+    mqttClient.subscribe(mac)
+    const allSns = _discoverSns(sp, mac)
+    if (allSns.length > 0) {
+      allSns.forEach((s) => knownSns.add(s))
+      mqttClient.publishRead(mac, allSns)
     }
   } catch (e) {
-    // 网络失败
-    if (!cachedData) {
-      if (isOffline.value) {
-        ps.errorMsg = '暂无数据，请检查网络连接后点击刷新'
-      } else {
-        ps.errorMsg = '获取设备数据失败，请点击重试'
-      }
-      ps.loading = false
-    } else {
-      ps.tsLabel = buildTsLabel(cachedTs, '（刷新失败）')
-    }
+    uni.showToast({ title: '设备通道连接失败：' + (e && e.message || ''), icon: 'none' })
   }
 }
 
-// ── IFC-1111-FE-01-2: writeStructureCache ───────────────────────────────────
+/** 设备 SN 发现：结构骨架 device_sns 优先，回退结构缓存，再回退遗留 SN 缓存。 */
+function _discoverSns(sp, mac) {
+  const struct = partState[sp]?.structure
+  if (struct && Array.isArray(struct.device_sns) && struct.device_sns.length > 0) {
+    return struct.device_sns.map(String)
+  }
+  const { data: cached } = readStructureCache(sp)
+  if (cached && Array.isArray(cached.device_sns) && cached.device_sns.length > 0) {
+    return cached.device_sns.map(String)
+  }
+  return loadSns(mac)
+}
 
-function writeStructureCache(specificPart, data) {
+// 遗留 SN 缓存（按 screenMac，v1.11.0 兼容降级）
+const snCacheKey = (mac) => `ds_sns_${mac}`
+function loadSns(mac) {
+  try { const a = uni.getStorageSync(snCacheKey(mac)); return Array.isArray(a) ? a.map(String) : [] } catch (e) { return [] }
+}
+function persistSns(mac) {
+  try { uni.setStorageSync(snCacheKey(mac), Array.from(knownSns)) } catch (e) { /* ignore */ }
+}
+
+// ── 结构骨架缓存（owner_structure_{sp}，TTL 30 天）────────────────────────────
+function writeStructureCache(sp, data) {
   try {
-    const ttlMs = data && data.sync_status === 'pending' ? 5 * 60 * 1000 : 24 * 60 * 60 * 1000
-    uni.setStorageSync(`owner_structure_${specificPart}`, JSON.stringify(data))
-    uni.setStorageSync(`owner_structure_${specificPart}_ts`, new Date().toISOString())
-    // sync_status=pending 时在 localStorage 额外存 TTL 标记，供读取时判断是否过期
-    uni.setStorageSync(`owner_structure_${specificPart}_ttl`, ttlMs)
+    const ttlMs = data && data.sync_status === 'pending' ? STRUCT_TTL_PENDING_MS : STRUCT_TTL_MS
+    uni.setStorageSync(`owner_structure_${sp}`, JSON.stringify(data))
+    uni.setStorageSync(`owner_structure_${sp}_ts`, new Date().toISOString())
+    uni.setStorageSync(`owner_structure_${sp}_ttl`, ttlMs)
   } catch (e) {
     console.warn('[param-settings] writeStructureCache 失败:', e)
   }
 }
 
-// ── IFC-1111-FE-01-3: readStructureCache ────────────────────────────────────
-
-function readStructureCache(specificPart) {
+function readStructureCache(sp) {
   try {
-    const raw = uni.getStorageSync(`owner_structure_${specificPart}`)
-    const tsRaw = uni.getStorageSync(`owner_structure_${specificPart}_ts`)
-    const ttlMs = uni.getStorageSync(`owner_structure_${specificPart}_ttl`) || (24 * 60 * 60 * 1000)
+    const raw = uni.getStorageSync(`owner_structure_${sp}`)
+    const tsRaw = uni.getStorageSync(`owner_structure_${sp}_ts`)
+    const ttlMs = uni.getStorageSync(`owner_structure_${sp}_ttl`) || STRUCT_TTL_MS
     const data = raw ? JSON.parse(raw) : null
     const ts = tsRaw ? new Date(tsRaw) : null
-    // TTL 到期时（pending 5min / ok 24h）视为无效，强制重取
     const expired = ts ? (Date.now() - ts.getTime() > ttlMs) : true
-    return { data: expired ? null : data, ts, rawData: data }
+    return { data: expired ? null : data, rawData: data }
   } catch (e) {
-    return { data: null, ts: null, rawData: null }
+    return { data: null, rawData: null }
   }
 }
 
-// ── IFC-1111-FE-01-1: loadStructure ─────────────────────────────────────────
-
-async function loadStructure(specificPart, forceRefresh = false) {
-  const ps = partState[specificPart]
+/**
+ * 加载结构骨架：
+ *   - 缓存有效 → 立即渲染（秒开），并后台静默重拉一次（兑现「重新进入即更新」，OQ-02/OQ-03）。
+ *   - 缓存过期但有旧数据 → 先用旧数据渲染，再 await 网络。
+ *   - 无任何缓存 → 显示加载态，await 网络（首次进入预取，OQ-02）。
+ */
+async function loadStructure(sp, forceRefresh = false) {
+  const ps = partState[sp]
   if (!ps) return
+  const { data: cached, rawData } = readStructureCache(sp)
 
-  // 步骤1：同步读结构缓存
-  const { data: cachedStructure } = readStructureCache(specificPart)
-
-  if (!forceRefresh && cachedStructure) {
-    // 缓存命中：直接渲染骨架（< 100ms，ADR-1111-04）
-    ps.structure = cachedStructure
+  if (!forceRefresh && cached) {
+    ps.structure = cached
     ps.structureLoading = false
+    ps.errorMsg = null
+    _refreshStructureNetwork(sp)   // 后台静默刷新，不阻塞渲染
     return
   }
+  if (rawData) {
+    ps.structure = rawData          // 过期旧数据先撑住骨架
+    ps.structureLoading = false
+  } else {
+    ps.structure = null
+    ps.structureLoading = true
+  }
+  await _refreshStructureNetwork(sp)
+}
 
-  // 步骤2：缓存未命中或强制刷新 → 调结构接口
-  // FND-004 修复：网络错误指数退避自动重试（最多 3 次，间隔 0 / 0.5s / 1.5s），
-  // 弱网首次失败不再停留空白骨架；重试耗尽后回退过期缓存，再不行才提示手动刷新。
-  ps.structureLoading = true
+/** 网络重拉结构（指数退避重试 3 次）；成功后更新缓存，并补拉新发现设备的 MQTT 值。 */
+async function _refreshStructureNetwork(sp) {
+  const ps = partState[sp]
+  if (!ps) return
   const BACKOFF_MS = [0, 500, 1500]
   for (let attempt = 0; attempt < BACKOFF_MS.length; attempt++) {
-    if (BACKOFF_MS[attempt] > 0) {
-      await new Promise(r => setTimeout(r, BACKOFF_MS[attempt]))
-    }
+    if (BACKOFF_MS[attempt] > 0) await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]))
     try {
-      const res = await api.getOwnerStructure(specificPart)
+      const res = await api.getOwnerStructure(sp)
       if (res && res.success !== false) {
         ps.structure = res
         ps.errorMsg = null
-        writeStructureCache(specificPart, res)  // IFC-1111-FE-01-2
+        writeStructureCache(sp, res)
+        _readNewlyDiscovered(sp, res)
       } else {
-        // 业务失败（success:false，如 403/参数错误）非网络抖动，不重试
-        ps.errorMsg = (res && res.error) ? res.error : '获取设备结构失败，请点击重试'
-        ps.structure = null
+        ps.errorMsg = (res && res.error) || '获取设备结构失败，请点击重试'
+        // 保留已有 structure（若有），不清空
       }
       ps.structureLoading = false
       return
     } catch (e) {
-      // 网络错误：未到最后一次则退避后重试
       if (attempt < BACKOFF_MS.length - 1) continue
-      // 重试耗尽：降级用过期缓存（即使 TTL 超期，rawData 仍可显示）
-      const { rawData } = readStructureCache(specificPart)
-      if (rawData) {
-        ps.structure = rawData
-        ps.errorMsg = null
-      } else {
-        ps.errorMsg = '获取设备结构失败，请点击重试'
-        ps.structure = null
-      }
+      // 重试耗尽：降级用过期缓存
+      const { rawData } = readStructureCache(sp)
+      if (rawData && !ps.structure) ps.structure = rawData
+      if (!ps.structure) ps.errorMsg = '获取设备结构失败，请点击重试'
       ps.structureLoading = false
     }
   }
 }
 
-// ── IFC-1111-FE-01-4: getParamsForSubType（realtime 值查找，ADR-1111-05）───
-
-/**
- * 从 realtime-params data 中提取指定 sub_type 的参数列表。
- * 扫描 data[groupKey].sub_types[subType].params，未找到返回 []。
- */
-function getParamsForSubType(realtimeData, subType) {
-  if (!realtimeData || !subType) return []
-  for (const group of Object.values(realtimeData)) {
-    if (!group || !group.sub_types) continue
-    const subData = group.sub_types[subType]
-    if (subData && subData.params) return subData.params
-  }
-  return []
-}
-
-/**
- * 叠加对齐：从 realtime data 中查找 subType+paramName 的值（ADR-1111-05）。
- * 未找到返回占位符（加载中时显示"采集中…"，否则"—"）。
- */
-function getOverlayValue(realtimeData, subType, paramName, isLoading) {
-  if (!realtimeData || !subType || !paramName) {
-    return isLoading ? '采集中…' : '—'
-  }
-  for (const group of Object.values(realtimeData)) {
-    if (!group || !group.sub_types) continue
-    const subData = group.sub_types[subType]
-    if (!subData || !subData.params) continue
-    const param = subData.params.find(p => p.param_name === paramName)
-    if (param && param.value != null) return param.value
-  }
-  return isLoading ? '采集中…' : '—'
-}
-
-// ── IFC-1111-FE-01-5: resolveRoomName（OQ-E2 fallback 链）─────────────────
-
-/**
- * 房间名 fallback 链（OQ-E2，OQ-1111-C）：
- *   room.room_name → room.ori_room_name → '未知房间'
- */
-function resolveRoomName(room) {
-  return room.room_name || room.ori_room_name || '未知房间'
-}
-
-// ── IFC-1110-FE-02-2（v1.11.1 改造）: toggleExpand ──────────────────────────
-
-async function toggleExpand(specificPart) {
-  _initPartState(specificPart)
-  const ps = partState[specificPart]
-  ps.expanded = !ps.expanded
-
-  if (!ps.expanded) return  // 折叠：保留数据，下次展开立即渲染缓存
-
-  // Phase 1：结构骨架（串行，骨架就绪后才进入 Phase 2，ADR-1111-04）
-  await loadStructure(specificPart)   // IFC-1111-FE-01-1
-
-  // Phase 1.5：值缓存立即叠加（同步，骨架完成后立即执行）
-  const { data: cachedVal, ts: cachedVts } = readCache(specificPart)  // IFC-1110-FE-02-8
-  if (cachedVal) {
-    ps.data = cachedVal
-    ps.tsLabel = buildTsLabel(cachedVts)
-    ps.loading = false
-  }
-
-  // Phase 2：后台值更新（异步，不阻塞骨架渲染，ADR-1111-04）
-  loadRealtimeParams(specificPart)    // IFC-1110-FE-02-3（不 await）
-}
-
-// ── IFC-1110-FE-02-5: runRefreshPathA ───────────────────────────────────────
-
-async function runRefreshPathA(specificPart, screenMac, deviceSns) {
-  const ps = partState[specificPart]
-  const TIMEOUT_MS = 10000  // 10s（INF-01，OQ-D 已采用默认）
-
-  // 注册一次性 DeviceStatusUpdate 监听，等待**本套设备**的更新（FND-008：按 device_sn
-  // 过滤，避免并发刷新时收到他套响应而提前 resolve）。deviceSns 为空时不过滤（兜底）。
-  const snSet = new Set((deviceSns || []).map(String))
-  let resolved = false
-  let timer = null
-  let off = null
-
-  // outcome：收到的 parsed 对象 = 成功；null = 超时（FND-008 修复原 `timer===null` 永假的死分支）
-  const outcome = await new Promise((resolve) => {
-    off = mqttClient.onDeviceUpdate((parsed) => {  // IFC-1110-FE-01-7
-      if (resolved) return
-      if (snSet.size > 0 && !snSet.has(String(parsed && parsed.deviceSn))) return
-      resolved = true
-      resolve(parsed)
-    })
-
-    timer = setTimeout(() => {
-      if (!resolved) {
-        resolved = true
-        resolve(null)  // null = 超时
-      }
-    }, TIMEOUT_MS)
-
-    // 订阅并发布 DeviceStatusRead
-    mqttClient.subscribe(screenMac)  // IFC-1110-FE-01-3（幂等）
-    mqttClient.publishRead(screenMac, deviceSns.map(String))  // IFC-1110-FE-01-4
-  })
-
-  clearTimeout(timer)
-  if (off) off()
-
-  if (outcome === null) {
-    // 超时（DEV-01：仅提示，不降级路径B，用户已拍板）
-    ps.refreshError = '设备未响应，请确认设备在线'
-    return
-  }
-
-  // 收到响应，重取快照（确保完整数据）
-  await loadRealtimeParams(specificPart, true)
-  ps.refreshError = null
-}
-
-// ── IFC-1110-FE-02-6: runRefreshPathB ───────────────────────────────────────
-
-async function runRefreshPathB(specificPart) {
-  const ps = partState[specificPart]
-
-  try {
-    await api.ownerOndemandRefresh(specificPart)
-  } catch (e) {
-    // ondemand-refresh 失败
-    const hasCache = ps.data != null
-    if (!hasCache) {
-      ps.errorMsg = '暂无数据，请检查网络'
-    }
-    ps.refreshError = '刷新失败，请检查网络'
-    return
-  }
-
-  // 等待 5s 后重取快照（US-OWNER-003 AC-1）
-  await new Promise(resolve => setTimeout(resolve, 5000))
-  await loadRealtimeParams(specificPart, true)
-  ps.refreshError = null
-}
-
-// ── IFC-1110-FE-02-4: onRefresh ─────────────────────────────────────────────
-
-async function onRefresh(specificPart) {
-  const ps = partState[specificPart]
-  if (!ps) return
-
-  // 防抖检查（REQ-NFUNC-001）
-  if (ps.refreshing || Date.now() < ps.refreshLockUntil) return
-
-  // 网络离线检查
-  if (isOffline.value) {
-    uni.showToast({ title: '网络不可用，无法刷新', icon: 'none' }); return
-  }
-
-  ps.refreshing = true
-  ps.refreshLockUntil = Date.now() + 3000  // 最短锁定 3s
-  ps.refreshError = null
-
-  try {
-    const screenMac = ps.screen_mac
-    const deviceSns = ps.device_sns || []
-
-    if (screenMac && deviceSns.length > 0) {
-      // 路径 A：MQTT DeviceStatusRead（ADR-1110-02，D-02）
-      try {
-        // 确保已连接（若参数设置区已连接则直接复用）
-        if (!mqttClient.connected.value && broker.value && topics.value) {
-          await mqttClient.acquire(broker.value, topics.value)
-        }
-        await runRefreshPathA(specificPart, screenMac, deviceSns)
-      } catch (e) {
-        console.error('[param-settings] runRefreshPathA 异常:', e)
-        ps.refreshError = '设备未响应，请确认设备在线'
-      }
-    } else {
-      // 路径 B：PLC ondemand-refresh
-      await runRefreshPathB(specificPart)
-    }
-  } finally {
-    // 最短锁定保护：等到 refreshLockUntil 才恢复按钮
-    const remaining = ps.refreshLockUntil - Date.now()
-    if (remaining > 0) await new Promise(r => setTimeout(r, remaining))
-    ps.refreshing = false
+/** 后台刷新发现新 device_sn 且 MQTT 已连接当前套户时，补发 DeviceStatusRead。 */
+function _readNewlyDiscovered(sp, structure) {
+  const room = currentRoom.value
+  if (!room || room.specific_part !== sp) return
+  if (!mqttClient.connected.value || !Array.isArray(structure.device_sns)) return
+  const fresh = structure.device_sns.map(String).filter((s) => !knownSns.has(s))
+  if (fresh.length > 0) {
+    fresh.forEach((s) => knownSns.add(s))
+    mqttClient.publishRead(room.screen_mac, fresh)
   }
 }
 
-// ── IFC-1110-FE-02-9: goToSettings ──────────────────────────────────────────
-
-function goToSettings(specificPart) {
-  // 在参数设置区的 rooms 中找到匹配的 specific_part，切换 roomIndex
-  const idx = rooms.value.findIndex(r => r.specific_part === specificPart)
-  if (idx >= 0) {
-    roomIndex.value = idx
-  }
-  // 滚动到参数设置区锚点（ADR-1110-05）
-  uni.pageScrollTo({ selector: '#param-settings-anchor', duration: 300 })
+/** 错误/pending 态的重试入口（强制网络重拉，非「手动刷新有效数据」入口）。 */
+function reloadStructure() {
+  const sp = currentRoom.value?.specific_part
+  if (sp) loadStructure(sp, true)
 }
 
-// ── 通用工具 ─────────────────────────────────────────────────────────────────
-
+// ── 通用 ─────────────────────────────────────────────────────────────────────
 function goBind() {
   uni.navigateTo({ url: '/pages/bind/index' })
 }
 
-// 判断参数是否可写（REQ-FUNC-002）
-function isWritable(paramName) {
-  const wa = config.value.writable_attrs
-  return !!(wa && wa[paramName])
-}
-
 // ── 生命周期 ─────────────────────────────────────────────────────────────────
-
 onLoad(() => {
-  uni.setNavigationBarTitle({ title: '我的房产' })
+  uni.setNavigationBarTitle({ title: '参数设置' })
 })
 
 onShow(() => {
   if (!authStore.isLoggedIn) { uni.reLaunch({ url: '/pages/login/index' }); return }
-
-  // 初始化参数设置区（区域二，复用原有逻辑）
   if (rooms.value.length === 0 && loading.value) loadConfig()
-
-  // 初始化我的房产区（区域一），仅首次或 bindStatus 为空时执行
-  if (bindStatus.value.length === 0 && !ownerLoading.value) initOwnerHome()
 })
 
 onUnload(() => {
-  // 注销 DeviceStatusUpdate 监听，释放 MQTT 引用（ADR-1110-04 引用计数管理）
+  Object.values(_flushTimers).forEach((t) => clearTimeout(t))
   if (_offDeviceUpdate) { _offDeviceUpdate(); _offDeviceUpdate = null }
-  mqttClient.release()   // IFC-1110-FE-01-2
+  mqttClient.release()
 })
 </script>
 
 <style scoped>
-/* ── 页面基础 ─────────────────────────────────────────────────────────────── */
-.ps-page { display: flex; flex-direction: column; background: #f5f5f5; min-height: 100vh; }
+.ps-page { display: flex; flex-direction: column; background: #f5f5f5; min-height: 100vh; padding-bottom: 24rpx; }
 
-/* ── 区域一：我的房产 ────────────────────────────────────────────────────── */
-.owner-home-section { padding: 0 0 16rpx; }
-.section-header { background: #fff; padding: 24rpx 24rpx 16rpx; border-bottom: 1rpx solid #f0f0f0; }
-.section-title { font-size: 32rpx; font-weight: bold; color: #333; }
-
-.offline-banner {
-  background: #fff7e6; padding: 12rpx 24rpx;
-  border-left: 4rpx solid #f59e0b;
-  margin: 0 0 8rpx;
-}
-.offline-banner text { font-size: 24rpx; color: #92400e; }
-
-.config-warn-banner {
-  background: #fef2f2; padding: 12rpx 24rpx;
-  border-left: 4rpx solid #ef4444;
-  margin: 0 0 8rpx;
-}
-.config-warn-banner text { font-size: 24rpx; color: #b91c1c; }
-
-.part-card {
-  background: #fff; margin: 16rpx 24rpx; border-radius: 12rpx;
-  box-shadow: 0 2rpx 6rpx rgba(0,0,0,0.06); overflow: hidden;
-}
-.part-card-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20rpx 24rpx;
-}
-.part-name { font-size: 28rpx; font-weight: bold; color: #333; flex: 1; }
-.part-header-right { display: flex; align-items: center; gap: 16rpx; }
-.expand-arrow { font-size: 20rpx; color: #aaa; }
-
-.refresh-btn {
-  padding: 8rpx 20rpx; background: #1a73e8; border-radius: 8rpx;
-}
-.refresh-btn text { color: #fff; font-size: 24rpx; }
-.refresh-btn-busy { opacity: 0.6; }
-
-.part-expand { padding: 0 24rpx 16rpx; border-top: 1rpx solid #f5f5f5; }
-
-.ts-label { font-size: 22rpx; color: #999; display: block; padding: 8rpx 0; }
-
-.refresh-error-msg {
-  background: #fef2f2; border-radius: 8rpx; padding: 10rpx 16rpx; margin: 8rpx 0;
-}
-.refresh-error-msg text { font-size: 24rpx; color: #ef4444; }
-
-.group-block { margin-top: 12rpx; }
-.room-block { margin-bottom: 16rpx; }
-.room-title { font-size: 26rpx; font-weight: bold; color: #555; display: block; padding: 8rpx 0 4rpx; border-bottom: 1rpx solid #f0f0f0; margin-bottom: 8rpx; }
-
-.param-row { display: flex; align-items: center; justify-content: space-between; padding: 10rpx 0; border-bottom: 1rpx solid #fafafa; }
-.param-name { font-size: 26rpx; color: #666; flex: 1; }
-.param-right { display: flex; align-items: center; gap: 12rpx; }
-.param-value { font-size: 26rpx; color: #333; }
-.param-badges { display: flex; align-items: center; gap: 8rpx; }
-.badge-writable { font-size: 20rpx; color: #16a34a; background: #f0fdf4; padding: 2rpx 8rpx; border-radius: 4rpx; }
-.badge-readonly { font-size: 20rpx; color: #aaa; }
-.btn-go-settings { padding: 6rpx 16rpx; background: #1a73e8; border-radius: 6rpx; }
-.btn-go-settings text { color: #fff; font-size: 22rpx; }
-
-.tip-loading { text-align: center; padding: 32rpx; color: #aaa; font-size: 26rpx; }
-.tip-error { text-align: center; padding: 24rpx; }
-.tip-error text { font-size: 26rpx; color: #666; }
-.retry-btn { margin-top: 16rpx; display: inline-block; padding: 10rpx 28rpx; background: #1a73e8; border-radius: 8rpx; }
-.retry-btn text { color: #fff; font-size: 24rpx; }
-
-/* ── v1.11.1 新增样式（两阶段渲染）─────────────────────────────────────── */
-/* 设备树未同步提示（OQ-E5）*/
-.sync-pending { text-align: center; padding: 24rpx 16rpx; }
-.sync-pending-text { font-size: 26rpx; color: #999; display: block; margin-bottom: 16rpx; }
-
-/* 全屋系统分区标题缩进与风格区分（ADR-1111-03）*/
-.system-block { margin-top: 8rpx; border-top: 2rpx dashed #e5e7eb; padding-top: 8rpx; }
-
-/* 系统级设备名称行（OQ-E4：显示 device_name）*/
-.device-name-system {
-  font-size: 24rpx; color: #888; display: block;
-  padding: 4rpx 0 2rpx; font-style: italic;
-}
-
-/* 无参数定义时占位（sub_type 未知或 DeviceConfig 无记录）*/
-.no-params-placeholder { padding: 8rpx 0; }
-.no-params-placeholder text { font-size: 24rpx; color: #bbb; }
-
-/* ── 区域二：参数设置（原有样式，零改动）────────────────────────────────── */
-.param-settings-section { display: flex; flex-direction: column; min-height: 60vh; }
-.room-bar {
+/* 套户选择条 */
+.unit-bar {
   display: flex; align-items: center; justify-content: space-between;
   background: #fff; padding: 20rpx 24rpx; border-bottom: 1rpx solid #f0f0f0;
 }
-.room-label { font-size: 26rpx; color: #999; margin-right: 16rpx; }
-.room-pick, .room-single { font-size: 28rpx; color: #1a73e8; font-weight: bold; }
+.unit-label { font-size: 26rpx; color: #999; margin-right: 16rpx; }
+.unit-pick, .unit-single { font-size: 28rpx; color: #1a73e8; font-weight: bold; flex: 1; }
 .conn-dot { font-size: 22rpx; color: #f59e0b; }
 .conn-dot.on { color: #16a34a; }
-.ps-body { flex: 1; }
+
+/* 提示 / 空态 */
 .tip { text-align: center; padding: 80rpx 24rpx; color: #999; font-size: 28rpx; }
 .link-btn { margin-top: 24rpx; display: inline-block; padding: 12rpx 32rpx; background: #1a73e8; border-radius: 8rpx; }
 .link-btn text { color: #fff; font-size: 26rpx; }
-.dev-card { background: #fff; margin: 16rpx 24rpx; border-radius: 12rpx; padding: 20rpx 24rpx; box-shadow: 0 2rpx 6rpx rgba(0,0,0,0.06); }
-.dev-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12rpx; padding-bottom: 12rpx; border-bottom: 1rpx solid #f0f0f0; }
-.dev-role { font-size: 28rpx; font-weight: bold; color: #333; }
-.dev-sn { font-size: 22rpx; color: #bbb; }
-.attr-row { display: flex; align-items: center; justify-content: space-between; padding: 14rpx 0; }
+
+/* 面板卡片 */
+.panel-card {
+  background: #fff; margin: 16rpx 24rpx; border-radius: 12rpx;
+  box-shadow: 0 2rpx 6rpx rgba(0,0,0,0.06); overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20rpx 24rpx; border-bottom: 1rpx solid #f0f0f0;
+}
+.panel-title { font-size: 30rpx; font-weight: bold; color: #333; }
+
+/* tab 切换 */
+.tab-bar { display: flex; border: 1rpx solid #e5e7eb; border-radius: 8rpx; overflow: hidden; }
+.tab { padding: 8rpx 28rpx; background: #f7f8fa; }
+.tab text { font-size: 24rpx; color: #666; }
+.tab.active { background: #1a73e8; }
+.tab.active text { color: #fff; }
+
+.panel-body { padding: 8rpx 24rpx 16rpx; }
+.dev-block { padding: 8rpx 0; }
+.dev-sub-name { font-size: 24rpx; color: #888; display: block; padding: 8rpx 0 4rpx; font-style: italic; }
+
+/* tab1 控件行 */
+.attr-row { display: flex; align-items: center; justify-content: space-between; padding: 14rpx 0; border-bottom: 1rpx solid #fafafa; }
 .attr-label { font-size: 26rpx; color: #666; }
 .sel-val { font-size: 26rpx; color: #1a73e8; }
 .num-ctl { display: flex; align-items: center; }
 .num-btn { width: 56rpx; height: 56rpx; line-height: 52rpx; text-align: center; border: 1rpx solid #ddd; border-radius: 8rpx; font-size: 32rpx; color: #1a73e8; }
 .num-val { min-width: 120rpx; text-align: center; font-size: 26rpx; color: #333; font-weight: bold; }
-.apply-btn { margin-top: 16rpx; background: #1a73e8; border-radius: 8rpx; padding: 16rpx; text-align: center; }
-.apply-btn.busy { opacity: 0.6; }
-.apply-btn text { color: #fff; font-size: 26rpx; }
+
+/* 圆点型运行模式控件（#6）：整行，label 一行 + 四个圆点一行，点选即生效 */
+.dots-row { padding: 14rpx 0; border-bottom: 1rpx solid #fafafa; }
+.dots-ctl { display: flex; justify-content: space-between; margin-top: 16rpx; }
+.dot-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.dot { width: 40rpx; height: 40rpx; border-radius: 50%; background: #dfe3e8; border: 2rpx solid #cbd2d9; }
+.dot.on { background: #1a73e8; border-color: #1a73e8; box-shadow: 0 0 0 6rpx rgba(26,115,232,0.15); }
+.dot-label { font-size: 22rpx; color: #999; margin-top: 8rpx; }
+.dot-label.on { color: #1a73e8; font-weight: bold; }
+
+.no-set-tip { text-align: center; padding: 32rpx 0; }
+.no-set-tip text { font-size: 24rpx; color: #bbb; }
+
+/* tab2 详细行 */
+.param-row { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid #fafafa; }
+.param-name { font-size: 26rpx; color: #666; flex: 1; }
+.param-right { display: flex; align-items: center; gap: 12rpx; }
+.param-value { font-size: 26rpx; color: #333; }
+.badge-writable { font-size: 20rpx; color: #16a34a; background: #f0fdf4; padding: 2rpx 8rpx; border-radius: 4rpx; }
+.badge-readonly { font-size: 20rpx; color: #aaa; }
+.no-params-placeholder { padding: 16rpx 0; }
+.no-params-placeholder text { font-size: 24rpx; color: #bbb; }
 </style>
