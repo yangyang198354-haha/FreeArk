@@ -137,24 +137,24 @@
             </view>
           </view>
 
-          <!-- tab2「详细」：全部属性（含只读）当前值，仅展示（C-07）-->
+          <!-- tab2「详细」：屏端实推的当前值（屏端自描述，命中白名单才显示），仅展示（C-07）-->
           <view v-else class="panel-body">
             <template v-for="dev in panel.devices" :key="dev.deviceSn">
               <text v-if="panel.devices.length > 1 && dev.deviceName" class="dev-sub-name">{{ dev.deviceName }}</text>
 
-              <view v-if="dev.allParams.length > 0">
-                <view v-for="p in dev.allParams" :key="p.param_name" class="param-row">
-                  <text class="param-name">{{ p.display_name || p.param_name }}</text>
+              <view v-if="detailRows(dev.deviceSn).length > 0">
+                <view v-for="r in detailRows(dev.deviceSn)" :key="r.tag" class="param-row">
+                  <text class="param-name">{{ r.label }}</text>
                   <view class="param-right">
-                    <text class="param-value">{{ detailVal(dev.deviceSn, p.param_name) }}</text>
-                    <text :class="isWritable(p.param_name) ? 'badge-writable' : 'badge-readonly'">
-                      {{ isWritable(p.param_name) ? '可设置' : '只读' }}
+                    <text class="param-value">{{ r.value }}</text>
+                    <text :class="r.writable ? 'badge-writable' : 'badge-readonly'">
+                      {{ r.writable ? '可设置' : '只读' }}
                     </text>
                   </view>
                 </view>
               </view>
               <view v-else class="no-params-placeholder">
-                <text>{{ mqttConnected ? '采集中…' : '暂无参数定义' }}</text>
+                <text>{{ mqttConnected ? '采集中…' : '设备未上报' }}</text>
               </view>
             </template>
           </view>
@@ -176,7 +176,7 @@ import { useAuthStore } from '@/store/auth'
 import { api } from '@/utils/api'
 import { buildWriteItems } from '@/utils/screenMqtt'
 import { useMqttClient } from '@/utils/useMqttClient'
-import { buildPanels, panelHasControls, formatValue } from '@/utils/paramPanels'
+import { buildPanels, panelHasControls, buildDetailRows } from '@/utils/paramPanels'
 
 const authStore = useAuthStore()
 const mqttClient = useMqttClient()
@@ -187,7 +187,7 @@ const rooms = ref([])               // config.rooms：[{specific_part, location_
 const roomIndex = ref(0)
 const broker = ref(null)
 const topics = ref(null)
-const config = ref({ writable_attrs: {}, product_code_role: {}, mode_energy_link: {}, link_product_codes: [] })
+const config = ref({ writable_attrs: {}, readonly_attrs: {}, product_code_role: {}, mode_energy_link: {}, link_product_codes: [] })
 
 const devices = reactive({})        // deviceSn → {productCode, attrs:{tag:val}}（MQTT 实时值）
 const edits = reactive({})          // deviceSn → {tag: newVal}（待下发）
@@ -230,19 +230,12 @@ const tabState = reactive({})
 function tabOf(id) { return tabState[id] || 'set' }
 function setTab(id, t) { tabState[id] = t }
 
-// ── 值展示 / 可写判定 ────────────────────────────────────────────────────────
-function isWritable(paramName) {
-  const wa = config.value.writable_attrs
-  return !!(wa && wa[paramName])
-}
-
-/** tab2「详细」单元格值：MQTT 实时值格式化；未收到时按连接状态显示占位。 */
-function detailVal(sn, paramName) {
+// ── tab2「详细」值展示（屏端自描述：直接渲染屏端实推 attrs，过滤非白名单）──────
+/** 某设备「详细」tab 行：来自屏端 MQTT 实时 attrs，命中 可写∪只读 白名单才显示。 */
+function detailRows(sn) {
   const d = devices[String(sn)]
-  const raw = d ? d.attrs[paramName] : undefined
-  const formatted = formatValue(paramName, raw, config.value.writable_attrs)
-  if (formatted != null) return formatted
-  return mqttConnected.value ? '采集中…' : '—'
+  if (!d) return []
+  return buildDetailRows(d.attrs, config.value.writable_attrs, config.value.readonly_attrs)
 }
 
 // ── tab1「设置」控件读写（写链路继承 v1.10.0，零语义变更）────────────────────

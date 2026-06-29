@@ -13,6 +13,7 @@ import {
   buildPanels,
   panelHasControls,
   formatValue,
+  buildDetailRows,
 } from '../utils/paramPanels.js'
 
 // 模拟后端 config.writable_attrs（与 screen_param_config.py 对齐）
@@ -27,7 +28,14 @@ const WA = {
   wind_speed: { control: 'select', label: '风速', options: [{ value: 'normal', label: '普通' }, { value: 'high_speed', label: '高速' }] },
   humidification_enable: { control: 'toggle', label: '加湿', options: [{ value: 'off', label: '关' }, { value: 'on', label: '开' }] },
 }
-const CONFIG = { writable_attrs: WA, product_code_role: { 250001: '能量计', 100007: '空气质量' } }
+// 模拟后端 config.readonly_attrs（屏端自描述「只读」展示白名单）
+const RA = {
+  temp: { label: '当前温度', unit: '℃' },
+  humidity: { label: '当前湿度', unit: '%' },
+  condensation_alarm: { label: '结露报警', options: [{ value: '0', label: '正常' }, { value: '1', label: '报警' }] },
+  co2: { label: 'CO₂', unit: 'ppm' },
+}
+const CONFIG = { writable_attrs: WA, readonly_attrs: RA, product_code_role: { 250001: '能量计', 100007: '空气质量' } }
 
 // ── resolveRoomName ──────────────────────────────────────────────────────────
 describe('resolveRoomName', () => {
@@ -240,5 +248,41 @@ describe('formatValue', () => {
   it('空值 → null（占位交由调用方）', () => {
     expect(formatValue('switch', undefined, WA)).toBeNull()
     expect(formatValue('switch', '', WA)).toBeNull()
+  })
+})
+
+// ── buildDetailRows：屏端自描述详细 tab（命中白名单才显示）────────────────────
+describe('buildDetailRows', () => {
+  it('只展示「可写∪只读」白名单内 attrTag，过滤 error_*/comm_fault/plc_*/空 tag', () => {
+    const attrs = {
+      switch: 'off', temp: '24.5', humidity: '55.0',
+      comm_fault_timeout: 'normal', error_673: '0', plc_ip_1: '49320', '': 'x',
+    }
+    const rows = buildDetailRows(attrs, WA, RA)
+    // 可写项(switch)在前、只读项(temp/humidity)在后；诊断/内部项被滤除
+    expect(rows.map((r) => r.tag)).toEqual(['switch', 'temp', 'humidity'])
+  })
+
+  it('值格式化：options→中文、unit 拼接', () => {
+    const rows = buildDetailRows({ switch: 'on', temp: '24.5', condensation_alarm: '0' }, WA, RA)
+    const byTag = Object.fromEntries(rows.map((r) => [r.tag, r.value]))
+    expect(byTag.switch).toBe('开')          // 可写 options
+    expect(byTag.temp).toBe('24.5℃')         // 只读 unit
+    expect(byTag.condensation_alarm).toBe('正常') // 只读 options 0→正常
+  })
+
+  it('writable 标记正确（可写 true / 只读 false）', () => {
+    const rows = buildDetailRows({ switch: 'on', temp: '24.5' }, WA, RA)
+    expect(rows.find((r) => r.tag === 'switch').writable).toBe(true)
+    expect(rows.find((r) => r.tag === 'temp').writable).toBe(false)
+  })
+
+  it('空 attrs / null → []', () => {
+    expect(buildDetailRows({}, WA, RA)).toEqual([])
+    expect(buildDetailRows(null, WA, RA)).toEqual([])
+  })
+
+  it('值为空串的项不渲染', () => {
+    expect(buildDetailRows({ temp: '' }, WA, RA).length).toBe(0)
   })
 })

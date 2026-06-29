@@ -65,6 +65,52 @@ SCREEN_WRITABLE_ATTRS = {
     },
 }
 
+# 屏端「只读」attrTag → 展示定义（仅小程序「详细」tab 用，不可写）。v1.12.1
+#
+# 关键背景（2026-06-29 抓包定性）：屏端 DeviceStatusUpdate 是**自描述**的，值按屏端
+#   自己的短 attrTag 对齐（temp / humidity / mode …），与数据库 DeviceConfig.param_name
+#   （PLC/S7 采集管线命名，如 living_room_temperature / operation_mode）**是两套词表**。
+#   旧「详细」tab 用 DB param_name 去 MQTT attrs 里查，永远查不到 → 永久「采集中」。
+#   故「详细」tab 改为：直接遍历屏端实推 attrTag，命中「可写 ∪ 本表」白名单才展示；
+#   未命中者（error_* / comm_fault_timeout / plc_* / 空 tag）一律不显示。
+# 值为屏端语义/数字串；options 用于把状态码转中文（如 condensation_alarm 0/1）。
+# 标注「单位/语义待核实」的项先按推荐展示原值（值真实），后续再校准。
+SCREEN_READONLY_ATTRS = {
+    # 温控（主温控 260001 / 末端 120003）通用
+    'temp': {'label': '当前温度', 'unit': '℃'},
+    'humidity': {'label': '当前湿度', 'unit': '%'},
+    'dew_point_temp': {'label': '露点温度', 'unit': '℃'},
+    'NTC_temp': {'label': '探头温度(NTC)', 'unit': '℃'},
+    'condensation_alarm': {
+        'label': '结露报警',
+        'options': [{'value': '0', 'label': '正常'}, {'value': '1', 'label': '报警'}],
+    },
+    # 主机 270001
+    '2nd_inwater_temp_detect': {'label': '二次进水温度', 'unit': '℃'},
+    '2nd_outwater_temp_detect': {'label': '二次出水温度', 'unit': '℃'},
+    'primary_valve_opening': {'label': '一次阀开度', 'unit': '%'},  # 单位待核实
+    # 新风 130004
+    'fan_speed': {'label': '风机转速', 'unit': 'rpm'},
+    'newwind_inlet_temp': {'label': '新风进风温度', 'unit': '℃'},
+    'pau_out_temp': {'label': '送风温度', 'unit': '℃'},
+    'pau_through_temp': {'label': '盘管温度', 'unit': '℃'},
+    'pau_in_temp': {'label': '回风温度', 'unit': '℃'},  # 实测样例 101.2，疑似探头/缩放异常，待核实
+    'one_water_valve_opening': {'label': '水阀开度', 'unit': '%'},
+    'humi_lower_limit': {'label': '加湿下限', 'unit': '%'},
+    'humi_upper_limit': {'label': '加湿上限', 'unit': '%'},
+    'filter_max_life': {'label': '滤网寿命', 'unit': 'h'},
+    'filter_working_time': {'label': '滤网已运行', 'unit': 'h'},
+    # 能量计 250001（单位待核实）
+    'total_cold_quantity': {'label': '累计冷量'},
+    'total_hot_quantity': {'label': '累计热量'},
+    'work_duration': {'label': '工作时长'},
+    # 空气品质 100007
+    'co2': {'label': 'CO₂', 'unit': 'ppm'},
+    'pm25': {'label': 'PM2.5', 'unit': 'µg/m³'},
+    'hcho': {'label': '甲醛', 'unit': 'mg/m³'},
+    'tvoc': {'label': 'TVOC', 'unit': 'mg/m³'},
+}
+
 # productCode → 设备角色显示名（小程序按设备分组展示用）
 PRODUCT_CODE_ROLE = {
     260001: '主温控器',
@@ -97,6 +143,7 @@ def get_screen_param_config() -> dict:
     """供 config 接口下发的完整配置块。"""
     return {
         'writable_attrs': SCREEN_WRITABLE_ATTRS,
+        'readonly_attrs': SCREEN_READONLY_ATTRS,
         'product_code_role': PRODUCT_CODE_ROLE,
         'mode_energy_link': MODE_ENERGY_LINK,
         'link_product_codes': LINK_PRODUCT_CODES,

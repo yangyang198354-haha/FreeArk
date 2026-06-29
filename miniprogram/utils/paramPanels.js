@@ -169,6 +169,16 @@ export function panelHasControls(panel) {
   return !!(panel && panel.devices && panel.devices.some((d) => d.controls.length > 0))
 }
 
+/** 按控件/展示定义把单值转中文：options 映射（on→开 / 0→正常）→ unit 拼接（26→26℃）→ 原值。 */
+function formatAttr(value, def) {
+  if (def && def.options && def.options.length) {
+    const o = def.options.find((opt) => String(opt.value) === String(value))
+    if (o) return o.label
+  }
+  if (def && def.unit) return `${value}${def.unit}`
+  return String(value)
+}
+
 /**
  * 值展示格式化：可写属性按 options/unit 转中文（on→开 / cold→制冷 / 26→26℃）；
  * 只读属性（不在 writable_attrs）返回原值字符串。无值返回 null（由调用方决定占位文案）。
@@ -176,10 +186,36 @@ export function panelHasControls(panel) {
 export function formatValue(paramName, value, writableAttrs) {
   if (value === null || value === undefined || value === '') return null
   const c = (writableAttrs || {})[paramName]
-  if (c && c.options && c.options.length) {
-    const o = c.options.find((opt) => String(opt.value) === String(value))
-    if (o) return o.label
+  if (!c) return String(value)
+  return formatAttr(value, c)
+}
+
+/**
+ * 「详细」tab 行：屏端自描述——只用屏端实推的 attrs，命中「可写 ∪ 只读」白名单才展示。
+ *
+ *   背景（2026-06-29 抓包定性）：屏端 DeviceStatusUpdate 的 attrTag（temp/humidity/mode…）
+ *   与 DB DeviceConfig.param_name（living_room_temperature/operation_mode…）是两套词表，
+ *   故详细 tab 不再依赖 DB 骨架，直接渲染屏端实推值（单一数据源 = 屏端 MQTT）。
+ *   未在白名单内的 attrTag（error_* / comm_fault_timeout / plc_* / 空 tag）一律不显示。
+ *
+ * @param attrs        devices[sn].attrs（屏端实时值 attrTag→value）
+ * @param writableAttrs config.writable_attrs（可写白名单，详细里标「可设置」）
+ * @param readonlyAttrs config.readonly_attrs（只读展示白名单，标「只读」）
+ * @returns Array<{tag,label,value,writable}> —— 顺序：可写项（控件镜像）在前、只读项在后；
+ *          各自按 config 定义顺序，过滤掉未推送 / 空值的项。
+ */
+export function buildDetailRows(attrs, writableAttrs, readonlyAttrs) {
+  const present = attrs || {}
+  const rows = []
+  const pushFrom = (defs, writable) => {
+    for (const tag of Object.keys(defs || {})) {
+      if (!(tag in present)) continue
+      const v = present[tag]
+      if (v === null || v === undefined || v === '') continue
+      rows.push({ tag, label: (defs[tag] && defs[tag].label) || tag, value: formatAttr(v, defs[tag]), writable })
+    }
   }
-  if (c && c.unit) return `${value}${c.unit}`
-  return String(value)
+  pushFrom(writableAttrs, true)
+  pushFrom(readonlyAttrs, false)
+  return rows
 }
