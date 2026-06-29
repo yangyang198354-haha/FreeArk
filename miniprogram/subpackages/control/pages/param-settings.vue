@@ -73,29 +73,17 @@
             <switch
               v-if="card.switchCtl"
               class="card-switch"
+              color="#00e5ff"
               :checked="curVal(card.switchCtl.sn, card.switchCtl.w.tag) === 'on'"
               @change="onToggle(ctlDev(card.switchCtl), card.switchCtl.w.tag, $event)"
             />
           </view>
 
-          <!-- 大字关键指标（温度等）-->
-          <view v-if="card.big.length" class="big-row">
-            <view v-for="m in card.big" :key="m.tag" class="big-item">
-              <text class="big-val">{{ m.value }}</text>
-              <text class="big-lbl">{{ m.label }}</text>
-            </view>
-          </view>
-
-          <!-- 小字指标（行内）-->
-          <view v-if="card.small.length" class="small-row">
-            <text v-for="m in card.small" :key="m.tag" class="small-item">{{ m.label }} {{ m.value }}</text>
-          </view>
-
-          <!-- 网格指标（空气品质）-->
-          <view v-if="card.grid.length" class="grid-row">
-            <view v-for="m in card.grid" :key="m.tag" class="grid-cell">
-              <text class="cell-val">{{ m.value }}</text>
-              <text class="cell-lbl">{{ m.label }}</text>
+          <!-- 指标（统一小字 chips：温度/湿度/空气品质等只读读数，字体一致、不重叠）-->
+          <view v-if="card.small.length" class="metric-row">
+            <view v-for="m in card.small" :key="m.tag" class="metric-chip">
+              <text class="metric-lbl">{{ m.label }}</text>
+              <text class="metric-val">{{ m.value }}</text>
             </view>
           </view>
 
@@ -103,13 +91,19 @@
           <view v-if="card.controls.length" class="ctl-area">
             <view v-for="c in card.controls" :key="c.sn + '-' + c.w.tag">
 
-              <!-- 圆点（运行模式）-->
-              <view v-if="c.w.control === 'dots'" class="ctl-dots">
+              <!-- 运行模式：图标药丸（点选即生效，当前态高亮发光，替代旧四圆点）-->
+              <view v-if="c.w.control === 'pills'" class="mode-block">
                 <text class="ctl-label">{{ c.w.label }}</text>
-                <view class="dots-ctl">
-                  <view v-for="opt in c.w.options" :key="opt.value" class="dot-item" @tap="onPickDot(ctlDev(c), c.w, opt.value)">
-                    <view class="dot" :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"></view>
-                    <text class="dot-label" :class="{ on: curVal(c.sn, c.w.tag) === opt.value }">{{ opt.label }}</text>
+                <view class="mode-pills">
+                  <view
+                    v-for="opt in c.w.options"
+                    :key="opt.value"
+                    class="mode-pill"
+                    :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"
+                    @tap="onPickDot(ctlDev(c), c.w, opt.value)"
+                  >
+                    <text class="mode-ico">{{ modeIcon(opt.value) }}</text>
+                    <text class="mode-txt">{{ opt.label }}</text>
                   </view>
                 </view>
               </view>
@@ -131,7 +125,7 @@
               <!-- 开关 -->
               <view v-else-if="c.w.control === 'toggle'" class="ctl-row">
                 <text class="ctl-label">{{ c.w.label }}</text>
-                <switch :checked="curVal(c.sn, c.w.tag) === 'on'" @change="onToggle(ctlDev(c), c.w.tag, $event)" />
+                <switch color="#00e5ff" :checked="curVal(c.sn, c.w.tag) === 'on'" @change="onToggle(ctlDev(c), c.w.tag, $event)" />
               </view>
 
               <!-- 数值步进 -->
@@ -161,7 +155,7 @@
 
           <!-- 空卡占位（无开关/控件/指标/读数，连接中先撑住）-->
           <view
-            v-if="!card.switchCtl && !card.controls.length && !card.big.length && !card.small.length && !card.grid.length && !card.rest.length"
+            v-if="!card.switchCtl && !card.controls.length && !card.small.length && !card.rest.length"
             class="empty-tip"
           >
             <text>{{ mqttConnected ? '采集中…' : '设备未上报' }}</text>
@@ -249,6 +243,10 @@ function toggleExpand(id) { expanded[id] = !expanded[id] }
 
 // 控件 slot（{sn,productCode,w}）→ 写链路所需的轻量 dev 对象（deviceSn/productCode）。
 function ctlDev(c) { return { deviceSn: c.sn, productCode: c.productCode } }
+
+// 运行模式图标（图标药丸用）：制冷/制热/通风/除湿。
+const MODE_ICON = { cold: '❄', hot: '☀', wind: '🌀', dehumidification: '💧' }
+function modeIcon(v) { return MODE_ICON[v] || '◆' }
 
 // ── 控件读写（写链路继承 v1.10.0，零语义变更）────────────────────────────────
 function curVal(sn, tag) {
@@ -545,6 +543,8 @@ function goBind() {
 // ── 生命周期 ─────────────────────────────────────────────────────────────────
 onLoad(() => {
   uni.setNavigationBarTitle({ title: '参数设置' })
+  // 赛博朋克：导航栏配深色背景 + 白字，与页面深空底统一。
+  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#0a0e1a' }) } catch (e) { /* ignore */ }
 })
 
 onShow(() => {
@@ -560,84 +560,103 @@ onUnload(() => {
 </script>
 
 <style scoped>
-.ps-page { display: flex; flex-direction: column; background: #f2f3f5; min-height: 100vh; padding-bottom: 32rpx; }
+/* ── 赛博朋克：深空底 + 霓虹辉光 ─────────────────────────────────────────── */
+.ps-page {
+  min-height: 100vh;
+  padding-bottom: 44rpx;
+  background:
+    radial-gradient(80% 50% at 12% -5%, rgba(124, 58, 237, 0.30), transparent 60%),
+    radial-gradient(70% 45% at 96% 6%, rgba(0, 229, 255, 0.20), transparent 60%),
+    radial-gradient(95% 60% at 50% 112%, rgba(255, 46, 151, 0.16), transparent 60%),
+    #060912;
+}
 
 /* 套户选择条 */
-.unit-bar { display: flex; align-items: center; justify-content: space-between; padding: 22rpx 30rpx 8rpx; }
-.unit-label { font-size: 24rpx; color: #9aa0a6; margin-right: 12rpx; }
-.unit-pick, .unit-single { font-size: 30rpx; color: #1f2937; font-weight: 600; flex: 1; }
+.unit-bar { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 32rpx 12rpx; }
+.unit-label { font-size: 24rpx; color: #5f6b86; margin-right: 12rpx; letter-spacing: 2rpx; }
+.unit-pick, .unit-single { font-size: 32rpx; color: #e8f6ff; font-weight: 700; flex: 1; text-shadow: 0 0 12rpx rgba(0, 229, 255, 0.45); }
 .conn-dot { font-size: 22rpx; color: #f59e0b; }
-.conn-dot.on { color: #16a34a; }
+.conn-dot.on { color: #27f5b5; text-shadow: 0 0 10rpx rgba(39, 245, 181, 0.7); }
 
 /* 提示 / 空态 */
-.tip { text-align: center; padding: 80rpx 24rpx; color: #9aa0a6; font-size: 28rpx; }
-.link-btn { margin-top: 24rpx; display: inline-block; padding: 14rpx 36rpx; background: #3b82f6; border-radius: 999rpx; }
-.link-btn text { color: #fff; font-size: 26rpx; }
+.tip { text-align: center; padding: 90rpx 24rpx; color: #6b7796; font-size: 28rpx; }
+.link-btn {
+  margin-top: 24rpx; display: inline-block; padding: 16rpx 42rpx; border-radius: 999rpx;
+  background: linear-gradient(90deg, #00e5ff, #7c3aed); box-shadow: 0 0 24rpx rgba(0, 229, 255, 0.5);
+}
+.link-btn text { color: #04121f; font-size: 26rpx; font-weight: 700; }
 
-/* 设备卡 */
+/* 设备卡：暗玻璃 + 霓虹描边辉光 */
 .dev-card {
-  background: #fff; margin: 18rpx 24rpx; border-radius: 24rpx;
-  padding: 26rpx 28rpx 14rpx; box-shadow: 0 6rpx 20rpx rgba(17, 24, 39, 0.05);
+  position: relative; margin: 20rpx 24rpx; border-radius: 22rpx; padding: 26rpx 28rpx 14rpx;
+  background: linear-gradient(160deg, rgba(20, 30, 56, 0.72), rgba(10, 16, 33, 0.82));
+  border: 1rpx solid rgba(0, 229, 255, 0.20);
+  box-shadow: 0 0 28rpx rgba(0, 160, 255, 0.10), inset 0 1rpx 0 rgba(255, 255, 255, 0.05);
 }
 .card-head { display: flex; align-items: center; }
 .card-icon {
-  width: 64rpx; height: 64rpx; line-height: 64rpx; text-align: center;
-  font-size: 34rpx; background: #eef2ff; border-radius: 18rpx; margin-right: 18rpx;
+  width: 64rpx; height: 64rpx; line-height: 64rpx; text-align: center; font-size: 34rpx;
+  border-radius: 16rpx; margin-right: 18rpx;
+  background: rgba(0, 229, 255, 0.10); border: 1rpx solid rgba(0, 229, 255, 0.30);
+  box-shadow: 0 0 14rpx rgba(0, 229, 255, 0.25);
 }
-.card-title { font-size: 32rpx; font-weight: 700; color: #1f2937; flex: 1; }
-.card-switch { transform: scale(0.9); }
+.card-title { font-size: 32rpx; font-weight: 700; color: #eaf6ff; flex: 1; letter-spacing: 1rpx; }
+.card-switch { transform: scale(0.92); }
 
-/* 大字关键指标 */
-.big-row { display: flex; gap: 48rpx; margin: 20rpx 0 6rpx; }
-.big-item { display: flex; flex-direction: column; }
-.big-val { font-size: 64rpx; font-weight: 700; color: #ea6a3a; line-height: 1.1; }
-.big-lbl { font-size: 22rpx; color: #9aa0a6; margin-top: 4rpx; }
-
-/* 小字指标 */
-.small-row { display: flex; flex-wrap: wrap; gap: 24rpx; margin: 8rpx 0 4rpx; }
-.small-item { font-size: 24rpx; color: #6b7280; }
-
-/* 网格指标（空气品质）*/
-.grid-row { display: flex; flex-wrap: wrap; margin: 14rpx 0 4rpx; }
-.grid-cell { width: 25%; display: flex; flex-direction: column; align-items: center; padding: 12rpx 0; }
-.cell-val { font-size: 34rpx; font-weight: 700; color: #1f2937; }
-.cell-lbl { font-size: 20rpx; color: #9aa0a6; margin-top: 4rpx; }
+/* 指标 chips（统一小字，温度/湿度/空气品质同一样式，避免重叠）*/
+.metric-row { display: flex; flex-wrap: wrap; gap: 14rpx; margin: 18rpx 0 6rpx; }
+.metric-chip {
+  display: flex; align-items: baseline; gap: 8rpx; padding: 10rpx 18rpx; border-radius: 12rpx;
+  background: rgba(0, 229, 255, 0.06); border: 1rpx solid rgba(0, 229, 255, 0.16);
+}
+.metric-lbl { font-size: 22rpx; color: #7f8db0; }
+.metric-val { font-size: 26rpx; color: #7df9ff; font-weight: 600; text-shadow: 0 0 8rpx rgba(0, 229, 255, 0.35); }
 
 /* 控件区 */
-.ctl-area { margin-top: 8rpx; }
-.ctl-row { display: flex; align-items: center; justify-content: space-between; padding: 16rpx 0; border-top: 1rpx solid #f3f4f6; }
-.ctl-label { font-size: 26rpx; color: #374151; }
+.ctl-area { margin-top: 10rpx; }
+.ctl-row { display: flex; align-items: center; justify-content: space-between; padding: 18rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
+.ctl-label { font-size: 26rpx; color: #aab6d6; }
 
 /* 分段 chips（风速等少选项 select）*/
-.seg { display: flex; background: #f3f4f6; border-radius: 999rpx; padding: 4rpx; }
-.seg-item { padding: 8rpx 28rpx; border-radius: 999rpx; }
-.seg-item text { font-size: 24rpx; color: #6b7280; }
-.seg-item.on { background: #3b82f6; }
-.seg-item.on text { color: #fff; font-weight: 600; }
+.seg { display: flex; background: rgba(10, 18, 38, 0.8); border: 1rpx solid rgba(0, 229, 255, 0.16); border-radius: 999rpx; padding: 4rpx; }
+.seg-item { padding: 8rpx 30rpx; border-radius: 999rpx; }
+.seg-item text { font-size: 24rpx; color: #7f8db0; }
+.seg-item.on { background: linear-gradient(90deg, #00e5ff, #3b82f6); box-shadow: 0 0 16rpx rgba(0, 229, 255, 0.55); }
+.seg-item.on text { color: #04121f; font-weight: 700; }
 
 /* 数值步进 */
 .num-ctl { display: flex; align-items: center; }
-.num-btn { width: 60rpx; height: 60rpx; line-height: 56rpx; text-align: center; border: 1rpx solid #e5e7eb; border-radius: 14rpx; font-size: 34rpx; color: #3b82f6; }
-.num-val { min-width: 130rpx; text-align: center; font-size: 30rpx; color: #1f2937; font-weight: 700; }
+.num-btn {
+  width: 62rpx; height: 62rpx; line-height: 58rpx; text-align: center; border-radius: 14rpx;
+  border: 1rpx solid rgba(0, 229, 255, 0.35); color: #7df9ff; font-size: 34rpx; background: rgba(0, 229, 255, 0.06);
+}
+.num-val { min-width: 140rpx; text-align: center; font-size: 32rpx; color: #eaf6ff; font-weight: 700; text-shadow: 0 0 8rpx rgba(0, 229, 255, 0.4); }
 
-/* 圆点（运行模式）*/
-.ctl-dots { padding: 16rpx 0; border-top: 1rpx solid #f3f4f6; }
-.dots-ctl { display: flex; justify-content: space-between; margin-top: 18rpx; }
-.dot-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
-.dot { width: 44rpx; height: 44rpx; border-radius: 50%; background: #e5e7eb; }
-.dot.on { background: #3b82f6; box-shadow: 0 0 0 8rpx rgba(59, 130, 246, 0.15); }
-.dot-label { font-size: 22rpx; color: #9aa0a6; margin-top: 10rpx; }
-.dot-label.on { color: #3b82f6; font-weight: 600; }
+/* 运行模式：图标药丸（取代旧四圆点）*/
+.mode-block { padding: 18rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
+.mode-pills { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 18rpx; }
+.mode-pill {
+  flex: 1; min-width: 150rpx; display: flex; align-items: center; justify-content: center; gap: 8rpx;
+  padding: 16rpx 10rpx; border-radius: 14rpx;
+  background: rgba(10, 18, 38, 0.75); border: 1rpx solid rgba(120, 160, 255, 0.16);
+}
+.mode-pill.on {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.22), rgba(124, 58, 237, 0.32));
+  border-color: rgba(0, 229, 255, 0.7); box-shadow: 0 0 20rpx rgba(0, 229, 255, 0.45);
+}
+.mode-ico { font-size: 30rpx; }
+.mode-txt { font-size: 24rpx; color: #9fb0d6; }
+.mode-pill.on .mode-txt { color: #eaf6ff; font-weight: 700; }
 
 /* 查看全部 + 展开列表 */
-.more-row { display: flex; align-items: center; justify-content: center; gap: 8rpx; padding: 18rpx 0 8rpx; }
-.more-txt, .more-arrow { font-size: 24rpx; color: #9aa0a6; }
-.rest-list { padding: 2rpx 0 8rpx; }
-.rest-row { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; border-top: 1rpx solid #f7f8fa; }
-.rest-name { font-size: 24rpx; color: #6b7280; }
-.rest-val { font-size: 24rpx; color: #374151; }
+.more-row { display: flex; align-items: center; justify-content: center; gap: 8rpx; padding: 20rpx 0 10rpx; }
+.more-txt, .more-arrow { font-size: 24rpx; color: #5f6b86; }
+.rest-list { padding: 2rpx 0 10rpx; }
+.rest-row { display: flex; align-items: center; justify-content: space-between; padding: 14rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.08); }
+.rest-name { font-size: 24rpx; color: #7f8db0; }
+.rest-val { font-size: 24rpx; color: #bcd3e8; }
 
 /* 空卡占位 */
-.empty-tip { text-align: center; padding: 28rpx 0; }
-.empty-tip text { font-size: 24rpx; color: #c0c4cc; }
+.empty-tip { text-align: center; padding: 30rpx 0; }
+.empty-tip text { font-size: 24rpx; color: #4d5878; }
 </style>

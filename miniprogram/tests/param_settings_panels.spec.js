@@ -66,9 +66,9 @@ describe('buildControls — OQ-01 可写白名单', () => {
     expect(ctrls.some((c) => c.tag === 'energy_supply_mode')).toBe(false)
   })
 
-  it('运行模式 mode 控件类型被改写为 dots（#6 圆点控件）', () => {
+  it('运行模式 mode 控件类型被改写为 pills（图标药丸）', () => {
     const mode = buildControls({ product_code: '270001', params: [] }, WA).find((c) => c.tag === 'mode')
-    expect(mode.control).toBe('dots')
+    expect(mode.control).toBe('pills')
     expect(mode.optionLabels).toEqual(['制冷', '制热'])
   })
 
@@ -198,7 +198,7 @@ describe('buildPanels', () => {
         { device_sn: 7002, product_code: '100007', params: [{ param_name: 'co2', display_name: 'CO₂' }] },
       ],
     }
-    expect(buildPanels(structure, CONFIG).map((p) => p.title)).toEqual(['能量计', '空气质量'])
+    expect(buildPanels(structure, CONFIG).map((p) => p.title)).toEqual(['能耗表', '空气质量'])
   })
 
   it('#4 隐藏真正为空的面板（无控件且无参数定义的设备）', () => {
@@ -308,16 +308,16 @@ function panelDev(sn, pc) {
 }
 
 describe('buildCard', () => {
-  it('客厅(260001)：switch 抽为头部开关、temp_set 为卡面控件、temp 大字、humidity/露点小字、NTC_temp 进查看全部', () => {
+  it('客厅(260001)：switch 抽为头部开关、temp_set 为卡面控件，温度/湿度/露点统一小字 chips、NTC_temp 进查看全部', () => {
     const panel = { id: 'sys-260001', title: '客厅', devices: [panelDev(2222, '260001')] }
     const attrs = { 2222: { switch: 'off', temp: '24.5', humidity: '55.0', temp_set: '26.0', NTC_temp: '24.5', comm_fault_timeout: 'normal', error_1: '0' } }
     const card = buildCard(panel, attrs, CONFIG)
     expect(card.icon).toBe('🌡')
     expect(card.switchCtl.w.tag).toBe('switch')
     expect(card.controls.map((c) => c.w.tag)).toEqual(['temp_set'])
-    expect(card.big.map((m) => m.tag)).toEqual(['temp'])
-    expect(card.big[0].value).toBe('24.5℃')
-    expect(card.small.map((m) => m.tag)).toEqual(['humidity', 'dew_point_temp'])
+    expect(card.big).toBeUndefined() // #1：不再有大字区
+    expect(card.small.map((m) => m.tag)).toEqual(['temp', 'humidity', 'dew_point_temp'])
+    expect(card.small.find((m) => m.tag === 'temp').value).toBe('24.5℃')
     expect(card.small.find((m) => m.tag === 'humidity').value).toBe('55.0%') // 原值拼单位，不做小数裁剪
     expect(card.small.find((m) => m.tag === 'dew_point_temp').value).toBe('—') // 无值占位
     expect(card.rest.map((r) => r.tag)).toEqual(['NTC_temp']) // comm_fault/error 被过滤
@@ -333,29 +333,30 @@ describe('buildCard', () => {
     expect(card.icon).toBe('🔥')
     expect(card.switchCtl.w.tag).toBe('system_switch')
     expect(card.controls.map((c) => c.w.tag)).toEqual(['mode', 'energy_saving_sign']) // primaryTags 把 mode 排首
-    expect(card.controls[0].w.control).toBe('dots')
+    expect(card.controls[0].w.control).toBe('pills')
     expect(card.small.map((m) => m.tag)).toEqual(['2nd_inwater_temp_detect', '2nd_outwater_temp_detect'])
     expect(card.small[0].value).toBe('15.5℃')
     expect(card.rest.map((r) => r.tag)).toEqual(['energy_supply_mode', 'primary_valve_opening'])
   })
 
-  it('空气品质(100007)：无开关无控件，co2/pm25/hcho/tvoc 进网格', () => {
+  it('空气品质(100007)：无开关无控件，co2/pm25/hcho/tvoc 统一小字 chips（#6 不重叠/字体统一）', () => {
     const panel = { id: 'sys-extra-100007', title: '空气质量', devices: [panelDev(7002, '100007')] }
     const attrs = { 7002: { co2: '606', pm25: '0', hcho: '0.000', tvoc: '0.000', comm_fault_timeout: 'normal', error_265: '0' } }
     const card = buildCard(panel, attrs, CONFIG)
     expect(card.icon).toBe('🌫️')
     expect(card.switchCtl).toBeNull()
     expect(card.controls).toEqual([])
-    expect(card.grid.map((m) => m.tag)).toEqual(['co2', 'pm25', 'hcho', 'tvoc'])
-    expect(card.grid.find((m) => m.tag === 'co2').value).toBe('606ppm')
-    expect(card.rest).toEqual([]) // 网格已展示 + 诊断过滤
+    expect(card.grid).toBeUndefined() // #6：取消网格特例
+    expect(card.small.map((m) => m.tag)).toEqual(['co2', 'pm25', 'hcho', 'tvoc'])
+    expect(card.small.find((m) => m.tag === 'co2').value).toBe('606ppm')
+    expect(card.rest).toEqual([]) // 指标已展示 + 诊断过滤
   })
 
-  it('新风合并卡(130004+10016)：控件来自 10016（风速/加湿），小字来自 130004（送风/滤网），无头部开关', () => {
+  it('新风合并卡(130004+10016)：控件来自 10016（风速/加湿），小字来自 130004，无头部开关，#2 隐藏 10016 的 mode/system_switch', () => {
     const panel = { id: 'sys-130004-10016', title: '新风', devices: [panelDev(9002, '130004'), panelDev(9005, '10016')] }
     const attrs = {
       9002: { fan_speed: '1674', pau_out_temp: '15.4', filter_working_time: '653', out_temp_set: '13.0', comm_fault_timeout: 'normal' },
-      9005: { wind_speed: 'normal', humidification_enable: 'off' },
+      9005: { wind_speed: 'normal', humidification_enable: 'off', mode: 'cold', system_switch: 'on' }, // 10016 会镜像推 mode/system_switch
     }
     const card = buildCard(panel, attrs, CONFIG)
     expect(card.icon).toBe('💨')
@@ -363,8 +364,12 @@ describe('buildCard', () => {
     expect(card.controls.map((c) => c.w.tag)).toEqual(['wind_speed', 'humidification_enable'])
     expect(card.small.map((m) => m.tag)).toEqual(['pau_out_temp', 'filter_working_time'])
     expect(card.small.find((m) => m.tag === 'pau_out_temp').value).toBe('15.4℃')
+    // #2：mode / system_switch（10016 镜像）不出现在任何位置
+    const restTags = card.rest.map((r) => r.tag)
+    expect(restTags).not.toContain('mode')
+    expect(restTags).not.toContain('system_switch')
     // out_temp_set/fan_speed 未在卡面突出 → 进查看全部
-    expect(card.rest.map((r) => r.tag)).toEqual(['out_temp_set', 'fan_speed'])
+    expect(restTags).toEqual(['out_temp_set', 'fan_speed'])
   })
 
   it('风速 select 控件携带 options 供分段 chips 渲染', () => {

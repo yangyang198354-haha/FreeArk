@@ -36,8 +36,8 @@ const SYS_PANEL_ORDER = [
   { codes: ['260001'], title: '客厅' },
 ]
 
-// 其余系统级设备（非预设）兜底标题，避免丢失既有可见信息（能量计 / 空气质量等）。
-const EXTRA_SYS_TITLE = { '250001': '能量计', '100007': '空气质量' }
+// 其余系统级设备（非预设）兜底标题，避免丢失既有可见信息（能耗表 / 空气质量等）。
+const EXTRA_SYS_TITLE = { '250001': '能耗表', '100007': '空气质量' }
 
 /**
  * 房间名 fallback 链：room_name → ori_room_name → '未知房间'（继承 v1.11.1 语义）。
@@ -70,9 +70,9 @@ export function buildControls(device, writableAttrs) {
     result.push({
       tag,
       label: c.label || tag,
-      // 运行模式（mode）用「圆点」控件：四个圆点代表四状态，点哪个哪个生效，颜色区分当前态
-      //（用户 2026-06-29 指定）；其余沿用后端控件类型。
-      control: tag === 'mode' ? 'dots' : c.control,
+      // 运行模式（mode）用「图标药丸」控件：制冷/制热/通风/除湿 各一颗带图标的药丸，
+      // 点选即生效、当前态高亮发光（v1.13.1 取代旧四圆点，用户嫌圆点丑）；其余沿用后端控件类型。
+      control: tag === 'mode' ? 'pills' : c.control,
       unit: c.unit,
       step: c.step || 1,
       min: c.min,
@@ -224,23 +224,26 @@ export function buildDetailRows(attrs, writableAttrs, readonlyAttrs) {
 // 按 product_code 定义卡片版面：图标 / 头部主开关 / 卡面突出的只读指标（大字+小字+网格）。
 // 卡面的「可写控件」直接取设备 controls（buildControls 产物），故此处不重复列控件 tag——
 // 只声明 primaryTags 用来把最常用控件排到最前。其余写法（点选即生效/写确认）零变更。
+// smallTags = 卡面统一展示的只读指标（chips，字体统一，不再分大字/网格——用户 v1.13.1 反馈）。
+// hideTags = 该设备上不希望出现的镜像 tag（如新风的面板控制器 10016 会推 mode/system_switch，
+//   但那是主机的镜像、不属于新风，需从新风卡彻底隐藏）。
 export const CARD_LAYOUT = {
   '270001': { icon: '🔥', switchTag: 'system_switch', primaryTags: ['mode'],
-    bigTags: [], smallTags: ['2nd_inwater_temp_detect', '2nd_outwater_temp_detect'], gridTags: [] },
+    smallTags: ['2nd_inwater_temp_detect', '2nd_outwater_temp_detect'], hideTags: [] },
   '130004': { icon: '💨', switchTag: null, primaryTags: [],
-    bigTags: [], smallTags: ['pau_out_temp', 'filter_working_time'], gridTags: [] },
+    smallTags: ['pau_out_temp', 'filter_working_time'], hideTags: [] },
   '10016':  { icon: '💨', switchTag: 'system_switch', primaryTags: ['wind_speed', 'humidification_enable'],
-    bigTags: [], smallTags: [], gridTags: [] },
+    smallTags: [], hideTags: ['mode', 'system_switch'] },  // #2：新风卡不显示 mode / system_switch
   '260001': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
-    bigTags: ['temp'], smallTags: ['humidity', 'dew_point_temp'], gridTags: [] },
+    smallTags: ['temp', 'humidity', 'dew_point_temp'], hideTags: [] },
   '120003': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
-    bigTags: ['temp'], smallTags: ['humidity', 'dew_point_temp'], gridTags: [] },
+    smallTags: ['temp', 'humidity', 'dew_point_temp'], hideTags: [] },
   '250001': { icon: '📊', switchTag: null, primaryTags: [],
-    bigTags: ['total_cold_quantity', 'total_hot_quantity'], smallTags: [], gridTags: [] },
+    smallTags: ['total_cold_quantity', 'total_hot_quantity'], hideTags: [] },
   '100007': { icon: '🌫️', switchTag: null, primaryTags: [],
-    bigTags: [], smallTags: [], gridTags: ['co2', 'pm25', 'hcho', 'tvoc'] },
+    smallTags: ['co2', 'pm25', 'hcho', 'tvoc'], hideTags: [] },
 }
-const DEFAULT_LAYOUT = { icon: '📋', switchTag: null, primaryTags: [], bigTags: [], smallTags: [], gridTags: [] }
+const DEFAULT_LAYOUT = { icon: '📋', switchTag: null, primaryTags: [], smallTags: [], hideTags: [] }
 
 function layoutFor(productCode) {
   return CARD_LAYOUT[String(productCode == null ? '' : productCode)] || DEFAULT_LAYOUT
@@ -271,9 +274,9 @@ function controlRank(tag, primaryTags) {
  * @param panel    {id,title,devices:[{deviceSn,productCode,controls,allParams}]}
  * @param attrsBySn { [sn]: {tag:val} } 屏端实时值（渲染期传入；纯函数不读 MQTT）
  * @param config   后端 config（writable_attrs/readonly_attrs/...）
- * @returns {id,title,icon,switchCtl,controls,big,small,grid,rest}
+ * @returns {id,title,icon,switchCtl,controls,small,rest}
  *   switchCtl/controls 元素 = {sn,productCode,w}（w 为控件定义，供写链路与渲染）
- *   big/small/grid/rest 元素 = {tag,label,value(已格式化)}（rest 另含 writable 标记）
+ *   small/rest 元素 = {tag,label,value(已格式化)}（rest 另含 writable 标记）
  */
 export function buildCard(panel, attrsBySn, config) {
   const a = attrsBySn || {}
@@ -282,12 +285,13 @@ export function buildCard(panel, attrsBySn, config) {
 
   let switchCtl = null
   const controls = []
-  const big = [], small = [], grid = []
+  const small = []
   const shown = new Set()
 
-  // 头部主开关 + 卡面可写控件
+  // 头部主开关 + 卡面可写控件（先把 hideTags 标记为已处理，使其既不显示也不进 rest）
   for (const d of devs) {
     const lay = layoutFor(d.productCode)
+    for (const t of (lay.hideTags || [])) shown.add(t)
     const sorted = (d.controls || []).slice().sort((x, y) => controlRank(x.tag, lay.primaryTags) - controlRank(y.tag, lay.primaryTags))
     for (const w of sorted) {
       const slot = { sn: d.deviceSn, productCode: d.productCode, w }
@@ -300,20 +304,18 @@ export function buildCard(panel, attrsBySn, config) {
     }
   }
 
-  // 卡面突出指标（只读）
+  // 卡面突出指标（只读，统一 chips）
   for (const d of devs) {
     const lay = layoutFor(d.productCode)
-    for (const t of (lay.bigTags || [])) { big.push(metricOf(t, d.deviceSn, a, config)); shown.add(t) }
     for (const t of (lay.smallTags || [])) { small.push(metricOf(t, d.deviceSn, a, config)); shown.add(t) }
-    for (const t of (lay.gridTags || [])) { grid.push(metricOf(t, d.deviceSn, a, config)); shown.add(t) }
   }
 
-  // 「查看全部」：屏端实推的其余白名单项（排除已在卡面展示的 tag）
+  // 「查看全部」：屏端实推的其余白名单项（排除已在卡面展示 / hideTags 的 tag）
   const rest = []
   for (const d of devs) {
     const rows = buildDetailRows(a[String(d.deviceSn)], config && config.writable_attrs, config && config.readonly_attrs)
     for (const r of rows) if (!shown.has(r.tag)) rest.push(r)
   }
 
-  return { id: panel.id, title: panel.title, icon, switchCtl, controls, big, small, grid, rest }
+  return { id: panel.id, title: panel.title, icon, switchCtl, controls, small, rest }
 }
