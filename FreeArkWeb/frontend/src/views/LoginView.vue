@@ -272,6 +272,8 @@
       <div class="lp-meta-row">
         <div class="lp-meta-item">服务条款</div>
         <div class="lp-meta-item">隐私政策</div>
+        <a class="lp-meta-item lp-beian" href="https://beian.miit.gov.cn/"
+           target="_blank" rel="noopener noreferrer">蜀ICP备2026035823号</a>
       </div>
     </div>
   </div>
@@ -1264,6 +1266,16 @@ export default {
 }
 .lp-mono {
   font-family: var(--lp-font-mono);
+}
+
+/* ICP 备案号 */
+.lp-beian {
+  color: var(--lp-ink-2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.lp-beian:hover {
+  color: var(--lp-acc);
 }
 
 /* ---- 响应式：<1100px 单栏，隐藏装饰区 ---- */
