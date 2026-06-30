@@ -10,7 +10,7 @@
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-alpha-5010320260611001",
     "@qiun/ucharts": "^2.5.0-20230101",
-    "marked": "^13.0.3",
+    "marked": "^4.3.0",
     "mqtt": "^4.3.8",
     "pinia": "^2.1.7",
     "vue": "^3.4.21"
