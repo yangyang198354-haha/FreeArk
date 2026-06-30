@@ -3,8 +3,8 @@
     {
       "path": "pages/login/index",
       "style": {
-        "navigationBarTitleText": "登录",
-        "navigationBarBackgroundColor": "#1a73e8",
+        "navigationBarTitleText": "方舟座舱",
+        "navigationBarBackgroundColor": "#060912",
         "navigationBarTextStyle": "white"
       }
     },
