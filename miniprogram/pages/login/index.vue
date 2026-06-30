@@ -281,9 +281,10 @@ function goRegister() {
     linear-gradient(90deg, rgba(56,230,224,0.10) 1rpx, transparent 1rpx);
   background-size: 80rpx 80rpx;
   /* 用 background-position 驱动滚动（非 transform），避免合成层盖住内容吞点击（与参数设置页一致）。
-     不用 mask-image（模拟器 WebView 对 mask 的隔离合成会破坏同层点击命中）。 */
+     100% 还原：恢复 mask-image 顶部渐隐（设计稿网格在顶部 22% 渐入）。 */
   animation: ark-grid 3.6s linear infinite;
-  opacity: 0.7;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 100%);
 }
 
 /* ── 光晕团 ─────────────────────────────────────────────────────────── */
@@ -389,14 +390,14 @@ function goRegister() {
   text-shadow: 0 0 36rpx rgba(56,230,224,0.85), 0 0 84rpx rgba(56,230,224,0.45);
   animation: ark-flicker 6s infinite;
 }
-/* 不用 mix-blend-mode（模拟器 WebView 隔离合成破坏同层点击）；用偏移 + 透明度闪现做 RGB 分离故障感 */
+/* 100% 还原：恢复 mix-blend-mode: screen 叠色（青/品红 RGB 分离故障感） */
 .title-a {
   position: absolute; left: 0; top: 0; color: #2ff4e0;
-  animation: ark-glitchA 4.5s infinite;
+  mix-blend-mode: screen; animation: ark-glitchA 4.5s infinite;
 }
 .title-b {
   position: absolute; left: 0; top: 0; color: #ff3da6;
-  animation: ark-glitchB 4.5s infinite;
+  mix-blend-mode: screen; animation: ark-glitchB 4.5s infinite;
 }
 
 /* ── 副标题：13px→26rpx ─────────────────────────────────────────────── */
