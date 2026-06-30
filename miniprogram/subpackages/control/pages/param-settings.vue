@@ -653,17 +653,9 @@ onLoad(() => {
   uni.setNavigationBarTitle({ title: '参数设置' })
   // 赛博朋克：导航栏配深色背景 + 白字，与页面深空底统一。
   try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#060912' }) } catch (e) { /* ignore */ }
-  // HOLO-HUD 字体：真机接入 Orbitron（仅用于数字/拉丁铭牌，中文走系统字体）。
-  // 注意：真机需在 mp-weixin 后台「downloadFile 合法域名」加入 cdn.jsdelivr.net；
-  //   开发者工具勾选「不校验合法域名」即可预览。加载失败时静默降级为系统等宽栈。
-  try {
-    uni.loadFontFace({
-      global: true,
-      family: 'Orbitron',
-      source: 'url("https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/orbitron/static/Orbitron-Bold.ttf")',
-      fail: () => { /* 降级系统字体，不影响功能 */ },
-    })
-  } catch (e) { /* ignore */ }
+  // 注：HOLO-HUD 数字/铭牌字体直接走 CSS 字体栈里的系统等宽（Menlo/Monaco/monospace）。
+  //   原 uni.loadFontFace 远程拉 jsdelivr Orbitron 不稳（CDN 返回非法 TTF → OTS 解析报错），
+  //   已移除；真机若要 Orbitron，改为打包本地 .ttf（static/）并在后台配 downloadFile 合法域名。
 })
 
 onShow(() => {
