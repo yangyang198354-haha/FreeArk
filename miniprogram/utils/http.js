@@ -10,10 +10,10 @@
 import { getToken, clearAuth } from './auth'
 
 // Development: change this to your local backend IP
-// Production: change this to your HTTPS domain
-const BASE_URL = 'http://192.168.31.51:8000'
+// Production: 已备案域名，VPS nginx(443/Let's Encrypt) 终止 TLS → frp 隧道 → Pi nginx:8080
+const BASE_URL = 'https://ai-freeark.xin'
 
-export const WS_BASE_URL = 'ws://192.168.31.51:8000'
+export const WS_BASE_URL = 'wss://ai-freeark.xin'
 
 let _sessionExpiredShown = false
 
