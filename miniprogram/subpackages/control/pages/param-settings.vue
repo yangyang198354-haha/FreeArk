@@ -86,7 +86,7 @@
 
             <!-- 头部：图标 + 名称/编号 + 主开关 -->
             <view class="card-head">
-              <view class="card-icon"><text>{{ card.icon }}</text></view>
+              <view class="card-icon"><text>{{ cardIcon(card) }}</text></view>
               <view class="card-id">
                 <text class="card-title">{{ card.title }}</text>
                 <text class="card-code">{{ cardEnLabel(card) }} · {{ cardCode(card) }}</text>
@@ -106,17 +106,17 @@
               <view v-if="card.hudLayout" class="metric-hud">
                 <view v-if="card.metricsLeft.length" class="mhud-left">
                   <view v-for="m in card.metricsLeft" :key="m.tag" class="mcell">
-                    <!-- 环形 gauge（温度 / 滤网时长）-->
-                    <view v-if="m.displayType === 'ring'" class="ring-wrap">
-                      <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + m.progressPct + '%'">
-                        <view class="ring-hole">
-                          <text class="ring-num">{{ m.numText }}</text>
-                          <text class="ring-unit">{{ m.unitText }}</text>
-                          <text v-if="m.tag === 'temp'" class="ring-setpt">设定 {{ curVal(m.sn, 'temp_set') !== undefined ? curVal(m.sn, 'temp_set') : '—' }}°C</text>
-                        </view>
-                      </view>
-                      <text class="ring-lbl">{{ m.label }}</text>
-                    </view>
+                    <!-- 环形 gauge（温度 / 滤网时长）：ucharts arcbar 270° 渐变描边 -->
+                    <RingGauge
+                      v-if="m.displayType === 'ring'"
+                      :canvas-id="ringId(card, m)"
+                      :progress="m.progressPct"
+                      :num-text="m.numText"
+                      :unit-text="m.unitText"
+                      :top-label="m.label"
+                      :sub="m.tag === 'temp' ? setptText(m) : ''"
+                      :alt="ci % 2 === 1"
+                    />
                     <!-- 大字展示（如新风送风温度）-->
                     <view v-else-if="m.displayType === 'big'" class="big-metric">
                       <text class="big-lbl">{{ m.label }}</text>
@@ -142,16 +142,16 @@
                 </view>
                 <view v-if="card.metricsRight.length" class="mhud-right">
                   <view v-for="m in card.metricsRight" :key="m.tag" class="mcell">
-                    <view v-if="m.displayType === 'ring'" class="ring-wrap">
-                      <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + m.progressPct + '%'">
-                        <view class="ring-hole">
-                          <text class="ring-num">{{ m.numText }}</text>
-                          <text class="ring-unit">{{ m.unitText }}</text>
-                          <text v-if="m.tag === 'temp'" class="ring-setpt">设定 {{ curVal(m.sn, 'temp_set') !== undefined ? curVal(m.sn, 'temp_set') : '—' }}°C</text>
-                        </view>
-                      </view>
-                      <text class="ring-lbl">{{ m.label }}</text>
-                    </view>
+                    <RingGauge
+                      v-if="m.displayType === 'ring'"
+                      :canvas-id="ringId(card, m)"
+                      :progress="m.progressPct"
+                      :num-text="m.numText"
+                      :unit-text="m.unitText"
+                      :top-label="m.label"
+                      :sub="m.tag === 'temp' ? setptText(m) : ''"
+                      :alt="ci % 2 === 1"
+                    />
                     <view v-else-if="m.displayType === 'big'" class="big-metric">
                       <text class="big-lbl">{{ m.label }}</text>
                       <view class="big-val-row">
@@ -182,6 +182,9 @@
               </view>
             </view>
 
+            <!-- 主机运行波形示波器（ucharts line，横向滚动青色波形）-->
+            <WaveScope v-if="card.title === '主机'" :canvas-id="waveId(card)" />
+
             <!-- 可写控件（点选即生效）-->
             <view v-if="card.controls.length" class="ctl-area">
               <view v-for="c in card.controls" :key="c.sn + '-' + c.w.tag">
@@ -197,14 +200,14 @@
                       :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"
                       @tap="onPickDot(ctlDev(c), c.w, opt.value)"
                     >
-                      <text class="mode-ico">{{ modeIcon(opt.value) }}</text>
+                      <view class="mode-dot"></view>
                       <text class="mode-txt">{{ opt.label }}</text>
                     </view>
                   </view>
                 </view>
 
-                <!-- 分段 chips（如风速 select）-->
-                <view v-else-if="c.w.control === 'select'" class="ctl-row">
+                <!-- 分段控件（如风速 select）：标签在上，全宽矩形分段在下 -->
+                <view v-else-if="c.w.control === 'select'" class="seg-block">
                   <text class="ctl-label">{{ c.w.label }}</text>
                   <view class="seg">
                     <view
@@ -228,7 +231,10 @@
                   <text class="ctl-label">{{ c.w.label }}</text>
                   <view class="num-ctl">
                     <view class="num-btn" @tap="onStep(ctlDev(c), c.w, -1)">−</view>
-                    <view class="num-val"><text>{{ curVal(c.sn, c.w.tag) ?? '—' }}{{ c.w.unit || '' }}</text></view>
+                    <view class="num-val">
+                      <text class="num-num">{{ curVal(c.sn, c.w.tag) ?? '—' }}</text>
+                      <text v-if="c.w.unit" class="num-unit">{{ c.w.unit }}</text>
+                    </view>
                     <view class="num-btn" @tap="onStep(ctlDev(c), c.w, 1)">＋</view>
                   </view>
                 </view>
@@ -276,6 +282,8 @@ import { api } from '@/utils/api'
 import { buildWriteItems } from '@/utils/screenMqtt'
 import { useMqttClient } from '@/utils/useMqttClient'
 import { buildPanels, buildCard } from '@/utils/paramPanels'
+import RingGauge from '@/components/RingGauge.vue'
+import WaveScope from '@/components/WaveScope.vue'
 
 const authStore = useAuthStore()
 const mqttClient = useMqttClient()
@@ -340,20 +348,49 @@ function toggleExpand(id) { expanded[id] = !expanded[id] }
 // 控件 slot（{sn,productCode,w}）→ 写链路所需的轻量 dev 对象（deviceSn/productCode）。
 function ctlDev(c) { return { deviceSn: c.sn, productCode: c.productCode } }
 
-// 运行模式图标（图标药丸用）：制冷/制热/通风/除湿。
-const MODE_ICON = { cold: '❄', hot: '☀', wind: '🌀', dehumidification: '💧' }
-function modeIcon(v) { return MODE_ICON[v] || '◆' }
-
 // ── HOLO-HUD 纯展示辅助（不参与数据/写链路）──────────────────────────────────
 // 卡片副标题编号：从 card.id 抽取设备/房间数字码（sys-270001 / sys-130004-10016 / room-12 …）。
 function cardCode(card) {
   const m = String((card && card.id) || '').match(/(\d{3,})/)
   return m ? m[1] : '—'
 }
-// 卡片英文铭牌：已知预设给专名，其余统一 MODULE（保持 HUD 科技感而不臆造业务含义）。
-const EN_LABEL = { '主机': 'HOST', '新风': 'FRESH-AIR', '客厅': 'LIVING-ROOM', '能耗表': 'ENERGY', '空气质量': 'AIR-QUALITY' }
-function cardEnLabel(card) {
-  return (card && EN_LABEL[card.title]) || 'MODULE'
+// 卡片铭牌（对齐设计稿）：英文副标题 + 头部 2 字母 monogram（取代 emoji）。
+// monogram 为设计稿手选缩写（HOST→HC / FRESH-AIR→FA / MASTER-BEDROOM→MB …），
+//   未命中的房间走通用 ROOM/RM 兜底（真机 HUD 一致，不臆造业务含义）。
+const CARD_META = {
+  '主机':   { en: 'HOST',           mono: 'HC' },
+  '新风':   { en: 'FRESH-AIR',      mono: 'FA' },
+  '客厅':   { en: 'LIVING-ROOM',    mono: 'LR' },
+  '主卧':   { en: 'MASTER-BEDROOM', mono: 'MB' },
+  '次卧':   { en: '2ND-BEDROOM',    mono: 'BR' },
+  '书房':   { en: 'STUDY',          mono: 'ST' },
+  '儿童房': { en: 'KIDS-ROOM',      mono: 'KR' },
+  '能耗表': { en: 'ENERGY',         mono: 'EN' },
+  '空气质量': { en: 'AIR-QUALITY',  mono: 'AQ' },
+  '餐厅':   { en: 'DINING-ROOM',    mono: 'DR' },
+  '厨房':   { en: 'KITCHEN',        mono: 'KT' },
+  '卫生间': { en: 'BATHROOM',       mono: 'BA' },
+  '主卫':   { en: 'MASTER-BATH',    mono: 'MW' },
+  '次卫':   { en: '2ND-BATH',       mono: 'BW' },
+  '阳台':   { en: 'BALCONY',        mono: 'BC' },
+  '老人房': { en: 'ELDER-ROOM',     mono: 'ER' },
+  '茶室':   { en: 'TEA-ROOM',       mono: 'TR' },
+  '衣帽间': { en: 'CLOAKROOM',      mono: 'CR' },
+  '玄关':   { en: 'FOYER',          mono: 'FY' },
+  '过道':   { en: 'HALLWAY',        mono: 'HW' },
+}
+function cardMeta(card) { return (card && CARD_META[card.title]) || { en: 'ROOM', mono: 'RM' } }
+function cardEnLabel(card) { return cardMeta(card).en }
+function cardIcon(card) { return cardMeta(card).mono }
+
+// ── ucharts 画布辅助（环形 gauge / 运行波形）──────────────────────────────────
+// canvas-id 须页面内唯一且合法（mp-weixin 仅允许 字母/数字/-/_）。card.id 唯一 → 稳定不撞。
+function ringId(card, m) { return ('rg-' + String(card.id) + '-' + m.tag).replace(/[^A-Za-z0-9_-]/g, '-') }
+function waveId(card) { return ('wave-' + String(card.id)).replace(/[^A-Za-z0-9_-]/g, '-') }
+// 温度 ring 圆心第三行：当前设定温度（写链路读 temp_set）。
+function setptText(m) {
+  const v = curVal(m.sn, 'temp_set')
+  return '设定 ' + (v !== undefined && v !== null && v !== '' ? v : '—') + '°C'
 }
 
 // ── 控件读写（写链路继承 v1.10.0，零语义变更）────────────────────────────────
@@ -443,9 +480,9 @@ async function applyDevice(dev) {
   }
 
   applyingSn.value = ''
-  if (failCount === 0) uni.showToast({ title: '已生效', icon: 'success' })
-  else if (okCount === 0) uni.showToast({ title: '未确认，请重试', icon: 'none' })
-  else uni.showToast({ title: `部分成功（${okCount}/${okCount + failCount}）`, icon: 'none' })
+  // 成功不再弹「已生效」系统提示（点选即生效，避免每次设置都打扰）；仅失败/部分成功时反馈。
+  if (failCount > 0 && okCount === 0) uni.showToast({ title: '未确认，请重试', icon: 'none' })
+  else if (failCount > 0) uni.showToast({ title: `部分成功（${okCount}/${okCount + failCount}）`, icon: 'none' })
 
   // 在途写期间若又产生新改动，排一次后续 flush 以排空（点选即生效语义）
   if (hasPending(sn)) scheduleFlush(dev)
@@ -650,8 +687,9 @@ function goBind() {
 
 // ── 生命周期 ─────────────────────────────────────────────────────────────────
 onLoad(() => {
+  // 用系统导航栏（小程序自带「参数设置」标题 + 返回 + 白色胶囊），不在页面内重复自绘。
   uni.setNavigationBarTitle({ title: '参数设置' })
-  // 赛博朋克：导航栏配深色背景 + 白字，与页面深空底统一。
+  // 导航栏深色背景 + 白字（白色胶囊），与页面深空底统一、弱化分界线。
   try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#060912' }) } catch (e) { /* ignore */ }
   // 注：HOLO-HUD 数字/铭牌字体直接走 CSS 字体栈里的系统等宽（Menlo/Monaco/monospace）。
   //   原 uni.loadFontFace 远程拉 jsdelivr Orbitron 不稳（CDN 返回非法 TTF → OTS 解析报错），
@@ -746,7 +784,7 @@ onUnload(() => {
 
 /* 设备卡：暗玻璃 + 霓虹描边 + 呼吸辉光（青）*/
 .dev-card {
-  position: relative; margin: 22rpx 24rpx; border-radius: 24rpx; padding: 30rpx 30rpx 16rpx;
+  position: relative; margin: 16rpx 24rpx; border-radius: 24rpx; padding: 30rpx 30rpx 16rpx;
   background: linear-gradient(160deg, rgba(20, 30, 56, 0.74), rgba(10, 16, 33, 0.84));
   border: 1rpx solid rgba(0, 229, 255, 0.22);
   animation: hueFloat 7s ease-in-out infinite;
@@ -770,12 +808,13 @@ onUnload(() => {
 /* 头部 */
 .card-head { display: flex; align-items: center; position: relative; z-index: 2; }
 .card-icon {
-  width: 72rpx; height: 72rpx; display: flex; align-items: center; justify-content: center; font-size: 36rpx;
+  width: 72rpx; height: 72rpx; display: flex; align-items: center; justify-content: center;
+  font-family: 'Orbitron', 'Menlo', 'Monaco', monospace; font-size: 28rpx; font-weight: 800; letter-spacing: 1rpx; color: #7df9ff;
   border-radius: 18rpx; margin-right: 18rpx;
   background: rgba(0, 229, 255, 0.10); border: 1rpx solid rgba(0, 229, 255, 0.32);
   box-shadow: 0 0 16rpx rgba(0, 229, 255, 0.25);
 }
-.dev-card.alt .card-icon { background: rgba(124, 58, 237, 0.14); border-color: rgba(124, 58, 237, 0.4); box-shadow: 0 0 16rpx rgba(124, 58, 237, 0.3); }
+.dev-card.alt .card-icon { background: rgba(124, 58, 237, 0.14); border-color: rgba(124, 58, 237, 0.4); box-shadow: 0 0 16rpx rgba(124, 58, 237, 0.3); color: #c4a6ff; }
 .card-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .card-title { font-size: 34rpx; font-weight: 700; color: #eaf6ff; letter-spacing: 1rpx; line-height: 1.1; }
 .card-code { font-family: 'Orbitron', 'Menlo', 'Monaco', monospace; font-size: 20rpx; letter-spacing: 3rpx; color: #5f7da6; margin-top: 6rpx; }
@@ -797,29 +836,7 @@ onUnload(() => {
 .mhud-left .mcell + .mcell { margin-top: 18rpx; }
 .mhud-right .mcell { align-items: stretch; }
 
-/* 环形 gauge（conic-gradient，CSS 自定义属性控制进度）*/
-.ring-wrap { display: flex; flex-direction: column; align-items: center; }
-.ring-track {
-  width: 168rpx; height: 168rpx; border-radius: 50%; position: relative;
-  background: conic-gradient(#00e5ff 0% var(--prog, 0%), rgba(0, 229, 255, 0.12) var(--prog, 0%) 100%);
-  display: flex; align-items: center; justify-content: center;
-}
-.ring-track.alt {
-  background: conic-gradient(#a855f7 0% var(--prog, 0%), rgba(124, 58, 237, 0.15) var(--prog, 0%) 100%);
-}
-.ring-hole {
-  width: 130rpx; height: 130rpx; border-radius: 50%;
-  background: radial-gradient(circle, rgba(10, 16, 40, 0.96) 0%, rgba(6, 9, 18, 0.97) 100%);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-.ring-num {
-  font-family: 'Orbitron', 'Menlo', monospace; font-size: 38rpx; font-weight: 800;
-  color: #7df9ff; line-height: 1; text-shadow: 0 0 12rpx rgba(0, 229, 255, 0.5);
-}
-.ring-track.alt .ring-num { color: #c4a6ff; text-shadow: 0 0 12rpx rgba(124, 58, 237, 0.5); }
-.ring-unit { font-size: 18rpx; color: #5f7da6; margin-top: 3rpx; }
-.ring-setpt { font-size: 16rpx; color: #7f8db0; margin-top: 5rpx; letter-spacing: 0.5rpx; white-space: nowrap; }
-.ring-lbl { font-size: 20rpx; color: #5f7da6; margin-top: 10rpx; letter-spacing: 1rpx; }
+/* 环形 gauge 已迁移到 <RingGauge>（ucharts arcbar，组件内 scoped 样式）*/
 
 /* 大字展示（新风送风温度等）*/
 .big-metric { display: flex; flex-direction: column; align-items: center; padding: 8rpx 0; }
@@ -863,29 +880,42 @@ onUnload(() => {
 .ctl-block { padding: 22rpx 0 6rpx; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
 .ctl-label { font-size: 26rpx; color: #aab6d6; letter-spacing: 1rpx; }
 
-/* 分段 chips（风速等少选项 select）*/
-.seg { display: flex; background: rgba(10, 18, 38, 0.8); border: 1rpx solid rgba(0, 229, 255, 0.16); border-radius: 999rpx; padding: 4rpx; }
-.seg-item { padding: 10rpx 32rpx; border-radius: 999rpx; }
-.seg-item text { font-size: 24rpx; color: #7f8db0; }
-.seg-item.on { background: linear-gradient(90deg, #00e5ff, #3b82f6); box-shadow: 0 0 16rpx rgba(0, 229, 255, 0.55); }
-.seg-item.on text { color: #04121f; font-weight: 700; }
-.dev-card.alt .seg-item.on { background: linear-gradient(90deg, #7c3aed, #c026d3); box-shadow: 0 0 16rpx rgba(124, 58, 237, 0.5); }
+/* 分段控件（风速等少选项 select）：标签在上 + 全宽矩形分段（对齐设计稿，非胶囊）*/
+.seg-block { padding: 22rpx 0 6rpx; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
+.seg { display: flex; gap: 16rpx; margin-top: 16rpx; }
+.seg-item {
+  flex: 1; text-align: center; padding: 22rpx 0; border-radius: 22rpx;
+  background: rgba(10, 18, 38, 0.7); border: 1rpx solid rgba(120, 160, 255, 0.16);
+}
+.seg-item text { font-size: 26rpx; color: #9fb0d6; font-weight: 600; }
+.seg-item.on {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.22), rgba(124, 58, 237, 0.30));
+  border-color: rgba(0, 229, 255, 0.7); box-shadow: 0 0 18rpx rgba(0, 229, 255, 0.4);
+}
+.seg-item.on text { color: #eaf6ff; font-weight: 700; }
+.dev-card.alt .seg-item.on {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.30), rgba(192, 38, 211, 0.28));
+  border-color: rgba(192, 38, 211, 0.7); box-shadow: 0 0 16rpx rgba(124, 58, 237, 0.4);
+}
 .dev-card.alt .seg-item.on text { color: #f3eaff; }
 
 /* 数值步进：大字霓虹中央值 */
 .num-ctl { display: flex; align-items: center; margin-top: 16rpx; }
 .num-btn {
-  width: 96rpx; height: 92rpx; line-height: 86rpx; text-align: center; border-radius: 22rpx;
-  border: 1rpx solid rgba(0, 229, 255, 0.32); color: #7df9ff; font-size: 44rpx; background: rgba(10, 18, 38, 0.8);
+  width: 100rpx; height: 92rpx; display: flex; align-items: center; justify-content: center; border-radius: 24rpx;
+  border: 1rpx solid rgba(0, 229, 255, 0.32); color: #7df9ff;
+  font-family: 'Orbitron', 'Menlo', monospace; font-size: 48rpx; font-weight: 700; background: rgba(10, 18, 38, 0.8);
 }
 .num-val {
-  flex: 1; height: 92rpx; margin: 0 16rpx; display: flex; align-items: center; justify-content: center; border-radius: 22rpx;
+  flex: 1; height: 92rpx; margin: 0 16rpx; display: flex; align-items: flex-end; justify-content: center; border-radius: 24rpx;
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(124, 58, 237, 0.2));
   border: 1rpx solid rgba(0, 229, 255, 0.4); box-shadow: inset 0 0 24rpx rgba(0, 229, 255, 0.18);
 }
-.num-val text { font-family: 'Orbitron', -apple-system, sans-serif; font-size: 48rpx; color: #eaf6ff; font-weight: 800; text-shadow: 0 0 16rpx rgba(0, 229, 255, 0.5); }
+.num-num { font-family: 'Orbitron', -apple-system, sans-serif; font-size: 56rpx; line-height: 1; color: #eaf6ff; font-weight: 800; text-shadow: 0 0 16rpx rgba(0, 229, 255, 0.5); padding-bottom: 14rpx; }
+.num-unit { font-size: 28rpx; color: #9fb0d6; margin-left: 4rpx; padding-bottom: 18rpx; }
 .dev-card.alt .num-btn { border-color: rgba(124, 58, 237, 0.4); color: #c4a6ff; }
 .dev-card.alt .num-val { border-color: rgba(124, 58, 237, 0.45); box-shadow: inset 0 0 24rpx rgba(124, 58, 237, 0.18); }
+.dev-card.alt .num-unit { color: #bcaee0; }
 
 /* 运行模式：图标药丸 */
 .mode-block { padding: 22rpx 0 6rpx; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
@@ -899,7 +929,10 @@ onUnload(() => {
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.22), rgba(124, 58, 237, 0.32));
   border-color: rgba(0, 229, 255, 0.7); box-shadow: 0 0 22rpx rgba(0, 229, 255, 0.45);
 }
-.mode-ico { font-size: 30rpx; margin-right: 10rpx; }
+/* 模式标记：菱形小方块（选中态青色发光，未选中灰色），取代 emoji */
+.mode-dot { width: 12rpx; height: 12rpx; margin-right: 12rpx; background: #5f7da6; transform: rotate(45deg); }
+.mode-pill.on .mode-dot { background: #7df9ff; box-shadow: 0 0 12rpx #7df9ff; }
+.dev-card.alt .mode-pill.on .mode-dot { background: #c4a6ff; box-shadow: 0 0 12rpx #c4a6ff; }
 .mode-txt { font-size: 26rpx; color: #9fb0d6; }
 .mode-pill.on .mode-txt { color: #eaf6ff; font-weight: 700; }
 

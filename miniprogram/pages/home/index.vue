@@ -102,6 +102,18 @@
           <text class="shortcut-label">方舟智能体</text>
         </view>
 
+        <!-- 方舟座舱（游戏化 POC）：全角色可见 -->
+        <view class="shortcut-tile" @tap="goTo('/subpackages/game/pages/ark-poc')">
+          <text class="shortcut-icon">⬢</text>
+          <text class="shortcut-label">方舟座舱</text>
+        </view>
+
+        <!-- 方舟智能体·机器人场景（游戏化 POC）：全角色可见 -->
+        <view class="shortcut-tile" @tap="goTo('/subpackages/game/pages/agent-scene')">
+          <text class="shortcut-icon">⊙</text>
+          <text class="shortcut-label">智能体座舱</text>
+        </view>
+
         <!-- 管理端入口：仅 admin/operator 可见 -->
         <view
           v-if="authStore.role !== 'user'"
@@ -267,6 +279,8 @@ const NAV_ROUTES = [
   '/subpackages/ops/pages/condensation',
   '/subpackages/ops/pages/workorders',
   '/subpackages/control/pages/param-settings',
+  '/subpackages/game/pages/ark-poc',
+  '/subpackages/game/pages/agent-scene',
   '/pages/profile/index',
 ]
 

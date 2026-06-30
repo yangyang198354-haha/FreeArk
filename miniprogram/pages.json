@@ -133,6 +133,29 @@
       ]
     },
     {
+      "root": "subpackages/game",
+      "pages": [
+        {
+          "path": "pages/ark-poc",
+          "style": {
+            "navigationBarTitleText": "方舟座舱",
+            "navigationBarBackgroundColor": "#070b16",
+            "navigationBarTextStyle": "white",
+            "disableScroll": true
+          }
+        },
+        {
+          "path": "pages/agent-scene",
+          "style": {
+            "navigationBarTitleText": "方舟智能体",
+            "navigationBarBackgroundColor": "#05080f",
+            "navigationBarTextStyle": "white",
+            "disableScroll": true
+          }
+        }
+      ]
+    },
+    {
       "root": "subpackages/ops",
       "pages": [
         {

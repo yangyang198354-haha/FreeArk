@@ -169,8 +169,21 @@ export function panelHasControls(panel) {
   return !!(panel && panel.devices && panel.devices.some((d) => d.controls.length > 0))
 }
 
-/** 按控件/展示定义把单值转中文：options 映射（on→开 / 0→正常）→ unit 拼接（26→26℃）→ 原值。 */
-function formatAttr(value, def) {
+// 屏端推的是「累计工作秒数」、后端定义无单位的时长字段 → 显示换算为「天」。
+const DURATION_SECONDS_TAGS = new Set(['work_duration'])
+function formatDurationDays(value) {
+  const n = parseFloat(value)
+  if (isNaN(n)) return String(value)
+  const days = Math.round((n / 86400) * 10) / 10        // 秒 → 天，保留 1 位
+  return `${Number.isInteger(days) ? days : days.toFixed(1)} 天`
+}
+
+/**
+ * 按控件/展示定义把单值转中文：时长秒数→天（work_duration 等）→ options 映射（on→开 / 0→正常）
+ * → unit 拼接（26→26℃）→ 原值。tag 可选，仅用于秒数时长这类需按字段名特殊换算的项。
+ */
+function formatAttr(value, def, tag) {
+  if (tag && DURATION_SECONDS_TAGS.has(tag)) return formatDurationDays(value)
   if (def && def.options && def.options.length) {
     const o = def.options.find((opt) => String(opt.value) === String(value))
     if (o) return o.label
@@ -212,7 +225,7 @@ export function buildDetailRows(attrs, writableAttrs, readonlyAttrs) {
       if (!(tag in present)) continue
       const v = present[tag]
       if (v === null || v === undefined || v === '') continue
-      rows.push({ tag, label: (defs[tag] && defs[tag].label) || tag, value: formatAttr(v, defs[tag]), writable })
+      rows.push({ tag, label: (defs[tag] && defs[tag].label) || tag, value: formatAttr(v, defs[tag], tag), writable })
     }
   }
   pushFrom(writableAttrs, true)
@@ -268,7 +281,7 @@ function metricOf(tag, sn, attrsBySn, config) {
   const def = defOf(tag, config)
   const raw = (attrsBySn && attrsBySn[String(sn)]) ? attrsBySn[String(sn)][tag] : undefined
   const has = !(raw === null || raw === undefined || raw === '')
-  const value = has ? formatAttr(raw, def || {}) : '—'
+  const value = has ? formatAttr(raw, def || {}, tag) : '—'
   const rawNum = has ? parseFloat(raw) : NaN
   const numOk = !isNaN(rawNum)
 
