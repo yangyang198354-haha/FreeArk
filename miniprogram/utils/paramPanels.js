@@ -256,38 +256,45 @@ function defOf(tag, config) {
 }
 
 /**
- * 单个突出指标视图。
+ * 单个突出指标视图。所有展示用字段在此预计算，模板零计算（mp-weixin 模板不放 Math/isNaN/箭头）。
  * displayType: 'ring' | 'big' | 'bar' | 'text'
  *   ring  — 圆形进度 gauge（温度/滤网时长）
  *   big   — 大字展示（送风温度等宽范围值，不适合 ring）
  *   bar   — 水平进度条（湿度/露点）
  *   text  — 普通 chip（其余）
+ * 产物字段：value(带单位格式化串) / numText(裸数字或'—') / unitText / progressPct(0-100整数) / sn
  */
 function metricOf(tag, sn, attrsBySn, config) {
   const def = defOf(tag, config)
   const raw = (attrsBySn && attrsBySn[String(sn)]) ? attrsBySn[String(sn)][tag] : undefined
-  const value = (raw === null || raw === undefined || raw === '') ? '—' : formatAttr(raw, def || {})
-  const rawNum = (raw !== null && raw !== undefined && raw !== '') ? parseFloat(raw) : NaN
+  const has = !(raw === null || raw === undefined || raw === '')
+  const value = has ? formatAttr(raw, def || {}) : '—'
+  const rawNum = has ? parseFloat(raw) : NaN
+  const numOk = !isNaN(rawNum)
 
   let displayType = 'text'
   let progress = 0
-  if (tag === 'temp' && !isNaN(rawNum)) {
-    displayType = 'ring'
-    progress = Math.min(Math.max((rawNum - 16) / (32 - 16), 0), 1)
-  } else if (tag === 'filter_working_time' && !isNaN(rawNum)) {
-    displayType = 'ring'
-    progress = Math.min(rawNum / 1000, 1)
-  } else if (tag === 'humidity' && !isNaN(rawNum)) {
+  let unitText = ''
+  if (tag === 'temp' && numOk) {
+    displayType = 'ring'; unitText = '°C'
+    progress = (rawNum - 16) / (32 - 16)            // 16~32℃ 映射 0~1
+  } else if (tag === 'filter_working_time' && numOk) {
+    displayType = 'ring'; unitText = 'h'
+    progress = rawNum / 1000                          // 0~1000h 映射 0~1
+  } else if (tag === 'humidity' && numOk) {
     displayType = 'bar'
-    progress = Math.min(rawNum / 100, 1)
-  } else if (tag === 'dew_point_temp' && !isNaN(rawNum)) {
+    progress = rawNum / 100                            // 0~100%
+  } else if (tag === 'dew_point_temp' && numOk) {
     displayType = 'bar'
-    progress = Math.min(Math.max(rawNum / 30, 0), 1)
+    progress = rawNum / 30                             // 0~30℃（负露点裁剪到 0）
   } else if (tag === 'pau_out_temp') {
-    displayType = 'big'
+    displayType = 'big'; unitText = '°C'
   }
+  progress = Math.min(Math.max(progress, 0), 1)
+  const progressPct = Math.round(progress * 100)
+  const numText = numOk ? String(rawNum) : '—'
 
-  return { tag, label: (def && def.label) || tag, value, rawNum, displayType, progress, sn: String(sn) }
+  return { tag, label: (def && def.label) || tag, value, numText, unitText, progressPct, displayType, sn: String(sn) }
 }
 
 /** 控件排序权重：primaryTags 列出的在前（按列出顺序），其余保持原序在后。 */
@@ -344,5 +351,11 @@ export function buildCard(panel, attrsBySn, config) {
     for (const r of rows) if (!shown.has(r.tag)) rest.push(r)
   }
 
-  return { id: panel.id, title: panel.title, icon, switchCtl, controls, small, rest }
+  // HUD 指标分栏（模板零计算）：左列 = ring/big，右列 = bar/text；
+  // hudLayout=有任意非 text 指标时启用左右分栏，否则回退纯文字 chip 网格。
+  const metricsLeft = small.filter((m) => m.displayType === 'ring' || m.displayType === 'big')
+  const metricsRight = small.filter((m) => m.displayType === 'bar' || m.displayType === 'text')
+  const hudLayout = small.some((m) => m.displayType !== 'text')
+
+  return { id: panel.id, title: panel.title, icon, switchCtl, controls, small, metricsLeft, metricsRight, hudLayout, rest }
 }

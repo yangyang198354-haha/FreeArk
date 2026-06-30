@@ -100,47 +100,47 @@
               />
             </view>
 
-            <!-- 指标区：ring gauge / 进度条 / 大字 / 普通 chip ─────────────────── -->
+            <!-- 指标区：ring gauge / 进度条 / 大字 / 普通 chip（分栏在 buildCard 预计算）─── -->
             <view v-if="card.small.length">
               <!-- HUD 分栏：有 ring/big/bar 时左右分列 -->
-              <view v-if="card.small.some(m => m.displayType !== 'text')" class="metric-hud">
+              <view v-if="card.hudLayout" class="metric-hud">
                 <!-- 左列：ring 环形 gauge 或 big 大字 -->
-                <view v-if="card.small.some(m => m.displayType === 'ring' || m.displayType === 'big')" class="mhud-left">
-                  <template v-for="m in card.small" :key="m.tag">
+                <view v-if="card.metricsLeft.length" class="mhud-left">
+                  <template v-for="m in card.metricsLeft" :key="m.tag">
                     <!-- 环形 gauge（温度 / 滤网时长）-->
                     <view v-if="m.displayType === 'ring'" class="ring-wrap">
-                      <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + Math.round(m.progress * 100) + '%'">
+                      <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + m.progressPct + '%'">
                         <view class="ring-hole">
-                          <text class="ring-num">{{ isNaN(m.rawNum) ? '—' : m.rawNum }}</text>
-                          <text class="ring-unit">{{ m.tag === 'filter_working_time' ? 'h' : '°C' }}</text>
+                          <text class="ring-num">{{ m.numText }}</text>
+                          <text class="ring-unit">{{ m.unitText }}</text>
                           <text v-if="m.tag === 'temp'" class="ring-setpt">设定 {{ curVal(m.sn, 'temp_set') !== undefined ? curVal(m.sn, 'temp_set') : '—' }}°C</text>
                         </view>
                       </view>
                       <text class="ring-lbl">{{ m.label }}</text>
                     </view>
                     <!-- 大字展示（如新风送风温度）-->
-                    <view v-else-if="m.displayType === 'big'" class="big-metric">
+                    <view v-else class="big-metric">
                       <text class="big-lbl">{{ m.label }}</text>
                       <view class="big-val-row">
-                        <text class="big-num">{{ isNaN(m.rawNum) ? '—' : m.rawNum }}</text>
-                        <text class="big-unt">°C</text>
+                        <text class="big-num">{{ m.numText }}</text>
+                        <text class="big-unt">{{ m.unitText }}</text>
                       </view>
                     </view>
                   </template>
                 </view>
                 <!-- 右列：进度条 + 文字 chip -->
-                <view class="mhud-right">
-                  <template v-for="m in card.small" :key="m.tag + '-r'">
+                <view v-if="card.metricsRight.length" class="mhud-right">
+                  <template v-for="m in card.metricsRight" :key="m.tag">
                     <view v-if="m.displayType === 'bar'" class="bar-metric">
                       <view class="bar-head">
                         <text class="bar-lbl">{{ m.label }}</text>
                         <text class="bar-val" :class="{ pink: m.tag === 'dew_point_temp' }">{{ m.value }}</text>
                       </view>
                       <view class="bar-track">
-                        <view class="bar-fill" :class="{ pink: m.tag === 'dew_point_temp' }" :style="'width: ' + Math.round(m.progress * 100) + '%'"></view>
+                        <view class="bar-fill" :class="{ pink: m.tag === 'dew_point_temp' }" :style="'width: ' + m.progressPct + '%'"></view>
                       </view>
                     </view>
-                    <view v-else-if="m.displayType === 'text'" class="metric-chip">
+                    <view v-else class="metric-chip">
                       <text class="metric-lbl">{{ m.label }}</text>
                       <text class="metric-val">{{ m.value }}</text>
                     </view>
