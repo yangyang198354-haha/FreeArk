@@ -102,11 +102,10 @@
 
             <!-- 指标区：ring gauge / 进度条 / 大字 / 普通 chip（分栏在 buildCard 预计算）─── -->
             <view v-if="card.small.length">
-              <!-- HUD 分栏：有 ring/big/bar 时左右分列 -->
+              <!-- HUD 分栏：左列主视觉 + 右列其余；两列均按指标 displayType 自描述渲染 -->
               <view v-if="card.hudLayout" class="metric-hud">
-                <!-- 左列：ring 环形 gauge 或 big 大字 -->
                 <view v-if="card.metricsLeft.length" class="mhud-left">
-                  <template v-for="m in card.metricsLeft" :key="m.tag">
+                  <view v-for="m in card.metricsLeft" :key="m.tag" class="mcell">
                     <!-- 环形 gauge（温度 / 滤网时长）-->
                     <view v-if="m.displayType === 'ring'" class="ring-wrap">
                       <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + m.progressPct + '%'">
@@ -119,32 +118,59 @@
                       <text class="ring-lbl">{{ m.label }}</text>
                     </view>
                     <!-- 大字展示（如新风送风温度）-->
-                    <view v-else class="big-metric">
+                    <view v-else-if="m.displayType === 'big'" class="big-metric">
                       <text class="big-lbl">{{ m.label }}</text>
                       <view class="big-val-row">
                         <text class="big-num">{{ m.numText }}</text>
                         <text class="big-unt">{{ m.unitText }}</text>
                       </view>
                     </view>
-                  </template>
-                </view>
-                <!-- 右列：进度条 + 文字 chip -->
-                <view v-if="card.metricsRight.length" class="mhud-right">
-                  <template v-for="m in card.metricsRight" :key="m.tag">
-                    <view v-if="m.displayType === 'bar'" class="bar-metric">
+                    <!-- 进度条 -->
+                    <view v-else-if="m.displayType === 'bar'" class="bar-metric">
                       <view class="bar-head">
                         <text class="bar-lbl">{{ m.label }}</text>
                         <text class="bar-val" :class="{ pink: m.tag === 'dew_point_temp' }">{{ m.value }}</text>
                       </view>
-                      <view class="bar-track">
-                        <view class="bar-fill" :class="{ pink: m.tag === 'dew_point_temp' }" :style="'width: ' + m.progressPct + '%'"></view>
+                      <view class="bar-track"><view class="bar-fill" :class="{ pink: m.tag === 'dew_point_temp' }" :style="'width: ' + m.progressPct + '%'"></view></view>
+                    </view>
+                    <!-- 文字 chip -->
+                    <view v-else class="metric-chip">
+                      <text class="metric-lbl">{{ m.label }}</text>
+                      <text class="metric-val">{{ m.value }}</text>
+                    </view>
+                  </view>
+                </view>
+                <view v-if="card.metricsRight.length" class="mhud-right">
+                  <view v-for="m in card.metricsRight" :key="m.tag" class="mcell">
+                    <view v-if="m.displayType === 'ring'" class="ring-wrap">
+                      <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + m.progressPct + '%'">
+                        <view class="ring-hole">
+                          <text class="ring-num">{{ m.numText }}</text>
+                          <text class="ring-unit">{{ m.unitText }}</text>
+                          <text v-if="m.tag === 'temp'" class="ring-setpt">设定 {{ curVal(m.sn, 'temp_set') !== undefined ? curVal(m.sn, 'temp_set') : '—' }}°C</text>
+                        </view>
                       </view>
+                      <text class="ring-lbl">{{ m.label }}</text>
+                    </view>
+                    <view v-else-if="m.displayType === 'big'" class="big-metric">
+                      <text class="big-lbl">{{ m.label }}</text>
+                      <view class="big-val-row">
+                        <text class="big-num">{{ m.numText }}</text>
+                        <text class="big-unt">{{ m.unitText }}</text>
+                      </view>
+                    </view>
+                    <view v-else-if="m.displayType === 'bar'" class="bar-metric">
+                      <view class="bar-head">
+                        <text class="bar-lbl">{{ m.label }}</text>
+                        <text class="bar-val" :class="{ pink: m.tag === 'dew_point_temp' }">{{ m.value }}</text>
+                      </view>
+                      <view class="bar-track"><view class="bar-fill" :class="{ pink: m.tag === 'dew_point_temp' }" :style="'width: ' + m.progressPct + '%'"></view></view>
                     </view>
                     <view v-else class="metric-chip">
                       <text class="metric-lbl">{{ m.label }}</text>
                       <text class="metric-val">{{ m.value }}</text>
                     </view>
-                  </template>
+                  </view>
                 </view>
               </view>
               <!-- 纯文字 chip：无 ring/big/bar（主机等双列大字 chip 网格）-->
@@ -767,11 +793,17 @@ onUnload(() => {
 /* ── HUD 指标分栏（ring + big + bar 混排）─────────────────────────────────── */
 .metric-hud { display: flex; align-items: stretch; margin: 20rpx 0 8rpx; position: relative; z-index: 2; gap: 16rpx; }
 
-/* 左列：ring gauge / big text；固定宽，居中 */
+/* 左列：主视觉（ring gauge / big text）；固定宽，居中 */
 .mhud-left { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 0 0 200rpx; }
 
-/* 右列：bars + chips；自动撑满 */
+/* 右列：其余指标（bars / ring / chips）；自动撑满 */
 .mhud-right { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 12rpx; }
+
+/* 单元格包裹（左右列共用，按 displayType 自描述渲染）*/
+.mcell { width: 100%; display: flex; flex-direction: column; }
+.mhud-left .mcell { align-items: center; }
+.mhud-left .mcell + .mcell { margin-top: 18rpx; }
+.mhud-right .mcell { align-items: stretch; }
 
 /* 环形 gauge（conic-gradient，CSS 自定义属性控制进度）*/
 .ring-wrap { display: flex; flex-direction: column; align-items: center; }

@@ -351,10 +351,14 @@ export function buildCard(panel, attrsBySn, config) {
     for (const r of rows) if (!shown.has(r.tag)) rest.push(r)
   }
 
-  // HUD 指标分栏（模板零计算）：左列 = ring/big，右列 = bar/text；
-  // hudLayout=有任意非 text 指标时启用左右分栏，否则回退纯文字 chip 网格。
-  const metricsLeft = small.filter((m) => m.displayType === 'ring' || m.displayType === 'big')
-  const metricsRight = small.filter((m) => m.displayType === 'bar' || m.displayType === 'text')
+  // HUD 指标分栏（模板零计算）。规则对齐设计稿：
+  //   左列 = 主视觉（有 big 大字优先放 big，否则放第一个 ring），右列 = 其余全部。
+  //   · 新风：big(送风温度) 左 + ring(滤网) 右；· 客厅：ring(当前温度) 左 + bars 右。
+  //   左右列都能渲染任意 displayType（模板分支统一），故摆放只决定归属、不决定样式。
+  //   hudLayout=有任意非 text 指标时启用左右分栏，否则回退纯文字 chip 网格。
+  const hero = small.find((m) => m.displayType === 'big') || small.find((m) => m.displayType === 'ring') || null
+  const metricsLeft = hero ? [hero] : []
+  const metricsRight = small.filter((m) => m !== hero)
   const hudLayout = small.some((m) => m.displayType !== 'text')
 
   return { id: panel.id, title: panel.title, icon, switchCtl, controls, small, metricsLeft, metricsRight, hudLayout, rest }
