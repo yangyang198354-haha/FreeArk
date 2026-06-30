@@ -255,12 +255,39 @@ function defOf(tag, config) {
   return wa[tag] || ra[tag] || null
 }
 
-/** 单个突出指标视图：{tag,label,value}；无值显示 '—'（保持版面稳定，值通常 ~1s 内到达）。 */
+/**
+ * 单个突出指标视图。
+ * displayType: 'ring' | 'big' | 'bar' | 'text'
+ *   ring  — 圆形进度 gauge（温度/滤网时长）
+ *   big   — 大字展示（送风温度等宽范围值，不适合 ring）
+ *   bar   — 水平进度条（湿度/露点）
+ *   text  — 普通 chip（其余）
+ */
 function metricOf(tag, sn, attrsBySn, config) {
   const def = defOf(tag, config)
   const raw = (attrsBySn && attrsBySn[String(sn)]) ? attrsBySn[String(sn)][tag] : undefined
   const value = (raw === null || raw === undefined || raw === '') ? '—' : formatAttr(raw, def || {})
-  return { tag, label: (def && def.label) || tag, value }
+  const rawNum = (raw !== null && raw !== undefined && raw !== '') ? parseFloat(raw) : NaN
+
+  let displayType = 'text'
+  let progress = 0
+  if (tag === 'temp' && !isNaN(rawNum)) {
+    displayType = 'ring'
+    progress = Math.min(Math.max((rawNum - 16) / (32 - 16), 0), 1)
+  } else if (tag === 'filter_working_time' && !isNaN(rawNum)) {
+    displayType = 'ring'
+    progress = Math.min(rawNum / 1000, 1)
+  } else if (tag === 'humidity' && !isNaN(rawNum)) {
+    displayType = 'bar'
+    progress = Math.min(rawNum / 100, 1)
+  } else if (tag === 'dew_point_temp' && !isNaN(rawNum)) {
+    displayType = 'bar'
+    progress = Math.min(Math.max(rawNum / 30, 0), 1)
+  } else if (tag === 'pau_out_temp') {
+    displayType = 'big'
+  }
+
+  return { tag, label: (def && def.label) || tag, value, rawNum, displayType, progress, sn: String(sn) }
 }
 
 /** 控件排序权重：primaryTags 列出的在前（按列出顺序），其余保持原序在后。 */

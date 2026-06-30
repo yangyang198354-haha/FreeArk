@@ -1,170 +1,240 @@
 <!--
   @module MOD-1120-FE-02
-  @author Claude (v1.13.0 参数设置页·米家风设备卡片流改版)
+  @author Claude (v1.14.0 参数设置页·赛博朋克 HOLO-HUD 视觉改版)
   @depends MOD-1110-FE-01 (useMqttClient.js), MOD-1120-FE-01 (paramPanels.js),
            MOD-API (api.js: getDeviceSettingsConfig / getOwnerStructure / reportDeviceSettingsAudit)
-  @description 业主端·参数设置（v1.13.0 卡片流）。
+  @description 业主端·参数设置。v1.14.0 在 v1.13 卡片流之上落地「HOLO-HUD」赛博朋克视觉：
+      · 全屏 HUD 背景层（网格漂移 + 扫描线扫过 + 细扫描线纹理），固定不随滚动。
+      · 设备卡 = 暗玻璃 + 霓虹描边 + 四角 HUD 括号 + 呼吸辉光；青/紫按序交替（节奏感）。
+      · 指标 = 双列大字霓虹读数（温度等只读读数）。
+      · 顶部连接条带「均衡器」动效条 + LINK 状态药丸。
+      · 控件（模式药丸 / 风速分段 / 加湿开关 / 温度步进）沿用点选即生效写链路，零语义变更。
 
-    每个设备/房间 = 一张「米家风」设备卡，状态 + 控制同屏（取消 v1.12 的设置/详细双 tab）：
-      头部   图标 + 名称 + 主开关
-      指标   大字关键指标（温度）+ 小字指标 + 网格指标（空气品质）—— 屏端只读读数
-      控件   点选即生效的可写控件（模式圆点 / 风速分段 / 加湿开关 / 设定温度步进）
-      展开   「查看全部 N 项」内联展开该设备其余只读读数（不跳页）
-
-    数据来源（单一来源 = 屏端 MQTT，后端不连 broker）：
-      骨架  = GET /api/miniapp/owner/structure/（device_sn/product_code/params 定义）
-              端侧缓存 owner_structure_{sp}，TTL 30 天（OQ-03）；每次进入后台静默重拉一次。
-      值    = MQTT DeviceStatusUpdate，按 device_sn + attrTag 对齐（屏端自描述）。
-              卡片版面 = paramPanels.buildCard()，命中「可写∪只读」白名单才展示
-              （error_*/comm_fault/plc_* 等被过滤）。
-
-    写链路（DeviceWrite/写确认/审计/点选即生效去抖）继承 v1.10.0，零语义变更。
+    数据/写链路（结构骨架 owner/structure → MQTT 实时值 → buildCard → 点选即生效去抖下发 →
+    写确认 → 审计）完全继承 v1.13.0，本次仅视觉与两个纯展示辅助函数（cardCode/cardEnLabel）。
+    字体：不依赖远程 Web 字体（小程序域名白名单不稳），用系统等宽栈 + 字距营造科技感。
 -->
 <template>
   <view class="ps-page">
 
-    <view v-if="loading" class="tip"><text>加载中…</text></view>
+    <!-- ── HUD 背景层（固定全屏，纯装饰，不拦截点击）───────────────────── -->
+    <view class="hud-grid"></view>
+    <view class="hud-scan"></view>
+    <view class="hud-lines"></view>
 
-    <view v-else-if="rooms.length === 0" class="tip">
-      <text>您还没有绑定专有部分</text>
-      <view class="link-btn" @tap="goBind"><text>去绑定</text></view>
-    </view>
+    <view class="ps-content">
 
-    <template v-else>
-      <!-- 套户选择条（多套户时为选择器，单套户时显示名称 + 连接状态）-->
-      <view v-if="rooms.length > 1" class="unit-bar">
-        <text class="unit-label">房产</text>
-        <picker :range="roomLabels" :value="roomIndex" @change="onRoomChange">
-          <view class="unit-pick">{{ currentRoom ? (currentRoom.location_name || currentRoom.specific_part) : '请选择' }} ›</view>
-        </picker>
-        <text class="conn-dot" :class="{ on: mqttConnected }">{{ mqttConnected ? '已连接' : '连接中…' }}</text>
-      </view>
-      <view v-else-if="currentRoom" class="unit-bar">
-        <text class="unit-single">{{ currentRoom.location_name || currentRoom.specific_part }}</text>
-        <text class="conn-dot" :class="{ on: mqttConnected }">{{ mqttConnected ? '已连接' : '连接中…' }}</text>
+      <view v-if="loading" class="tip"><text>加载中…</text></view>
+
+      <view v-else-if="rooms.length === 0" class="tip">
+        <text>您还没有绑定专有部分</text>
+        <view class="link-btn" @tap="goBind"><text>去绑定</text></view>
       </view>
 
-      <!-- 结构骨架加载中（无任何缓存可渲染）-->
-      <view v-if="curStructureLoading && !curStructure" class="tip"><text>正在获取设备结构…</text></view>
-
-      <!-- 设备树未同步（sync_status=pending）-->
-      <view v-else-if="curSyncPending" class="tip">
-        <text>您的房间结构尚未就绪，请等待设备初始化后再试</text>
-        <view class="link-btn" @tap="reloadStructure"><text>重试</text></view>
-      </view>
-
-      <!-- 结构加载失败且无缓存可降级 -->
-      <view v-else-if="curError && !curStructure" class="tip">
-        <text>{{ curError }}</text>
-        <view class="link-btn" @tap="reloadStructure"><text>重试</text></view>
-      </view>
-
-      <!-- 结构就绪但无设备 -->
-      <view v-else-if="cards.length === 0" class="tip"><text>当前房产暂无设备信息</text></view>
-
-      <!-- 设备卡片流（米家风，纵向排列）-->
       <template v-else>
-        <view v-for="card in cards" :key="card.id" class="dev-card">
-
-          <!-- 头部：图标 + 名称 + 主开关 -->
-          <view class="card-head">
-            <text class="card-icon">{{ card.icon }}</text>
-            <text class="card-title">{{ card.title }}</text>
-            <switch
-              v-if="card.switchCtl"
-              class="card-switch"
-              color="#00e5ff"
-              :checked="curVal(card.switchCtl.sn, card.switchCtl.w.tag) === 'on'"
-              @change="onToggle(ctlDev(card.switchCtl), card.switchCtl.w.tag, $event)"
-            />
+        <!-- 套户选择条（多套户=选择器；单套户=名称）+ 连接状态药丸 + 均衡器动效 -->
+        <view class="unit-bar">
+          <view class="unit-main">
+            <text class="unit-label">PROPERTY</text>
+            <picker v-if="rooms.length > 1" :range="roomLabels" :value="roomIndex" @change="onRoomChange">
+              <view class="unit-pick">{{ currentRoom ? (currentRoom.location_name || currentRoom.specific_part) : '请选择' }} ›</view>
+            </picker>
+            <text v-else-if="currentRoom" class="unit-single">{{ currentRoom.location_name || currentRoom.specific_part }}</text>
           </view>
-
-          <!-- 指标（统一小字 chips：温度/湿度/空气品质等只读读数，字体一致、不重叠）-->
-          <view v-if="card.small.length" class="metric-row">
-            <view v-for="m in card.small" :key="m.tag" class="metric-chip">
-              <text class="metric-lbl">{{ m.label }}</text>
-              <text class="metric-val">{{ m.value }}</text>
+          <view class="conn-side">
+            <view class="eq" :class="{ live: mqttConnected }">
+              <view class="eq-bar" v-for="n in 6" :key="n" :style="'animation-delay:' + (n * 0.12) + 's'"></view>
+            </view>
+            <view class="conn-pill" :class="{ on: mqttConnected }">
+              <view class="conn-led"></view>
+              <text class="conn-txt">{{ mqttConnected ? 'LINK · OK' : 'LINK · …' }}</text>
             </view>
           </view>
+        </view>
 
-          <!-- 可写控件（点选即生效）-->
-          <view v-if="card.controls.length" class="ctl-area">
-            <view v-for="c in card.controls" :key="c.sn + '-' + c.w.tag">
+        <!-- 结构骨架加载中（无任何缓存可渲染）-->
+        <view v-if="curStructureLoading && !curStructure" class="tip"><text>正在获取设备结构…</text></view>
 
-              <!-- 运行模式：图标药丸（点选即生效，当前态高亮发光，替代旧四圆点）-->
-              <view v-if="c.w.control === 'pills'" class="mode-block">
-                <text class="ctl-label">{{ c.w.label }}</text>
-                <view class="mode-pills">
-                  <view
-                    v-for="opt in c.w.options"
-                    :key="opt.value"
-                    class="mode-pill"
-                    :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"
-                    @tap="onPickDot(ctlDev(c), c.w, opt.value)"
-                  >
-                    <text class="mode-ico">{{ modeIcon(opt.value) }}</text>
-                    <text class="mode-txt">{{ opt.label }}</text>
+        <!-- 设备树未同步（sync_status=pending）-->
+        <view v-else-if="curSyncPending" class="tip">
+          <text>您的房间结构尚未就绪，请等待设备初始化后再试</text>
+          <view class="link-btn" @tap="reloadStructure"><text>重试</text></view>
+        </view>
+
+        <!-- 结构加载失败且无缓存可降级 -->
+        <view v-else-if="curError && !curStructure" class="tip">
+          <text>{{ curError }}</text>
+          <view class="link-btn" @tap="reloadStructure"><text>重试</text></view>
+        </view>
+
+        <!-- 结构就绪但无设备 -->
+        <view v-else-if="cards.length === 0" class="tip"><text>当前房产暂无设备信息</text></view>
+
+        <!-- 设备卡片流（HOLO-HUD，纵向排列，青/紫交替）-->
+        <template v-else>
+          <view
+            v-for="(card, ci) in cards"
+            :key="card.id"
+            class="dev-card"
+            :class="{ alt: ci % 2 === 1 }"
+          >
+            <!-- 四角 HUD 括号 -->
+            <view class="bk bk-tl"></view>
+            <view class="bk bk-tr"></view>
+            <view class="bk bk-bl"></view>
+            <view class="bk bk-br"></view>
+
+            <!-- 头部：图标 + 名称/编号 + 主开关 -->
+            <view class="card-head">
+              <view class="card-icon"><text>{{ card.icon }}</text></view>
+              <view class="card-id">
+                <text class="card-title">{{ card.title }}</text>
+                <text class="card-code">{{ cardEnLabel(card) }} · {{ cardCode(card) }}</text>
+              </view>
+              <switch
+                v-if="card.switchCtl"
+                class="card-switch"
+                color="#00e5ff"
+                :checked="curVal(card.switchCtl.sn, card.switchCtl.w.tag) === 'on'"
+                @change="onToggle(ctlDev(card.switchCtl), card.switchCtl.w.tag, $event)"
+              />
+            </view>
+
+            <!-- 指标区：ring gauge / 进度条 / 大字 / 普通 chip ─────────────────── -->
+            <view v-if="card.small.length">
+              <!-- HUD 分栏：有 ring/big/bar 时左右分列 -->
+              <view v-if="card.small.some(m => m.displayType !== 'text')" class="metric-hud">
+                <!-- 左列：ring 环形 gauge 或 big 大字 -->
+                <view v-if="card.small.some(m => m.displayType === 'ring' || m.displayType === 'big')" class="mhud-left">
+                  <template v-for="m in card.small" :key="m.tag">
+                    <!-- 环形 gauge（温度 / 滤网时长）-->
+                    <view v-if="m.displayType === 'ring'" class="ring-wrap">
+                      <view class="ring-track" :class="{ alt: ci % 2 === 1 }" :style="'--prog: ' + Math.round(m.progress * 100) + '%'">
+                        <view class="ring-hole">
+                          <text class="ring-num">{{ isNaN(m.rawNum) ? '—' : m.rawNum }}</text>
+                          <text class="ring-unit">{{ m.tag === 'filter_working_time' ? 'h' : '°C' }}</text>
+                          <text v-if="m.tag === 'temp'" class="ring-setpt">设定 {{ curVal(m.sn, 'temp_set') !== undefined ? curVal(m.sn, 'temp_set') : '—' }}°C</text>
+                        </view>
+                      </view>
+                      <text class="ring-lbl">{{ m.label }}</text>
+                    </view>
+                    <!-- 大字展示（如新风送风温度）-->
+                    <view v-else-if="m.displayType === 'big'" class="big-metric">
+                      <text class="big-lbl">{{ m.label }}</text>
+                      <view class="big-val-row">
+                        <text class="big-num">{{ isNaN(m.rawNum) ? '—' : m.rawNum }}</text>
+                        <text class="big-unt">°C</text>
+                      </view>
+                    </view>
+                  </template>
+                </view>
+                <!-- 右列：进度条 + 文字 chip -->
+                <view class="mhud-right">
+                  <template v-for="m in card.small" :key="m.tag + '-r'">
+                    <view v-if="m.displayType === 'bar'" class="bar-metric">
+                      <view class="bar-head">
+                        <text class="bar-lbl">{{ m.label }}</text>
+                        <text class="bar-val" :class="{ pink: m.tag === 'dew_point_temp' }">{{ m.value }}</text>
+                      </view>
+                      <view class="bar-track">
+                        <view class="bar-fill" :class="{ pink: m.tag === 'dew_point_temp' }" :style="'width: ' + Math.round(m.progress * 100) + '%'"></view>
+                      </view>
+                    </view>
+                    <view v-else-if="m.displayType === 'text'" class="metric-chip">
+                      <text class="metric-lbl">{{ m.label }}</text>
+                      <text class="metric-val">{{ m.value }}</text>
+                    </view>
+                  </template>
+                </view>
+              </view>
+              <!-- 纯文字 chip：无 ring/big/bar（主机等双列大字 chip 网格）-->
+              <view v-else class="metric-row">
+                <view v-for="m in card.small" :key="m.tag" class="metric-chip">
+                  <text class="metric-lbl">{{ m.label }}</text>
+                  <text class="metric-val">{{ m.value }}</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 可写控件（点选即生效）-->
+            <view v-if="card.controls.length" class="ctl-area">
+              <view v-for="c in card.controls" :key="c.sn + '-' + c.w.tag">
+
+                <!-- 运行模式：图标药丸（点选即生效，当前态高亮发光）-->
+                <view v-if="c.w.control === 'pills'" class="mode-block">
+                  <text class="ctl-label">{{ c.w.label }}</text>
+                  <view class="mode-pills">
+                    <view
+                      v-for="opt in c.w.options"
+                      :key="opt.value"
+                      class="mode-pill"
+                      :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"
+                      @tap="onPickDot(ctlDev(c), c.w, opt.value)"
+                    >
+                      <text class="mode-ico">{{ modeIcon(opt.value) }}</text>
+                      <text class="mode-txt">{{ opt.label }}</text>
+                    </view>
                   </view>
                 </view>
-              </view>
 
-              <!-- 分段 chips（如风速 select）-->
-              <view v-else-if="c.w.control === 'select'" class="ctl-row">
-                <text class="ctl-label">{{ c.w.label }}</text>
-                <view class="seg">
-                  <view
-                    v-for="opt in c.w.options"
-                    :key="opt.value"
-                    class="seg-item"
-                    :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"
-                    @tap="onPickDot(ctlDev(c), c.w, opt.value)"
-                  ><text>{{ opt.label }}</text></view>
+                <!-- 分段 chips（如风速 select）-->
+                <view v-else-if="c.w.control === 'select'" class="ctl-row">
+                  <text class="ctl-label">{{ c.w.label }}</text>
+                  <view class="seg">
+                    <view
+                      v-for="opt in c.w.options"
+                      :key="opt.value"
+                      class="seg-item"
+                      :class="{ on: curVal(c.sn, c.w.tag) === opt.value }"
+                      @tap="onPickDot(ctlDev(c), c.w, opt.value)"
+                    ><text>{{ opt.label }}</text></view>
+                  </view>
                 </view>
-              </view>
 
-              <!-- 开关 -->
-              <view v-else-if="c.w.control === 'toggle'" class="ctl-row">
-                <text class="ctl-label">{{ c.w.label }}</text>
-                <switch color="#00e5ff" :checked="curVal(c.sn, c.w.tag) === 'on'" @change="onToggle(ctlDev(c), c.w.tag, $event)" />
-              </view>
-
-              <!-- 数值步进 -->
-              <view v-else-if="c.w.control === 'number'" class="ctl-row">
-                <text class="ctl-label">{{ c.w.label }}</text>
-                <view class="num-ctl">
-                  <view class="num-btn" @tap="onStep(ctlDev(c), c.w, -1)">−</view>
-                  <text class="num-val">{{ curVal(c.sn, c.w.tag) ?? '—' }}{{ c.w.unit || '' }}</text>
-                  <view class="num-btn" @tap="onStep(ctlDev(c), c.w, 1)">＋</view>
+                <!-- 开关 -->
+                <view v-else-if="c.w.control === 'toggle'" class="ctl-row">
+                  <text class="ctl-label">{{ c.w.label }}</text>
+                  <switch color="#00e5ff" :checked="curVal(c.sn, c.w.tag) === 'on'" @change="onToggle(ctlDev(c), c.w.tag, $event)" />
                 </view>
+
+                <!-- 数值步进 -->
+                <view v-else-if="c.w.control === 'number'" class="ctl-block">
+                  <text class="ctl-label">{{ c.w.label }}</text>
+                  <view class="num-ctl">
+                    <view class="num-btn" @tap="onStep(ctlDev(c), c.w, -1)">−</view>
+                    <view class="num-val"><text>{{ curVal(c.sn, c.w.tag) ?? '—' }}{{ c.w.unit || '' }}</text></view>
+                    <view class="num-btn" @tap="onStep(ctlDev(c), c.w, 1)">＋</view>
+                  </view>
+                </view>
+
               </view>
-
             </view>
-          </view>
 
-          <!-- 查看全部（其余只读读数，展开/收起，不跳页）-->
-          <view v-if="card.rest.length" class="more-row" @tap="toggleExpand(card.id)">
-            <text class="more-txt">{{ expanded[card.id] ? '收起' : '查看全部 ' + card.rest.length + ' 项' }}</text>
-            <text class="more-arrow">{{ expanded[card.id] ? '▲' : '›' }}</text>
-          </view>
-          <view v-if="expanded[card.id]" class="rest-list">
-            <view v-for="r in card.rest" :key="r.tag" class="rest-row">
-              <text class="rest-name">{{ r.label }}</text>
-              <text class="rest-val">{{ r.value }}</text>
+            <!-- 查看全部（其余只读读数，展开/收起，不跳页）-->
+            <view v-if="card.rest.length" class="more-row" @tap="toggleExpand(card.id)">
+              <text class="more-txt">{{ expanded[card.id] ? '收起' : '查看全部 ' + card.rest.length + ' 项' }}</text>
+              <text class="more-arrow">{{ expanded[card.id] ? '▲' : '›' }}</text>
             </view>
-          </view>
+            <view v-if="expanded[card.id]" class="rest-list">
+              <view v-for="r in card.rest" :key="r.tag" class="rest-row">
+                <text class="rest-name">{{ r.label }}</text>
+                <text class="rest-val">{{ r.value }}</text>
+              </view>
+            </view>
 
-          <!-- 空卡占位（无开关/控件/指标/读数，连接中先撑住）-->
-          <view
-            v-if="!card.switchCtl && !card.controls.length && !card.small.length && !card.rest.length"
-            class="empty-tip"
-          >
-            <text>{{ mqttConnected ? '采集中…' : '设备未上报' }}</text>
-          </view>
+            <!-- 空卡占位（无开关/控件/指标/读数，连接中先撑住）-->
+            <view
+              v-if="!card.switchCtl && !card.controls.length && !card.small.length && !card.rest.length"
+              class="empty-tip"
+            >
+              <text>{{ mqttConnected ? '采集中…' : '设备未上报' }}</text>
+            </view>
 
-        </view>
+          </view>
+        </template>
       </template>
-    </template>
 
+    </view>
   </view>
 </template>
 
@@ -234,7 +304,7 @@ const attrsBySn = computed(() => {
   for (const sn of Object.keys(devices)) m[sn] = devices[sn].attrs
   return m
 })
-// 面板 → 米家风卡片视图模型（结构 + 实时值合成）。
+// 面板 → 卡片视图模型（结构 + 实时值合成）。
 const cards = computed(() => panels.value.map((p) => buildCard(p, attrsBySn.value, config.value)))
 
 // ── 「查看全部」展开态（cardId → bool）─────────────────────────────────────────
@@ -247,6 +317,18 @@ function ctlDev(c) { return { deviceSn: c.sn, productCode: c.productCode } }
 // 运行模式图标（图标药丸用）：制冷/制热/通风/除湿。
 const MODE_ICON = { cold: '❄', hot: '☀', wind: '🌀', dehumidification: '💧' }
 function modeIcon(v) { return MODE_ICON[v] || '◆' }
+
+// ── HOLO-HUD 纯展示辅助（不参与数据/写链路）──────────────────────────────────
+// 卡片副标题编号：从 card.id 抽取设备/房间数字码（sys-270001 / sys-130004-10016 / room-12 …）。
+function cardCode(card) {
+  const m = String((card && card.id) || '').match(/(\d{3,})/)
+  return m ? m[1] : '—'
+}
+// 卡片英文铭牌：已知预设给专名，其余统一 MODULE（保持 HUD 科技感而不臆造业务含义）。
+const EN_LABEL = { '主机': 'HOST', '新风': 'FRESH-AIR', '客厅': 'LIVING-ROOM', '能耗表': 'ENERGY', '空气质量': 'AIR-QUALITY' }
+function cardEnLabel(card) {
+  return (card && EN_LABEL[card.title]) || 'MODULE'
+}
 
 // ── 控件读写（写链路继承 v1.10.0，零语义变更）────────────────────────────────
 function curVal(sn, tag) {
@@ -544,7 +626,18 @@ function goBind() {
 onLoad(() => {
   uni.setNavigationBarTitle({ title: '参数设置' })
   // 赛博朋克：导航栏配深色背景 + 白字，与页面深空底统一。
-  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#0a0e1a' }) } catch (e) { /* ignore */ }
+  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#060912' }) } catch (e) { /* ignore */ }
+  // HOLO-HUD 字体：真机接入 Orbitron（仅用于数字/拉丁铭牌，中文走系统字体）。
+  // 注意：真机需在 mp-weixin 后台「downloadFile 合法域名」加入 cdn.jsdelivr.net；
+  //   开发者工具勾选「不校验合法域名」即可预览。加载失败时静默降级为系统等宽栈。
+  try {
+    uni.loadFontFace({
+      global: true,
+      family: 'Orbitron',
+      source: 'url("https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/orbitron/static/Orbitron-Bold.ttf")',
+      fail: () => { /* 降级系统字体，不影响功能 */ },
+    })
+  } catch (e) { /* ignore */ }
 })
 
 onShow(() => {
@@ -560,10 +653,12 @@ onUnload(() => {
 </script>
 
 <style scoped>
-/* ── 赛博朋克：深空底 + 霓虹辉光 ─────────────────────────────────────────── */
+/* ── HOLO-HUD：深空底 + 霓虹辉光 ─────────────────────────────────────────── */
 .ps-page {
+  position: relative;
   min-height: 100vh;
   padding-bottom: 44rpx;
+  overflow: hidden;
   background:
     radial-gradient(80% 50% at 12% -5%, rgba(124, 58, 237, 0.30), transparent 60%),
     radial-gradient(70% 45% at 96% 6%, rgba(0, 229, 255, 0.20), transparent 60%),
@@ -571,12 +666,57 @@ onUnload(() => {
     #060912;
 }
 
+/* HUD 背景层：固定全屏，纯装饰 */
+.hud-grid {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0, 229, 255, 0.05) 1rpx, transparent 1rpx),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1rpx, transparent 1rpx);
+  background-size: 80rpx 80rpx;
+  animation: hudGridDrift 16s linear infinite;
+}
+.hud-scan {
+  position: fixed; left: 0; right: 0; top: 0; height: 300rpx; z-index: 1; pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.10), transparent);
+  animation: hudScan 5.5s linear infinite;
+}
+.hud-lines {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 1; pointer-events: none; opacity: 0.5;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0) 0, rgba(0,0,0,0) 4rpx, rgba(0,0,0,0.16) 6rpx);
+}
+@keyframes hudGridDrift { from { background-position: 0 0; } to { background-position: 80rpx 80rpx; } }
+@keyframes hudScan { 0% { transform: translateY(-300rpx); } 100% { transform: translateY(1900rpx); } }
+@keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes hueFloat {
+  0%, 100% { box-shadow: 0 0 28rpx rgba(0, 160, 255, 0.14), inset 0 1rpx 0 rgba(255, 255, 255, 0.05); }
+  50% { box-shadow: 0 0 36rpx rgba(124, 58, 237, 0.22), inset 0 1rpx 0 rgba(255, 255, 255, 0.05); }
+}
+@keyframes eqBar { 0%, 100% { transform: scaleY(0.28); } 50% { transform: scaleY(1); } }
+
+/* 内容层（盖在 HUD 之上）*/
+.ps-content { position: relative; z-index: 2; }
+
 /* 套户选择条 */
-.unit-bar { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 32rpx 12rpx; }
-.unit-label { font-size: 24rpx; color: #5f6b86; margin-right: 12rpx; letter-spacing: 2rpx; }
-.unit-pick, .unit-single { font-size: 32rpx; color: #e8f6ff; font-weight: 700; flex: 1; text-shadow: 0 0 12rpx rgba(0, 229, 255, 0.45); }
-.conn-dot { font-size: 22rpx; color: #f59e0b; }
-.conn-dot.on { color: #27f5b5; text-shadow: 0 0 10rpx rgba(39, 245, 181, 0.7); }
+.unit-bar { display: flex; align-items: center; justify-content: space-between; padding: 28rpx 32rpx 14rpx; }
+.unit-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.unit-label { font-family: 'Orbitron', 'Menlo', 'Monaco', monospace; font-size: 20rpx; color: #5f7da6; letter-spacing: 4rpx; }
+.unit-pick, .unit-single { font-size: 34rpx; color: #eaf6ff; font-weight: 700; letter-spacing: 1rpx; margin-top: 4rpx; text-shadow: 0 0 12rpx rgba(0, 229, 255, 0.45); }
+
+.conn-side { display: flex; align-items: center; flex: none; }
+/* 均衡器动效（连接时跳动，断开时静止矮态）*/
+.eq { display: flex; align-items: flex-end; height: 32rpx; }
+.eq-bar {
+  width: 5rpx; height: 32rpx; margin-right: 4rpx; border-radius: 3rpx; transform: scaleY(0.28); transform-origin: bottom;
+  background: linear-gradient(180deg, #00e5ff, #7c3aed);
+}
+.eq.live .eq-bar { animation: eqBar 1.1s ease-in-out infinite; }
+
+.conn-pill { display: flex; align-items: center; margin-left: 14rpx; padding: 8rpx 16rpx; border-radius: 999rpx; border: 1rpx solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); }
+.conn-pill.on { border-color: rgba(39, 245, 181, 0.45); background: rgba(39, 245, 181, 0.08); }
+.conn-led { width: 12rpx; height: 12rpx; margin-right: 8rpx; border-radius: 50%; background: #f59e0b; }
+.conn-pill.on .conn-led { background: #27f5b5; box-shadow: 0 0 12rpx #27f5b5; animation: pulseDot 1.8s ease-in-out infinite; }
+.conn-txt { font-family: 'Orbitron', 'Menlo', 'Monaco', monospace; font-size: 20rpx; letter-spacing: 1rpx; color: #f59e0b; }
+.conn-pill.on .conn-txt { color: #27f5b5; }
 
 /* 提示 / 空态 */
 .tip { text-align: center; padding: 90rpx 24rpx; color: #6b7796; font-size: 28rpx; }
@@ -586,77 +726,169 @@ onUnload(() => {
 }
 .link-btn text { color: #04121f; font-size: 26rpx; font-weight: 700; }
 
-/* 设备卡：暗玻璃 + 霓虹描边辉光 */
+/* 设备卡：暗玻璃 + 霓虹描边 + 呼吸辉光（青）*/
 .dev-card {
-  position: relative; margin: 20rpx 24rpx; border-radius: 22rpx; padding: 26rpx 28rpx 14rpx;
-  background: linear-gradient(160deg, rgba(20, 30, 56, 0.72), rgba(10, 16, 33, 0.82));
-  border: 1rpx solid rgba(0, 229, 255, 0.20);
-  box-shadow: 0 0 28rpx rgba(0, 160, 255, 0.10), inset 0 1rpx 0 rgba(255, 255, 255, 0.05);
+  position: relative; margin: 22rpx 24rpx; border-radius: 24rpx; padding: 30rpx 30rpx 16rpx;
+  background: linear-gradient(160deg, rgba(20, 30, 56, 0.74), rgba(10, 16, 33, 0.84));
+  border: 1rpx solid rgba(0, 229, 255, 0.22);
+  animation: hueFloat 7s ease-in-out infinite;
+  overflow: hidden;
 }
-.card-head { display: flex; align-items: center; }
+/* 交替紫色卡（节奏感）*/
+.dev-card.alt {
+  background: linear-gradient(160deg, rgba(28, 20, 52, 0.74), rgba(14, 9, 30, 0.84));
+  border-color: rgba(124, 58, 237, 0.30);
+}
+
+/* 四角 HUD 括号 */
+.bk { position: absolute; width: 22rpx; height: 22rpx; z-index: 1; }
+.bk-tl { top: 12rpx; left: 12rpx; border-top: 3rpx solid rgba(0, 229, 255, 0.7); border-left: 3rpx solid rgba(0, 229, 255, 0.7); }
+.bk-tr { top: 12rpx; right: 12rpx; border-top: 3rpx solid rgba(0, 229, 255, 0.7); border-right: 3rpx solid rgba(0, 229, 255, 0.7); }
+.bk-bl { bottom: 12rpx; left: 12rpx; border-bottom: 3rpx solid rgba(0, 229, 255, 0.4); border-left: 3rpx solid rgba(0, 229, 255, 0.4); }
+.bk-br { bottom: 12rpx; right: 12rpx; border-bottom: 3rpx solid rgba(0, 229, 255, 0.4); border-right: 3rpx solid rgba(0, 229, 255, 0.4); }
+.dev-card.alt .bk-tl, .dev-card.alt .bk-tr { border-color: rgba(124, 58, 237, 0.75); }
+.dev-card.alt .bk-bl, .dev-card.alt .bk-br { border-color: rgba(124, 58, 237, 0.45); }
+
+/* 头部 */
+.card-head { display: flex; align-items: center; position: relative; z-index: 2; }
 .card-icon {
-  width: 64rpx; height: 64rpx; line-height: 64rpx; text-align: center; font-size: 34rpx;
-  border-radius: 16rpx; margin-right: 18rpx;
-  background: rgba(0, 229, 255, 0.10); border: 1rpx solid rgba(0, 229, 255, 0.30);
-  box-shadow: 0 0 14rpx rgba(0, 229, 255, 0.25);
+  width: 72rpx; height: 72rpx; display: flex; align-items: center; justify-content: center; font-size: 36rpx;
+  border-radius: 18rpx; margin-right: 18rpx;
+  background: rgba(0, 229, 255, 0.10); border: 1rpx solid rgba(0, 229, 255, 0.32);
+  box-shadow: 0 0 16rpx rgba(0, 229, 255, 0.25);
 }
-.card-title { font-size: 32rpx; font-weight: 700; color: #eaf6ff; flex: 1; letter-spacing: 1rpx; }
+.dev-card.alt .card-icon { background: rgba(124, 58, 237, 0.14); border-color: rgba(124, 58, 237, 0.4); box-shadow: 0 0 16rpx rgba(124, 58, 237, 0.3); }
+.card-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.card-title { font-size: 34rpx; font-weight: 700; color: #eaf6ff; letter-spacing: 1rpx; line-height: 1.1; }
+.card-code { font-family: 'Orbitron', 'Menlo', 'Monaco', monospace; font-size: 20rpx; letter-spacing: 3rpx; color: #5f7da6; margin-top: 6rpx; }
+.dev-card.alt .card-code { color: #7a6aa6; }
 .card-switch { transform: scale(0.92); }
 
-/* 指标 chips（统一小字，温度/湿度/空气品质同一样式，避免重叠）*/
-.metric-row { display: flex; flex-wrap: wrap; gap: 14rpx; margin: 18rpx 0 6rpx; }
-.metric-chip {
-  display: flex; align-items: baseline; gap: 8rpx; padding: 10rpx 18rpx; border-radius: 12rpx;
-  background: rgba(0, 229, 255, 0.06); border: 1rpx solid rgba(0, 229, 255, 0.16);
+/* ── HUD 指标分栏（ring + big + bar 混排）─────────────────────────────────── */
+.metric-hud { display: flex; align-items: stretch; margin: 20rpx 0 8rpx; position: relative; z-index: 2; gap: 16rpx; }
+
+/* 左列：ring gauge / big text；固定宽，居中 */
+.mhud-left { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 0 0 200rpx; }
+
+/* 右列：bars + chips；自动撑满 */
+.mhud-right { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 12rpx; }
+
+/* 环形 gauge（conic-gradient，CSS 自定义属性控制进度）*/
+.ring-wrap { display: flex; flex-direction: column; align-items: center; }
+.ring-track {
+  width: 168rpx; height: 168rpx; border-radius: 50%; position: relative;
+  background: conic-gradient(#00e5ff 0% var(--prog, 0%), rgba(0, 229, 255, 0.12) var(--prog, 0%) 100%);
+  display: flex; align-items: center; justify-content: center;
 }
-.metric-lbl { font-size: 22rpx; color: #7f8db0; }
-.metric-val { font-size: 26rpx; color: #7df9ff; font-weight: 600; text-shadow: 0 0 8rpx rgba(0, 229, 255, 0.35); }
+.ring-track.alt {
+  background: conic-gradient(#a855f7 0% var(--prog, 0%), rgba(124, 58, 237, 0.15) var(--prog, 0%) 100%);
+}
+.ring-hole {
+  width: 130rpx; height: 130rpx; border-radius: 50%;
+  background: radial-gradient(circle, rgba(10, 16, 40, 0.96) 0%, rgba(6, 9, 18, 0.97) 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.ring-num {
+  font-family: 'Orbitron', 'Menlo', monospace; font-size: 38rpx; font-weight: 800;
+  color: #7df9ff; line-height: 1; text-shadow: 0 0 12rpx rgba(0, 229, 255, 0.5);
+}
+.ring-track.alt .ring-num { color: #c4a6ff; text-shadow: 0 0 12rpx rgba(124, 58, 237, 0.5); }
+.ring-unit { font-size: 18rpx; color: #5f7da6; margin-top: 3rpx; }
+.ring-setpt { font-size: 16rpx; color: #7f8db0; margin-top: 5rpx; letter-spacing: 0.5rpx; white-space: nowrap; }
+.ring-lbl { font-size: 20rpx; color: #5f7da6; margin-top: 10rpx; letter-spacing: 1rpx; }
+
+/* 大字展示（新风送风温度等）*/
+.big-metric { display: flex; flex-direction: column; align-items: center; padding: 8rpx 0; }
+.big-lbl { font-size: 20rpx; color: #5f7da6; letter-spacing: 1rpx; margin-bottom: 6rpx; }
+.big-val-row { display: flex; align-items: flex-end; gap: 2rpx; }
+.big-num {
+  font-family: 'Orbitron', 'Menlo', monospace; font-size: 80rpx; font-weight: 800;
+  color: #7df9ff; line-height: 1; text-shadow: 0 0 18rpx rgba(0, 229, 255, 0.45);
+}
+.dev-card.alt .big-num { color: #c4a6ff; text-shadow: 0 0 18rpx rgba(124, 58, 237, 0.45); }
+.big-unt { font-size: 28rpx; color: #7df9ff; margin-bottom: 8rpx; }
+.dev-card.alt .big-unt { color: #c4a6ff; }
+
+/* 进度条（湿度 / 露点）*/
+.bar-metric { display: flex; flex-direction: column; }
+.bar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8rpx; }
+.bar-lbl { font-size: 22rpx; color: #7f8db0; }
+.bar-val { font-size: 26rpx; font-weight: 700; color: #7df9ff; }
+.bar-val.pink { color: #ff79c6; }
+.bar-track { height: 8rpx; border-radius: 999rpx; background: rgba(0, 229, 255, 0.12); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999rpx; background: linear-gradient(90deg, #00e5ff, #3b82f6); }
+.bar-fill.pink { background: linear-gradient(90deg, #ff79c6, #bd93f9); }
+
+/* 指标：双列大字霓虹读数（纯文字 chip 回退）*/
+.metric-row { display: flex; flex-wrap: wrap; margin: 24rpx -7rpx 6rpx; position: relative; z-index: 2; }
+.metric-chip {
+  box-sizing: border-box; width: calc(50% - 14rpx); margin: 7rpx; display: flex; flex-direction: column;
+  padding: 16rpx 20rpx; border-radius: 16rpx;
+  background: rgba(0, 229, 255, 0.05); border: 1rpx solid rgba(0, 229, 255, 0.14);
+}
+.dev-card.alt .metric-chip { background: rgba(124, 58, 237, 0.06); border-color: rgba(124, 58, 237, 0.16); }
+.metric-lbl { font-size: 22rpx; color: #7f8db0; letter-spacing: 1rpx; margin-bottom: 6rpx; }
+.metric-val { font-family: 'Orbitron', -apple-system, sans-serif; font-size: 40rpx; font-weight: 700; color: #7df9ff; line-height: 1.05; text-shadow: 0 0 14rpx rgba(0, 229, 255, 0.45); }
+.dev-card.alt .metric-val { color: #c4a6ff; text-shadow: 0 0 14rpx rgba(124, 58, 237, 0.5); }
+/* mhud-right 内的 metric-chip 不设宽（flex 列内自然撑满）*/
+.mhud-right .metric-chip { width: auto; margin: 0; }
 
 /* 控件区 */
-.ctl-area { margin-top: 10rpx; }
-.ctl-row { display: flex; align-items: center; justify-content: space-between; padding: 18rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
-.ctl-label { font-size: 26rpx; color: #aab6d6; }
+.ctl-area { margin-top: 12rpx; position: relative; z-index: 2; }
+.ctl-row { display: flex; align-items: center; justify-content: space-between; padding: 22rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
+.ctl-block { padding: 22rpx 0 6rpx; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
+.ctl-label { font-size: 26rpx; color: #aab6d6; letter-spacing: 1rpx; }
 
 /* 分段 chips（风速等少选项 select）*/
 .seg { display: flex; background: rgba(10, 18, 38, 0.8); border: 1rpx solid rgba(0, 229, 255, 0.16); border-radius: 999rpx; padding: 4rpx; }
-.seg-item { padding: 8rpx 30rpx; border-radius: 999rpx; }
+.seg-item { padding: 10rpx 32rpx; border-radius: 999rpx; }
 .seg-item text { font-size: 24rpx; color: #7f8db0; }
 .seg-item.on { background: linear-gradient(90deg, #00e5ff, #3b82f6); box-shadow: 0 0 16rpx rgba(0, 229, 255, 0.55); }
 .seg-item.on text { color: #04121f; font-weight: 700; }
+.dev-card.alt .seg-item.on { background: linear-gradient(90deg, #7c3aed, #c026d3); box-shadow: 0 0 16rpx rgba(124, 58, 237, 0.5); }
+.dev-card.alt .seg-item.on text { color: #f3eaff; }
 
-/* 数值步进 */
-.num-ctl { display: flex; align-items: center; }
+/* 数值步进：大字霓虹中央值 */
+.num-ctl { display: flex; align-items: center; margin-top: 16rpx; }
 .num-btn {
-  width: 62rpx; height: 62rpx; line-height: 58rpx; text-align: center; border-radius: 14rpx;
-  border: 1rpx solid rgba(0, 229, 255, 0.35); color: #7df9ff; font-size: 34rpx; background: rgba(0, 229, 255, 0.06);
+  width: 96rpx; height: 92rpx; line-height: 86rpx; text-align: center; border-radius: 22rpx;
+  border: 1rpx solid rgba(0, 229, 255, 0.32); color: #7df9ff; font-size: 44rpx; background: rgba(10, 18, 38, 0.8);
 }
-.num-val { min-width: 140rpx; text-align: center; font-size: 32rpx; color: #eaf6ff; font-weight: 700; text-shadow: 0 0 8rpx rgba(0, 229, 255, 0.4); }
+.num-val {
+  flex: 1; height: 92rpx; margin: 0 16rpx; display: flex; align-items: center; justify-content: center; border-radius: 22rpx;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(124, 58, 237, 0.2));
+  border: 1rpx solid rgba(0, 229, 255, 0.4); box-shadow: inset 0 0 24rpx rgba(0, 229, 255, 0.18);
+}
+.num-val text { font-family: 'Orbitron', -apple-system, sans-serif; font-size: 48rpx; color: #eaf6ff; font-weight: 800; text-shadow: 0 0 16rpx rgba(0, 229, 255, 0.5); }
+.dev-card.alt .num-btn { border-color: rgba(124, 58, 237, 0.4); color: #c4a6ff; }
+.dev-card.alt .num-val { border-color: rgba(124, 58, 237, 0.45); box-shadow: inset 0 0 24rpx rgba(124, 58, 237, 0.18); }
 
-/* 运行模式：图标药丸（取代旧四圆点）*/
-.mode-block { padding: 18rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
-.mode-pills { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 18rpx; }
+/* 运行模式：图标药丸 */
+.mode-block { padding: 22rpx 0 6rpx; border-top: 1rpx solid rgba(120, 160, 255, 0.10); }
+.mode-pills { display: flex; flex-wrap: wrap; margin: 18rpx -7rpx 0; }
 .mode-pill {
-  flex: 1; min-width: 150rpx; display: flex; align-items: center; justify-content: center; gap: 8rpx;
-  padding: 16rpx 10rpx; border-radius: 14rpx;
+  flex: 1; min-width: 150rpx; box-sizing: border-box; margin: 7rpx; display: flex; align-items: center; justify-content: center;
+  padding: 18rpx 10rpx; border-radius: 16rpx;
   background: rgba(10, 18, 38, 0.75); border: 1rpx solid rgba(120, 160, 255, 0.16);
 }
 .mode-pill.on {
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.22), rgba(124, 58, 237, 0.32));
-  border-color: rgba(0, 229, 255, 0.7); box-shadow: 0 0 20rpx rgba(0, 229, 255, 0.45);
+  border-color: rgba(0, 229, 255, 0.7); box-shadow: 0 0 22rpx rgba(0, 229, 255, 0.45);
 }
-.mode-ico { font-size: 30rpx; }
-.mode-txt { font-size: 24rpx; color: #9fb0d6; }
+.mode-ico { font-size: 30rpx; margin-right: 10rpx; }
+.mode-txt { font-size: 26rpx; color: #9fb0d6; }
 .mode-pill.on .mode-txt { color: #eaf6ff; font-weight: 700; }
 
 /* 查看全部 + 展开列表 */
-.more-row { display: flex; align-items: center; justify-content: center; gap: 8rpx; padding: 20rpx 0 10rpx; }
-.more-txt, .more-arrow { font-size: 24rpx; color: #5f6b86; }
-.rest-list { padding: 2rpx 0 10rpx; }
-.rest-row { display: flex; align-items: center; justify-content: space-between; padding: 14rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.08); }
+.more-row { display: flex; align-items: center; justify-content: center; padding: 22rpx 0 12rpx; margin-top: 8rpx; border-top: 1rpx solid rgba(120, 160, 255, 0.08); position: relative; z-index: 2; }
+.more-txt, .more-arrow { font-family: 'Orbitron', 'Menlo', 'Monaco', monospace; font-size: 22rpx; color: #5f6b86; letter-spacing: 1rpx; }
+.more-arrow { margin-left: 8rpx; }
+.rest-list { padding: 2rpx 0 10rpx; position: relative; z-index: 2; }
+.rest-row { display: flex; align-items: center; justify-content: space-between; padding: 16rpx 0; border-top: 1rpx solid rgba(120, 160, 255, 0.08); }
 .rest-name { font-size: 24rpx; color: #7f8db0; }
 .rest-val { font-size: 24rpx; color: #bcd3e8; }
 
 /* 空卡占位 */
-.empty-tip { text-align: center; padding: 30rpx 0; }
+.empty-tip { text-align: center; padding: 30rpx 0; position: relative; z-index: 2; }
 .empty-tip text { font-size: 24rpx; color: #4d5878; }
 </style>
