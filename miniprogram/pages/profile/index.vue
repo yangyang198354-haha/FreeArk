@@ -57,7 +57,10 @@ function onLogout() {
     success: (r) => {
       if (r.confirm) {
         authStore.logout()
-        uni.reLaunch({ url: '/pages/login/index' })
+        // 延迟一帧再 reLaunch：确保 showModal 的全屏蒙层先播完消失动画再跳转。
+        // 否则在 reLaunch 销毁页面栈时蒙层可能被遗留在新登录页之上、吞掉所有点击
+        //（原生 input 在更高的原生层，唯独它仍可用——与"登出后登录页点不动、重启工具才好"现象一致）。
+        setTimeout(() => uni.reLaunch({ url: '/pages/login/index' }), 80)
       }
     },
   })
