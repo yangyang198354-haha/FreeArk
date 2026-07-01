@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>自由方舟能耗采集平台 · 控制台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap">
+<style>
+
+  :root {
+    --bg-0: #050a14; --bg-1: #0a1424; --bg-2: #0f1d35;
+    --panel: rgba(15,29,53,0.55); --panel-2: rgba(20,34,58,0.7);
+    --ink-0: #f0f6ff; --ink-1: #c7d4ea; --ink-2: #7a8bab; --ink-3: #4a5a78;
+    --line: rgba(120,160,220,0.12); --line-2: rgba(120,160,220,0.22);
+    --acc: #3b82f6; --acc-2: #22d3ee; --acc-3: #60a5fa;
+    --cool: #3b82f6; --heat: #f0506e; --ok: #34d399; --warn: #fbbf24; --danger: #f87171; --violet: #a78bfa;
+    --sidebar-w: 244px; --topbar-h: 60px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--ink-0); font-family: "Noto Sans SC","PingFang SC","Hiragino Sans GB",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(120,160,220,0.22); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(120,160,220,0.4); background-clip: padding-box; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .grotesk { font-family: "Space Grotesk","Noto Sans SC",sans-serif; }
+
+  #root { min-height: 100vh; }
+
+  /* ===== APP SHELL ===== */
+  .app {
+    position: relative; min-height: 100vh;
+    display: grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-areas: "brand top" "side main";
+    background:
+      radial-gradient(1100px 700px at 80% -5%, rgba(56,189,248,0.07), transparent 60%),
+      radial-gradient(900px 600px at 0% 100%, rgba(59,130,246,0.06), transparent 60%),
+      linear-gradient(180deg, #050a14 0%, #060d1c 100%);
+  }
+  .app::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: linear-gradient(rgba(120,160,220,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,220,0.035) 1px, transparent 1px);
+    background-size: 54px 54px;
+    -webkit-mask-image: radial-gradient(1200px 800px at 70% 30%, #000 0%, transparent 80%);
+    mask-image: radial-gradient(1200px 800px at 70% 30%, #000 0%, transparent 80%);
+  }
+
+  /* brand corner */
+  .brand-box { grid-area: brand; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(7,14,28,0.6); position: relative; z-index: 2; }
+  .brand-box .logo { width: 30px; height: 30px; flex: none; }
+  .brand-box .logo svg { width: 100%; height: 100%; display: block; }
+  .brand-box .nm { font-weight: 600; font-size: 14.5px; letter-spacing: 0.04em; color: var(--ink-0); white-space: nowrap; }
+
+  /* topbar */
+  .topbar { grid-area: top; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; border-bottom: 1px solid var(--line); background: rgba(7,14,28,0.45); backdrop-filter: blur(10px); position: relative; z-index: 2; }
+  .topbar .crumb { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  .topbar .crumb b { color: var(--ink-0); font-weight: 500; }
+  .topbar .crumb .sep { color: var(--ink-3); }
+  .topbar .right { display: flex; align-items: center; gap: 20px; }
+  .topbar .pill { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-2); font-family: "JetBrains Mono",monospace; letter-spacing: 0.06em; }
+  .topbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .topbar .user { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; transition: all .15s; }
+  .topbar .user:hover { border-color: var(--line-2); background: var(--panel-2); }
+  .topbar .ava { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--acc), var(--acc-2)); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: #06182a; }
+  .topbar .uname { font-size: 13px; color: var(--ink-1); }
+
+  /* sidebar */
+  .sidebar { grid-area: side; border-right: 1px solid var(--line); background: rgba(7,14,28,0.55); backdrop-filter: blur(10px); padding: 14px 12px; overflow-y: auto; position: relative; z-index: 2; }
+  .nav-group { margin-bottom: 2px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 10px; color: var(--ink-2); font-size: 13.5px; cursor: pointer; transition: all .15s; position: relative; user-select: none; }
+  .nav-item .ico { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: var(--ink-3); transition: color .15s; }
+  .nav-item .chev { margin-left: auto; transition: transform .2s; color: var(--ink-3); }
+  .nav-item.open .chev { transform: rotate(180deg); }
+  .nav-item:hover { color: var(--ink-0); background: rgba(120,160,220,0.06); }
+  .nav-item:hover .ico { color: var(--ink-1); }
+  .nav-item.active { color: #fff; background: linear-gradient(90deg, rgba(59,130,246,0.22), rgba(59,130,246,0.05)); }
+  .nav-item.active .ico { color: var(--acc-2); }
+  .nav-item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: linear-gradient(180deg, var(--acc), var(--acc-2)); box-shadow: 0 0 12px var(--acc); }
+  .nav-sub { overflow: hidden; transition: height .22s ease; }
+  .nav-subitem { display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 44px; border-radius: 8px; color: var(--ink-2); font-size: 13px; cursor: pointer; transition: all .15s; position: relative; }
+  .nav-subitem:hover { color: var(--ink-0); background: rgba(120,160,220,0.05); }
+  .nav-subitem.active { color: var(--acc-2); background: rgba(59,130,246,0.1); }
+  .nav-subitem .tick { position: absolute; left: 26px; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); }
+  .nav-subitem.active .tick { background: var(--acc-2); box-shadow: 0 0 8px var(--acc-2); }
+
+  /* main scroll area */
+  .main { grid-area: main; overflow-y: auto; position: relative; z-index: 1; height: calc(100vh - var(--topbar-h)); }
+  .page { padding: 28px 32px 48px; max-width: 1680px; margin: 0 auto; }
+
+  .page-head { margin-bottom: 22px; }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: 0.02em; display: flex; align-items: center; gap: 12px; }
+  .page-title .bar { width: 4px; height: 22px; border-radius: 2px; background: linear-gradient(180deg, var(--acc), var(--acc-2)); box-shadow: 0 0 12px var(--acc); }
+  .page-sub { font-size: 13px; color: var(--ink-2); margin-top: 8px; margin-left: 16px; }
+
+  .section-label { display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: 0.16em; color: var(--ink-2); text-transform: uppercase; margin: 26px 0 14px; }
+  .section-label::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .section-label .en { color: var(--ink-3); font-family: "JetBrains Mono",monospace; font-size: 10px; }
+
+  /* generic panel */
+  .panel { background: linear-gradient(180deg, rgba(15,29,53,0.55), rgba(10,20,36,0.4)); border: 1px solid var(--line); border-radius: 14px; position: relative; overflow: hidden; }
+  .panel.glow::after { content: ""; position: absolute; inset: 0; border-radius: 14px; pointer-events: none; box-shadow: 0 0 0 1px rgba(120,160,220,0.04) inset; }
+
+  /* badges */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 6px; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; line-height: 1.4; white-space: nowrap; }
+  .badge .bd { width: 5px; height: 5px; border-radius: 50%; }
+  .badge.on { color: #5ee7a8; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.28); }
+  .badge.on .bd { background: #34d399; box-shadow: 0 0 6px #34d399; }
+  .badge.off { color: #ff9aa8; background: rgba(248,80,110,0.12); border: 1px solid rgba(248,80,110,0.3); }
+  .badge.off .bd { background: #f0506e; box-shadow: 0 0 6px #f0506e; }
+  .badge.unknown { color: var(--ink-2); background: rgba(120,160,220,0.08); border: 1px solid var(--line-2); }
+  .badge.unknown .bd { background: var(--ink-3); }
+  .badge.cool { color: #7db8ff; background: rgba(59,130,246,0.14); border: 1px solid rgba(59,130,246,0.3); }
+  .badge.heat { color: #ff9aa8; background: rgba(240,80,110,0.12); border: 1px solid rgba(240,80,110,0.28); }
+  .badge.warn { color: var(--warn); background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.28); }
+
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; border-radius: 9px; font-size: 13px; font-family: inherit; cursor: pointer; transition: all .15s; border: 1px solid var(--line-2); background: var(--panel); color: var(--ink-1); letter-spacing: 0.04em; }
+  .btn:hover { border-color: rgba(120,160,220,0.4); background: var(--panel-2); color: var(--ink-0); }
+  .btn.primary { border: 0; background: linear-gradient(90deg, var(--acc), var(--acc-2)); color: #06182a; font-weight: 600; box-shadow: 0 8px 22px -10px rgba(59,130,246,0.6); }
+  .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 12px 28px -12px rgba(59,130,246,0.75); }
+  .link-act { color: var(--acc-2); font-size: 12.5px; cursor: pointer; text-decoration: none; transition: color .15s; }
+  .link-act:hover { color: #7ff0ff; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* form controls */
+  .ctl { height: 38px; border-radius: 9px; border: 1px solid var(--line); background: rgba(5,10,20,0.5); color: var(--ink-0); font-size: 13px; font-family: inherit; padding: 0 14px; transition: all .15s; outline: none; }
+  .ctl:focus { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
+  .ctl::placeholder { color: var(--ink-3); }
+  select.ctl { appearance: none; cursor: pointer; padding-right: 32px; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8bab' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; }
+  select.ctl option { background: #0a1424; color: var(--ink-0); }
+
+  .fade-in { animation: fadeIn .38s ease; opacity: 1; }
+  @keyframes fadeIn { from { transform: translateY(8px); } to { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .fade-in { animation: none; } }
+
+  /* responsive grids */
+  .eo-grid { display: grid; grid-template-columns: 1.7fr 1fr 1fr; gap: 16px; }
+  .ds-top { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 16px; }
+  .ds-bottom { display: grid; grid-template-columns: repeat(5,1fr); gap: 16px; }
+  .trend-grid { display: grid; grid-template-columns: 1.85fr 1fr; gap: 16px; align-items: stretch; }
+  @media (max-width: 1340px) {
+    .eo-grid { grid-template-columns: 1fr 1fr; }
+    .eo-total { grid-column: 1 / -1; }
+    .ds-top { grid-template-columns: repeat(2,1fr); }
+    .ds-bottom { grid-template-columns: repeat(3,1fr); }
+    .trend-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .eo-grid, .ds-top, .ds-bottom { grid-template-columns: 1fr; }
+  }
+
+  /* table + misc (vanilla) */
+  table.dtable { width:100%; border-collapse:collapse; min-width:1100px; }
+  table.dtable th { padding:14px 18px; font-size:12px; font-weight:500; color:var(--ink-2); letter-spacing:0.08em; border-bottom:1px solid var(--line-2); background:rgba(7,14,28,0.5); white-space:nowrap; }
+  table.dtable td { padding:13px 18px; font-size:13px; color:var(--ink-1); vertical-align:middle; }
+  table.dtable tbody tr { border-bottom:1px solid var(--line); transition:background .12s; }
+  table.dtable tbody tr:hover { background:rgba(59,130,246,0.06); }
+  .pg { min-width:30px; height:30px; padding:0 8px; display:inline-grid; place-items:center; border-radius:7px; font-size:12.5px; cursor:pointer; font-family:"JetBrains Mono",monospace; background:rgba(5,10,20,0.5); color:var(--ink-2); border:1px solid var(--line); }
+  .pg.active { background:linear-gradient(90deg,var(--acc),var(--acc-2)); color:#06182a; border:0; font-weight:600; }
+  .stat-card { padding:18px; position:relative; }
+  .stat-accent { position:absolute; left:0; top:14px; bottom:14px; width:2px; border-radius:2px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="brand-box">
+    <div class="logo" id="brandLogo"></div>
+    <div class="nm">自由方舟能耗采集平台</div>
+  </div>
+  <header class="topbar">
+    <div class="crumb" id="crumb"></div>
+    <div class="right">
+      <div class="pill"><span class="dot"></span>实时采集 · 60s</div>
+      <div class="pill">数据节点 <span style="color:var(--ink-0)">634</span></div>
+      <div class="user"><span class="ava">杨</span><span class="uname">杨扬</span></div>
+    </div>
+  </header>
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main"><div id="pageRoot"></div></main>
+</div>
+
+<script>
+/* ============ Freeark Console — vanilla JS ============ */
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, html) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) { if (k === 'class') n.className = attrs[k]; else if (k === 'style') n.style.cssText = attrs[k]; else n.setAttribute(k, attrs[k]); }
+    if (html != null) n.innerHTML = html;
+    return n;
+  }
+
+  /* ---------- ICONS (inline svg strings) ---------- */
+  var ICO = {
+    dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+    device: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>',
+    owner: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg>',
+    report: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 13v4M12 9v8M16 11v6"/></svg>',
+    service: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 2.6 14H2.5a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7L4.5 7a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 4.6V4.5a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8 1.6 1.6 0 0 0 1.4 1H22a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5.9z"/></svg>',
+    chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3 3 0 0 1 0 5.6M21 20a6 6 0 0 0-4-5.6"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>',
+    reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+    cpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>',
+    monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M20 6L9 17l-5-5"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+    gauge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M12 14l4-4"/><path d="M3.5 18a9 9 0 1 1 17 0"/><circle cx="12" cy="14" r="1.5"/></svg>',
+    wind: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M3 8h10a2.5 2.5 0 1 0-2.5-2.5"/><path d="M3 12h14a2.5 2.5 0 1 1-2.5 2.5"/><path d="M3 16h7a2 2 0 1 1-2 2"/></svg>',
+    water: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M12 2.5S5 10 5 14.5a7 7 0 0 0 14 0C19 10 12 2.5 12 2.5z"/></svg>',
+    panelIco: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="7" cy="6.5" r="0.6" fill="currentColor"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>'
+  };
+  var LOGO = '<svg viewBox="0 0 48 48" fill="none"><defs><linearGradient id="slg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><path d="M24 3 L42 13.5 V34.5 L24 45 L6 34.5 V13.5 Z" stroke="url(#slg)" stroke-width="1.4" fill="rgba(59,130,246,0.06)"/><path d="M14 30 L24 18 L34 30" stroke="url(#slg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="24" r="2" fill="#3b82f6"/><path d="M14 33 H34" stroke="#3b82f6" stroke-width="1" opacity="0.55"/></svg>';
+
+  /* ---------- NAV MODEL ---------- */
+  var NAV = [
+    { id: 'dashboard', label: '系统看板', icon: 'dashboard' },
+    { id: 'device', label: '设备管理', icon: 'device', children: [
+      { id: 'device-list', label: '设备列表' }, { id: 'fault', label: '故障管理' }, { id: 'dew', label: '结露预警' } ] },
+    { id: 'owner', label: '业主信息管理', icon: 'owner' },
+    { id: 'report', label: '能耗报表', icon: 'report', children: [
+      { id: 'report-day', label: '日报表' }, { id: 'report-month', label: '月报表' } ] },
+    { id: 'svc', label: '服务管理', icon: 'service', children: [ { id: 'svc-status', label: '服务状态' } ] },
+    { id: 'chat', label: '和方舟智能体聊天', icon: 'chat' },
+    { id: 'user', label: '用户管理', icon: 'users', children: [
+      { id: 'user-list', label: '用户列表' }, { id: 'user-role', label: '角色权限' } ] }
+  ];
+  var ROUTE_META = {
+    'dashboard': ['首页', '系统看板'], 'device-list': ['设备管理', '设备列表'],
+    'fault': ['设备管理', '故障管理'], 'dew': ['设备管理', '结露预警'],
+    'owner': ['业主信息管理'], 'report-day': ['能耗报表', '日报表'], 'report-month': ['能耗报表', '月报表'],
+    'svc-status': ['服务管理', '服务状态'], 'chat': ['和方舟智能体聊天'],
+    'user-list': ['用户管理', '用户列表'], 'user-role': ['用户管理', '角色权限']
+  };
+
+  var state = { route: 'dashboard', open: { device: true } };
+
+  /* ---------- SIDEBAR ---------- */
+  function renderSidebar() {
+    var sb = document.getElementById('sidebar');
+    sb.innerHTML = '';
+    NAV.forEach(function (item) {
+      var group = el('div', { class: 'nav-group' });
+      if (!item.children) {
+        var ni = el('div', { class: 'nav-item' + (state.route === item.id ? ' active' : '') });
+        ni.innerHTML = '<span class="ico">' + ICO[item.icon] + '</span>' + item.label;
+        ni.onclick = function () { nav(item.id); };
+        group.appendChild(ni);
+      } else {
+        var parentActive = item.children.some(function (c) { return c.id === state.route; });
+        var isOpen = !!state.open[item.id];
+        var ni2 = el('div', { class: 'nav-item' + (parentActive ? ' active' : '') + (isOpen ? ' open' : '') });
+        ni2.innerHTML = '<span class="ico">' + ICO[item.icon] + '</span>' + item.label + '<span class="chev">' + ICO.chevron + '</span>';
+        ni2.onclick = function () { state.open[item.id] = !state.open[item.id]; renderSidebar(); };
+        group.appendChild(ni2);
+        var sub = el('div', { class: 'nav-sub', style: 'height:' + (isOpen ? item.children.length * 36 : 0) + 'px' });
+        item.children.forEach(function (c) {
+          var si = el('div', { class: 'nav-subitem' + (state.route === c.id ? ' active' : '') });
+          si.innerHTML = '<span class="tick"></span>' + c.label;
+          si.onclick = function () { nav(c.id); };
+          sub.appendChild(si);
+        });
+        group.appendChild(sub);
+      }
+      sb.appendChild(group);
+    });
+  }
+
+  /* ---------- TOPBAR CRUMB ---------- */
+  function renderCrumb() {
+    var crumb = ROUTE_META[state.route] || ROUTE_META.dashboard;
+    var c = document.getElementById('crumb');
+    c.innerHTML = crumb.map(function (x, i) {
+      var sep = i > 0 ? '<span class="sep">/</span>' : '';
+      return sep + (i === crumb.length - 1 ? '<b>' + x + '</b>' : '<span>' + x + '</span>');
+    }).join('');
+  }
+
+  /* ---------- helpers ---------- */
+  function miniRing(pct, color, size) {
+    size = size || 46;
+    var r = size / 2 - 4, cc = 2 * Math.PI * r, dash = Math.max(0.02, Math.min(1, pct)) * cc;
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+      '<circle cx="' + size/2 + '" cy="' + size/2 + '" r="' + r + '" fill="none" stroke="rgba(120,160,220,0.14)" stroke-width="3"/>' +
+      '<circle cx="' + size/2 + '" cy="' + size/2 + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3" stroke-linecap="round" stroke-dasharray="' + dash + ' ' + (cc-dash) + '" transform="rotate(-90 ' + size/2 + ' ' + size/2 + ')" style="filter:drop-shadow(0 0 4px ' + color + ')"/></svg>';
+  }
+  function badge(cls, txt, dot) { return '<span class="badge ' + cls + '">' + (dot ? '<span class="bd"></span>' : '') + txt + '</span>'; }
+
+  window.__FA = { el: el, ICO: ICO, LOGO: LOGO, NAV: NAV, ROUTE_META: ROUTE_META, state: state, miniRing: miniRing, badge: badge,
+    renderSidebar: renderSidebar, renderCrumb: renderCrumb };
+
+  /* ---------- ROUTER ---------- */
+  function nav(id) {
+    if (id === 'device') id = 'device-list';
+    if (id === 'report') id = 'report-day';
+    if (id === 'svc') id = 'svc-status';
+    if (id === 'user') id = 'user-list';
+    state.route = id;
+    try { location.hash = id; } catch (e) {}
+    render();
+    var m = document.querySelector('.main'); if (m) m.scrollTop = 0;
+  }
+  window.__FA.nav = nav;
+
+  function render() {
+    renderSidebar();
+    renderCrumb();
+    var root = document.getElementById('pageRoot');
+    root.innerHTML = '';
+    if (state.route === 'dashboard') window.__FA.renderDashboard(root);
+    else if (state.route === 'device-list') window.__FA.renderDevices(root);
+    else window.__FA.renderPlaceholder(root, (ROUTE_META[state.route] || ['页面']).slice(-1)[0]);
+  }
+  window.__FA.render = render;
+
+  /* ---------- INIT ---------- */
+  document.getElementById('brandLogo').innerHTML = LOGO;
+  var h = (location.hash || '').replace('#', '');
+  if (ROUTE_META[h]) state.route = h;
+  window.addEventListener('hashchange', function () {
+    var hh = (location.hash || '').replace('#', '');
+    if (ROUTE_META[hh] && hh !== state.route) { state.route = hh; render(); }
+  });
+  // render after page modules load
+  window.__FA.boot = render;
+})();
+
+</script>
+<script>
+/* ============ Freeark Console — pages (vanilla) ============ */
+(function () {
+  'use strict';
+  var FA = window.__FA, el = FA.el, ICO = FA.ICO, miniRing = FA.miniRing, badge = FA.badge;
+
+  /* ============ DASHBOARD ============ */
+  FA.renderDashboard = function (root) {
+    var page = el('div', { class: 'page fade-in' });
+    page.innerHTML =
+      '<div class="page-head"><div class="page-title"><span class="bar"></span>系统看板</div>' +
+      '<div class="page-sub">实时监控系统运行状态和能耗数据</div></div>' +
+      sectionLabel('能耗概览', 'ENERGY OVERVIEW') +
+      energyOverview() +
+      sectionLabel('设备状态与故障', 'DEVICE STATUS') +
+      deviceStatus() +
+      sectionLabel('趋势与日志', 'TREND &amp; LOGS') +
+      '<div class="trend-grid">' + trendChart() + serviceStatus() + '</div>';
+    root.appendChild(page);
+  };
+
+  function sectionLabel(cn, en) {
+    return '<div class="section-label">' + cn + ' <span class="en">' + en + '</span></div>';
+  }
+
+  function energyOverview() {
+    var totals = [
+      { v: '1,186,067', l: '总电量 (kWh)', c: 'var(--ink-0)', glow: false },
+      { v: '210,611', l: '制冷 (kWh)', c: 'var(--cool)', glow: true },
+      { v: '975,456', l: '制热 (kWh)', c: 'var(--heat)', glow: true }
+    ];
+    var totalCells = totals.map(function (x) {
+      return '<div style="min-width:0"><div class="grotesk" style="font-size:24px;font-weight:600;color:' + x.c + ';letter-spacing:-0.01em;white-space:nowrap;' + (x.glow ? 'text-shadow:0 0 22px ' + x.c + '55' : '') + '">' + x.v + '</div>' +
+        '<div style="font-size:12px;color:var(--ink-2);margin-top:6px">' + x.l + '</div></div>';
+    }).join('');
+    var totalCard =
+      '<div class="panel eo-total" style="padding:22px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
+          '<div style="font-size:14px;color:var(--ink-1);font-weight:500;letter-spacing:0.04em">总电量查询</div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span class="ctl mono" style="height:32px;display:inline-flex;align-items:center;font-size:12.5px;color:var(--ink-1)">' + iconInline('calendar', 13, 'margin-right:7px;color:var(--ink-3)') + '2026-01-01</span>' +
+            '<span style="color:var(--ink-3);font-size:12px">至</span>' +
+            '<span class="ctl mono" style="height:32px;display:inline-flex;align-items:center;font-size:12.5px;color:var(--ink-1)">2026-05-31</span>' +
+          '</div></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">' + totalCells + '</div>' +
+      '</div>';
+    return '<div class="eo-grid">' + totalCard +
+      statBig('calendar', '15,375', 'kWh', '今日用电量', 'var(--acc-2)', '较昨日 +3.2%') +
+      statBig('doc', '206,487', 'kWh', '本月用电量', 'var(--acc)', '预计本月 248,000') +
+      '</div>';
+  }
+
+  function iconInline(name, size, style) {
+    var svg = ICO[name].replace(/width="\d+"/, 'width="' + size + '"').replace(/height="\d+"/, 'height="' + size + '"');
+    return '<span style="display:inline-grid;place-items:center;' + (style || '') + '">' + svg + '</span>';
+  }
+
+  function statBig(icon, value, unit, label, accent, delta) {
+    return '<div class="panel" style="padding:22px;display:flex;flex-direction:column;justify-content:space-between">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">' +
+        '<div style="min-width:0"><div class="grotesk" style="font-size:25px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">' + value +
+          '<span class="mono" style="font-size:12px;color:var(--ink-2);margin-left:5px">' + unit + '</span></div>' +
+        '<div style="font-size:12.5px;color:var(--ink-2);margin-top:8px;white-space:nowrap">' + label + '</div></div>' +
+        '<div style="width:40px;height:40px;flex:none;border-radius:11px;display:grid;place-items:center;color:' + accent + ';background:' + accent + '1a;border:1px solid ' + accent + '33">' + ICO[icon] + '</div>' +
+      '</div>' +
+      '<div class="mono" style="font-size:11px;color:var(--ink-3);margin-top:18px;letter-spacing:0.04em">' + delta + '</div></div>';
+  }
+
+  function deviceStatus() {
+    var top = [
+      { value: '565', label: 'PLC 在线', sub: '在线率 89.12%', color: 'var(--ok)', pct: 0.8912 },
+      { value: '325', label: '大屏在线', sub: '在线率 51.26%', color: 'var(--acc-2)', pct: 0.5126 },
+      { value: '634', label: '总设备数', sub: '全部接入终端', color: 'var(--acc)', pct: 1 },
+      { value: '62.6%', label: '系统开机率', sub: null, color: 'var(--violet)', pct: 0.626,
+        tags: [['制冷','371','var(--cool)'],['制热','0','var(--ink-3)'],['通风','1','var(--acc-2)'],['除湿','25','var(--violet)']] }
+    ];
+    var bottom = [
+      { value: '481', label: '当前故障总数', sub: '影响 75 户', icon: 'alert', color: 'var(--danger)', danger: true },
+      { value: '634', label: '空气品质传感器', sub: '故障 49 台', icon: 'gauge', color: 'var(--warn)' },
+      { value: '2954', label: '温控面板', sub: '故障 210 台', icon: 'panelIco', color: 'var(--acc)' },
+      { value: '634', label: '新风', sub: '故障 67 台', icon: 'wind', color: 'var(--ok)' },
+      { value: '634', label: '水力模块', sub: '故障 62 台', icon: 'water', color: 'var(--acc-2)' }
+    ];
+    return '<div class="ds-top">' + top.map(statCard).join('') + '</div>' +
+           '<div class="ds-bottom">' + bottom.map(statCard).join('') + '</div>';
+  }
+
+  function statCard(c) {
+    var tags = '';
+    if (c.tags) {
+      tags = '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px">' + c.tags.map(function (t) {
+        return '<span class="mono" style="font-size:11px;color:var(--ink-2)">' + t[0] + ' <b style="color:' + t[2] + '">' + t[1] + '</b></span>';
+      }).join('') + '</div>';
+    }
+    var right = (c.pct != null)
+      ? '<div style="position:relative;flex:none">' + miniRing(c.pct, c.color) + '</div>'
+      : '<div style="width:40px;height:40px;border-radius:11px;flex:none;display:grid;place-items:center;color:' + c.color + ';background:' + c.color + '1a;border:1px solid ' + c.color + '33;' + (c.danger ? 'box-shadow:0 0 16px ' + c.color + '33' : '') + '">' + ICO[c.icon] + '</div>';
+    return '<div class="panel stat-card">' +
+      '<div class="stat-accent" style="background:' + c.color + ';box-shadow:0 0 12px ' + c.color + '"></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div style="min-width:0"><div class="grotesk" style="font-size:28px;font-weight:600;color:' + c.color + ';letter-spacing:-0.01em;text-shadow:0 0 20px ' + c.color + '40">' + c.value + '</div>' +
+        '<div style="font-size:13px;color:var(--ink-1);margin-top:8px;font-weight:500">' + c.label + '</div>' +
+        (c.sub ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:4px">' + c.sub + '</div>' : '') + tags + '</div>' +
+        right +
+      '</div></div>';
+  }
+
+  function trendChart() {
+    var data = [
+      { d: '05-25', total: 20720 }, { d: '05-26', total: 18747 }, { d: '05-27', total: 16761 },
+      { d: '05-28', total: 12323 }, { d: '05-29', total: 14108 }, { d: '05-30', total: 16481 }, { d: '05-31', total: 15343 }
+    ].map(function (x) { x.cool = Math.round(x.total * 0.18); x.heat = Math.round(x.total * 0.82); return x; });
+    var max = 25000, W = 760, H = 300, padL = 44, padB = 34, padT = 16, padR = 12;
+    var cw = W - padL - padR, ch = H - padB - padT, bw = cw / data.length;
+    var yTicks = [0, 5000, 10000, 15000, 20000, 25000];
+    var grid = yTicks.map(function (t) {
+      var y = padT + ch - (t / max) * ch;
+      return '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="rgba(120,160,220,0.1)" stroke-width="1"/>' +
+        '<text x="' + (padL - 8) + '" y="' + (y + 3) + '" text-anchor="end" class="mono" fill="var(--ink-3)" font-size="9">' + (t/1000) + 'k</text>';
+    }).join('');
+    var bars = data.map(function (row, i) {
+      var groupX = padL + i * bw, gap = 3, w = (bw * 0.5 - gap) / 2, x0 = groupX + bw * 0.25;
+      var coolH = (row.cool / max) * ch, heatH = (row.heat / max) * ch;
+      var coolY = padT + ch - coolH, heatY = padT + ch - heatH;
+      return '<rect x="' + x0 + '" y="' + coolY + '" width="' + w + '" height="' + coolH + '" fill="url(#barCool)" rx="2" style="filter:drop-shadow(0 0 6px rgba(59,130,246,0.45))"/>' +
+        '<text x="' + (x0 + w/2) + '" y="' + (coolY - 6) + '" text-anchor="middle" class="mono" fill="#7db8ff" font-size="9">' + (row.cool/1000).toFixed(1) + 'k</text>' +
+        '<rect x="' + (x0 + w + gap) + '" y="' + heatY + '" width="' + w + '" height="' + heatH + '" fill="url(#barHeat)" rx="2" style="filter:drop-shadow(0 0 6px rgba(240,80,110,0.4))"/>' +
+        '<text x="' + (x0 + w + gap + w/2) + '" y="' + (heatY - 6) + '" text-anchor="middle" class="mono" fill="#ff9aa8" font-size="9">' + (row.heat/1000).toFixed(1) + 'k</text>' +
+        '<text x="' + (groupX + bw/2) + '" y="' + (H - 14) + '" text-anchor="middle" class="mono" fill="var(--ink-3)" font-size="9.5">' + row.d + '</text>';
+    }).join('');
+    var legend = '<div style="display:flex;gap:16px">' +
+      legendItem('var(--cool)', '制冷') + legendItem('var(--heat)', '制热') + '</div>';
+    return '<div class="panel" style="padding:20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<div style="font-size:14px;font-weight:500;color:var(--ink-1)">近 7 天用电量趋势</div>' + legend + '</div>' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">' +
+        '<defs><linearGradient id="barCool" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#3b82f6"/></linearGradient>' +
+        '<linearGradient id="barHeat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7b91"/><stop offset="1" stop-color="#f0506e"/></linearGradient></defs>' +
+        grid + bars + '</svg></div>';
+  }
+  function legendItem(color, label) {
+    return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)"><span style="width:9px;height:9px;border-radius:3px;background:' + color + ';box-shadow:0 0 8px ' + color + '"></span>' + label + '</span>';
+  }
+
+  function serviceStatus() {
+    var svcs = [
+      ['freeark-backend', true], ['freeark-mqtt-consumer', true], ['freeark-screen-heartbeat', true],
+      ['freeark-daily-usage', true], ['freeark-monthly-usage', true], ['freeark-plc-cleanup', false],
+      ['freeark-alarm-dispatch', true], ['freeark-report-export', true], ['freeark-dew-monitor', true]
+    ];
+    var rows = svcs.map(function (s) {
+      return '<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;background:rgba(5,10,20,0.4);border:1px solid var(--line)">' +
+        badge(s[1] ? 'on' : 'off', s[1] ? '运行中' : '已停止', true) +
+        '<span class="mono" style="font-size:12.5px;color:' + (s[1] ? 'var(--ink-1)' : 'var(--ink-3)') + '">' + s[0] + '</span>' +
+        (s[1] ? '<span style="margin-left:auto;width:5px;height:5px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)"></span>' : '') +
+        '</div>';
+    }).join('');
+    return '<div class="panel" style="padding:20px;display:flex;flex-direction:column;min-height:0">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+        '<div style="font-size:14px;font-weight:500;color:var(--ink-1)">系统运行状态</div>' +
+        '<span class="btn" style="height:30px;padding:0 12px;font-size:12px">' + ICO.reset + '刷新</span></div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding-right:4px">' + rows + '</div></div>';
+  }
+
+  /* ============ DEVICES ============ */
+  function buildDevices() {
+    var rooms = ['1001','1002','1101','1102','1201','1202','1301','1302','1401','1402','1501','1502','1601','1602','201','202','301','302'];
+    function rnd(s) { var x = Math.sin(s * 99.7) * 43758.5; return x - Math.floor(x); }
+    return rooms.map(function (r, i) {
+      var unknown = (r === '1102');
+      var screenOn = rnd(i + 1) > 0.42, plcOn = rnd(i + 7) > 0.12;
+      var sysOn = unknown ? 'unknown' : (rnd(i + 3) > 0.45 ? 'on' : 'off');
+      var faults = (r === '1501' || r === '1601') ? 1 : 0;
+      var sec = unknown ? '—' : '2026-05-31 21:08:' + String(35 + i).padStart(2, '0');
+      return { bldg: '10栋', unit: '1单元', room: r,
+        screen: unknown ? 'off' : (screenOn ? 'on' : 'off'),
+        plc: unknown ? 'off' : (plcOn ? 'on' : 'off'),
+        heartbeat: sec, sysOn: sysOn, mode: unknown ? 'unknown' : 'cool',
+        faults: unknown ? null : faults, dew: false };
+    });
+  }
+  function onlineBadge(s) { return s === 'on' ? badge('on', '在线', true) : badge('off', '离线', true); }
+  function switchBadge(s) { return s === 'on' ? badge('on', '开', true) : (s === 'off' ? badge('off', '关', true) : badge('unknown', '未知', true)); }
+  function modeBadge(m) { return m === 'cool' ? '<span class="badge cool">❄ 制冷</span>' : (m === 'heat' ? '<span class="badge heat">⚡ 制热</span>' : '<span class="badge unknown">未知</span>'); }
+
+  FA.renderDevices = function (root) {
+    var all = buildDevices();
+    var cols = ['楼栋','单元','户号','大屏状态','PLC状态','PLC上次心跳','系统开关','运行模式','故障数量','凝露提醒','操作'];
+    var filters = ['大屏状态','PLC状态','系统开关','运行模式','故障状态'];
+
+    var th = cols.map(function (c, i) {
+      var align = i === 10 ? 'right' : (i >= 3 ? 'center' : 'left');
+      return '<th style="text-align:' + align + '">' + c + '</th>';
+    }).join('');
+
+    var rows = all.map(function (d) {
+      var faultCell = d.faults == null ? '<span style="color:var(--ink-3)">—</span>'
+        : (d.faults > 0 ? '<span style="color:var(--danger);font-weight:600">' + d.faults + '</span>' : '<span style="color:var(--ok)">0</span>');
+      return '<tr>' +
+        '<td>' + d.bldg + '</td><td>' + d.unit + '</td>' +
+        '<td class="mono" style="color:var(--ink-0);font-weight:500">' + d.room + '</td>' +
+        '<td style="text-align:center">' + onlineBadge(d.screen) + '</td>' +
+        '<td style="text-align:center">' + onlineBadge(d.plc) + '</td>' +
+        '<td class="mono" style="text-align:center;color:var(--ink-2);font-size:12px">' + d.heartbeat + '</td>' +
+        '<td style="text-align:center">' + switchBadge(d.sysOn) + '</td>' +
+        '<td style="text-align:center">' + modeBadge(d.mode) + '</td>' +
+        '<td class="mono" style="text-align:center">' + faultCell + '</td>' +
+        '<td style="text-align:center;color:var(--ink-2);font-size:12px">' + (d.dew ? '<span class="badge warn">提醒</span>' : '无') + '</td>' +
+        '<td style="text-align:right;white-space:nowrap"><span style="display:inline-flex;gap:14px">' +
+          '<a class="link-act">设备画板</a><a class="link-act" style="color:var(--ink-2)">PLC历史</a><a class="link-act" style="color:var(--ink-2)">设置</a></span></td>' +
+        '</tr>';
+    }).join('');
+
+    var filterEls = filters.map(function (f) {
+      return '<select class="ctl" style="min-width:130px"><option value="" disabled selected>' + f + '</option><option>全部</option><option>在线</option><option>离线</option></select>';
+    }).join('');
+
+    var pg = ['‹','1','2','3','…','36','›'].map(function (p) {
+      return '<span class="pg' + (p === '1' ? ' active' : '') + '">' + p + '</span>';
+    }).join('');
+
+    var page = el('div', { class: 'page fade-in' });
+    page.innerHTML =
+      '<div class="page-head"><div class="page-title"><span class="bar"></span>设备列表</div>' +
+      '<div class="page-sub">查看和管理所有设备的运行状态</div></div>' +
+      '<div class="panel" style="padding:16px;margin-bottom:18px">' +
+        '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">' +
+          '<div style="position:relative;flex:0 0 240px">' +
+            '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none">' + ICO.search + '</span>' +
+            '<input class="ctl" placeholder="可直接输入，例:1-2-101" style="width:100%;padding-left:34px"/></div>' +
+          filterEls +
+          '<button class="btn primary">' + ICO.search + '搜索</button>' +
+          '<button class="btn">' + ICO.reset + '重置</button>' +
+        '</div></div>' +
+      '<div class="panel" style="overflow:hidden">' +
+        '<div style="overflow-x:auto"><table class="dtable"><thead><tr>' + th + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid var(--line-2);background:rgba(7,14,28,0.4)">' +
+          '<span style="font-size:12.5px;color:var(--ink-2)">共 <b class="mono" style="color:var(--ink-0)">634</b> 条 · 当前显示 1–18</span>' +
+          '<div style="display:flex;gap:6px;align-items:center">' + pg + '</div>' +
+        '</div></div>';
+    root.appendChild(page);
+  };
+
+  /* ============ PLACEHOLDER ============ */
+  FA.renderPlaceholder = function (root, title) {
+    var page = el('div', { class: 'page fade-in' });
+    page.innerHTML =
+      '<div class="page-head"><div class="page-title"><span class="bar"></span>' + title + '</div>' +
+      '<div class="page-sub">此模块为演示占位 · 视觉风格与「系统看板 / 设备列表」一致</div></div>' +
+      '<div class="panel" style="padding:64px;display:grid;place-items:center;text-align:center;color:var(--ink-3)">' +
+        '<div style="width:64px;height:64px;border-radius:16px;display:grid;place-items:center;background:rgba(59,130,246,0.1);border:1px solid var(--line-2);color:var(--acc-2);margin-bottom:18px">' + ICO.cpu + '</div>' +
+        '<div style="font-size:15px;color:var(--ink-1)">' + title + '</div>' +
+        '<div style="font-size:13px;margin-top:8px;max-width:360px;line-height:1.7">本次重做聚焦「系统看板」与「设备列表」两个核心界面，其余菜单沿用同一套设计语言即可扩展。</div>' +
+      '</div>';
+    root.appendChild(page);
+  };
+
+  /* boot */
+  FA.boot();
+})();
+
+</script>
+
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0a1424"/>
+  <rect x="14" y="20" width="22" height="60" rx="3" fill="none" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="42" y="20" width="44" height="26" rx="3" fill="none" stroke="#22d3ee" stroke-width="2"/>
+  <rect x="42" y="52" width="20" height="28" rx="3" fill="none" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="66" y="52" width="20" height="28" rx="3" fill="none" stroke="#f0506e" stroke-width="2"/>
+</svg>
+</template>
+</body>
+</html>

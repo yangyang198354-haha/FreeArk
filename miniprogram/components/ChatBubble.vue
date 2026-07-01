@@ -52,7 +52,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { marked } from 'marked'
+import { renderMarkdown } from '@/utils/miniMarkdown'
 
 const props = defineProps({
   role: { type: String, default: 'assistant' },
@@ -68,7 +68,7 @@ defineEmits(['confirm'])
 const renderedHtml = computed(() => {
   if (!props.content) return ''
   try {
-    return marked.parse(props.content, { breaks: true, gfm: true })
+    return renderMarkdown(props.content)
   } catch {
     return props.content
   }

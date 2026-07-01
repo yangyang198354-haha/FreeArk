@@ -257,6 +257,8 @@ onShow(() => {
     uni.reLaunch({ url: '/pages/login/index' })
     return
   }
+  // AI问答页会 hideTabBar 隐藏原生底栏；回到首页需复原原生 tabBar
+  uni.showTabBar({ animation: false, fail: () => {} })
   poller.start()
 })
 

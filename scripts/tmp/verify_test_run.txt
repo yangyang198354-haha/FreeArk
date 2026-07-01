@@ -1,0 +1,37 @@
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1059, in run_tests
+    suite = self.build_suite(test_labels)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 914, in build_suite
+    tests = self.load_tests_for_label(label, discover_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 895, in load_tests_for_label
+    tests = self.test_loader.discover(start_dir=label, **kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\loader.py", line 310, in discover
+    tests = list(self._find_tests(start_dir, pattern))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\loader.py", line 366, in _find_tests
+    tests, should_recurse = self._find_test_path(full_path, pattern)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\loader.py", line 418, in _find_test_path
+    raise ImportError(
+ImportError: 'tests' module incorrectly imported from 'C:\\Users\\yanggyan\\MyProject\\FreeArk\\FreeArkWeb\\backend\\freearkweb\\api\\tests'. Expected 'C:\\Users\\yanggyan\\MyProject\\FreeArk\\FreeArkWeb\\backend\\freearkweb\\api'. Is this module globally installed?

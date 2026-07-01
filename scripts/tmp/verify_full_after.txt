@@ -1,0 +1,1035 @@
+Creating test database for alias 'default'...
+Found 1702 test(s).
+System check identified no issues (0 silenced).
+...................................................................................................................................................................................F.......................................................................FF......................................................................................................................................................................................................................................ss.....................................FFF...........................................................................................................................................................................E..........F.....................................................................................................\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.........................................................................................................................................................................F..F.F.F............C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\urls\resolvers.py:640: RuntimeWarning: coroutine 'sleep' was never awaited
+  @staticmethod
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................................................................E--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-73: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 608, in test_execute_ondemand_with_empty_set_yields_no_configs
+    sub._execute_ondemand('9-1-10-1002', allowed_params=set())
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 230, in _execute_ondemand
+    logger.info('[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s', specific_part)
+Message: '[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s'
+Arguments: ('9-1-10-1002',)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-74: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 608, in test_execute_ondemand_with_empty_set_yields_no_configs
+    sub._execute_ondemand('9-1-10-1002', allowed_params=set())
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 262, in _execute_ondemand
+    logger.info(
+Message: '[ondemand] \u91c7\u96c6\u4fa7\u88c1\u526a: specific_part=%s, \u5b9e\u9645\u91c7\u96c6 %d / \u603b\u8ba1 %d \u4e2a\u53c2\u6570'
+Arguments: ('9-1-10-1002', 0, 3)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 84-92: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 608, in test_execute_ondemand_with_empty_set_yields_no_configs
+    sub._execute_ondemand('9-1-10-1002', allowed_params=set())
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 269, in _execute_ondemand
+    logger.warning('[ondemand] plc_config \u4e3a\u7a7a\uff0c\u65e0\u53c2\u6570\u53ef\u91c7\u96c6: specific_part=%s', specific_part)
+Message: '[ondemand] plc_config \u4e3a\u7a7a\uff0c\u65e0\u53c2\u6570\u53ef\u91c7\u96c6: specific_part=%s'
+Arguments: ('9-1-10-1002',)
+.--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-73: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 593, in test_execute_ondemand_without_allowed_params_full_collect
+    sub._execute_ondemand('9-1-10-1002', allowed_params=None)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 230, in _execute_ondemand
+    logger.info('[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s', specific_part)
+Message: '[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s'
+Arguments: ('9-1-10-1002',)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-73: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 593, in test_execute_ondemand_without_allowed_params_full_collect
+    sub._execute_ondemand('9-1-10-1002', allowed_params=None)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 298, in _execute_ondemand
+    logger.info('[ondemand] \u91c7\u96c6\u5b8c\u6210: specific_part=%s, \u53c2\u6570\u6570=%d, \u8017\u65f6=%.1fms',
+Message: '[ondemand] \u91c7\u96c6\u5b8c\u6210: specific_part=%s, \u53c2\u6570\u6570=%d, \u8017\u65f6=%.1fms'
+Arguments: ('9-1-10-1002', 0, 0.0)
+.--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 59-66: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 630, in test_on_request_parses_allowed_params_from_payload
+    sub._on_request('/datacollection/plc/ondemand/request/9-1-10-1002', payload)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 192, in _on_request
+    logger.info('\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s', specific_part, topic)
+Message: '\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s'
+Arguments: ('9-1-10-1002', '/datacollection/plc/ondemand/request/9-1-10-1002')
+.--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 59-66: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 655, in test_on_request_without_allowed_params_passes_none
+    sub._on_request('/datacollection/plc/ondemand/request/9-1-10-1002', payload)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 192, in _on_request
+    logger.info('\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s', specific_part, topic)
+Message: '\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s'
+Arguments: ('9-1-10-1002', '/datacollection/plc/ondemand/request/9-1-10-1002')
+............................................................................................................................................................................................................................................................................................................................................................................................................................................................sss...sssssssssssss..............................sssssssEE.EEEEEEEEE........E.E..EEE.EEEEssssssssssss............
+======================================================================
+ERROR: test_marks_offline_when_all_failed (api.tests.test_main.ConnectionStatusHandlerTest.test_marks_offline_when_all_failed)
+\u6240\u6709\u6570\u636e\u9879\u5931\u8d25\u65f6\u6807\u8bb0\u4e3a offline
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_main.py", line 818, in test_marks_offline_when_all_failed
+    status = PLCConnectionStatus.objects.get(specific_part="3-1-7-702")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\db\models\manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\db\models\query.py", line 651, in get
+    raise self.model.DoesNotExist(
+api.models.PLCConnectionStatus.DoesNotExist: PLCConnectionStatus matching query does not exist.
+
+======================================================================
+ERROR: test_execute_ondemand_with_allowed_params_filters_configs (api.tests.test_room_filter_v057.TestOndemandCollectSubscriberAllowedParams.test_execute_ondemand_with_allowed_params_filters_configs)
+UT-M7B-01\uff1aallowed_params \u6307\u5b9a\u65f6\uff0cconfigs \u4ec5\u542b\u767d\u540d\u5355\u5185\u53c2\u6570
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 59, in _load_config
+    print(f"[LogConfigManager] \u914d\u7f6e\u5df2\u52a0\u8f7d: {self._config_path}", flush=True)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 19-23: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 559, in test_execute_ondemand_with_allowed_params_filters_configs
+    sub = self._make_subscriber()
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 542, in _make_subscriber
+    from datacollection.ondemand_collect_subscriber import OndemandCollectSubscriber
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 25, in <module>
+    from datacollection.mqtt_client import MQTTClient
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\mqtt_client.py", line 18, in <module>
+    logger = get_logger('mqtt_client')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 172, in get_logger
+    return LogConfigManager().get_logger(name)
+           ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 47, in __new__
+    cls._instance._load_config()
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 62, in _load_config
+    print(f"\u8b66\u544a\uff1a\u65e0\u6cd5\u52a0\u8f7d\u65e5\u5fd7\u914d\u7f6e\u6587\u4ef6 {self._config_path}\uff0c\u4f7f\u7528\u9ed8\u8ba4\u914d\u7f6e\u3002\u9519\u8bef: {str(e)}")
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 0-12: character maps to <undefined>
+
+======================================================================
+ERROR: test_user_b_does_not_see_user_a_history (api.tests.test_memory_consumer_v13.ConsumerCrossUserIsolationTest.test_user_b_does_not_see_user_a_history)
+\u7528\u6237 A \u6709\u5386\u53f2\uff0c\u7528\u6237 B \u8fde\u63a5\u540e\u53d1\u9001\u6d88\u606f\uff0c\u6ce8\u5165\u7684\u5386\u53f2\u4e2d\u4e0d\u542b\u7528\u6237 A \u7684\u5185\u5bb9\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 297, in test_user_b_does_not_see_user_a_history
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 290, in _inner
+    with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_append_message_failure_chat_continues (api.tests.test_memory_consumer_v13.ConsumerDegradationTest.test_append_message_failure_chat_continues)
+append_message(assistant) \u5931\u8d25\u65f6\uff0cWS \u6d88\u606f\u6d41\u4ecd\u6b63\u5e38\u53d1\u9001\u7ed9\u524d\u7aef\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 379, in test_append_message_failure_chat_continues
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 367, in _inner
+    patch('api.consumers.OpenClawAdapter.stream_chat',
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_load_history_failure_chat_still_works (api.tests.test_memory_consumer_v13.ConsumerDegradationTest.test_load_history_failure_chat_still_works)
+load_history \u5931\u8d25\u65f6\uff0cWS \u804a\u5929\u4ecd\u80fd\u8fdb\u884c\uff08\u4f7f\u7528\u7a7a\u5386\u53f2\u964d\u7ea7\uff09\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 355, in test_load_history_failure_chat_still_works
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 343, in _inner
+    patch('api.consumers.OpenClawAdapter.stream_chat',
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_empty_history_no_prefix (api.tests.test_memory_consumer_v13.ConsumerHistoryInjectionTest.test_empty_history_no_prefix)
+\u65e0\u5386\u53f2\u65f6\uff0c\u53d1\u7ed9 OpenClaw \u7684 message \u4e0d\u542b\u5386\u53f2\u524d\u7f00\u6807\u8bb0\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 253, in test_empty_history_no_prefix
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 246, in _inner
+    with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_history_prefix_passed_to_openclaw (api.tests.test_memory_consumer_v13.ConsumerHistoryInjectionTest.test_history_prefix_passed_to_openclaw)
+\u6709\u5386\u53f2\u8bb0\u5fc6\u65f6\uff0c\u53d1\u7ed9 OpenClaw \u7684 message \u5305\u542b [\u5386\u53f2\u8bb0\u5fc6\u5f00\u59cb] \u524d\u7f00\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 223, in test_history_prefix_passed_to_openclaw
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 216, in _inner
+    with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_inject_turns_zero_no_prefix (api.tests.test_memory_consumer_v13.ConsumerInjectTurnsZeroTest.test_inject_turns_zero_no_prefix)
+\u5c06 load_history \u7684\u8fd4\u56de mock \u4e3a\u7a7a\uff08\u6a21\u62df turns=0 \u6548\u679c\uff09\uff0c\u6ce8\u5165\u524d\u7f00\u5e94\u4e3a\u7a7a\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 415, in test_inject_turns_zero_no_prefix
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 408, in _inner
+    patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat):
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_stream_end_writes_assistant_message (api.tests.test_memory_consumer_v13.ConsumerMessageWriteTest.test_stream_end_writes_assistant_message)
+\u6d41\u6b63\u5e38\u7ed3\u675f\u540e\uff0cDB \u4e2d\u5e94\u6709 role=assistant \u7684 ChatMessage\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 150, in test_stream_end_writes_assistant_message
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 131, in _inner
+    with patch(
+         ^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_user_message_written_before_stream (api.tests.test_memory_consumer_v13.ConsumerMessageWriteTest.test_user_message_written_before_stream)
+\u7528\u6237\u6d88\u606f\u5e94\u5728\u53d1\u7ed9 OpenClaw \u524d\u5199\u5165 DB\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 180, in test_user_message_written_before_stream
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 170, in _inner
+    with patch(
+         ^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_no_reasoning_sequence_compat (api.tests.test_memory_consumer_v13.ConsumerReasoningStreamRegressionTest.test_no_reasoning_sequence_compat)
+\u65e0 reasoning \u65f6\u9000\u5316\u4e3a stream_token \u2192 stream_end\uff0c\u65e0 reasoning_token/end\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 499, in test_no_reasoning_sequence_compat
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 478, in _inner
+    with patch(
+         ^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_reasoning_end_only_once (api.tests.test_memory_consumer_v13.ConsumerReasoningStreamRegressionTest.test_reasoning_end_only_once)
+ARCH-C-004\uff1a\u591a\u4e2a reasoning \u5757\u540e\uff0creasoning_end \u53ea\u51fa\u73b0\u4e00\u6b21\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 530, in test_reasoning_end_only_once
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 510, in _inner
+    with patch(
+         ^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_reasoning_token_sequence_unchanged (api.tests.test_memory_consumer_v13.ConsumerReasoningStreamRegressionTest.test_reasoning_token_sequence_unchanged)
+v1.3 \u4e2d reasoning_token \u2192 reasoning_end \u2192 stream_token \u2192 stream_end \u65f6\u5e8f\u4e0d\u53d8\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 467, in test_reasoning_token_sequence_unchanged
+    _run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 63, in _run
+    return _run_loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_memory_consumer_v13.py", line 446, in _inner
+    with patch(
+         ^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_chat_message_flow (api.tests.test_openclaw_integration.TestChatConsumerIntegration.test_chat_message_flow)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 255, in test_chat_message_flow
+    self._run(self._test_chat_message_flow())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 133, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 230, in _test_chat_message_flow
+    with patch('api.consumers.OpenClawAdapter.stream_chat', side_effect=mock_stream_chat_normal):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_no_db_writes_during_chat (api.tests.test_openclaw_integration.TestChatConsumerIntegration.test_no_db_writes_during_chat)
+TC-I-07: \u5b8c\u6574\u804a\u5929\u6d41\u7a0b\u671f\u95f4\uff0cDB \u4e2d\u65e0\u65b0\u7684"\u804a\u5929\u5185\u5bb9"\u76f8\u5173\u8868\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 361, in test_no_db_writes_during_chat
+    self._run(self._test_no_db_writes_during_chat_async())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 133, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 335, in _test_no_db_writes_during_chat_async
+    with patch('api.consumers.OpenClawAdapter.stream_chat',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_openclaw_timeout_error (api.tests.test_openclaw_integration.TestChatConsumerIntegration.test_openclaw_timeout_error)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 318, in test_openclaw_timeout_error
+    self._run(self._test_openclaw_timeout_error())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 133, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 304, in _test_openclaw_timeout_error
+    with patch('api.consumers.OpenClawAdapter.stream_chat',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_openclaw_unavailable_error (api.tests.test_openclaw_integration.TestChatConsumerIntegration.test_openclaw_unavailable_error)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 287, in test_openclaw_unavailable_error
+    self._run(self._test_openclaw_unavailable_error())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 133, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 272, in _test_openclaw_unavailable_error
+    with patch('api.consumers.OpenClawAdapter.stream_chat',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_session_key_consistency (api.tests.test_openclaw_integration.TestChatConsumerIntegration.test_session_key_consistency)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 472, in test_session_key_consistency
+    self._run(self._test_session_key_consistency())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 133, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_integration.py", line 434, in _test_session_key_consistency
+    with patch('api.consumers.OpenClawAdapter.stream_chat',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_TC_INTG_001_reasoning_after_content_no_duplicate_reasoning_end (api.tests.test_reasoning_stream.ChatConsumerEdgeCasesTest.test_TC_INTG_001_reasoning_after_content_no_duplicate_reasoning_end)
+TC-INTG-001\uff1acontent \u4e4b\u540e\u518d\u51fa\u73b0 reasoning \u65f6\uff0c\u4e0d\u91cd\u590d\u53d1\u9001 reasoning_end\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 838, in test_TC_INTG_001_reasoning_after_content_no_duplicate_reasoning_end
+    self._run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 778, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 800, in _inner
+    with _patch(
+         ^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_no_reasoning_sequence_is_compat (api.tests.test_reasoning_stream.ChatConsumerNoReasoningCompatTest.test_no_reasoning_sequence_is_compat)
+\u65e0 reasoning \u6d41\u65f6\uff0cWS \u6d88\u606f\u5e8f\u5217\u4e0e v1.1 \u5b8c\u5168\u4e00\u81f4\uff1a
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 257, in test_no_reasoning_sequence_is_compat
+    self._run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 211, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 230, in _inner
+    with _patch(
+         ^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_reasoning_end_sent_only_once (api.tests.test_reasoning_stream.ChatConsumerReasoningProtocolTest.test_reasoning_end_sent_only_once)
+ARCH-C-004\uff1areasoning_end \u6700\u591a\u53d1\u9001\u4e00\u6b21\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 183, in test_reasoning_end_sent_only_once
+    self._run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 78, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 159, in _inner
+    with _patch(
+         ^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+ERROR: test_reasoning_then_content_message_sequence (api.tests.test_reasoning_stream.ChatConsumerReasoningProtocolTest.test_reasoning_then_content_message_sequence)
+\u573a\u666f A\uff08AC-010-01/02/03/04\uff09\uff1a
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 141, in test_reasoning_then_content_message_sequence
+    self._run(_inner())
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 78, in _run
+    return loop.run_until_complete(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_reasoning_stream.py", line 99, in _inner
+    with _patch(
+         ^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1451, in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\pkgutil.py", line 528, in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'api.consumers' has no attribute 'OpenClawAdapter'
+
+======================================================================
+FAIL: test_nested_structure (api.tests.test_device_cards.TestDeviceRealtimeParamsAPI.test_nested_structure)
+Given: hvac \u5206\u7ec4\u4e0b\u6709 main_thermostat \u548c room_panel \u4e24\u4e2a\u5b50\u7c7b\u578b
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_device_cards.py", line 344, in test_nested_structure
+    self.assertIn('room_panel', hvac['sub_types'])
+AssertionError: 'room_panel' not found in {'main_thermostat': {'display': '\u4e3b\u6e29\u63a7\u5668', 'params': [{'param_name': 'living_room_temperature', 'display_name': '\u5ba2\u5385\u5b9e\u9645\u6e29\u5ea6', 'value': 245, 'collected_at': '2026-06-19 15:07:03', 'is_stale': False}, {'param_name': 'living_room_humidity', 'display_name': '\u5ba2\u5385\u76f8\u5bf9\u6e7f\u5ea6', 'value': 60, 'collected_at': '2026-06-19 15:07:03', 'is_stale': False}]}}
+
+======================================================================
+FAIL: test_page_size_2000_returns_all_records_in_one_page (api.tests.test_device_management.TC_I_005_DeviceListAPIPagination.test_page_size_2000_returns_all_records_in_one_page)
+page_size=2000\uff08\u6279\u91cf\u540c\u6b65\u573a\u666f\uff09\uff1a\u53ef\u4e00\u6b21\u53d6\u5b8c\u5168\u90e825\u6761\u8bb0\u5f55
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_device_management.py", line 714, in test_page_size_2000_returns_all_records_in_one_page
+    self.assertEqual(data["page_size"], 2000)
+AssertionError: 50 != 2000
+
+======================================================================
+FAIL: test_page_size_large_value_capped_at_2000 (api.tests.test_device_management.TC_I_005_DeviceListAPIPagination.test_page_size_large_value_capped_at_2000)
+page_size=9999\uff1a\u88ab cap \u5230 2000\uff08BUG-FIX: \u539f\u4e0a\u9650\u4e3a50\uff0c\u73b0\u4e3a2000\uff09
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_device_management.py", line 701, in test_page_size_large_value_capped_at_2000
+    self.assertEqual(data["page_size"], 2000)
+AssertionError: 50 != 2000
+
+======================================================================
+FAIL: test_cache_already_warm_no_reload (api.tests.test_fault_event_serializer_v061.TestSerializerMainPath.test_cache_already_warm_no_reload)
+\u7f13\u5b58\u5df2\u9884\u70ed\uff08_cache_loaded_at > 0\uff09\uff0cTTL \u672a\u8fc7\u671f\u65f6\u4e0d\u89e6\u53d1 _load_cache\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_fault_event_serializer_v061.py", line 230, in test_cache_already_warm_no_reload
+    self.assertEqual(first['device_name'], '\u6c34\u529b\u6a21\u5757')
+AssertionError: '\u65b0\u98ce\u673a' != '\u6c34\u529b\u6a21\u5757'
+- \u65b0\u98ce\u673a
++ \u6c34\u529b\u6a21\u5757
+
+
+======================================================================
+FAIL: test_device_sn_hit_returns_device_name (api.tests.test_fault_event_serializer_v061.TestSerializerMainPath.test_device_sn_hit_returns_device_name)
+device_sn='22155'\uff08\u6574\u6570\u5316\u540e 22155\uff09\u547d\u4e2d\u7f13\u5b58 {22155: '\u65b0\u98ce'} \u2192 device_name='\u65b0\u98ce'\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_fault_event_serializer_v061.py", line 178, in test_device_sn_hit_returns_device_name
+    self.assertEqual(first['device_name'], '\u65b0\u98ce',
+AssertionError: '\u65b0\u98ce\u673a' != '\u65b0\u98ce'
+- \u65b0\u98ce\u673a
+?   -
++ \u65b0\u98ce
+ : \u9884\u671f device_name='\u65b0\u98ce'\uff0c\u5b9e\u9645='\u65b0\u98ce\u673a'
+
+======================================================================
+FAIL: test_device_sn_hit_supersedes_product_code (api.tests.test_fault_event_serializer_v061.TestSerializerMainPath.test_device_sn_hit_supersedes_product_code)
+\u5f53 device_sn \u547d\u4e2d cache \u65f6\uff0cdevice_name \u4e0d\u4e3a None\uff0c\u5373\u4f7f product_code \u4e5f\u547d\u4e2d PRODUCT_CODE_LABELS\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_fault_event_serializer_v061.py", line 205, in test_device_sn_hit_supersedes_product_code
+    self.assertEqual(first['device_name'], '\u65b0\u98ce')
+AssertionError: '\u65b0\u98ce\u673a' != '\u65b0\u98ce'
+- \u65b0\u98ce\u673a
+?   -
++ \u65b0\u98ce
+
+
+======================================================================
+FAIL: test_creates_next_day_record (api.tests.test_main.DailyUsageCalculatorTest.test_creates_next_day_record)
+\u8ba1\u7b97\u65f6\u5e94\u540c\u6b65\u521b\u5efa\u6b21\u65e5\u7684 initial_energy \u9884\u7559\u8bb0\u5f55
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_main.py", line 407, in test_creates_next_day_record
+    self.assertIsNotNone(next_day_record)
+AssertionError: unexpectedly None
+
+======================================================================
+FAIL: test_chinese_deltas (api.tests.test_openclaw_unit.TestStreamChat.test_chinese_deltas)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_unit.py", line 339, in test_chinese_deltas
+    self.assertEqual(tokens, ['\u4f60\u597d', '\uff0c', '\u65b9\u821f\u9f99\u867e'])
+AssertionError: Lists differ: [('content', '\u4f60\u597d'), ('content', '\uff0c'), ('content', '\u65b9\u821f\u9f99\u867e')] != ['\u4f60\u597d', '\uff0c', '\u65b9\u821f\u9f99\u867e']
+
+First differing element 0:
+('content', '\u4f60\u597d')
+'\u4f60\u597d'
+
+- [('content', '\u4f60\u597d'), ('content', '\uff0c'), ('content', '\u65b9\u821f\u9f99\u867e')]
++ ['\u4f60\u597d', '\uff0c', '\u65b9\u821f\u9f99\u867e']
+
+======================================================================
+FAIL: test_empty_delta_text_filtered (api.tests.test_openclaw_unit.TestStreamChat.test_empty_delta_text_filtered)
+deltaText \u4e3a\u7a7a\u4e32 \u2192 \u4e0d yield \u7a7a\u5b57\u7b26\u4e32\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_unit.py", line 347, in test_empty_delta_text_filtered
+    self.assertEqual(tokens, ['Hello', 'World'])
+AssertionError: Lists differ: [('content', 'Hello'), ('content', 'World')] != ['Hello', 'World']
+
+First differing element 0:
+('content', 'Hello')
+'Hello'
+
+- [('content', 'Hello'), ('content', 'World')]
++ ['Hello', 'World']
+
+======================================================================
+FAIL: test_events_for_other_runid_are_ignored (api.tests.test_openclaw_unit.TestStreamChat.test_events_for_other_runid_are_ignored)
+\u540c\u8fde\u63a5\u4e0a\u82e5\u6df7\u5165\u5176\u4ed6 runId \u7684 chat \u4e8b\u4ef6\uff0c\u5e94\u88ab\u8fc7\u6ee4\u3002
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_unit.py", line 534, in test_events_for_other_runid_are_ignored
+    self.assertEqual(tokens, ['real'])
+AssertionError: Lists differ: [('content', 'real')] != ['real']
+
+First differing element 0:
+('content', 'real')
+'real'
+
+- [('content', 'real')]
++ ['real']
+
+======================================================================
+FAIL: test_normal_flow_yields_deltas (api.tests.test_openclaw_unit.TestStreamChat.test_normal_flow_yields_deltas)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_openclaw_unit.py", line 333, in test_normal_flow_yields_deltas
+    self.assertEqual(tokens, ['Hey', ', ', 'world'])
+AssertionError: Lists differ: [('content', 'Hey'), ('content', ', '), ('content', 'world')] != ['Hey', ', ', 'world']
+
+First differing element 0:
+('content', 'Hey')
+'Hey'
+
+- [('content', 'Hey'), ('content', ', '), ('content', 'world')]
++ ['Hey', ', ', 'world']
+
+----------------------------------------------------------------------
+Ran 1702 tests in 8.686s
+
+FAILED (failures=11, errors=22, skipped=37)
+Destroying test database for alias 'default'...

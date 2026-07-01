@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-06-26T03:33:53.917Z",
+  "broker": "wss://www.ttqingjiao.site:8084/mqtt",
+  "mac_filter": "#",
+  "header_name_counts": {
+    "DeviceStatusRead": 10
+  },
+  "topic_counts": {
+    "/screen/service/cloud/to/screen/acd095de9c40a984": 10
+  },
+  "device_write_samples": [],
+  "device_attr_mapping": []
+}

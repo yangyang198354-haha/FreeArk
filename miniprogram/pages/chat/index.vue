@@ -1,210 +1,481 @@
 <!--
   @module MOD-PAGE-CHAT-INDEX
-  @author sub_agent_software_developer
-  @description Chat session list page (US-11, slice 1).
-    Lists sessions from GET /api/memory/me/ with pagination.
-    "New session" button → session page directly (backend LLM auto-routes the expert;
-    expert选择对用户隐藏，与现有 Web ChatView 一致).
-    Tapping existing session → session page with session_key param.
-    Refreshes session list on every onShow.
+  @description AI 问答（方案1 · 对话气泡，赛博朋克 HUD）——「对话优先」。
+    Claude Design handoff「AI问答 方案1」1:1 还原。custom 导航 + 自绘 4-Tab 底栏。
+    进入即对话界面（复用既有 WS 链路 utils/chat-ws.js → 进程内 LangGraph → DeepSeek，零后端改动）：
+      顶部子栏『＋新建会话 / 历史会话▾』；空会话显示问候 + 快捷提问 chips。
+    WS 协议严格复刻：token 走 query、connected 帧才算连上、stream_token 流式、
+      confirm_required 写确认门、onHide 必须 close()。历史会话下拉复用 api.getSessionList/getSessionHistory。
+    本页是原生 tabBar 页：onShow 调 uni.hideTabBar() 隐藏原生底栏，避免与自绘 4-Tab 重叠（首页 onShow 复原）。
+    图标为 SVG data-URI 背景（微信小程序不渲染 inline SVG）；字体不远程加载（规避 OTS 崩溃）。
 -->
 <template>
-  <view class="chat-index-page">
-    <!-- New session button：后端 LLM 自动路由，不向用户暴露专家选择 -->
-    <view class="new-session-bar">
-      <button class="btn-new-session" @tap="startNewSession">+ 新建会话</button>
+  <view class="ai-page">
+    <!-- 背景装饰 -->
+    <view class="bg-base" />
+    <view class="bg-grid" />
+    <view class="bg-blob" />
+
+    <!-- 状态栏占位 -->
+    <view :style="{ height: statusBarHeight + 'px' }" class="status-spacer" />
+
+    <!-- header -->
+    <view class="header">
+      <view v-if="canGoBack" class="back-btn ico-back" @tap="goBack" />
+      <text class="header-title">方舟助手</text>
     </view>
 
-    <!-- Session list with pull-to-refresh and infinite scroll -->
-    <scroll-view
-      scroll-y
-      class="session-list"
-      @scrolltolower="loadMore"
-      refresher-enabled
-      :refresher-triggered="refreshing"
-      @refresherrefresh="onRefresh"
-    >
-      <view v-if="sessions.length === 0 && !loading" class="empty-state">
-        <text class="empty-text">暂无会话历史，点击「新建会话」开始</text>
+    <!-- subbar -->
+    <view class="subbar">
+      <view class="new-pill" @tap="newSession"><text>＋ 新建会话</text></view>
+      <view class="history-entry" @tap="toggleHistory">
+        <text>历史会话</text><text class="caret-dn">▾</text>
       </view>
+    </view>
 
+    <!-- 断连横幅 -->
+    <view v-if="!wsConnected && !connecting" class="disc-banner">
+      <text>连接已断开，</text><text class="relink" @tap="reconnect">点击重连</text>
+    </view>
+
+    <!-- chat feed -->
+    <scroll-view class="feed" scroll-y :scroll-top="scrollTop" :scroll-with-animation="true">
+      <!-- 问候 + 快捷提问（空会话）-->
+      <block v-if="messages.length === 0">
+        <view class="row row-ai">
+          <view class="avatar-ark"><text>ARK</text></view>
+          <view class="bubble bubble-ai">
+            <text class="btext">你好，我是方舟助手 ARK。可以帮你控制设备、排查故障，也能解答空调与新风知识。</text>
+          </view>
+        </view>
+        <view class="chips">
+          <view v-for="(c, i) in quickChips" :key="i" class="chip" @tap="sendText(c)"><text>{{ c }}</text></view>
+        </view>
+      </block>
+
+      <!-- 消息 -->
       <view
-        v-for="session in sessions"
-        :key="session.session_key || session.id"
-        class="session-item"
-        @tap="openSession(session)"
+        v-for="(m, i) in messages"
+        :key="i"
+        class="row"
+        :class="m.role === 'user' ? 'row-user' : 'row-ai'"
       >
-        <view class="session-top">
-          <text class="session-summary">
-            {{ session.summary || (session.session_key ? session.session_key.slice(0, 8) : '新会话') }}
-          </text>
-          <text class="session-time">{{ formatTime(session.last_message_time || session.updated_at) }}</text>
+        <view v-if="m.role !== 'user'" class="avatar-ark"><text>ARK</text></view>
+
+        <!-- AI 思考中：无内容且流式 → 三点跳动 -->
+        <view
+          v-if="m.role !== 'user' && m.streaming && !m.content"
+          class="bubble bubble-ai thinking"
+        >
+          <text v-if="m.statusText" class="status-text">{{ m.statusText }}</text>
+          <view v-else class="dots">
+            <view class="dot" /><view class="dot d2" /><view class="dot d3" />
+          </view>
+        </view>
+
+        <!-- 普通气泡 -->
+        <view
+          v-else
+          class="bubble"
+          :class="m.role === 'user' ? 'bubble-user' : 'bubble-ai'"
+        >
+          <text class="btext">{{ m.content }}<text v-if="m.streaming" class="caret">▋</text></text>
+
+          <!-- 写确认门 -->
+          <view v-if="m.confirmActions && m.confirmActions.length" class="confirm-box">
+            <text class="confirm-tip">智能体请求执行操作，是否同意？</text>
+            <view class="confirm-btns">
+              <view class="cf-btn cf-yes" @tap="handleConfirm(true)"><text>同意</text></view>
+              <view class="cf-btn cf-no" @tap="handleConfirm(false)"><text>拒绝</text></view>
+            </view>
+          </view>
         </view>
       </view>
-
-      <view v-if="loading" class="loading-tip"><text>加载中…</text></view>
-      <view v-if="noMore && sessions.length > 0" class="no-more-tip"><text>没有更多了</text></view>
+      <view :style="{ height: '2rpx' }" />
     </scroll-view>
+
+    <!-- input bar -->
+    <view class="input-bar">
+      <textarea
+        class="msg-input"
+        v-model="inputText"
+        placeholder="向方舟助手提问…"
+        placeholder-style="color:rgba(143,217,255,0.55)"
+        :disabled="!wsConnected || isStreaming"
+        auto-height
+        :maxlength="-1"
+        @confirm="onSend"
+      />
+      <view class="voice-btn ico-mic" @tap="onVoice" />
+      <view
+        class="send-btn"
+        :class="{ 'send-disabled': !wsConnected || isStreaming || !inputText.trim() }"
+        @tap="onSend"
+      >
+        <view class="ico-send" />
+      </view>
+    </view>
+
+    <!-- 底栏 -->
+    <ArkTabBar active="chat" />
+
+    <!-- 历史会话下拉 -->
+    <view v-if="showHistory" class="hist-mask" @tap="toggleHistory" />
+    <view v-if="showHistory" class="hist-panel">
+      <view class="hist-title"><text>历史会话</text></view>
+      <scroll-view scroll-y class="hist-list">
+        <view v-if="histLoading" class="hist-empty"><text>加载中…</text></view>
+        <view v-else-if="histSessions.length === 0" class="hist-empty"><text>暂无历史会话</text></view>
+        <view
+          v-for="(s, i) in histSessions"
+          :key="i"
+          class="hist-item"
+          @tap="openHistory(s)"
+        >
+          <text class="hist-summary">{{ s.summary || (s.session_key ? s.session_key.slice(0, 8) : '会话') }}</text>
+          <text class="hist-time">{{ formatTime(s.last_message_time || s.updated_at) }}</text>
+        </view>
+      </scroll-view>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { ref, computed, nextTick } from 'vue'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
 import { useChatStore } from '@/store/chat'
+import { ChatWebSocket } from '@/utils/chat-ws'
 import { api } from '@/utils/api'
+import ArkTabBar from '@/components/ArkTabBar.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 
-// Auth guard
-if (!authStore.isLoggedIn) {
-  uni.reLaunch({ url: '/pages/login/index' })
-}
+const sysInfo = uni.getSystemInfoSync()
+const statusBarHeight = sysInfo.statusBarHeight || 20
 
-const sessions = ref([])
-const loading = ref(false)
-const refreshing = ref(false)
-const noMore = ref(false)
-const page = ref(1)
-const PAGE_SIZE = 20
+const inputText = ref('')
+const scrollTop = ref(0)
+const connecting = ref(false)
+const sessionKeyParam = ref(null)
+const canGoBack = ref(false)
 
-async function loadSessions(reset = false) {
-  if (loading.value) return
-  if (reset) {
-    page.value = 1
-    noMore.value = false
-  }
-  loading.value = true
-  try {
-    const res = await api.getSessionList({ page: page.value, page_size: PAGE_SIZE })
-    // Support both DRF paginated (results) and custom (data) response shapes
-    const items = res?.results || res?.data || []
-    if (reset) {
-      sessions.value = items
-    } else {
-      sessions.value = [...sessions.value, ...items]
-    }
-    if (items.length < PAGE_SIZE) noMore.value = true
-    page.value++
-  } catch (err) {
-    uni.showToast({ title: '加载会话列表失败', icon: 'none' })
-  } finally {
-    loading.value = false
-    refreshing.value = false
-  }
-}
+// 历史会话下拉
+const showHistory = ref(false)
+const histSessions = ref([])
+const histLoading = ref(false)
 
-function loadMore() {
-  if (!noMore.value) loadSessions()
-}
+const quickChips = ['客厅主机不制冷？', '如何开启离家节能', '新风滤网多久换']
 
-async function onRefresh() {
-  refreshing.value = true
-  await loadSessions(true)
-}
-
-// Refresh list every time this tab/page becomes visible
-onShow(() => {
-  if (!authStore.isLoggedIn) {
-    uni.reLaunch({ url: '/pages/login/index' })
-    return
-  }
-  loadSessions(true)
+const messages = computed(() => chatStore.messages)
+const wsConnected = computed(() => chatStore.wsConnected)
+const isStreaming = computed(() => {
+  const last = messages.value[messages.value.length - 1]
+  return !!(last?.streaming)
 })
 
-function openSession(session) {
-  // 列表接口的 session_key 是截断显示值（8 位 + '...'，见后端 get_sessions）；
-  // 恢复会话必须用完整 UUID session_key_full，否则取历史 404 且会话续接到错误的 key。
-  const key = session.session_key_full || session.session_key || session.key
-  uni.navigateTo({
-    url: `/subpackages/chat/pages/session?session_key=${key}`,
+let chatWs = null
+
+function initWs() {
+  chatWs = new ChatWebSocket({
+    onConnected(sessionKey, sessionId) {
+      chatStore.setConnected(true, sessionKey, sessionId)
+      connecting.value = false
+      // 仅在「恢复既有会话」（带 session_key 进入）时取历史；新会话的 key 尚无 DB 行，取历史必 404。
+      if (sessionKeyParam.value) loadHistory(sessionKey)
+    },
+    onStatusUpdate(msg) { chatStore.setStatusText(msg) },
+    onReasoningToken(token) { chatStore.appendReasoningToken(token) },
+    onReasoningEnd() {},
+    onToken(token) { chatStore.appendToken(token); scrollToBottom() },
+    onStreamEnd() { chatStore.setStreamEnd(); scrollToBottom() },
+    onConfirmRequired(actions) {
+      const last = messages.value[messages.value.length - 1]
+      if (last) last.confirmActions = actions
+    },
+    onError(err) {
+      connecting.value = false
+      uni.showToast({ title: err.message || '发生错误', icon: 'none' })
+    },
+    onClose(code) {
+      connecting.value = false
+      chatStore.setConnected(false, null, null)
+      if (code === 4001) {
+        uni.showToast({ title: '鉴权失败，请重新登录', icon: 'none' })
+        authStore.logout()
+        uni.reLaunch({ url: '/pages/login/index' })
+      }
+    },
   })
 }
 
-function startNewSession() {
-  // 新建会话直接进入聊天页；后端 LLM 自动路由专家，不传 expert_type
-  chatStore.resetSession()
-  uni.navigateTo({ url: '/subpackages/chat/pages/session' })
+function connectWs() {
+  if (!authStore.token) return
+  connecting.value = true
+  chatWs.connect(authStore.token, sessionKeyParam.value)
 }
+
+function reconnect() { connectWs() }
+
+async function loadHistory(sessionKey) {
+  if (!sessionKey || messages.value.length > 0) return
+  try {
+    const res = await api.getSessionHistory(sessionKey)
+    const msgs = res?.messages || []
+    msgs.forEach((m) => {
+      chatStore.addMessage({
+        role: m.role, content: m.content,
+        streaming: false, reasoning: '', statusText: '', confirmActions: null,
+      })
+    })
+    scrollToBottom()
+  } catch { /* 历史加载失败非致命 */ }
+}
+
+// 发送
+function sendText(text) {
+  const t = (text || '').trim()
+  if (!t || !wsConnected.value || isStreaming.value) return
+  chatStore.addMessage({ role: 'user', content: t, streaming: false, reasoning: '', statusText: '', confirmActions: null })
+  chatStore.addMessage({ role: 'assistant', content: '', streaming: true, reasoning: '', statusText: '', confirmActions: null })
+  chatWs.send(t)
+  scrollToBottom()
+}
+function onSend() {
+  const t = inputText.value.trim()
+  if (!t) return
+  inputText.value = ''
+  sendText(t)
+}
+
+function onVoice() {
+  // 语音输入：需接语音转文字（同声传译插件/后端 ASR），当前占位
+  uni.showToast({ title: '语音输入开发中', icon: 'none' })
+}
+
+function handleConfirm(approved) {
+  chatWs.sendConfirm(approved)
+  const last = messages.value[messages.value.length - 1]
+  if (last) last.confirmActions = null
+}
+
+// 新建会话：清空并以新 key 重连
+function newSession() {
+  showHistory.value = false
+  sessionKeyParam.value = null
+  chatStore.resetSession()
+  if (chatWs) chatWs.close()
+  connectWs()
+}
+
+// 历史会话下拉
+function toggleHistory() {
+  showHistory.value = !showHistory.value
+  if (showHistory.value) loadHistList()
+}
+async function loadHistList() {
+  histLoading.value = true
+  try {
+    const res = await api.getSessionList({ page: 1, page_size: 20 })
+    histSessions.value = res?.results || res?.data || []
+  } catch {
+    histSessions.value = []
+  } finally {
+    histLoading.value = false
+  }
+}
+function openHistory(s) {
+  const key = s.session_key_full || s.session_key || s.key
+  showHistory.value = false
+  if (!key) return
+  sessionKeyParam.value = key
+  chatStore.resetSession()
+  chatStore.sessionKey = key
+  if (chatWs) chatWs.close()
+  connectWs()
+}
+
+function scrollToBottom() { nextTick(() => { scrollTop.value = 1e7 }) }
+
+function goBack() { uni.navigateBack() }
 
 function formatTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
   if (isNaN(d.getTime())) return ts
-  const now = new Date()
-  const diff = now - d
+  const diff = Date.now() - d.getTime()
   if (diff < 60000) return '刚刚'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
   if (diff < 86400000) return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
+
+onLoad((options) => {
+  if (!authStore.isLoggedIn) { uni.reLaunch({ url: '/pages/login/index' }); return }
+  canGoBack.value = getCurrentPages().length > 1
+  sessionKeyParam.value = options?.session_key || null
+  chatStore.resetSession()
+  if (sessionKeyParam.value) chatStore.sessionKey = sessionKeyParam.value
+  initWs()
+  connectWs()
+})
+
+onShow(() => {
+  // 隐藏原生 tabBar，避免与自绘 4-Tab 底栏重叠
+  uni.hideTabBar({ animation: false, fail: () => {} })
+  if (chatWs && !wsConnected.value && !connecting.value) connectWs()
+})
+
+onHide(() => {
+  if (chatWs) chatWs.close()
+  chatStore.setConnected(false, null, null)
+})
+
+onUnload(() => {
+  if (chatWs) chatWs.close()
+})
 </script>
 
 <style scoped>
-.chat-index-page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #f5f5f5;
+.ai-page { position: relative; height: 100vh; display: flex; flex-direction: column; background: #05070f; overflow: hidden; }
+
+/* 背景 */
+.bg-base, .bg-grid, .bg-blob { position: absolute; pointer-events: none; }
+.bg-base {
+  inset: 0;
+  background:
+    radial-gradient(90% 50% at 15% 0%, rgba(101,55,180,0.30), transparent 55%),
+    radial-gradient(80% 45% at 100% 5%, rgba(20,180,170,0.22), transparent 55%),
+    linear-gradient(180deg, #0b0a1a, #07101c 60%, #050811);
 }
-.new-session-bar {
-  padding: 20rpx 24rpx;
-  background: #fff;
-  border-bottom: 1rpx solid #eee;
-  flex-shrink: 0;
+.bg-grid {
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56,230,224,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,230,224,0.06) 1px, transparent 1px);
+  background-size: 80rpx 80rpx;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 60%);
+  mask-image: linear-gradient(180deg, #000, transparent 60%);
 }
-.btn-new-session {
-  background: #1a73e8;
-  color: #fff;
-  font-size: 28rpx;
-  border-radius: 48rpx;
-  padding: 0 48rpx;
-  height: 80rpx;
-  line-height: 80rpx;
-  border: none;
+.bg-blob {
+  width: 360rpx; height: 360rpx; right: -100rpx; top: 400rpx; border-radius: 50%;
+  background: radial-gradient(circle, rgba(47,244,224,0.18), transparent 70%);
+  filter: blur(6px); animation: ark-float 16s ease-in-out infinite;
 }
-.session-list {
-  flex: 1;
+@keyframes ark-float { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20rpx,-24rpx); } }
+
+.status-spacer { position: relative; z-index: 5; flex: 0 0 auto; }
+
+/* header */
+.header { position: relative; z-index: 5; flex: 0 0 auto; height: 92rpx; display: flex; align-items: center; justify-content: center; }
+.back-btn { position: absolute; left: 24rpx; width: 44rpx; height: 44rpx; background-repeat: no-repeat; background-position: center; background-size: 44rpx 44rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; letter-spacing: 4rpx; color: #eaf6ff; text-shadow: 0 0 12px rgba(56,230,224,0.5); }
+
+/* subbar */
+.subbar { position: relative; z-index: 5; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 4rpx 32rpx 16rpx; }
+.new-pill { border: 1px solid rgba(56,230,224,0.4); border-radius: 28rpx; padding: 8rpx 22rpx; background: rgba(47,244,224,0.06); }
+.new-pill text { font-size: 24rpx; color: #2ff4e0; }
+.history-entry { display: flex; align-items: center; gap: 8rpx; }
+.history-entry text { font-size: 24rpx; color: rgba(143,217,255,0.7); }
+.caret-dn { font-size: 20rpx; }
+
+/* 断连横幅 */
+.disc-banner { position: relative; z-index: 5; flex: 0 0 auto; text-align: center; padding: 12rpx; background: rgba(255,212,0,0.1); }
+.disc-banner text { font-size: 24rpx; color: #ffe066; }
+.relink { color: #7df9ff; text-decoration: underline; }
+
+/* feed */
+.feed { position: relative; z-index: 4; flex: 1 1 auto; padding: 12rpx 28rpx 16rpx; }
+.row { display: flex; margin-bottom: 26rpx; }
+.row-user { justify-content: flex-end; }
+.row-ai { justify-content: flex-start; align-items: flex-start; }
+
+.avatar-ark {
+  flex: 0 0 auto; width: 68rpx; height: 68rpx; border-radius: 18rpx; margin-right: 20rpx;
+  background: linear-gradient(150deg, rgba(47,244,224,0.18), rgba(139,92,246,0.18));
+  border: 1px solid rgba(56,230,224,0.45);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 12px rgba(47,244,224,0.25);
 }
-.session-item {
-  background: #fff;
-  margin: 12rpx 24rpx;
-  border-radius: 12rpx;
-  padding: 24rpx;
-  box-shadow: 0 2rpx 6rpx rgba(0,0,0,0.06);
+.avatar-ark text { font-size: 22rpx; font-weight: 900; letter-spacing: 1rpx; color: #aef9f2; }
+
+.bubble { max-width: 78%; padding: 22rpx 26rpx; }
+.bubble-ai { background: rgba(14,22,42,0.85); border: 1px solid rgba(56,230,224,0.2); border-radius: 10rpx 28rpx 28rpx 28rpx; }
+.bubble-user {
+  background: linear-gradient(95deg, #22e6da, #3a8bff);
+  border-radius: 28rpx 10rpx 28rpx 28rpx; box-shadow: 0 0 18px rgba(47,244,224,0.3);
 }
-.session-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8rpx;
+.btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; word-break: break-all; }
+.bubble-user .btext { color: #04121f; font-weight: 600; line-height: 1.55; }
+.caret { color: #2ff4e0; }
+.status-text { font-size: 24rpx; color: #ffc83c; }
+
+/* thinking dots */
+.thinking { display: flex; align-items: center; }
+.dots { display: flex; align-items: center; gap: 12rpx; padding: 4rpx 0; }
+.dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #2ff4e0; animation: ark-dot 1.2s infinite; }
+.dot.d2 { animation-delay: 0.15s; }
+.dot.d3 { animation-delay: 0.3s; }
+@keyframes ark-dot { 0%,80%,100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-6rpx); } }
+
+/* quick chips */
+.chips { display: flex; flex-wrap: wrap; gap: 16rpx; padding-left: 88rpx; margin-bottom: 26rpx; }
+.chip { border: 1px solid rgba(56,230,224,0.35); border-radius: 28rpx; padding: 12rpx 22rpx; background: rgba(47,244,224,0.05); }
+.chip text { font-size: 24rpx; color: #9fe9e0; }
+
+/* 写确认门 */
+.confirm-box { margin-top: 18rpx; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16rpx; }
+.confirm-tip { font-size: 22rpx; color: #ffd400; display: block; margin-bottom: 12rpx; }
+.confirm-btns { display: flex; gap: 16rpx; }
+.cf-btn { flex: 1; text-align: center; padding: 14rpx 0; border-radius: 10rpx; }
+.cf-yes { background: rgba(0,255,163,0.18); border: 1px solid rgba(0,255,163,0.6); }
+.cf-yes text { color: #00ffa3; font-size: 24rpx; }
+.cf-no { background: rgba(255,46,99,0.15); border: 1px solid rgba(255,46,99,0.5); }
+.cf-no text { color: #ff5c85; font-size: 24rpx; }
+
+/* input bar */
+.input-bar {
+  position: relative; z-index: 5; flex: 0 0 auto; display: flex; align-items: center; gap: 18rpx;
+  padding: 18rpx 28rpx; background: rgba(8,14,28,0.7); border-top: 1px solid rgba(56,230,224,0.12);
 }
-.session-summary {
-  font-size: 28rpx;
-  color: #333;
-  flex: 1;
-  margin-right: 16rpx;
+.msg-input {
+  flex: 1; min-height: 84rpx; max-height: 240rpx; display: flex; align-items: center;
+  padding: 20rpx 30rpx; border-radius: 42rpx; background: rgba(4,10,22,0.7);
+  border: 1px solid rgba(56,230,224,0.25); font-size: 27rpx; color: #eaf6ff;
 }
-.session-time {
-  font-size: 22rpx;
-  color: #999;
-  flex-shrink: 0;
+.voice-btn {
+  flex: 0 0 auto; width: 84rpx; height: 84rpx; border-radius: 50%;
+  border: 1px solid rgba(56,230,224,0.5); background-color: rgba(47,244,224,0.07);
+  background-repeat: no-repeat; background-position: center; background-size: 40rpx 40rpx;
 }
-.empty-state {
-  padding: 80rpx 48rpx;
-  text-align: center;
+.send-btn {
+  flex: 0 0 auto; width: 84rpx; height: 84rpx; border-radius: 50%;
+  background: linear-gradient(135deg, #22e6da, #3a8bff); box-shadow: 0 0 16px rgba(47,244,224,0.4);
+  display: flex; align-items: center; justify-content: center;
 }
-.empty-text {
-  color: #999;
-  font-size: 28rpx;
+.send-btn.send-disabled { opacity: 0.45; box-shadow: none; }
+.ico-send { width: 38rpx; height: 38rpx; background-repeat: no-repeat; background-position: center; background-size: 38rpx 38rpx; }
+
+/* 历史下拉 */
+.hist-mask { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.4); }
+.hist-panel {
+  position: fixed; z-index: 21; left: 32rpx; right: 32rpx;
+  top: 220rpx; max-height: 60vh; border-radius: 24rpx; overflow: hidden;
+  background: rgba(10,18,36,0.98); border: 1px solid rgba(56,230,224,0.3);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
 }
-.loading-tip,
-.no-more-tip {
-  text-align: center;
-  padding: 24rpx;
-  font-size: 24rpx;
-  color: #999;
-}
+.hist-title { padding: 24rpx 28rpx; border-bottom: 1px solid rgba(56,230,224,0.14); }
+.hist-title text { font-size: 26rpx; font-weight: 700; color: #7df9ff; letter-spacing: 2rpx; }
+.hist-list { max-height: calc(60vh - 80rpx); }
+.hist-item { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 28rpx; border-bottom: 1px solid rgba(56,230,224,0.08); }
+.hist-summary { flex: 1; min-width: 0; font-size: 26rpx; color: #dbeeff; margin-right: 16rpx; overflow: hidden; }
+.hist-time { flex: 0 0 auto; font-size: 22rpx; color: rgba(143,217,255,0.5); }
+.hist-empty { padding: 48rpx; text-align: center; }
+.hist-empty text { font-size: 24rpx; color: rgba(143,217,255,0.5); }
+
+/* 图标（SVG data-URI）*/
+.ico-back { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23eaf6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E"); }
+.ico-mic { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
+.ico-send { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
 </style>

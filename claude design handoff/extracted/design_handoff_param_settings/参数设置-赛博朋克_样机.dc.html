@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; background: #05070d; }
+  * { -webkit-font-smoothing: antialiased; }
+  @keyframes scanSweep { 0% { transform: translateY(-160px); } 100% { transform: translateY(900px); } }
+  @keyframes gridDrift { 0% { background-position: 0 0; } 100% { background-position: 40px 40px; } }
+  @keyframes waveScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+  @keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+  @keyframes flicker { 0%,100% { opacity:1; } 92%{opacity:1;} 93%{opacity:.55;} 94%{opacity:1;} 97%{opacity:.7;} 98%{opacity:1;} }
+  @keyframes glitchShift { 0%,100% { transform: translate(0,0); } 2% { transform: translate(-1px,0); } 4% { transform: translate(1px,0); } 6% { transform: translate(0,0); } }
+  @keyframes ringSpin { to { transform: rotate(360deg); } }
+  @keyframes hueFloat { 0%,100% { box-shadow: 0 0 28px rgba(0,160,255,.14), inset 0 1px 0 rgba(255,255,255,.05); } 50% { box-shadow: 0 0 34px rgba(124,58,237,.20), inset 0 1px 0 rgba(255,255,255,.05); } }
+</style>
+</helmet>
+
+<section style="box-sizing:border-box; width:100%; padding:40px 20px 64px; background:radial-gradient(120% 80% at 50% -10%, rgba(124,58,237,.10), transparent 60%), #05070d;">
+  <div style="text-align:center; margin-bottom:32px;">
+    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:6px; color:#00e5ff; text-shadow:0 0 14px rgba(0,229,255,.5);">FREEARK // PARAM-SETTINGS · CYBERPUNK REDESIGN</div>
+    <div style="font-family:'Rajdhani',sans-serif; font-size:14px; letter-spacing:2px; color:#5f6b86; margin-top:8px;">两种方向 · 点选卡片下方编号可在对话中引用</div>
+  </div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:48px; justify-content:center; align-items:flex-start;">
+
+    <!-- ============ OPTION 1A : HOLO-HUD ============ -->
+    <div id="1a" style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:2px; color:#04121f; background:linear-gradient(90deg,#00e5ff,#7c3aed); padding:4px 12px; border-radius:6px; box-shadow:0 0 16px rgba(0,229,255,.5);">1A</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:16px; letter-spacing:3px; color:#cfe9ff;">HOLO-HUD</span>
+      </div>
+
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div style="position:relative; min-height:100%; overflow:hidden; font-family:'Rajdhani',-apple-system,system-ui,sans-serif; background:radial-gradient(85% 45% at 12% -2%, rgba(124,58,237,.30), transparent 62%), radial-gradient(70% 42% at 98% 4%, rgba(0,229,255,.20), transparent 60%), radial-gradient(95% 55% at 50% 114%, rgba(255,46,151,.16), transparent 60%), #060912; padding:56px 0 44px;">
+
+          <!-- grid bg -->
+          <div style="position:absolute; inset:0; background-image:linear-gradient(rgba(0,229,255,.05) 1px,transparent 1px), linear-gradient(90deg,rgba(0,229,255,.05) 1px,transparent 1px); background-size:40px 40px; animation:gridDrift 16s linear infinite; pointer-events:none;"></div>
+          <!-- scanline sweep -->
+          <div style="position:absolute; left:0; right:0; top:0; height:150px; background:linear-gradient(180deg,transparent,rgba(0,229,255,.09),transparent); animation:scanSweep 5.5s linear infinite; pointer-events:none; z-index:3;"></div>
+          <!-- fine scanlines -->
+          <div style="position:absolute; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px); pointer-events:none; z-index:4; opacity:.5;"></div>
+
+          <div style="position:relative; z-index:5; padding:0 16px;">
+
+            <!-- WeChat nav -->
+            <div style="display:flex; align-items:center; justify-content:space-between; height:40px; margin-bottom:10px;">
+              <div style="width:30px; height:30px; display:flex; align-items:center; justify-content:center;">
+                <svg width="11" height="18" viewBox="0 0 11 18" fill="none"><path d="M9 1L2 9l7 8" stroke="#7df9ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:18px; letter-spacing:4px; color:#eaf6ff; text-shadow:0 0 12px rgba(0,229,255,.55);">参数设置</div>
+              <div style="display:flex; align-items:center; height:30px; border:1px solid rgba(0,229,255,.30); border-radius:16px; background:rgba(0,229,255,.06);">
+                <div style="width:38px; display:flex; align-items:center; justify-content:center; color:#9fe9ff; font-size:16px; letter-spacing:1px;">⋯</div>
+                <div style="width:1px; height:15px; background:rgba(0,229,255,.30);"></div>
+                <div style="width:34px; display:flex; align-items:center; justify-content:center;"><span style="width:14px; height:14px; border-radius:50%; border:1.5px solid #9fe9ff; display:block;"></span></div>
+              </div>
+            </div>
+
+            <!-- property + connection -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 2px 18px;">
+              <div>
+                <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:17px; color:#eaf6ff; letter-spacing:.5px;">成都乐府（二仙桥）</div>
+                <div style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:13px; letter-spacing:3px; color:#7df9ff; margin-top:3px; text-shadow:0 0 10px rgba(0,229,255,.4);">UNIT-3·1·702</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px; padding:5px 12px; border-radius:999px; border:1px solid rgba(39,245,181,.4); background:rgba(39,245,181,.07);">
+                <span style="width:7px; height:7px; border-radius:50%; background:#27f5b5; box-shadow:0 0 10px #27f5b5; animation:pulseDot 1.8s ease-in-out infinite;"></span>
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#27f5b5;">LINK · OK</span>
+              </div>
+            </div>
+
+            <!--A-CARDS-START-->
+
+            <!-- 主机 card -->
+            <div style="position:relative; margin-bottom:16px; border-radius:16px; padding:18px 16px 12px; background:linear-gradient(160deg,rgba(18,28,52,.74),rgba(8,14,30,.86)); border:1px solid rgba(0,229,255,.22); animation:hueFloat 7s ease-in-out infinite;">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-left:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-right:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-left:2px solid rgba(0,229,255,.35);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-right:2px solid rgba(0,229,255,.35);"></span>
+
+              <!-- head -->
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(0,229,255,.10); border:1px solid rgba(0,229,255,.35); box-shadow:0 0 14px rgba(0,229,255,.25); font-family:'Orbitron',sans-serif; font-weight:800; font-size:15px; color:#7df9ff;">HC</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">主机</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#5f7da6; margin-top:4px;">HOST · 270001</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#00e5ff,#3b82f6); box-shadow:0 0 16px rgba(0,229,255,.55); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#eafcff; box-shadow:0 0 6px rgba(0,0,0,.3);"></span>
+                </div>
+              </div>
+
+              <!-- dual temp + scope -->
+              <div style="display:flex; gap:10px; margin:16px 0 4px;">
+                <div style="flex:1; border-radius:12px; padding:11px 13px; background:rgba(0,229,255,.05); border:1px solid rgba(0,229,255,.14);">
+                  <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:1px; color:#7f8db0;">二次进水温度</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff; text-shadow:0 0 12px rgba(0,229,255,.45); margin-top:2px;">15.6<span style="font-size:13px; color:#5f7da6;">℃</span></div>
+                </div>
+                <div style="flex:1; border-radius:12px; padding:11px 13px; background:rgba(255,46,151,.05); border:1px solid rgba(255,46,151,.16);">
+                  <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:1px; color:#7f8db0;">二次出水温度</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#ff6fb5; text-shadow:0 0 12px rgba(255,46,151,.4); margin-top:2px;">22.9<span style="font-size:13px; color:#8a6a86;">℃</span></div>
+                </div>
+              </div>
+
+              <!-- waveform scope -->
+              <div style="height:38px; margin:10px 0 4px; border-radius:10px; overflow:hidden; background:rgba(4,10,24,.6); border:1px solid rgba(0,229,255,.12); position:relative;">
+                <div style="position:absolute; inset:0; width:200%; animation:waveScroll 6s linear infinite;">
+                  <svg width="100%" height="38" viewBox="0 0 200 38" preserveAspectRatio="none"><path d="M0 24 Q5 10 10 24 T20 24 T30 24 Q35 8 40 24 T50 24 T60 24 T70 24 Q75 14 80 24 T90 24 T100 24 Q105 10 110 24 T120 24 T130 24 Q135 8 140 24 T150 24 T160 24 T170 24 Q175 14 180 24 T190 24 T200 24" fill="none" stroke="#00e5ff" stroke-width="1.4" opacity=".75"/></svg>
+                </div>
+              </div>
+
+              <!-- mode pills -->
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#7f8db0; margin:12px 0 8px;">运行模式</div>
+              <div style="display:flex; gap:8px;">
+                <div style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 0; border-radius:11px; background:linear-gradient(135deg,rgba(0,229,255,.22),rgba(124,58,237,.30)); border:1px solid rgba(0,229,255,.7); box-shadow:0 0 18px rgba(0,229,255,.4);">
+                  <span style="width:6px; height:6px; background:#7df9ff; transform:rotate(45deg); box-shadow:0 0 8px #7df9ff;"></span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:14px; color:#eaf6ff;">制冷</span>
+                </div>
+                <div style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 0; border-radius:11px; background:rgba(10,18,38,.7); border:1px solid rgba(120,160,255,.16);">
+                  <span style="width:6px; height:6px; background:#5f7da6; transform:rotate(45deg);"></span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-weight:600; font-size:14px; color:#9fb0d6;">制热</span>
+                </div>
+                <div style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 0; border-radius:11px; background:rgba(10,18,38,.7); border:1px solid rgba(120,160,255,.16);">
+                  <span style="width:6px; height:6px; background:#5f7da6; transform:rotate(45deg);"></span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-weight:600; font-size:14px; color:#9fb0d6;">通风</span>
+                </div>
+                <div style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 0; border-radius:11px; background:rgba(10,18,38,.7); border:1px solid rgba(120,160,255,.16);">
+                  <span style="width:6px; height:6px; background:#5f7da6; transform:rotate(45deg);"></span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-weight:600; font-size:14px; color:#9fb0d6;">除湿</span>
+                </div>
+              </div>
+
+              <!-- away energy -->
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 2px 14px; margin-top:14px; border-top:1px solid rgba(120,160,255,.12);">
+                <span style="font-family:'Rajdhani',sans-serif; font-weight:600; font-size:15px; color:#aab6d6;">离家节能</span>
+                <div style="width:50px; height:27px; border-radius:999px; background:rgba(10,18,38,.9); border:1px solid rgba(120,160,255,.22); position:relative;">
+                  <span style="position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:#39455f;"></span>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 0 4px; border-top:1px solid rgba(120,160,255,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#5f6b86;">查看全部 2 项</span>
+                <span style="color:#5f6b86; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!-- 新风 card -->
+            <div style="position:relative; margin-bottom:16px; border-radius:16px; padding:18px 16px 12px; background:linear-gradient(160deg,rgba(24,18,46,.74),rgba(10,8,26,.86)); border:1px solid rgba(124,58,237,.26);">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(124,58,237,.75); border-left:2px solid rgba(124,58,237,.75);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(124,58,237,.75); border-right:2px solid rgba(124,58,237,.75);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(124,58,237,.4); border-left:2px solid rgba(124,58,237,.4);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(124,58,237,.4); border-right:2px solid rgba(124,58,237,.4);"></span>
+
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(124,58,237,.14); border:1px solid rgba(124,58,237,.4); box-shadow:0 0 14px rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:800; font-size:14px; color:#c4a6ff;">FA</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">新风</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#7a6aa6; margin-top:4px;">FRESH-AIR · 270002</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#7c3aed,#c026d3); box-shadow:0 0 16px rgba(124,58,237,.55); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#f3eaff;"></span>
+                </div>
+              </div>
+
+              <!-- big送风温度 + 滤网 ring -->
+              <div style="display:flex; align-items:center; gap:14px; margin:18px 2px 6px;">
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:1px; color:#8f7fb0;">送风温度</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:46px; line-height:.92; color:#eaf6ff; text-shadow:0 0 18px rgba(124,58,237,.5); margin-top:4px;">15.3<span style="font-family:'Rajdhani'; font-weight:600; font-size:18px; color:#9a8ac0;">℃</span></div>
+                  <div style="font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:1px; color:#7a6aa6; margin-top:6px;">CO₂ 612ppm · PM2.5 8μg</div>
+                </div>
+                <!-- 滤网 ring gauge -->
+                <div style="position:relative; width:96px; height:96px; flex:none;">
+                  <svg width="96" height="96" viewBox="0 0 96 96" style="transform:rotate(-90deg);">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(124,58,237,.14)" stroke-width="7"/>
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="url(#ggrad)" stroke-width="7" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="68" />
+                    <defs><linearGradient id="ggrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00e5ff"/><stop offset="1" stop-color="#c026d3"/></linearGradient></defs>
+                  </svg>
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:22px; color:#c4a6ff; text-shadow:0 0 10px rgba(124,58,237,.5);">654</div>
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:1px; color:#7a6aa6; margin-top:2px;">滤网·H</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 风速 segmented -->
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#8f7fb0; margin:14px 0 8px;">风速</div>
+              <div style="display:flex; gap:8px;">
+                <div style="flex:1; text-align:center; padding:11px 0; border-radius:11px; background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(192,38,211,.28)); border:1px solid rgba(192,38,211,.7); box-shadow:0 0 16px rgba(124,58,237,.4); font-family:'Rajdhani',sans-serif; font-weight:700; font-size:14px; color:#f3eaff;">普通</div>
+                <div style="flex:1; text-align:center; padding:11px 0; border-radius:11px; background:rgba(14,10,30,.7); border:1px solid rgba(140,120,200,.16); font-family:'Rajdhani',sans-serif; font-weight:600; font-size:14px; color:#9a8ac0;">高速</div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 2px 14px; margin-top:14px; border-top:1px solid rgba(140,120,200,.12);">
+                <span style="font-family:'Rajdhani',sans-serif; font-weight:600; font-size:15px; color:#bcaee0;">加湿</span>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#7c3aed,#c026d3); box-shadow:0 0 14px rgba(124,58,237,.5); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#f3eaff;"></span>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 0 4px; border-top:1px solid rgba(140,120,200,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#7a6aa6;">查看全部 9 项</span>
+                <span style="color:#7a6aa6; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!-- 客厅 card -->
+            <div style="position:relative; border-radius:16px; padding:18px 16px 14px; background:linear-gradient(160deg,rgba(18,28,52,.74),rgba(8,14,30,.86)); border:1px solid rgba(0,229,255,.22);">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-left:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-right:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-left:2px solid rgba(0,229,255,.35);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-right:2px solid rgba(0,229,255,.35);"></span>
+
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(0,229,255,.10); border:1px solid rgba(0,229,255,.35); box-shadow:0 0 14px rgba(0,229,255,.25); font-family:'Orbitron',sans-serif; font-weight:800; font-size:15px; color:#7df9ff;">LR</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">客厅</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#5f7da6; margin-top:4px;">LIVING-ROOM · 270003</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#00e5ff,#3b82f6); box-shadow:0 0 16px rgba(0,229,255,.55); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#eafcff;"></span>
+                </div>
+              </div>
+
+              <!-- temp ring + humidity/dew -->
+              <div style="display:flex; align-items:center; gap:14px; margin:18px 2px 8px;">
+                <div style="position:relative; width:118px; height:118px; flex:none;">
+                  <svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="rgba(0,229,255,.12)" stroke-width="8"/>
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="url(#tgrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="96"/>
+                    <defs><linearGradient id="tgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7df9ff"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
+                  </svg>
+                  <!-- setpoint marker -->
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:1px; color:#5f7da6;">当前温度</div>
+                    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:32px; line-height:1; color:#eaf6ff; text-shadow:0 0 14px rgba(0,229,255,.5);">24.5</div>
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; color:#27f5b5; margin-top:2px;">设定 26.0℃</div>
+                  </div>
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:12px;">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#7f8db0; letter-spacing:1px;">湿度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#7df9ff;">55<span style="font-size:11px; color:#5f7da6;">%</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(0,229,255,.12); margin-top:6px; overflow:hidden;"><div style="width:55%; height:100%; background:linear-gradient(90deg,#00e5ff,#7c3aed); box-shadow:0 0 8px rgba(0,229,255,.6);"></div></div>
+                  </div>
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#7f8db0; letter-spacing:1px;">露点温度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#ff6fb5;">15.5<span style="font-size:11px; color:#8a6a86;">℃</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(255,46,151,.12); margin-top:6px; overflow:hidden;"><div style="width:42%; height:100%; background:linear-gradient(90deg,#ff2e97,#c026d3); box-shadow:0 0 8px rgba(255,46,151,.5);"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- temperature stepper -->
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#7f8db0; margin:16px 0 8px;">温度设定</div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(10,18,38,.8); border:1px solid rgba(0,229,255,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff;">−</div>
+                <div style="flex:1; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,rgba(0,229,255,.16),rgba(124,58,237,.2)); border:1px solid rgba(0,229,255,.4); box-shadow:inset 0 0 18px rgba(0,229,255,.18);">
+                  <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:30px; color:#eaf6ff; text-shadow:0 0 14px rgba(0,229,255,.5);">26.0<span style="font-family:'Rajdhani'; font-weight:600; font-size:15px; color:#9fb0d6;">℃</span></span>
+                </div>
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(10,18,38,.8); border:1px solid rgba(0,229,255,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff;">+</div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:14px 0 2px; margin-top:12px; border-top:1px solid rgba(120,160,255,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#5f6b86;">查看全部 6 项</span>
+                <span style="color:#5f6b86; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!-- 主卧 card (purple) -->
+            <div style="position:relative; margin-top:16px; border-radius:16px; padding:18px 16px 14px; background:linear-gradient(160deg,rgba(24,18,46,.74),rgba(10,8,26,.86)); border:1px solid rgba(124,58,237,.26);">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(124,58,237,.75); border-left:2px solid rgba(124,58,237,.75);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(124,58,237,.75); border-right:2px solid rgba(124,58,237,.75);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(124,58,237,.4); border-left:2px solid rgba(124,58,237,.4);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(124,58,237,.4); border-right:2px solid rgba(124,58,237,.4);"></span>
+
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(124,58,237,.14); border:1px solid rgba(124,58,237,.4); box-shadow:0 0 14px rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:800; font-size:15px; color:#c4a6ff;">MB</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">主卧</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#7a6aa6; margin-top:4px;">MASTER-BEDROOM · 270004</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#7c3aed,#c026d3); box-shadow:0 0 16px rgba(124,58,237,.55); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#f3eaff;"></span>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:14px; margin:18px 2px 8px;">
+                <div style="position:relative; width:118px; height:118px; flex:none;">
+                  <svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="rgba(124,58,237,.14)" stroke-width="8"/>
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="url(#tgrad2)" stroke-width="8" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="104"/>
+                    <defs><linearGradient id="tgrad2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4a6ff"/><stop offset="1" stop-color="#00e5ff"/></linearGradient></defs>
+                  </svg>
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:1px; color:#7a6aa6;">当前温度</div>
+                    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:32px; line-height:1; color:#eaf6ff; text-shadow:0 0 14px rgba(124,58,237,.5);">23.8</div>
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; color:#27f5b5; margin-top:2px;">设定 24.0℃</div>
+                  </div>
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:12px;">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#8f7fb0; letter-spacing:1px;">湿度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#c4a6ff;">52<span style="font-size:11px; color:#7a6aa6;">%</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(124,58,237,.14); margin-top:6px; overflow:hidden;"><div style="width:52%; height:100%; background:linear-gradient(90deg,#7c3aed,#00e5ff); box-shadow:0 0 8px rgba(124,58,237,.6);"></div></div>
+                  </div>
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#8f7fb0; letter-spacing:1px;">露点温度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#ff6fb5;">14.2<span style="font-size:11px; color:#8a6a86;">℃</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(255,46,151,.12); margin-top:6px; overflow:hidden;"><div style="width:38%; height:100%; background:linear-gradient(90deg,#ff2e97,#c026d3); box-shadow:0 0 8px rgba(255,46,151,.5);"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#8f7fb0; margin:16px 0 8px;">温度设定</div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(14,10,30,.8); border:1px solid rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#c4a6ff;">−</div>
+                <div style="flex:1; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,rgba(124,58,237,.2),rgba(192,38,211,.18)); border:1px solid rgba(124,58,237,.4); box-shadow:inset 0 0 18px rgba(124,58,237,.18);">
+                  <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:30px; color:#eaf6ff; text-shadow:0 0 14px rgba(124,58,237,.5);">24.0<span style="font-family:'Rajdhani'; font-weight:600; font-size:15px; color:#bcaee0;">℃</span></span>
+                </div>
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(14,10,30,.8); border:1px solid rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#c4a6ff;">+</div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:14px 0 2px; margin-top:12px; border-top:1px solid rgba(140,120,200,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#7a6aa6;">查看全部 6 项</span>
+                <span style="color:#7a6aa6; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!-- 次卧 card (cyan) -->
+            <div style="position:relative; margin-top:16px; border-radius:16px; padding:18px 16px 14px; background:linear-gradient(160deg,rgba(18,28,52,.74),rgba(8,14,30,.86)); border:1px solid rgba(0,229,255,.22);">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-left:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-right:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-left:2px solid rgba(0,229,255,.35);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-right:2px solid rgba(0,229,255,.35);"></span>
+
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(0,229,255,.10); border:1px solid rgba(0,229,255,.35); box-shadow:0 0 14px rgba(0,229,255,.25); font-family:'Orbitron',sans-serif; font-weight:800; font-size:15px; color:#7df9ff;">BR</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">次卧</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#5f7da6; margin-top:4px;">2ND-BEDROOM · 270005</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:rgba(10,18,38,.9); border:1px solid rgba(120,160,255,.22); position:relative;">
+                  <span style="position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:#39455f;"></span>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:14px; margin:18px 2px 8px;">
+                <div style="position:relative; width:118px; height:118px; flex:none;">
+                  <svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="rgba(0,229,255,.12)" stroke-width="8"/>
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="url(#tgrad3)" stroke-width="8" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="84"/>
+                    <defs><linearGradient id="tgrad3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7df9ff"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
+                  </svg>
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:1px; color:#5f7da6;">当前温度</div>
+                    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:32px; line-height:1; color:#eaf6ff; text-shadow:0 0 14px rgba(0,229,255,.5);">25.1</div>
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; color:#27f5b5; margin-top:2px;">设定 25.0℃</div>
+                  </div>
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:12px;">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#7f8db0; letter-spacing:1px;">湿度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#7df9ff;">58<span style="font-size:11px; color:#5f7da6;">%</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(0,229,255,.12); margin-top:6px; overflow:hidden;"><div style="width:58%; height:100%; background:linear-gradient(90deg,#00e5ff,#7c3aed); box-shadow:0 0 8px rgba(0,229,255,.6);"></div></div>
+                  </div>
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#7f8db0; letter-spacing:1px;">露点温度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#ff6fb5;">16.0<span style="font-size:11px; color:#8a6a86;">℃</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(255,46,151,.12); margin-top:6px; overflow:hidden;"><div style="width:45%; height:100%; background:linear-gradient(90deg,#ff2e97,#c026d3); box-shadow:0 0 8px rgba(255,46,151,.5);"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#7f8db0; margin:16px 0 8px;">温度设定</div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(10,18,38,.8); border:1px solid rgba(0,229,255,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff;">−</div>
+                <div style="flex:1; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,rgba(0,229,255,.16),rgba(124,58,237,.2)); border:1px solid rgba(0,229,255,.4); box-shadow:inset 0 0 18px rgba(0,229,255,.18);">
+                  <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:30px; color:#eaf6ff; text-shadow:0 0 14px rgba(0,229,255,.5);">25.0<span style="font-family:'Rajdhani'; font-weight:600; font-size:15px; color:#9fb0d6;">℃</span></span>
+                </div>
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(10,18,38,.8); border:1px solid rgba(0,229,255,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff;">+</div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:14px 0 2px; margin-top:12px; border-top:1px solid rgba(120,160,255,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#5f6b86;">查看全部 6 项</span>
+                <span style="color:#5f6b86; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!-- 书房 card (purple) -->
+            <div style="position:relative; margin-top:16px; border-radius:16px; padding:18px 16px 14px; background:linear-gradient(160deg,rgba(24,18,46,.74),rgba(10,8,26,.86)); border:1px solid rgba(124,58,237,.26);">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(124,58,237,.75); border-left:2px solid rgba(124,58,237,.75);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(124,58,237,.75); border-right:2px solid rgba(124,58,237,.75);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(124,58,237,.4); border-left:2px solid rgba(124,58,237,.4);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(124,58,237,.4); border-right:2px solid rgba(124,58,237,.4);"></span>
+
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(124,58,237,.14); border:1px solid rgba(124,58,237,.4); box-shadow:0 0 14px rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:800; font-size:15px; color:#c4a6ff;">ST</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">书房</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#7a6aa6; margin-top:4px;">STUDY · 270006</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#7c3aed,#c026d3); box-shadow:0 0 16px rgba(124,58,237,.55); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#f3eaff;"></span>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:14px; margin:18px 2px 8px;">
+                <div style="position:relative; width:118px; height:118px; flex:none;">
+                  <svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="rgba(124,58,237,.14)" stroke-width="8"/>
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="url(#tgrad4)" stroke-width="8" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="100"/>
+                    <defs><linearGradient id="tgrad4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4a6ff"/><stop offset="1" stop-color="#00e5ff"/></linearGradient></defs>
+                  </svg>
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:1px; color:#7a6aa6;">当前温度</div>
+                    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:32px; line-height:1; color:#eaf6ff; text-shadow:0 0 14px rgba(124,58,237,.5);">24.0</div>
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; color:#27f5b5; margin-top:2px;">设定 23.5℃</div>
+                  </div>
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:12px;">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#8f7fb0; letter-spacing:1px;">湿度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#c4a6ff;">49<span style="font-size:11px; color:#7a6aa6;">%</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(124,58,237,.14); margin-top:6px; overflow:hidden;"><div style="width:49%; height:100%; background:linear-gradient(90deg,#7c3aed,#00e5ff); box-shadow:0 0 8px rgba(124,58,237,.6);"></div></div>
+                  </div>
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#8f7fb0; letter-spacing:1px;">露点温度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#ff6fb5;">13.5<span style="font-size:11px; color:#8a6a86;">℃</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(255,46,151,.12); margin-top:6px; overflow:hidden;"><div style="width:35%; height:100%; background:linear-gradient(90deg,#ff2e97,#c026d3); box-shadow:0 0 8px rgba(255,46,151,.5);"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#8f7fb0; margin:16px 0 8px;">温度设定</div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(14,10,30,.8); border:1px solid rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#c4a6ff;">−</div>
+                <div style="flex:1; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,rgba(124,58,237,.2),rgba(192,38,211,.18)); border:1px solid rgba(124,58,237,.4); box-shadow:inset 0 0 18px rgba(124,58,237,.18);">
+                  <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:30px; color:#eaf6ff; text-shadow:0 0 14px rgba(124,58,237,.5);">23.5<span style="font-family:'Rajdhani'; font-weight:600; font-size:15px; color:#bcaee0;">℃</span></span>
+                </div>
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(14,10,30,.8); border:1px solid rgba(124,58,237,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#c4a6ff;">+</div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:14px 0 2px; margin-top:12px; border-top:1px solid rgba(140,120,200,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#7a6aa6;">查看全部 6 项</span>
+                <span style="color:#7a6aa6; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!-- 儿童房 card (cyan) -->
+            <div style="position:relative; margin-top:16px; border-radius:16px; padding:18px 16px 14px; background:linear-gradient(160deg,rgba(18,28,52,.74),rgba(8,14,30,.86)); border:1px solid rgba(0,229,255,.22);">
+              <span style="position:absolute; top:8px; left:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-left:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; top:8px; right:8px; width:14px; height:14px; border-top:2px solid rgba(0,229,255,.7); border-right:2px solid rgba(0,229,255,.7);"></span>
+              <span style="position:absolute; bottom:8px; left:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-left:2px solid rgba(0,229,255,.35);"></span>
+              <span style="position:absolute; bottom:8px; right:8px; width:14px; height:14px; border-bottom:2px solid rgba(0,229,255,.35); border-right:2px solid rgba(0,229,255,.35);"></span>
+
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:rgba(0,229,255,.10); border:1px solid rgba(0,229,255,.35); box-shadow:0 0 14px rgba(0,229,255,.25); font-family:'Orbitron',sans-serif; font-weight:800; font-size:15px; color:#7df9ff;">KR</div>
+                <div style="flex:1;">
+                  <div style="font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; color:#eaf6ff; letter-spacing:1px; line-height:1;">儿童房</div>
+                  <div style="font-family:'Orbitron',sans-serif; font-weight:600; font-size:10px; letter-spacing:3px; color:#5f7da6; margin-top:4px;">KIDS-ROOM · 270007</div>
+                </div>
+                <div style="width:50px; height:27px; border-radius:999px; background:linear-gradient(90deg,#00e5ff,#3b82f6); box-shadow:0 0 16px rgba(0,229,255,.55); position:relative;">
+                  <span style="position:absolute; top:3px; right:3px; width:21px; height:21px; border-radius:50%; background:#eafcff;"></span>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:14px; margin:18px 2px 8px;">
+                <div style="position:relative; width:118px; height:118px; flex:none;">
+                  <svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="rgba(0,229,255,.12)" stroke-width="8"/>
+                    <circle cx="59" cy="59" r="50" fill="none" stroke="url(#tgrad5)" stroke-width="8" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="72"/>
+                    <defs><linearGradient id="tgrad5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7df9ff"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
+                  </svg>
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:1px; color:#5f7da6;">当前温度</div>
+                    <div style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:32px; line-height:1; color:#eaf6ff; text-shadow:0 0 14px rgba(0,229,255,.5);">26.2</div>
+                    <div style="font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; color:#27f5b5; margin-top:2px;">设定 26.0℃</div>
+                  </div>
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:12px;">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#7f8db0; letter-spacing:1px;">湿度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#7df9ff;">60<span style="font-size:11px; color:#5f7da6;">%</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(0,229,255,.12); margin-top:6px; overflow:hidden;"><div style="width:60%; height:100%; background:linear-gradient(90deg,#00e5ff,#7c3aed); box-shadow:0 0 8px rgba(0,229,255,.6);"></div></div>
+                  </div>
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#7f8db0; letter-spacing:1px;">露点温度</span><span style="font-family:'Orbitron',sans-serif; font-weight:700; font-size:17px; color:#ff6fb5;">17.1<span style="font-size:11px; color:#8a6a86;">℃</span></span></div>
+                    <div style="height:6px; border-radius:3px; background:rgba(255,46,151,.12); margin-top:6px; overflow:hidden;"><div style="width:50%; height:100%; background:linear-gradient(90deg,#ff2e97,#c026d3); box-shadow:0 0 8px rgba(255,46,151,.5);"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; letter-spacing:2px; color:#7f8db0; margin:16px 0 8px;">温度设定</div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(10,18,38,.8); border:1px solid rgba(0,229,255,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff;">−</div>
+                <div style="flex:1; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,rgba(0,229,255,.16),rgba(124,58,237,.2)); border:1px solid rgba(0,229,255,.4); box-shadow:inset 0 0 18px rgba(0,229,255,.18);">
+                  <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:30px; color:#eaf6ff; text-shadow:0 0 14px rgba(0,229,255,.5);">26.0<span style="font-family:'Rajdhani'; font-weight:600; font-size:15px; color:#9fb0d6;">℃</span></span>
+                </div>
+                <div style="width:54px; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(10,18,38,.8); border:1px solid rgba(0,229,255,.3); font-family:'Orbitron',sans-serif; font-weight:700; font-size:26px; color:#7df9ff;">+</div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:14px 0 2px; margin-top:12px; border-top:1px solid rgba(120,160,255,.08);">
+                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px; color:#5f6b86;">查看全部 6 项</span>
+                <span style="color:#5f6b86; font-size:12px;">›</span>
+              </div>
+            </div>
+
+            <!--A-CARDS-END-->
+          </div>
+        </div>
+      </x-import>
+    </div>
+    <!-- ============ OPTION 1B : SYS://TERMINAL ============ -->
+    <div id="1b" style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:2px; color:#02120c; background:linear-gradient(90deg,#27f5b5,#00e5ff); padding:4px 12px; border-radius:6px; box-shadow:0 0 16px rgba(39,245,181,.5);">1B</span>
+        <span style="font-family:'Share Tech Mono',monospace; font-weight:700; font-size:16px; letter-spacing:2px; color:#b8ffe8;">SYS://TERMINAL</span>
+      </div>
+
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div style="position:relative; min-height:100%; overflow:hidden; font-family:'Share Tech Mono','JetBrains Mono',monospace; background:radial-gradient(80% 40% at 50% -4%, rgba(39,245,181,.12), transparent 60%), #04110d; padding:56px 0 44px;">
+
+          <!-- grid + scan -->
+          <div style="position:absolute; inset:0; background-image:linear-gradient(rgba(39,245,181,.045) 1px,transparent 1px), linear-gradient(90deg,rgba(39,245,181,.045) 1px,transparent 1px); background-size:30px 30px; pointer-events:none;"></div>
+          <div style="position:absolute; left:0; right:0; top:0; height:120px; background:linear-gradient(180deg,transparent,rgba(39,245,181,.10),transparent); animation:scanSweep 4.5s linear infinite; pointer-events:none; z-index:3;"></div>
+          <div style="position:absolute; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.22) 3px); pointer-events:none; z-index:4; opacity:.45;"></div>
+
+          <div style="position:relative; z-index:5; padding:0 14px;">
+
+            <!-- terminal title bar -->
+            <div style="display:flex; align-items:center; justify-content:space-between; height:38px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <svg width="10" height="16" viewBox="0 0 11 18" fill="none"><path d="M9 1L2 9l7 8" stroke="#27f5b5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span style="color:#27f5b5; font-size:13px; letter-spacing:1px; animation:flicker 6s infinite;">~/freeark/param</span>
+              </div>
+              <span style="color:#3f7a66; font-size:13px; letter-spacing:1px;">[ ⋯ ● ]</span>
+            </div>
+
+            <!-- glitch header -->
+            <div style="margin:8px 0 4px; animation:glitchShift 7s infinite;">
+              <div style="font-size:22px; letter-spacing:2px; color:#b8ffe8; text-shadow:0 0 12px rgba(39,245,181,.5);">&gt; 参数设置<span style="animation:blink 1s step-end infinite;">_</span></div>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0 14px; border-bottom:1px dashed rgba(39,245,181,.25);">
+              <span style="color:#5f8a78; font-size:12px;">node://成都乐府·3-1-702</span>
+              <span style="color:#27f5b5; font-size:12px; letter-spacing:1px;">[LINK::OK]<span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#27f5b5; box-shadow:0 0 8px #27f5b5; margin-left:6px; vertical-align:middle; animation:pulseDot 1.6s infinite;"></span></span>
+            </div>
+
+            <!--B-MOD-START-->
+
+            <!-- MOD 主机 -->
+            <div style="margin:16px 0; border:1px solid rgba(39,245,181,.28); border-radius:4px; background:rgba(6,24,18,.55); overflow:hidden;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:rgba(39,245,181,.10); border-bottom:1px solid rgba(39,245,181,.22);">
+                <span style="color:#b8ffe8; font-size:14px; letter-spacing:1px;">[MOD] 主机<span style="color:#3f7a66; font-size:11px; margin-left:8px;">0x270001</span></span>
+                <span style="color:#27f5b5; font-size:12px;">ON ▮</span>
+              </div>
+              <div style="padding:12px;">
+                <!-- data rows w/ bar -->
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:9px;">
+                  <span style="color:#5f8a78; font-size:12px; width:96px;">二次进水温度</span>
+                  <div style="flex:1; height:9px; background:rgba(39,245,181,.10); border:1px solid rgba(39,245,181,.2); position:relative;"><div style="width:52%; height:100%; background:repeating-linear-gradient(90deg,#27f5b5 0 4px,transparent 4px 6px);"></div></div>
+                  <span style="color:#b8ffe8; font-size:13px; width:52px; text-align:right;">15.6℃</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:9px;">
+                  <span style="color:#5f8a78; font-size:12px; width:96px;">二次出水温度</span>
+                  <div style="flex:1; height:9px; background:rgba(0,229,255,.10); border:1px solid rgba(0,229,255,.2); position:relative;"><div style="width:76%; height:100%; background:repeating-linear-gradient(90deg,#00e5ff 0 4px,transparent 4px 6px);"></div></div>
+                  <span style="color:#7df9ff; font-size:13px; width:52px; text-align:right;">22.9℃</span>
+                </div>
+                <!-- waveform -->
+                <div style="height:34px; margin:10px 0; border:1px solid rgba(39,245,181,.2); background:rgba(2,14,10,.7); overflow:hidden; position:relative;">
+                  <div style="position:absolute; inset:0; width:200%; animation:waveScroll 5s linear infinite;">
+                    <svg width="100%" height="34" viewBox="0 0 200 34" preserveAspectRatio="none"><path d="M0 22 L8 22 L10 8 L12 26 L20 20 L30 20 L34 22 L36 6 L40 24 L52 20 L60 20 L62 22 L66 10 L70 24 L82 20 L100 22 L108 22 L110 8 L112 26 L120 20 L130 20 L134 22 L136 6 L140 24 L152 20 L160 20 L162 22 L166 10 L170 24 L182 20 L200 22" fill="none" stroke="#27f5b5" stroke-width="1.3" opacity=".8"/></svg>
+                  </div>
+                </div>
+                <!-- mode toggles bracketed -->
+                <div style="color:#5f8a78; font-size:12px; margin:6px 0 7px;">运行模式 ::</div>
+                <div style="display:flex; flex-wrap:wrap; gap:7px;">
+                  <span style="font-size:13px; color:#02120c; background:#27f5b5; padding:5px 11px; border-radius:3px; box-shadow:0 0 12px rgba(39,245,181,.5);">[制冷]</span>
+                  <span style="font-size:13px; color:#5f8a78; border:1px solid rgba(39,245,181,.25); padding:5px 11px; border-radius:3px;">[制热]</span>
+                  <span style="font-size:13px; color:#5f8a78; border:1px solid rgba(39,245,181,.25); padding:5px 11px; border-radius:3px;">[通风]</span>
+                  <span style="font-size:13px; color:#5f8a78; border:1px solid rgba(39,245,181,.25); padding:5px 11px; border-radius:3px;">[除湿]</span>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px dashed rgba(39,245,181,.2);">
+                  <span style="color:#5f8a78; font-size:12px;">离家节能</span>
+                  <span style="color:#3f7a66; font-size:13px;">[ OFF ]</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- MOD 新风 -->
+            <div style="margin:16px 0; border:1px solid rgba(0,229,255,.28); border-radius:4px; background:rgba(6,18,26,.55); overflow:hidden;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:rgba(0,229,255,.10); border-bottom:1px solid rgba(0,229,255,.22);">
+                <span style="color:#cdebff; font-size:14px; letter-spacing:1px;">[MOD] 新风<span style="color:#3f6f8a; font-size:11px; margin-left:8px;">0x270002</span></span>
+                <span style="color:#7df9ff; font-size:12px;">ON ▮</span>
+              </div>
+              <div style="padding:12px;">
+                <div style="display:flex; align-items:flex-end; gap:14px; margin-bottom:10px;">
+                  <div style="flex:none;">
+                    <div style="color:#5f8aa8; font-size:12px;">送风温度</div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:40px; line-height:.9; color:#7df9ff; text-shadow:0 0 14px rgba(0,229,255,.5);">15.3</div>
+                  </div>
+                  <div style="flex:1; padding-bottom:4px;">
+                    <div style="color:#5f8aa8; font-size:11px; margin-bottom:4px;">滤网剩余</div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <div style="flex:1; height:9px; background:rgba(0,229,255,.1); border:1px solid rgba(0,229,255,.2);"><div style="width:73%; height:100%; background:repeating-linear-gradient(90deg,#00e5ff 0 4px,transparent 4px 6px);"></div></div>
+                      <span style="color:#7df9ff; font-size:12px;">654H</span>
+                    </div>
+                    <div style="color:#3f6f8a; font-size:11px; margin-top:6px;">CO₂ 612ppm · PM2.5 8</div>
+                  </div>
+                </div>
+                <div style="color:#5f8aa8; font-size:12px; margin:8px 0 7px;">风速 ::</div>
+                <div style="display:flex; gap:7px;">
+                  <span style="flex:1; text-align:center; font-size:13px; color:#5f8aa8; border:1px solid rgba(0,229,255,.25); padding:6px 0; border-radius:3px;">[自动]</span>
+                  <span style="flex:1; text-align:center; font-size:13px; color:#04121f; background:#00e5ff; padding:6px 0; border-radius:3px; box-shadow:0 0 12px rgba(0,229,255,.5);">[普通]</span>
+                  <span style="flex:1; text-align:center; font-size:13px; color:#5f8aa8; border:1px solid rgba(0,229,255,.25); padding:6px 0; border-radius:3px;">[高速]</span>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px dashed rgba(0,229,255,.2);">
+                  <span style="color:#5f8aa8; font-size:12px;">加湿</span>
+                  <span style="color:#7df9ff; font-size:13px;">[ ON ]</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- MOD 客厅 -->
+            <div style="margin:16px 0; border:1px solid rgba(124,58,237,.34); border-radius:4px; background:rgba(16,10,26,.55); overflow:hidden;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:rgba(124,58,237,.12); border-bottom:1px solid rgba(124,58,237,.28);">
+                <span style="color:#e3d4ff; font-size:14px; letter-spacing:1px;">[MOD] 客厅<span style="color:#7a6aa6; font-size:11px; margin-left:8px;">0x270003</span></span>
+                <span style="color:#c4a6ff; font-size:12px;">ON ▮</span>
+              </div>
+              <div style="padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:9px;">
+                  <span style="color:#8f7fb0; font-size:12px; width:60px;">当前温度</span>
+                  <div style="flex:1; height:9px; background:rgba(124,58,237,.12); border:1px solid rgba(124,58,237,.25);"><div style="width:68%; height:100%; background:repeating-linear-gradient(90deg,#c4a6ff 0 4px,transparent 4px 6px);"></div></div>
+                  <span style="color:#e3d4ff; font-size:13px; width:48px; text-align:right;">24.5℃</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:9px;">
+                  <span style="color:#8f7fb0; font-size:12px; width:60px;">湿度</span>
+                  <div style="flex:1; height:9px; background:rgba(0,229,255,.1); border:1px solid rgba(0,229,255,.2);"><div style="width:55%; height:100%; background:repeating-linear-gradient(90deg,#00e5ff 0 4px,transparent 4px 6px);"></div></div>
+                  <span style="color:#7df9ff; font-size:13px; width:48px; text-align:right;">55%</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+                  <span style="color:#8f7fb0; font-size:12px; width:60px;">露点温度</span>
+                  <div style="flex:1; height:9px; background:rgba(255,46,151,.1); border:1px solid rgba(255,46,151,.2);"><div style="width:42%; height:100%; background:repeating-linear-gradient(90deg,#ff2e97 0 4px,transparent 4px 6px);"></div></div>
+                  <span style="color:#ff6fb5; font-size:13px; width:48px; text-align:right;">15.5℃</span>
+                </div>
+                <!-- stepper -->
+                <div style="color:#8f7fb0; font-size:12px; margin:12px 0 7px;">温度设定 ::</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="width:46px; height:42px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#c4a6ff; border:1px solid rgba(124,58,237,.4); border-radius:3px; background:rgba(124,58,237,.08);">[-]</span>
+                  <span style="flex:1; height:42px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:24px; color:#e3d4ff; border:1px solid rgba(124,58,237,.5); border-radius:3px; background:rgba(124,58,237,.14); text-shadow:0 0 12px rgba(124,58,237,.5);">26.0℃</span>
+                  <span style="width:46px; height:42px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#c4a6ff; border:1px solid rgba(124,58,237,.4); border-radius:3px; background:rgba(124,58,237,.08);">[+]</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="text-align:center; color:#3f7a66; font-size:11px; letter-spacing:1px; padding:8px 0 2px;">EOF · 3 modules loaded · press [↑] to sync</div>
+
+            <!--B-MOD-END-->
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!--ROW-END-->
+
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,461 @@
+Creating test database for alias 'default'...
+Found 1702 test(s).
+System check identified no issues (0 silenced).
+...................................................................................................................................................................................F.......................................................................FF......................................................................................................................................................................................................................................ss...................................................................................................................................................................................................................E..........F.....................................................................................................\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.\u6267\u884cPLC\u6570\u636e\u6e05\u7406\u4efb\u52a1\u65f6\u51fa\u9519: 'charmap' codec can't encode characters in position 29-32: character maps to <undefined>
+.............................................................................................................................................................................C:\Program Files\Python312\Lib\unittest\mock.py:2217: RuntimeWarning: coroutine 'sleep' was never awaited
+  def __init__(self, name, parent):
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................................................................................E--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-73: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 608, in test_execute_ondemand_with_empty_set_yields_no_configs
+    sub._execute_ondemand('9-1-10-1002', allowed_params=set())
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 230, in _execute_ondemand
+    logger.info('[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s', specific_part)
+Message: '[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s'
+Arguments: ('9-1-10-1002',)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-74: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 608, in test_execute_ondemand_with_empty_set_yields_no_configs
+    sub._execute_ondemand('9-1-10-1002', allowed_params=set())
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 262, in _execute_ondemand
+    logger.info(
+Message: '[ondemand] \u91c7\u96c6\u4fa7\u88c1\u526a: specific_part=%s, \u5b9e\u9645\u91c7\u96c6 %d / \u603b\u8ba1 %d \u4e2a\u53c2\u6570'
+Arguments: ('9-1-10-1002', 0, 3)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 84-92: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 608, in test_execute_ondemand_with_empty_set_yields_no_configs
+    sub._execute_ondemand('9-1-10-1002', allowed_params=set())
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 269, in _execute_ondemand
+    logger.warning('[ondemand] plc_config \u4e3a\u7a7a\uff0c\u65e0\u53c2\u6570\u53ef\u91c7\u96c6: specific_part=%s', specific_part)
+Message: '[ondemand] plc_config \u4e3a\u7a7a\uff0c\u65e0\u53c2\u6570\u53ef\u91c7\u96c6: specific_part=%s'
+Arguments: ('9-1-10-1002',)
+.--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-73: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 593, in test_execute_ondemand_without_allowed_params_full_collect
+    sub._execute_ondemand('9-1-10-1002', allowed_params=None)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 230, in _execute_ondemand
+    logger.info('[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s', specific_part)
+Message: '[ondemand] \u5f00\u59cb\u91c7\u96c6: specific_part=%s'
+Arguments: ('9-1-10-1002',)
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 70-73: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 593, in test_execute_ondemand_without_allowed_params_full_collect
+    sub._execute_ondemand('9-1-10-1002', allowed_params=None)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 298, in _execute_ondemand
+    logger.info('[ondemand] \u91c7\u96c6\u5b8c\u6210: specific_part=%s, \u53c2\u6570\u6570=%d, \u8017\u65f6=%.1fms',
+Message: '[ondemand] \u91c7\u96c6\u5b8c\u6210: specific_part=%s, \u53c2\u6570\u6570=%d, \u8017\u65f6=%.1fms'
+Arguments: ('9-1-10-1002', 0, 0.0)
+.--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 59-66: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 630, in test_on_request_parses_allowed_params_from_payload
+    sub._on_request('/datacollection/plc/ondemand/request/9-1-10-1002', payload)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 192, in _on_request
+    logger.info('\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s', specific_part, topic)
+Message: '\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s'
+Arguments: ('9-1-10-1002', '/datacollection/plc/ondemand/request/9-1-10-1002')
+.--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 59-66: character maps to <undefined>
+Call stack:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 22, in <module>
+    main()
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 24, in run_from_argv
+    super().run_from_argv(argv)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\core\management\commands\test.py", line 63, in handle
+    failures = test_runner.run_tests(test_labels)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1073, in run_tests
+    result = self.run_suite(suite)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\runner.py", line 1000, in run_suite
+    return runner.run(suite)
+  File "C:\Program Files\Python312\Lib\unittest\runner.py", line 240, in run
+    test(result)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\suite.py", line 122, in run
+    test(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 317, in __call__
+    self._setup_and_call(result)
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\test\testcases.py", line 369, in _setup_and_call
+    super().__call__(result)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 634, in run
+    self._callTestMethod(testMethod)
+  File "C:\Program Files\Python312\Lib\unittest\case.py", line 589, in _callTestMethod
+    if method() is not None:
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 655, in test_on_request_without_allowed_params_passes_none
+    sub._on_request('/datacollection/plc/ondemand/request/9-1-10-1002', payload)
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 192, in _on_request
+    logger.info('\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s', specific_part, topic)
+Message: '\u6536\u5230\u6309\u9700\u91c7\u96c6\u8bf7\u6c42: specific_part=%s topic=%s'
+Arguments: ('9-1-10-1002', '/datacollection/plc/ondemand/request/9-1-10-1002')
+.....................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................ssssssssssss............
+======================================================================
+ERROR: test_marks_offline_when_all_failed (api.tests.test_main.ConnectionStatusHandlerTest.test_marks_offline_when_all_failed)
+\u6240\u6709\u6570\u636e\u9879\u5931\u8d25\u65f6\u6807\u8bb0\u4e3a offline
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_main.py", line 818, in test_marks_offline_when_all_failed
+    status = PLCConnectionStatus.objects.get(specific_part="3-1-7-702")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\db\models\manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\AppData\Roaming\Python\Python312\site-packages\django\db\models\query.py", line 651, in get
+    raise self.model.DoesNotExist(
+api.models.PLCConnectionStatus.DoesNotExist: PLCConnectionStatus matching query does not exist.
+
+======================================================================
+ERROR: test_execute_ondemand_with_allowed_params_filters_configs (api.tests.test_room_filter_v057.TestOndemandCollectSubscriberAllowedParams.test_execute_ondemand_with_allowed_params_filters_configs)
+UT-M7B-01\uff1aallowed_params \u6307\u5b9a\u65f6\uff0cconfigs \u4ec5\u542b\u767d\u540d\u5355\u5185\u53c2\u6570
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 59, in _load_config
+    print(f"[LogConfigManager] \u914d\u7f6e\u5df2\u52a0\u8f7d: {self._config_path}", flush=True)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 19-23: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 559, in test_execute_ondemand_with_allowed_params_filters_configs
+    sub = self._make_subscriber()
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_room_filter_v057.py", line 542, in _make_subscriber
+    from datacollection.ondemand_collect_subscriber import OndemandCollectSubscriber
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\ondemand_collect_subscriber.py", line 25, in <module>
+    from datacollection.mqtt_client import MQTTClient
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\mqtt_client.py", line 18, in <module>
+    logger = get_logger('mqtt_client')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 172, in get_logger
+    return LogConfigManager().get_logger(name)
+           ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 47, in __new__
+    cls._instance._load_config()
+  File "C:\Users\yanggyan\MyProject\FreeArk\datacollection\log_config_manager.py", line 62, in _load_config
+    print(f"\u8b66\u544a\uff1a\u65e0\u6cd5\u52a0\u8f7d\u65e5\u5fd7\u914d\u7f6e\u6587\u4ef6 {self._config_path}\uff0c\u4f7f\u7528\u9ed8\u8ba4\u914d\u7f6e\u3002\u9519\u8bef: {str(e)}")
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 0-12: character maps to <undefined>
+
+======================================================================
+FAIL: test_nested_structure (api.tests.test_device_cards.TestDeviceRealtimeParamsAPI.test_nested_structure)
+Given: hvac \u5206\u7ec4\u4e0b\u6709 main_thermostat \u548c room_panel \u4e24\u4e2a\u5b50\u7c7b\u578b
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_device_cards.py", line 344, in test_nested_structure
+    self.assertIn('room_panel', hvac['sub_types'])
+AssertionError: 'room_panel' not found in {'main_thermostat': {'display': '\u4e3b\u6e29\u63a7\u5668', 'params': [{'param_name': 'living_room_temperature', 'display_name': '\u5ba2\u5385\u5b9e\u9645\u6e29\u5ea6', 'value': 245, 'collected_at': '2026-06-19 15:51:13', 'is_stale': False}, {'param_name': 'living_room_humidity', 'display_name': '\u5ba2\u5385\u76f8\u5bf9\u6e7f\u5ea6', 'value': 60, 'collected_at': '2026-06-19 15:51:13', 'is_stale': False}]}}
+
+======================================================================
+FAIL: test_page_size_2000_returns_all_records_in_one_page (api.tests.test_device_management.TC_I_005_DeviceListAPIPagination.test_page_size_2000_returns_all_records_in_one_page)
+page_size=2000\uff08\u6279\u91cf\u540c\u6b65\u573a\u666f\uff09\uff1a\u53ef\u4e00\u6b21\u53d6\u5b8c\u5168\u90e825\u6761\u8bb0\u5f55
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_device_management.py", line 714, in test_page_size_2000_returns_all_records_in_one_page
+    self.assertEqual(data["page_size"], 2000)
+AssertionError: 50 != 2000
+
+======================================================================
+FAIL: test_page_size_large_value_capped_at_2000 (api.tests.test_device_management.TC_I_005_DeviceListAPIPagination.test_page_size_large_value_capped_at_2000)
+page_size=9999\uff1a\u88ab cap \u5230 2000\uff08BUG-FIX: \u539f\u4e0a\u9650\u4e3a50\uff0c\u73b0\u4e3a2000\uff09
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_device_management.py", line 701, in test_page_size_large_value_capped_at_2000
+    self.assertEqual(data["page_size"], 2000)
+AssertionError: 50 != 2000
+
+======================================================================
+FAIL: test_creates_next_day_record (api.tests.test_main.DailyUsageCalculatorTest.test_creates_next_day_record)
+\u8ba1\u7b97\u65f6\u5e94\u540c\u6b65\u521b\u5efa\u6b21\u65e5\u7684 initial_energy \u9884\u7559\u8bb0\u5f55
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\yanggyan\MyProject\FreeArk\FreeArkWeb\backend\freearkweb\api\tests\test_main.py", line 407, in test_creates_next_day_record
+    self.assertIsNotNone(next_day_record)
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 1702 tests in 9.325s
+
+FAILED (failures=4, errors=2, skipped=14)
+Destroying test database for alias 'default'...

@@ -1,0 +1,226 @@
+{
+  "captured_at": "2026-06-26T04:22:57.213Z",
+  "broker": "wss://www.ttqingjiao.site:8084/mqtt",
+  "mac_filter": "c5d29c52a237ade5",
+  "header_name_counts": {
+    "DeviceStatusUpdate": 54
+  },
+  "topic_counts": {
+    "/screen/upload/screen/to/cloud/c5d29c52a237ade5": 54
+  },
+  "device_write_samples": [],
+  "device_attr_mapping": [
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22155,
+      "productCode": 130004,
+      "attrs": {
+        "newwind_inlet_temp": "24.3",
+        "pau_in_temp": "100.4",
+        "pau_out_temp": "9.5",
+        "pau_through_temp": "13.4",
+        "humi_upper_limit": "55",
+        "humi_lower_limit": "40",
+        "out_temp_set": "16.0",
+        "one_water_valve_opening": "23.0",
+        "fan_speed": "0",
+        "humidification_enable": "off",
+        "empty_screen_timing": "timing",
+        "filter_max_life": "1000",
+        "wind_speed": "normal",
+        "error_193": "0",
+        "error_194": "2",
+        "filter_working_time": "580",
+        "comm_fault_timeout": "normal",
+        "": ""
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22154,
+      "productCode": 270001,
+      "attrs": {
+        "primary_valve_opening": "0.3",
+        "2nd_outwater_temp_detect": "24.0",
+        "system_switch": "off",
+        "mode": "dehumidification",
+        "energy_supply_mode": "cold",
+        "energy_saving_sign": "off",
+        "2nd_inwater_temp_detect": "15.9",
+        "error_140": "0",
+        "plc_ip_1": "49320",
+        "plc_ip_2": "795",
+        "plc_gateway_ip_1": "0",
+        "plc_gateway_ip_2": "0",
+        "plc_subnet_mask_1": "65535",
+        "plc_subnet_mask_2": "65280",
+        "plc_ip_sure": "off",
+        "error_82": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22157,
+      "productCode": 100007,
+      "attrs": {
+        "co2": "425",
+        "pm25": "0",
+        "tvoc": "0.000",
+        "hcho": "0.000",
+        "error_265": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22552,
+      "productCode": 120003,
+      "attrs": {
+        "switch": "off",
+        "temp": "24.0",
+        "NTC_temp": "23.5",
+        "humidity": "57.0",
+        "temp_set": "20.0",
+        "condensation_alarm": "0",
+        "dew_point_temp": "15.0",
+        "error_703": "0",
+        "error_704": "0",
+        "error_705": "0",
+        "error_709": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22153,
+      "productCode": 10016,
+      "attrs": {
+        "mode": "dehumidification",
+        "wind_speed": "normal",
+        "system_switch": "off",
+        "humidification_enable": "off",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22553,
+      "productCode": 120003,
+      "attrs": {
+        "switch": "off",
+        "temp": "24.0",
+        "NTC_temp": "23.5",
+        "humidity": "55.0",
+        "temp_set": "20.0",
+        "condensation_alarm": "0",
+        "dew_point_temp": "14.5",
+        "error_733": "0",
+        "error_734": "0",
+        "error_735": "0",
+        "error_739": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22554,
+      "productCode": 120003,
+      "attrs": {
+        "switch": "off",
+        "temp": "24.0",
+        "NTC_temp": "23.5",
+        "humidity": "56.0",
+        "temp_set": "20.0",
+        "condensation_alarm": "0",
+        "dew_point_temp": "15.0",
+        "error_763": "0",
+        "error_764": "0",
+        "error_765": "0",
+        "error_769": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22555,
+      "productCode": 120003,
+      "attrs": {
+        "switch": "off",
+        "temp": "24.5",
+        "NTC_temp": "24.5",
+        "humidity": "56.0",
+        "temp_set": "21.0",
+        "condensation_alarm": "0",
+        "dew_point_temp": "15.5",
+        "error_793": "0",
+        "error_794": "0",
+        "error_795": "0",
+        "error_799": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22156,
+      "productCode": 250001,
+      "attrs": {
+        "total_hot_quantity": "15329",
+        "total_cold_quantity": "17624",
+        "work_duration": "83460840",
+        "error_496": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    },
+    {
+      "screenMac": "c5d29c52a237ade5",
+      "deviceSn": 22158,
+      "productCode": 260001,
+      "attrs": {
+        "system_switch": "off",
+        "switch": "off",
+        "temp": "24.0",
+        "NTC_temp": "24.0",
+        "humidity": "56.0",
+        "temp_set": "25.0",
+        "condensation_alarm": "0",
+        "dew_point_temp": "15.5",
+        "error_673": "0",
+        "error_674": "0",
+        "error_675": "0",
+        "error_679": "0",
+        "comm_fault_timeout": "normal"
+      },
+      "seen_in": [
+        "DeviceStatusUpdate"
+      ]
+    }
+  ]
+}

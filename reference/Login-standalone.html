@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>自由方舟能耗采集平台 · 登录</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap">
+<style>
+  :root {
+    --bg-0: #050a14; --bg-1: #0a1424; --bg-2: #0f1d35;
+    --ink-0: #f0f6ff; --ink-1: #c7d4ea; --ink-2: #7a8bab; --ink-3: #4a5a78;
+    --line: rgba(120,160,220,0.12); --line-2: rgba(120,160,220,0.22);
+    --acc: #3b82f6; --acc-2: #22d3ee; --acc-3: #60a5fa;
+    --cool: #3b82f6; --heat: #f0506e; --ok: #34d399;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg-0); color: var(--ink-0);
+    font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; overflow: hidden; min-height: 100vh;
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .stage {
+    position: relative; width: 100vw; height: 100vh;
+    background:
+      radial-gradient(1200px 800px at 18% 30%, rgba(56,189,248,0.10), transparent 60%),
+      radial-gradient(900px 700px at 85% 80%, rgba(59,130,246,0.08), transparent 60%),
+      radial-gradient(700px 500px at 60% 10%, rgba(34,211,238,0.05), transparent 60%),
+      linear-gradient(180deg, #050a14 0%, #060d1c 60%, #050a14 100%);
+    overflow: hidden;
+  }
+  .grid-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(120,160,220,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,160,220,0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(1200px 800px at 30% 50%, #000 0%, transparent 75%);
+    mask-image: radial-gradient(1200px 800px at 30% 50%, #000 0%, transparent 75%);
+  }
+
+  .chrome-top, .chrome-bottom {
+    position: absolute; left: 0; right: 0; display: flex; align-items: center;
+    padding: 22px 40px; font-size: 12px; color: var(--ink-2); z-index: 5; letter-spacing: 0.04em;
+  }
+  .chrome-top { top: 0; justify-content: space-between; }
+  .chrome-bottom { bottom: 0; justify-content: space-between; border-top: 1px solid var(--line); }
+
+  .split { position: relative; display: grid; grid-template-columns: 1.05fr 1fr; width: 100%; height: 100%; padding-top: 60px; padding-bottom: 52px; }
+  .pane-left { position: relative; padding: 28px 56px 24px; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; overflow: hidden; }
+  .pane-right { position: relative; padding: 28px 56px 24px 0; display: flex; align-items: center; justify-content: flex-start; min-height: 0; }
+
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo { width: 40px; height: 40px; }
+  .logo svg { width: 100%; height: 100%; display: block; }
+  .brand-name { display: flex; flex-direction: column; line-height: 1.1; }
+  .brand-cn { font-weight: 600; font-size: 16px; letter-spacing: 0.18em; color: var(--ink-0); }
+  .brand-en { font-family: "Space Grotesk", sans-serif; font-weight: 500; font-size: 11px; letter-spacing: 0.32em; color: var(--ink-2); margin-top: 4px; text-transform: uppercase; }
+
+  .meta-row { display: flex; align-items: center; gap: 22px; }
+  .meta-row .item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-2); letter-spacing: 0.1em; font-family: "JetBrains Mono", monospace; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 8px var(--acc); }
+
+  .hero { max-width: 560px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: 0.3em; color: var(--acc); text-transform: uppercase; padding: 6px 10px; border: 1px solid rgba(59,130,246,0.3); border-radius: 999px; background: rgba(59,130,246,0.06); }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 12px var(--acc); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+  .h1 { font-weight: 600; font-size: clamp(30px, 3vw, 42px); line-height: 1.1; letter-spacing: -0.01em; margin: 16px 0 12px; text-wrap: balance; }
+  .h1 .accent { background: linear-gradient(90deg, var(--acc) 0%, var(--acc-2) 70%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--ink-2); font-size: 13px; line-height: 1.7; max-width: 460px; }
+
+  .viz { position: relative; flex: 1; margin: 6px 0; display: grid; place-items: center; min-height: 0; }
+  .rings { position: relative; width: min(320px, 26vw); aspect-ratio: 1/1; }
+  .rings svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ring-track { fill: none; stroke: rgba(120,160,220,0.10); stroke-width: 1; }
+  .tick { stroke: rgba(120,160,220,0.18); stroke-width: 1; }
+  .tick.major { stroke: rgba(120,160,220,0.35); }
+  .label-faint { fill: var(--ink-3); font-family: "JetBrains Mono", monospace; font-size: 9px; letter-spacing: 0.06em; }
+  .label-mono { font-family: "JetBrains Mono", monospace; }
+
+  .center-stat { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+  .center-stat .kw { font-family: "Space Grotesk", sans-serif; font-weight: 500; font-size: 44px; letter-spacing: -0.02em; color: var(--ink-0); line-height: 1; }
+  .center-stat .kw .wan { font-size: 18px; color: var(--ink-2); margin-left: 4px; }
+  .center-stat .unit { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--ink-2); letter-spacing: 0.2em; margin-top: 6px; }
+  .center-stat .lbl { font-size: 10px; color: var(--ink-3); letter-spacing: 0.3em; margin-top: 10px; }
+
+  .floater { position: absolute; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: rgba(10,20,36,0.6); backdrop-filter: blur(8px); font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--ink-1); letter-spacing: 0.06em; display: flex; align-items: center; gap: 8px; }
+  .floater .lab { color: var(--ink-3); }
+  .floater .val { color: var(--acc); }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .metric { border: 1px solid var(--line); background: linear-gradient(180deg, rgba(15,29,53,0.45), rgba(10,20,36,0.3)); border-radius: 10px; padding: 12px 14px; position: relative; overflow: hidden; }
+  .metric::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--c, var(--acc)); box-shadow: 0 0 12px var(--c, var(--acc)); }
+  .metric .name { font-size: 11px; color: var(--ink-2); letter-spacing: 0.18em; }
+  .metric .val { font-family: "Space Grotesk", sans-serif; font-weight: 500; font-size: 20px; color: var(--ink-0); margin-top: 4px; letter-spacing: -0.01em; }
+  .metric .val .u { font-size: 11px; color: var(--ink-2); margin-left: 4px; font-family: "JetBrains Mono", monospace; }
+  .metric .delta { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--ink-2); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .metric .delta.up { color: var(--ok); }
+  .metric .delta.dn { color: var(--heat); }
+  .sparkline { width: 100%; height: 22px; margin-top: 6px; }
+
+  .card { width: 420px; max-width: 100%; background: linear-gradient(180deg, rgba(20,34,58,0.78), rgba(10,20,36,0.72)); border: 1px solid var(--line-2); border-radius: 16px; padding: 36px 36px 30px; backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); box-shadow: 0 30px 80px -30px rgba(0,0,0,0.6), 0 0 0 1px rgba(120,160,220,0.04) inset, 0 1px 0 rgba(255,255,255,0.04) inset; position: relative; }
+  .card::before { content: ""; position: absolute; inset: -1px; border-radius: 16px; padding: 1px; background: linear-gradient(140deg, rgba(59,130,246,0.45) 0%, rgba(34,211,238,0) 35%, rgba(96,165,250,0.25) 100%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+  .card-head { margin-bottom: 28px; }
+  .card-title { font-size: 20px; font-weight: 600; letter-spacing: 0.04em; }
+  .card-sub { font-size: 12px; color: var(--ink-3); margin-top: 4px; letter-spacing: 0.16em; font-family: "JetBrains Mono", monospace; }
+
+  .field { margin-bottom: 18px; }
+  .field label { display: block; font-size: 11px; color: var(--ink-2); letter-spacing: 0.18em; margin-bottom: 10px; text-transform: uppercase; }
+  .input-wrap { position: relative; display: flex; align-items: center; background: rgba(5,10,20,0.5); border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; height: 48px; transition: border-color 0.2s, box-shadow 0.2s; }
+  .input-wrap:focus-within { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 0 4px rgba(59,130,246,0.1); }
+  .input-wrap .icon { color: var(--ink-3); margin-right: 10px; display: grid; place-items: center; }
+  .input-wrap input { background: transparent; border: 0; outline: 0; flex: 1; color: var(--ink-0); font-size: 14px; font-family: inherit; letter-spacing: 0.02em; }
+  .input-wrap input::placeholder { color: var(--ink-3); }
+  .input-wrap .toggle { background: transparent; border: 0; color: var(--ink-3); cursor: pointer; padding: 4px; display: grid; place-items: center; }
+  .input-wrap .toggle:hover { color: var(--ink-1); }
+
+  .row-between { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 22px; }
+  .check { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 12px; cursor: pointer; user-select: none; }
+  .check input { appearance: none; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line-2); background: rgba(5,10,20,0.5); display: grid; place-items: center; cursor: pointer; }
+  .check input:checked { background: var(--acc); border-color: var(--acc); }
+  .check input:checked::after { content: ""; width: 8px; height: 4px; border-left: 2px solid #06121f; border-bottom: 2px solid #06121f; transform: rotate(-45deg) translate(0px, -1px); }
+  .link { color: var(--acc); font-size: 12px; text-decoration: none; letter-spacing: 0.04em; }
+  .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  .btn-primary { width: 100%; height: 48px; border-radius: 10px; border: 0; cursor: pointer; background: linear-gradient(90deg, var(--acc) 0%, var(--acc-2) 100%); color: #06182a; font-weight: 600; font-size: 14px; letter-spacing: 0.2em; font-family: "Noto Sans SC", sans-serif; position: relative; overflow: hidden; transition: transform 0.15s, box-shadow 0.2s; box-shadow: 0 10px 30px -10px rgba(59,130,246,0.55), 0 0 0 1px rgba(59,130,246,0.4) inset; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 16px 36px -12px rgba(59,130,246,0.7), 0 0 0 1px rgba(59,130,246,0.5) inset; }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary .arrow { margin-left: 10px; display: inline-flex; transition: transform 0.2s; }
+  .btn-primary:hover .arrow { transform: translateX(4px); }
+
+  .card-foot { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--ink-3); letter-spacing: 0.08em; white-space: nowrap; }
+
+  .side-ticks { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+  .side-ticks .t { width: 8px; height: 1px; background: rgba(120,160,220,0.25); }
+  .side-ticks .t.long { width: 14px; background: rgba(120,160,220,0.5); }
+  .corner { position: absolute; width: 22px; height: 22px; border: 1px solid rgba(59,130,246,0.5); pointer-events: none; }
+  .corner.tl { top: 80px; left: 36px; border-right: 0; border-bottom: 0; }
+  .corner.tr { top: 80px; right: 36px; border-left: 0; border-bottom: 0; }
+  .corner.bl { bottom: 72px; left: 36px; border-right: 0; border-top: 0; }
+  .corner.br { bottom: 72px; right: 36px; border-left: 0; border-top: 0; }
+
+  @media (max-width: 1100px) {
+    .split { grid-template-columns: 1fr; }
+    .pane-left { padding: 40px 32px 12px; }
+    .pane-right { padding: 0 32px 40px; justify-content: center; }
+    .viz { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="grid-bg"></div>
+
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div class="side-ticks" id="sideTicks"></div>
+
+  <!-- TOP CHROME -->
+  <div class="chrome-top">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 48 48" fill="none">
+          <defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+          <path d="M24 3 L42 13.5 V34.5 L24 45 L6 34.5 V13.5 Z" stroke="url(#lg1)" stroke-width="1.2" fill="rgba(59,130,246,0.05)"/>
+          <path d="M14 30 L24 18 L34 30" stroke="url(#lg1)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="24" cy="24" r="2" fill="#3b82f6"/>
+          <path d="M14 33 H34" stroke="#3b82f6" stroke-width="1" opacity="0.55"/>
+        </svg>
+      </div>
+      <div class="brand-name">
+        <div class="brand-cn">自由方舟 · FREEARK</div>
+        <div class="brand-en">Energy Collection Platform · v4.2</div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="item"><span class="status-dot"></span>SYSTEM ONLINE</div>
+      <div class="item">总设备数 / DEVICES <span style="color:var(--ink-0)">634</span></div>
+      <div class="item" id="clockDate">2026.05.31 · 周日</div>
+      <div class="item" id="clockTime" style="color:var(--acc)">00:00:00</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="split">
+    <!-- LEFT -->
+    <div class="pane-left">
+      <div class="hero">
+        <div class="eyebrow"><span class="dot"></span>实时能耗采集 · 设备在线监控</div>
+        <h1 class="h1">制冷 · 制热 · 能效<br/><span class="accent">让每一度电都被看见</span></h1>
+        <p class="sub">自由方舟能耗采集平台接入 634 台终端设备，覆盖 PLC、温控面板、空气品质传感器、新风与水力模块，通过分钟级能耗采集与故障预警，为住宅与园区提供精细化能效管理与碳核算能力。</p>
+      </div>
+
+      <div class="viz">
+        <div class="rings">
+          <svg viewBox="0 0 400 400">
+            <defs>
+              <radialGradient id="bgGlow" cx="0.5" cy="0.5" r="0.5">
+                <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.12"/>
+                <stop offset="55%" stop-color="#22d3ee" stop-opacity="0.03"/>
+                <stop offset="100%" stop-color="#0a1424" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="200" cy="200" r="188" fill="url(#bgGlow)"/>
+            <g id="tickRing"></g>
+            <text x="200" y="20" class="label-faint" text-anchor="middle">能耗结构 · ENERGY MIX</text>
+            <text x="200" y="392" class="label-faint" text-anchor="middle" id="plcLabel">PLC 在线率 · 89%</text>
+            <!-- main split donut -->
+            <circle cx="200" cy="200" r="150" class="ring-track" stroke-width="14"/>
+            <circle id="coolArc" cx="200" cy="200" r="150" fill="none" stroke-linecap="round" stroke-width="14" stroke="#3b82f6" transform="rotate(-90 200 200)" style="filter:drop-shadow(0 0 8px rgba(59,130,246,0.55))"/>
+            <circle id="heatArc" cx="200" cy="200" r="150" fill="none" stroke-linecap="round" stroke-width="14" stroke="#f0506e" transform="rotate(-90 200 200)" style="filter:drop-shadow(0 0 8px rgba(240,80,110,0.5))"/>
+            <!-- inner device ring -->
+            <circle cx="200" cy="200" r="110" class="ring-track"/>
+            <circle id="devArc" cx="200" cy="200" r="110" fill="none" stroke-linecap="round" stroke-width="2" stroke="#3b82f6" transform="rotate(-90 200 200)" style="filter:drop-shadow(0 0 6px #3b82f6)"/>
+            <circle id="devDot" r="3.5" fill="#3b82f6" style="filter:drop-shadow(0 0 6px #3b82f6)"/>
+            <text x="104" y="108" class="label-mono" fill="#3b82f6" font-size="12" text-anchor="middle">制冷</text>
+            <text x="296" y="300" class="label-mono" fill="#f0506e" font-size="12" text-anchor="middle">制热</text>
+            <line x1="200" y1="122" x2="200" y2="278" stroke="rgba(120,160,220,0.10)" stroke-width="1" stroke-dasharray="2 4"/>
+            <line x1="122" y1="200" x2="278" y2="200" stroke="rgba(120,160,220,0.10)" stroke-width="1" stroke-dasharray="2 4"/>
+          </svg>
+          <div class="center-stat">
+            <div class="kw mono">118.6<span class="wan">万</span></div>
+            <div class="unit">KWH · 累计总电量</div>
+            <div class="lbl">TOTAL ENERGY</div>
+          </div>
+        </div>
+
+        <div class="floater" style="top:6%;right:7%"><span class="lab">温控面板</span><span class="val">2954</span></div>
+        <div class="floater" style="bottom:16%;left:4%"><span class="lab">新风模块</span><span class="val">634</span></div>
+        <div class="floater" style="bottom:3%;right:12%"><span class="lab">开机率</span><span class="val" id="runRate">62.6%</span></div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric" style="--c:#3b82f6">
+          <div class="name">今日用电量 · TODAY</div>
+          <div class="val mono"><span id="todayKwh">15,375</span><span class="u">kWh</span></div>
+          <div class="delta up">本月累计 206,487 kWh</div>
+          <svg class="sparkline" data-color="#3b82f6" data-seed="1.1" viewBox="0 0 100 22" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="metric" style="--c:#34d399">
+          <div class="name">PLC 在线 · ONLINE</div>
+          <div class="val mono">565<span class="u">/ 634</span></div>
+          <div class="delta up">▲ 在线率 <span id="plcRate">89.12</span>%</div>
+          <svg class="sparkline" data-color="#34d399" data-seed="2.7" viewBox="0 0 100 22" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="metric" style="--c:#f0506e">
+          <div class="name">当前故障 · FAULTS</div>
+          <div class="val mono"><span id="faults">481</span><span class="u">起</span></div>
+          <div class="delta dn">▼ 影响 75 户 · 待处理</div>
+          <svg class="sparkline" data-color="#f0506e" data-seed="3.9" viewBox="0 0 100 22" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="pane-right">
+      <form class="card" id="loginForm" autocomplete="on">
+        <div class="card-head">
+          <div class="card-title">欢迎回来</div>
+          <div class="card-sub">SIGN IN · FREEARK CONSOLE</div>
+        </div>
+
+        <div class="field">
+          <label for="account">工号 / 邮箱</label>
+          <div class="input-wrap">
+            <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg></span>
+            <input id="account" name="username" type="text" placeholder="请输入账户" value="" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="password">登录密码</label>
+          <div class="input-wrap">
+            <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+            <input id="password" name="password" type="password" placeholder="请输入密码" value="" />
+            <button type="button" class="toggle" id="pwToggle" aria-label="显示密码">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="row-between">
+          <label class="check"><input type="checkbox" id="remember" checked />7 天内保持登录</label>
+          <a class="link" href="#">忘记密码？</a>
+        </div>
+
+        <button class="btn-primary" type="submit">登 录 控 制 台 <span class="arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></button>
+
+        <div class="card-foot">
+          <span>© 2026 FREEARK</span>
+          <span class="mono">SOC2 · ISO 27001 · 等保三级</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BOTTOM CHROME -->
+  <div class="chrome-bottom">
+    <div class="meta-row">
+      <div class="item"><span class="status-dot"></span>freeark-backend · 运行中</div>
+      <div class="item">采集频率 <span style="color:var(--ink-0)">60s</span></div>
+      <div class="item" style="white-space:nowrap">制冷 <span style="color:#3b82f6">210,611</span> · 制热 <span style="color:#f0506e">975,456</span> kWh</div>
+    </div>
+    <div class="meta-row">
+      <div class="item">服务条款</div>
+      <div class="item">隐私政策</div>
+      <div class="item">沪 ICP 备 2025-08812 号</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---- side ticks ----
+  var st = document.getElementById('sideTicks');
+  for (var i = 0; i < 18; i++) {
+    var d = document.createElement('div');
+    d.className = 't' + (i % 4 === 0 ? ' long' : '');
+    st.appendChild(d);
+  }
+
+  // ---- tick ring ----
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var tr = document.getElementById('tickRing');
+  for (var k = 0; k < 60; k++) {
+    var a = (k / 60) * Math.PI * 2 - Math.PI / 2;
+    var inner = k % 5 === 0 ? 182 : 186, outer = 192;
+    var ln = document.createElementNS(SVGNS, 'line');
+    ln.setAttribute('x1', 200 + Math.cos(a) * inner);
+    ln.setAttribute('y1', 200 + Math.sin(a) * inner);
+    ln.setAttribute('x2', 200 + Math.cos(a) * outer);
+    ln.setAttribute('y2', 200 + Math.sin(a) * outer);
+    ln.setAttribute('class', 'tick' + (k % 5 === 0 ? ' major' : ''));
+    tr.appendChild(ln);
+  }
+
+  // ---- sparklines ----
+  function buildSpark(svg) {
+    var color = svg.getAttribute('data-color');
+    var seed = parseFloat(svg.getAttribute('data-seed'));
+    var n = 32, w = 100, h = 22, pts = [];
+    for (var i = 0; i < n; i++) {
+      var t = i / (n - 1);
+      var v = 0.5 + 0.3 * Math.sin(t * 8 + seed) + 0.18 * Math.sin(t * 18 + seed * 1.4) + 0.05 * Math.cos(t * 30 + seed);
+      v = Math.max(0.05, Math.min(0.95, v));
+      pts.push([t * w, (1 - v) * h]);
+    }
+    var d = pts.map(function (p, i) { return (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+    var path1 = document.createElementNS(SVGNS, 'path');
+    path1.setAttribute('d', d); path1.setAttribute('stroke', color); path1.setAttribute('stroke-width', '1.2');
+    path1.setAttribute('fill', 'none'); path1.setAttribute('stroke-linecap', 'round'); path1.setAttribute('stroke-linejoin', 'round'); path1.setAttribute('opacity', '0.9');
+    var path2 = document.createElementNS(SVGNS, 'path');
+    path2.setAttribute('d', d + ' L100,' + h + ' L0,' + h + ' Z'); path2.setAttribute('fill', color); path2.setAttribute('opacity', '0.07');
+    var dot = document.createElementNS(SVGNS, 'circle');
+    dot.setAttribute('cx', pts[pts.length - 1][0]); dot.setAttribute('cy', pts[pts.length - 1][1]); dot.setAttribute('r', '1.6'); dot.setAttribute('fill', color);
+    svg.appendChild(path2); svg.appendChild(path1); svg.appendChild(dot);
+  }
+  document.querySelectorAll('.sparkline').forEach(buildSpark);
+
+  // ---- donut: cool/heat split + device ring ----
+  var R = 150, C = 2 * Math.PI * R, GAP = 0.012 * C;
+  var Rd = 110, Cd = 2 * Math.PI * Rd;
+  var coolKwh = 210611, heatKwh = 975456, total = coolKwh + heatKwh;
+  var coolFrac = coolKwh / total;
+  var coolLen = Math.max(0, coolFrac * C - GAP), heatLen = Math.max(0, (1 - coolFrac) * C - GAP);
+  var coolArc = document.getElementById('coolArc'), heatArc = document.getElementById('heatArc');
+  coolArc.setAttribute('stroke-dasharray', coolLen + ' ' + (C - coolLen));
+  heatArc.setAttribute('stroke-dasharray', heatLen + ' ' + (C - heatLen));
+  heatArc.setAttribute('stroke-dashoffset', String(-(coolFrac * C)));
+  var devArc = document.getElementById('devArc'), devDot = document.getElementById('devDot');
+  function setDevice(pct) {
+    pct = Math.max(0.04, Math.min(0.96, pct));
+    var len = pct * Cd;
+    devArc.setAttribute('stroke-dasharray', len + ' ' + (Cd - len));
+    var a = pct * Math.PI * 2 - Math.PI / 2;
+    devDot.setAttribute('cx', 200 + Math.cos(a) * Rd);
+    devDot.setAttribute('cy', 200 + Math.sin(a) * Rd);
+  }
+
+  // ---- live data (pure visual simulation; replace with real values) ----
+  var tick = 0;
+  function refresh() {
+    var t = tick;
+    var today = 15375 + 90 * Math.sin(t * 0.27 + 2.1);
+    var plc = 0.8912 + 0.002 * Math.sin(t * 0.2);
+    var faults = 481 + Math.round(2 * Math.sin(t * 0.3));
+    var run = 62.6 + 0.6 * Math.sin(t * 0.22 + 1.1);
+    document.getElementById('todayKwh').textContent = Math.round(today).toLocaleString();
+    document.getElementById('plcRate').textContent = (plc * 100).toFixed(2);
+    document.getElementById('plcLabel').textContent = 'PLC 在线率 · ' + (plc * 100).toFixed(0) + '%';
+    document.getElementById('faults').textContent = faults;
+    document.getElementById('runRate').textContent = run.toFixed(1) + '%';
+    setDevice(plc);
+    tick++;
+  }
+  refresh();
+  setInterval(refresh, 1600);
+
+  // ---- clock ----
+  var WK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function clock() {
+    var d = new Date();
+    document.getElementById('clockDate').textContent = d.getFullYear() + '.' + pad(d.getMonth() + 1) + '.' + pad(d.getDate()) + ' · ' + WK[d.getDay()];
+    document.getElementById('clockTime').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  clock();
+  setInterval(clock, 1000);
+
+  // ---- password toggle ----
+  var pw = document.getElementById('password'), tg = document.getElementById('pwToggle');
+  var eye = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var eyeOff = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 10 6 10 6a18 18 0 0 1-3.3 3.9"/><path d="M6 8.5A18 18 0 0 0 2 12s4 6 10 6a10 10 0 0 0 4.2-.9"/><path d="M9.5 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-1.1"/></svg>';
+  tg.addEventListener('click', function () {
+    var show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    tg.innerHTML = show ? eyeOff : eye;
+  });
+
+  // ---- submit ----
+  document.getElementById('loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var username = document.getElementById('account').value.trim();
+    var password = document.getElementById('password').value;
+    var remember = document.getElementById('remember').checked;
+    // TODO: 在此对接真实登录接口，例如：
+    // fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'},
+    //   body: JSON.stringify({ username, password, remember }) })
+    //   .then(r => r.json()).then(res => { /* 跳转/存 token */ });
+    console.log('login submit →', { username: username, password: password, remember: remember });
+    alert('已捕获登录信息（演示）：\n账户：' + (username || '(空)') + '\n请在 loginForm 的 submit 处对接真实接口。');
+  });
+})();
+</script>
+
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0a1424"/>
+  <path d="M50 24 L70 35 V57 L50 68 L30 57 V35 Z" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+  <path d="M40 52 L50 40 L60 52" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="50" cy="48" r="2.5" fill="#3b82f6"/>
+</svg>
+</template>
+</body>
+</html>

@@ -78,7 +78,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { marked } from 'marked'
+import { renderMarkdown } from '@/utils/miniMarkdown'
 import { useAuthStore } from '@/store/auth'
 import { api } from '@/utils/api'
 
@@ -105,7 +105,7 @@ const resolving = ref(false)
 const recommendedHtml = computed(() => {
   const md = detail.value && detail.value.recommended_action
   if (!md) return '<p style="color:#999">—</p>'
-  try { return marked.parse(md, { breaks: true, gfm: true }) } catch { return md }
+  try { return renderMarkdown(md) } catch { return md }
 })
 
 function fmt(s) { return s ? String(s).replace('T', ' ').slice(0, 16) : '—' }
