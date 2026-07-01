@@ -3,9 +3,9 @@
     {
       "path": "pages/login/index",
       "style": {
-        "navigationBarTitleText": "方舟座舱",
-        "navigationBarBackgroundColor": "#060912",
-        "navigationBarTextStyle": "white"
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f",
+        "disableScroll": true
       }
     },
     {

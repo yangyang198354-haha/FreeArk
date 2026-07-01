@@ -17,17 +17,20 @@
 <template>
   <view class="login-page">
 
-    <!-- ===== 装饰层（全部 pointer-events:none，由 fxOn 总开关控制）===== -->
+    <!-- ===== 背景装饰（与个人中心/AI问答一致的赛博朋克基底）===== -->
+    <view class="bg-base"></view>
+    <view class="bg-grid"></view>
+    <view class="bg-blob"></view>
+
+    <!-- ===== 顶部特效层（扫描线/CRT/暗角/HUD角标，由 fxOn 控制）===== -->
     <template v-if="fxOn">
-      <view class="bg-base"></view>
-      <view class="bg-grid"></view>
       <view class="blob blob-1"></view>
       <view class="blob blob-2"></view>
       <view class="crt-lines"></view>
       <view class="scanline"></view>
       <view class="vignette"></view>
 
-      <!-- ===== HUD 角标（装饰）===== -->
+      <!-- HUD 角标（装饰）-->
       <view class="hud hud-tl">
         <view>SYS://ARK.OS</view>
         <view>v2.6.0 // SECURE</view>
@@ -39,6 +42,9 @@
       <view class="hud hud-bl"><view class="hud-dot"></view><text>LINK ONLINE</text></view>
       <view class="hud hud-br hud-purple">ENC // AES-256</view>
     </template>
+
+    <!-- 状态栏占位（custom 导航，与个人中心/AI问答一致）-->
+    <view :style="{ height: statusBarHeight + 'px' }" class="status-spacer"></view>
 
     <!-- ===== 前景内容列 ===== -->
     <view class="content">
@@ -158,19 +164,14 @@ const loading = ref(false)
 const wxLoading = ref(false)
 const showPwd = ref(false)
 const focusField = ref('')
-// 赛博朋克装饰/动画总开关（背景网格·扫描线·光晕·HUD·logo 动效·故障标题·按钮流光）。
-// 设计稿将这些定义为可独立开关的特效；此处合并为一个常量，需要时可关闭以排查或降耗。
 const fxOn = ref(true)
 
-// Auth guard: if already logged in skip login page
+const sysInfo = uni.getSystemInfoSync()
+const statusBarHeight = sysInfo.statusBarHeight || 20
+
 if (authStore.isLoggedIn) {
   uni.reLaunch({ url: '/pages/home/index' })
 }
-
-// 深空底导航栏（白字白胶囊），与赛博朋克底色融为一体
-onLoad(() => {
-  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#060912' }) } catch (e) { /* ignore */ }
-})
 
 async function handleLogin() {
   if (!username.value.trim() || !password.value) {
@@ -248,43 +249,47 @@ function goRegister() {
 </script>
 
 <style scoped>
-/* ====== 设计 token：px→rpx 按 2× ====== */
 .login-page {
   position: relative;
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40rpx 60rpx;
   overflow: hidden;
-  background: #060912;  /* 兜底深色，装饰层在其上叠加径向辉光 */
+  background: #05070f;
   font-family: 'Noto Sans SC', -apple-system, sans-serif;
 }
 
-/* ── 背景基底：左上紫 + 右上青 + 竖向深色 ─────────────────────────────── */
+/* ── 背景基底：与个人中心/AI问答/参数设置页一致的赛博朋克色值 ───────── */
+.bg-base, .bg-grid, .bg-blob { position: absolute; pointer-events: none; }
 .bg-base {
-  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  inset: 0; z-index: 0;
   background:
-    radial-gradient(90% 60% at 12% 0%, rgba(101,55,180,0.45) 0%, transparent 55%),
-    radial-gradient(80% 55% at 100% 8%, rgba(20,180,170,0.40) 0%, transparent 55%),
-    linear-gradient(180deg, #0b0a1a 0%, #07101c 60%, #050811 100%);
+    radial-gradient(90% 45% at 18% 0%, rgba(101,55,180,0.32), transparent 55%),
+    radial-gradient(80% 40% at 100% 4%, rgba(20,180,170,0.22), transparent 55%),
+    linear-gradient(180deg, #0b0a1a, #07101c 60%, #050811);
+}
+.bg-grid {
+  inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(56,230,224,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,230,224,0.06) 1px, transparent 1px);
+  background-size: 80rpx 80rpx;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 55%);
+  mask-image: linear-gradient(180deg, #000, transparent 55%);
+  animation: ark-grid 3.6s linear infinite;
+}
+.bg-blob {
+  width: 400rpx; height: 400rpx; left: -120rpx; top: 180rpx; border-radius: 50%; z-index: 0;
+  background: radial-gradient(circle, rgba(139,92,246,0.22), transparent 70%);
+  filter: blur(8px);
+  animation: ark-float 16s ease-in-out infinite;
 }
 
-/* ── 霓虹网格：40px→80rpx，顶部 22% 渐显，竖向滚动 ───────────────────── */
-.bg-grid {
-  position: absolute; left: 0; right: 0; top: -80rpx; height: 1760rpx; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(56,230,224,0.10) 1rpx, transparent 1rpx),
-    linear-gradient(90deg, rgba(56,230,224,0.10) 1rpx, transparent 1rpx);
-  background-size: 80rpx 80rpx;
-  /* 用 background-position 驱动滚动（非 transform）。不用 mask-image：真机 webview 对
-     full-screen mask 的合成可能整页翻白，改用 opacity 渐淡。 */
-  animation: ark-grid 3.6s linear infinite;
-  opacity: 0.7;
-}
+.status-spacer { position: relative; z-index: 5; flex: 0 0 auto; }
 
 /* ── 光晕团 ─────────────────────────────────────────────────────────── */
 .blob { position: absolute; border-radius: 50%; filter: blur(16rpx); z-index: 0; pointer-events: none; }
@@ -323,8 +328,8 @@ function goRegister() {
   font-size: 18rpx; letter-spacing: 2rpx; line-height: 1.5;
   color: rgba(56,230,224,0.55); white-space: pre-line;
 }
-.hud-tl { left: 32rpx; top: 24rpx; }
-.hud-tr { right: 32rpx; top: 24rpx; text-align: right; }
+.hud-tl { left: 32rpx; top: 16rpx; }
+.hud-tr { right: 32rpx; top: 16rpx; text-align: right; }
 .hud-bl { left: 32rpx; bottom: 28rpx; color: rgba(56,230,224,0.6); display: flex; align-items: center; }
 .hud-br { right: 32rpx; bottom: 28rpx; }
 .hud-purple { color: rgba(139,92,246,0.65); }
@@ -336,9 +341,10 @@ function goRegister() {
 
 /* ── 前景内容列 ─────────────────────────────────────────────────────── */
 .content {
-  position: relative; z-index: 3; width: 100%;
-  display: flex; flex-direction: column; align-items: center;
-  /* 让内容自成合成层，稳压在 transform 动画装饰层（扫描线/光晕/流光）之上，确保点击命中可靠。 */
+  position: relative; z-index: 3; width: 100%; flex: 1 1 auto;
+  padding: 20rpx 60rpx 40rpx;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  box-sizing: border-box;
   transform: translateZ(0);
 }
 
