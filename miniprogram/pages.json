@@ -133,7 +133,10 @@
         {
           "path": "pages/param-settings",
           "style": {
-            "navigationBarTitleText": "参数设置"
+            "navigationBarTitleText": "参数设置",
+            "navigationStyle": "custom",
+            "backgroundColor": "#05070f",
+            "disableScroll": true
           }
         }
       ]

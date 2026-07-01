@@ -100,7 +100,7 @@
         class="msg-input"
         v-model="inputText"
         placeholder="向方舟助手提问…"
-        placeholder-style="color:rgba(143,217,255,0.55)"
+        placeholder-style="color:rgba(143,217,255,0.55);font-size:28rpx;line-height:44rpx"
         :disabled="!wsConnected || isStreaming"
         auto-height
         :maxlength="-1"
@@ -385,8 +385,9 @@ onUnload(() => {
 .disc-banner text { font-size: 24rpx; color: #ffe066; }
 .relink { color: #7df9ff; text-decoration: underline; }
 
-/* feed */
-.feed { position: relative; z-index: 4; flex: 1 1 auto; padding: 12rpx 28rpx 16rpx; }
+/* feed：mp-weixin scroll-view 在 flex 列内必须 flex-basis:0 + min-height:0 才能真正滚动；
+   之前 `flex: 1 1 auto` 会让 scroll-view 高度被内容撑破，超出屏幕外的消息就看不到（用户 bug#4）。 */
+.feed { position: relative; z-index: 4; flex: 1 1 0; min-height: 0; padding: 12rpx 28rpx 16rpx; }
 .row { display: flex; margin-bottom: 26rpx; }
 .row-user { justify-content: flex-end; }
 .row-ai { justify-content: flex-start; align-items: flex-start; }
@@ -439,10 +440,12 @@ onUnload(() => {
   position: relative; z-index: 5; flex: 0 0 auto; display: flex; align-items: center; gap: 18rpx;
   padding: 18rpx 28rpx; background: rgba(8,14,28,0.7); border-top: 1px solid rgba(56,230,224,0.12);
 }
+/* textarea 不吃 flex 居中；用 line-height=min-height-padding*2 让占位/文字垂直居中于单行态。
+   min-height 84rpx − padding 20rpx*2 = 44rpx → line-height:44rpx；placeholder-style 同步 line-height 才对齐（bug#5）。 */
 .msg-input {
-  flex: 1; min-height: 84rpx; max-height: 240rpx; display: flex; align-items: center;
+  flex: 1; min-height: 84rpx; max-height: 240rpx;
   padding: 20rpx 30rpx; border-radius: 42rpx; background: rgba(4,10,22,0.7);
-  border: 1px solid rgba(56,230,224,0.25); font-size: 27rpx; color: #eaf6ff;
+  border: 1px solid rgba(56,230,224,0.25); font-size: 28rpx; line-height: 44rpx; color: #eaf6ff;
 }
 .voice-btn {
   flex: 0 0 auto; width: 84rpx; height: 84rpx; border-radius: 50%;

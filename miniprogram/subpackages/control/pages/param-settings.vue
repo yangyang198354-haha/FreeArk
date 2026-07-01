@@ -17,12 +17,22 @@
 <template>
   <view class="ps-page">
 
-    <!-- ── HUD 背景层（固定全屏，纯装饰，不拦截点击）───────────────────── -->
-    <view class="hud-grid"></view>
-    <view class="hud-scan"></view>
-    <view class="hud-lines"></view>
+    <!-- ── 赛博朋克背景层（与 profile/chat 一致：bg-base 径向渐变 + bg-grid 网格）── -->
+    <view class="bg-base" />
+    <view class="bg-grid" />
 
-    <view class="ps-content">
+    <!-- HUD 装饰层（保留扫描线动效，作为参数设置页特色）─────────────────── -->
+    <view class="hud-scan"></view>
+
+    <!-- 状态栏占位（custom 导航）-->
+    <view :style="{ height: statusBarHeight + 'px' }" class="status-spacer" />
+
+    <!-- 自绘头（与 profile/chat 一致，无系统返回箭头，靠底栏 ArkTabBar 切换）-->
+    <view class="ps-header">
+      <text class="ps-header-title">参数设置</text>
+    </view>
+
+    <scroll-view scroll-y class="ps-content">
 
       <view v-if="loading" class="tip"><text>加载中…</text></view>
 
@@ -266,7 +276,10 @@
         </template>
       </template>
 
-    </view>
+    </scroll-view>
+
+    <!-- 底栏（4-Tab）：与 profile/chat/home 一致，替代系统返回箭头 -->
+    <ArkTabBar active="device" />
   </view>
 </template>
 
@@ -284,9 +297,13 @@ import { useMqttClient } from '@/utils/useMqttClient'
 import { buildPanels, buildCard } from '@/utils/paramPanels'
 import RingGauge from '@/components/RingGauge.vue'
 import WaveScope from '@/components/WaveScope.vue'
+import ArkTabBar from '@/components/ArkTabBar.vue'
 
 const authStore = useAuthStore()
 const mqttClient = useMqttClient()
+
+const sysInfo = uni.getSystemInfoSync()
+const statusBarHeight = sysInfo.statusBarHeight || 20
 
 // ── 配置 / 套户 / MQTT 实时值 state ──────────────────────────────────────────
 const loading = ref(true)
@@ -349,8 +366,15 @@ function toggleExpand(id) { expanded[id] = !expanded[id] }
 function ctlDev(c) { return { deviceSn: c.sn, productCode: c.productCode } }
 
 // ── HOLO-HUD 纯展示辅助（不参与数据/写链路）──────────────────────────────────
-// 卡片副标题编号：从 card.id 抽取设备/房间数字码（sys-270001 / sys-130004-10016 / room-12 …）。
+// 卡片副标题编号：优先取真实 device_sn（房间面板 id=room-{room_id}，room_id 常 <100 位，
+//   靠 card.id 正则抽数字会命不中→显示「—」，用户反馈儿童房/次卧/书房等只显示「—」即此坑）。
+//   优先级：switchCtl.sn → 首个控件.sn → 首个指标.sn → 兜底从 card.id 抽数字。
 function cardCode(card) {
+  const sn = (card && card.switchCtl && card.switchCtl.sn)
+    || (card && card.controls && card.controls[0] && card.controls[0].sn)
+    || (card && card.small && card.small[0] && card.small[0].sn)
+    || ''
+  if (sn) return String(sn)
   const m = String((card && card.id) || '').match(/(\d{3,})/)
   return m ? m[1] : '—'
 }
@@ -687,10 +711,10 @@ function goBind() {
 
 // ── 生命周期 ─────────────────────────────────────────────────────────────────
 onLoad(() => {
-  // 用系统导航栏（小程序自带「参数设置」标题 + 返回 + 白色胶囊），不在页面内重复自绘。
-  uni.setNavigationBarTitle({ title: '参数设置' })
-  // 导航栏深色背景 + 白字（白色胶囊），与页面深空底统一、弱化分界线。
-  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#060912' }) } catch (e) { /* ignore */ }
+  // custom 导航：标题自绘在页面内（.ps-header），无系统返回箭头，由底栏 ArkTabBar 切换。
+  //   仍设置胶囊按钮 frontColor=白（微信右上「⋯/○」两颗胶囊图标色），底色由 backgroundColor 透出的
+  //   页面 bg-base 渐变承接（与 profile/chat 一致的赛博朋克 HUD 观感）。
+  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#05070f' }) } catch (e) { /* ignore */ }
   // 注：HOLO-HUD 数字/铭牌字体直接走 CSS 字体栈里的系统等宽（Menlo/Monaco/monospace）。
   //   原 uni.loadFontFace 远程拉 jsdelivr Orbitron 不稳（CDN 返回非法 TTF → OTS 解析报错），
   //   已移除；真机若要 Orbitron，改为打包本地 .ttf（static/）并在后台配 downloadFile 合法域名。
@@ -709,38 +733,41 @@ onUnload(() => {
 </script>
 
 <style scoped>
-/* ── HOLO-HUD：深空底 + 霓虹辉光 ─────────────────────────────────────────── */
+/* ── 页面骨架：与 profile/chat 一致的 flex 列 + 赛博朋克底 ────────────────── */
 .ps-page {
   position: relative;
-  min-height: 100vh;
-  padding-bottom: 44rpx;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #05070f;
   overflow: hidden;
-  background:
-    radial-gradient(80% 50% at 12% -5%, rgba(124, 58, 237, 0.30), transparent 60%),
-    radial-gradient(70% 45% at 96% 6%, rgba(0, 229, 255, 0.20), transparent 60%),
-    radial-gradient(95% 60% at 50% 112%, rgba(255, 46, 151, 0.16), transparent 60%),
-    #060912;
 }
 
-/* HUD 背景层：固定全屏，纯装饰 */
-.hud-grid {
-  position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(0, 229, 255, 0.05) 1rpx, transparent 1rpx),
-    linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1rpx, transparent 1rpx);
-  background-size: 80rpx 80rpx;
-  animation: hudGridDrift 16s linear infinite;
+/* 赛博朋克背景（与 profile/chat 一致：紫/青径向渐变 + 深空底）*/
+.bg-base, .bg-grid { position: absolute; pointer-events: none; }
+.bg-base {
+  inset: 0;
+  background:
+    radial-gradient(90% 45% at 18% 0%, rgba(101,55,180,0.32), transparent 55%),
+    radial-gradient(80% 40% at 100% 4%, rgba(20,180,170,0.22), transparent 55%),
+    linear-gradient(180deg, #0b0a1a, #07101c 60%, #050811);
 }
+.bg-grid {
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56,230,224,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,230,224,0.06) 1px, transparent 1px);
+  background-size: 80rpx 80rpx;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 55%);
+  mask-image: linear-gradient(180deg, #000, transparent 55%);
+}
+
+/* HUD 扫描线（参数页特色装饰，其它页无）*/
 .hud-scan {
-  position: fixed; left: 0; right: 0; top: 0; height: 300rpx; z-index: 1; pointer-events: none;
+  position: absolute; left: 0; right: 0; top: 0; height: 300rpx; z-index: 1; pointer-events: none;
   background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.10), transparent);
   animation: hudScan 5.5s linear infinite;
 }
-.hud-lines {
-  position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 1; pointer-events: none; opacity: 0.5;
-  background: repeating-linear-gradient(0deg, rgba(0,0,0,0) 0, rgba(0,0,0,0) 4rpx, rgba(0,0,0,0.16) 6rpx);
-}
-@keyframes hudGridDrift { from { background-position: 0 0; } to { background-position: 80rpx 80rpx; } }
 @keyframes hudScan { 0% { transform: translateY(-300rpx); } 100% { transform: translateY(1900rpx); } }
 @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @keyframes hueFloat {
@@ -749,8 +776,19 @@ onUnload(() => {
 }
 @keyframes eqBar { 0%, 100% { transform: scaleY(0.28); } 50% { transform: scaleY(1); } }
 
-/* 内容层（盖在 HUD 之上）*/
-.ps-content { position: relative; z-index: 2; }
+/* 状态栏占位 + 头 */
+.status-spacer { position: relative; z-index: 5; flex: 0 0 auto; }
+.ps-header {
+  position: relative; z-index: 5; flex: 0 0 auto;
+  height: 92rpx; display: flex; align-items: center; justify-content: center;
+}
+.ps-header-title {
+  font-size: 34rpx; font-weight: 700; letter-spacing: 8rpx; color: #f4fbff;
+  text-shadow: 0 0 12px rgba(56,230,224,0.5);
+}
+
+/* 内容滚动区（flex 列内滚动，让 ArkTabBar 固定底部）*/
+.ps-content { position: relative; z-index: 4; flex: 1 1 0; min-height: 0; padding-bottom: 24rpx; }
 
 /* 套户选择条 */
 .unit-bar { display: flex; align-items: center; justify-content: space-between; padding: 28rpx 32rpx 14rpx; }
