@@ -132,8 +132,8 @@
           class="hist-item"
           @tap="openHistory(s)"
         >
-          <text class="hist-summary">{{ s.summary || (s.session_key ? s.session_key.slice(0, 8) : '会话') }}</text>
-          <text class="hist-time">{{ formatTime(s.last_message_time || s.updated_at) }}</text>
+          <text class="hist-summary">{{ s.title || s.summary || (s.session_key_full || s.session_key || '会话') }}</text>
+          <text class="hist-time">{{ formatTime(s.last_message_time || s.updated_at || s.ended_at || s.started_at) }}</text>
         </view>
       </scroll-view>
     </view>
@@ -159,6 +159,7 @@ const inputText = ref('')
 const scrollTop = ref(0)
 const connecting = ref(false)
 const sessionKeyParam = ref(null)
+const shouldLoadHistoryOnConnect = ref(false)
 const canGoBack = ref(false)
 
 // 历史会话下拉
@@ -181,9 +182,11 @@ function initWs() {
   chatWs = new ChatWebSocket({
     onConnected(sessionKey, sessionId) {
       chatStore.setConnected(true, sessionKey, sessionId)
+      sessionKeyParam.value = sessionKey || sessionKeyParam.value
       connecting.value = false
-      // 仅在「恢复既有会话」（带 session_key 进入）时取历史；新会话的 key 尚无 DB 行，取历史必 404。
-      if (sessionKeyParam.value) loadHistory(sessionKey)
+      // 仅在「恢复既有会话」时取历史；新会话 connect 阶段尚无 DB 行，取历史必 404。
+      if (shouldLoadHistoryOnConnect.value) loadHistory(sessionKey)
+      shouldLoadHistoryOnConnect.value = false
     },
     onStatusUpdate(msg) { chatStore.setStatusText(msg) },
     onReasoningToken(token) { chatStore.appendReasoningToken(token) },
@@ -263,6 +266,8 @@ function handleConfirm(approved) {
 // 新建会话：清空并以新 key 重连
 function newSession() {
   showHistory.value = false
+  connecting.value = true
+  shouldLoadHistoryOnConnect.value = false
   sessionKeyParam.value = null
   chatStore.resetSession()
   if (chatWs) chatWs.close()
@@ -278,7 +283,7 @@ async function loadHistList() {
   histLoading.value = true
   try {
     const res = await api.getSessionList({ page: 1, page_size: 20 })
-    histSessions.value = res?.results || res?.data || []
+    histSessions.value = normalizeSessionList(res)
   } catch {
     histSessions.value = []
   } finally {
@@ -290,10 +295,17 @@ function openHistory(s) {
   showHistory.value = false
   if (!key) return
   sessionKeyParam.value = key
+  shouldLoadHistoryOnConnect.value = true
+  connecting.value = true
   chatStore.resetSession()
   chatStore.sessionKey = key
   if (chatWs) chatWs.close()
   connectWs()
+}
+
+function normalizeSessionList(res) {
+  const list = res?.sessions || res?.results || res?.data || []
+  return Array.isArray(list) ? list : []
 }
 
 function scrollToBottom() { nextTick(() => { scrollTop.value = 1e7 }) }
@@ -315,6 +327,7 @@ onLoad((options) => {
   if (!authStore.isLoggedIn) { uni.reLaunch({ url: '/pages/login/index' }); return }
   canGoBack.value = getCurrentPages().length > 1
   sessionKeyParam.value = options?.session_key || null
+  shouldLoadHistoryOnConnect.value = !!sessionKeyParam.value
   chatStore.resetSession()
   if (sessionKeyParam.value) chatStore.sessionKey = sessionKeyParam.value
   initWs()
@@ -472,7 +485,7 @@ onUnload(() => {
 .hist-title text { font-size: 26rpx; font-weight: 700; color: #7df9ff; letter-spacing: 2rpx; }
 .hist-list { max-height: calc(60vh - 80rpx); }
 .hist-item { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 28rpx; border-bottom: 1px solid rgba(56,230,224,0.08); }
-.hist-summary { flex: 1; min-width: 0; font-size: 26rpx; color: #dbeeff; margin-right: 16rpx; overflow: hidden; }
+.hist-summary { flex: 1; min-width: 0; font-size: 26rpx; color: #dbeeff; margin-right: 16rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-time { flex: 0 0 auto; font-size: 22rpx; color: rgba(143,217,255,0.5); }
 .hist-empty { padding: 48rpx; text-align: center; }
 .hist-empty text { font-size: 24rpx; color: rgba(143,217,255,0.5); }

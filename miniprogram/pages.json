@@ -12,8 +12,8 @@
       "path": "pages/home/index",
       "style": {
         "navigationBarTitleText": "FreeArk 控制中心",
-        "navigationBarBackgroundColor": "#1a73e8",
-        "navigationBarTextStyle": "white",
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f",
         "enablePullDownRefresh": true
       }
     },

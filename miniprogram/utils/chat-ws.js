@@ -27,6 +27,7 @@ export class ChatWebSocket {
     this.socketTask = null
     this.connected = false
     this.callbacks = callbacks
+    this._connSeq = 0
     // callbacks: {
     //   onConnected(sessionKey, sessionId),
     //   onStatusUpdate(message),
@@ -42,16 +43,19 @@ export class ChatWebSocket {
 
   connect(token, sessionKey) {
     this.close()
+    const seq = ++this._connSeq
     const url = buildWsUrl(token, sessionKey)
-    this.socketTask = uni.connectSocket({ url, complete: () => {} })
+    const socketTask = uni.connectSocket({ url, complete: () => {} })
+    this.socketTask = socketTask
 
-    this.socketTask.onOpen(() => {
+    socketTask.onOpen(() => {
       // Do NOT mark connected here — wait for "connected" frame from server.
       // The backend sends { type: "connected", session_id: "...", session_key: "..." }
       // only after successful auth. Marking connected on onOpen would bypass auth check.
     })
 
-    this.socketTask.onMessage(({ data }) => {
+    socketTask.onMessage(({ data }) => {
+      if (seq !== this._connSeq || socketTask !== this.socketTask) return
       let msg
       try { msg = JSON.parse(data) } catch { return }
 
@@ -87,12 +91,14 @@ export class ChatWebSocket {
       }
     })
 
-    this.socketTask.onClose(({ code }) => {
+    socketTask.onClose(({ code }) => {
+      if (seq !== this._connSeq || socketTask !== this.socketTask) return
       this.connected = false
       this.callbacks.onClose?.(code)
     })
 
-    this.socketTask.onError(() => {
+    socketTask.onError(() => {
+      if (seq !== this._connSeq || socketTask !== this.socketTask) return
       this.callbacks.onError?.({ code: 'WS_ERROR', message: '连接异常' })
     })
   }
@@ -109,9 +115,11 @@ export class ChatWebSocket {
 
   close() {
     if (this.socketTask) {
-      try { this.socketTask.close({}) } catch {}
+      const closingTask = this.socketTask
+      this._connSeq++
       this.socketTask = null
       this.connected = false
+      try { closingTask.close({}) } catch {}
     }
   }
 }
