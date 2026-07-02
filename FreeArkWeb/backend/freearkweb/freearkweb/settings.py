@@ -347,6 +347,16 @@ WECHAT_MINIAPP_APPID = os.environ.get('WECHAT_MINIAPP_APPID', '')
 WECHAT_MINIAPP_SECRET = os.environ.get('WECHAT_MINIAPP_SECRET', '')
 
 # ===========================================================================
+# 媒体文件配置（v1.12.0, REQ-PROFILE-004）
+# ===========================================================================
+# 用户上传头像等媒体文件的存储根目录。
+# MEDIA_URL 用于构造返回给前端的可访问 URL（绝对路径）。
+# 生产环境：由 Nginx 代理 /media/ → MEDIA_ROOT。
+# 开发环境：DEBUG=True 时由 Django static() helper 服务。
+MEDIA_URL = os.environ.get('MEDIA_URL', '/media/')
+MEDIA_ROOT = BASE_DIR / os.environ.get('MEDIA_ROOT', 'media')
+
+# ===========================================================================
 # 屏端 MQTT broker（v1.10.0_miniprogram_param_settings）
 # ===========================================================================
 # 小程序业主端直连厂端 broker 收发参数（DeviceWrite/DeviceStatusUpdate）。

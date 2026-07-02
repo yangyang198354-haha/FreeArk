@@ -12,6 +12,9 @@
  */
 
 import http from './http'
+import { getToken } from './auth'
+
+const API_BASE_URL = http.defaults?.baseURL || ''
 
 export const api = {
   // Auth
@@ -127,6 +130,45 @@ export const api = {
   //   → 403: { detail: "无权访问该专有部分" }
   getOwnerStructure: (specificPart) =>
     http.get('/api/miniapp/owner/structure/', { specific_part: specificPart }),
+
+  // v1.12.0: 上传头像 + 保存昵称（MOD-V1120-FE-05, IFC-V1120-FE-05-01）
+  //   使用 uni.uploadFile（非 uni.request），因为后端接收 multipart/form-data
+  //   @param {String|null} nickname - 用户昵称（可选）
+  //   @param {String|null} filePath - 头像临时文件路径（可选，来自 chooseAvatar）
+  //   @returns {Promise<{avatar_url: String|null, nickname: String|null}>}
+  //   @throws {Error} 网络错误、文件过大、格式不支持、认证失败
+  uploadProfile: (nickname, filePath) => {
+    return new Promise((resolve, reject) => {
+      const formData = {}
+      if (nickname && nickname.trim()) {
+        formData.nickname = nickname.trim()
+      }
+      const files = filePath ? [{ name: 'avatar', uri: filePath }] : []
+      uni.uploadFile({
+        url: (API_BASE_URL || '') + '/api/miniapp/profile/update/',
+        files: files,
+        formData: formData,
+        header: {
+          'Authorization': 'Token ' + getToken(),
+        },
+        success: (uploadRes) => {
+          try {
+            const data = JSON.parse(uploadRes.data)
+            if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300) {
+              resolve(data)
+            } else {
+              reject(new Error(data.detail || '资料更新失败'))
+            }
+          } catch (e) {
+            reject(new Error('服务器响应异常'))
+          }
+        },
+        fail: (err) => {
+          reject(new Error(err.errMsg || '上传失败，请检查网络'))
+        },
+      })
+    })
+  },
 }
 
 export default api

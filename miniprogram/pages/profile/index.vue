@@ -28,13 +28,19 @@
         <view class="corner tl" /><view class="corner tr" />
         <view class="corner bl" /><view class="corner br" />
         <view class="pc-row">
-          <view class="avatar-wrap">
+          <view class="avatar-wrap" @tap="onEditAvatar">
             <view class="avatar-ring" />
-            <view class="avatar"><text>{{ avatarText }}</text></view>
+            <!-- v1.12.0: 有头像显示图片，无头像或加载失败显示文字降级 -->
+            <image v-if="authStore.avatarUrl && !imgError"
+                   :src="authStore.avatarUrl"
+                   class="avatar-img"
+                   mode="aspectFill"
+                   @error="imgError = true" />
+            <view v-else class="avatar"><text>{{ avatarText }}</text></view>
           </view>
           <view class="pc-info">
             <view class="pc-name-row">
-              <text class="pc-name">{{ nickname }}</text>
+              <text class="pc-name" @tap="onEditNickname">{{ nickname }}</text>
               <text class="badge-ok">{{ roleBadge }}</text>
             </view>
             <text class="pc-id">ID · {{ userId }}</text>
@@ -115,8 +121,9 @@ const statusBarHeight = sysInfo.statusBarHeight || 20
 
 const bindings = computed(() => ownerStore.bindings)
 const loadingBindings = ref(false)
+const imgError = ref(false)  // v1.12.0: 头像加载失败降级
 
-const nickname = computed(() => authStore.username || '未登录')
+const nickname = computed(() => authStore.nickname || authStore.username || '未登录')
 const avatarText = computed(() => (authStore.username || '?').slice(0, 1).toUpperCase())
 const userId = computed(() => {
   const id = authStore.userInfo?.id
@@ -158,6 +165,20 @@ function switchProp(b) {
     ownerStore.setActiveSpecificPart(b.specific_part)
   }
   uni.showToast({ title: `已切换到 ${b.location_name || b.specific_part}`, icon: 'none' })
+}
+
+// v1.12.0: 编辑头像 — 跳转到 profile-setup 编辑页
+async function onEditAvatar() {
+  if (!authStore.isLoggedIn) return
+  // 在个人中心直接使用 chooseAvatar 弹窗选择头像并上传
+  // 复用 profile-setup 的 chooseAvatar 上传逻辑
+  uni.navigateTo({ url: '/pages/profile-setup/index?mode=edit' })
+}
+
+// v1.12.0: 编辑昵称 — 跳转到 profile-setup 编辑页
+function onEditNickname() {
+  if (!authStore.isLoggedIn) return
+  uni.navigateTo({ url: '/pages/profile-setup/index?mode=edit' })
 }
 
 function goViewAll() {
@@ -269,6 +290,8 @@ function onLogout() {
   display: flex; align-items: center; justify-content: center;
 }
 .avatar text { font-size: 48rpx; font-weight: 900; color: #aef9f2; text-shadow: 0 0 12px rgba(47,244,224,0.7); }
+/* v1.12.0: 图片头像 */
+.avatar-img { width: 108rpx; height: 108rpx; border-radius: 50%; border: 1px solid rgba(56,230,224,0.6); }
 
 .pc-info { flex: 1; min-width: 0; }
 .pc-name-row { display: flex; align-items: center; gap: 16rpx; }

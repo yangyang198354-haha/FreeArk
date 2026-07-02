@@ -106,3 +106,26 @@ jobs:
       - name: Build (compile check)
         working-directory: FreeArkWeb/frontend
         run: npm run build
+
+  miniapp-test:
+    name: 小程序前端 Vitest
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: miniprogram/package-lock.json
+
+      # uni-app 小程序端无 Web API（无 document/window），vitest 在 Node 环境
+      # 通过 jsdom 模拟执行——纯逻辑/契约测试足够，无需真机。
+      - name: Install dependencies
+        working-directory: miniprogram
+        run: npm install
+
+      - name: Run Vitest
+        working-directory: miniprogram
+        run: npm run test

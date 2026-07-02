@@ -44,6 +44,14 @@
       }
     },
     {
+      "path": "pages/profile-setup/index",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f",
+        "disableScroll": true
+      }
+    },
+    {
       "path": "pages/register/index",
       "style": {
         "navigationBarTitleText": "注册",

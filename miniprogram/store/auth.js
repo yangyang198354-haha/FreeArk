@@ -20,6 +20,9 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (state) => state.userInfo?.role === 'admin',
     username: (state) => state.userInfo?.username || '',
     role: (state) => state.userInfo?.role || '',
+    // v1.12.0: 头像URL和昵称（来自后端登录响应，为null时前端降级展示）
+    avatarUrl: (state) => state.userInfo?.avatar_url || null,
+    nickname: (state) => state.userInfo?.nickname || null,
   },
   actions: {
     // token and userInfo come from POST /api/auth/login/ response:

@@ -191,7 +191,9 @@ def user_login(request):
                 'email': user.email,
                 'role': user.role,
                 'first_name': user.first_name,
-                'last_name': user.last_name
+                'last_name': user.last_name,
+                'avatar_url': user.avatar_url or None,
+                'nickname': user.nickname or None,
             }
         })
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

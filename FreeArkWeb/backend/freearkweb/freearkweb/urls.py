@@ -14,6 +14,8 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
@@ -23,3 +25,8 @@ urlpatterns = [
     # v1.8.0 新增：小程序业主端 API（/api/miniapp/ 命名空间）
     path('api/miniapp/', include('api.urls_miniapp')),
 ]
+
+# v1.12.0: DEBUG 模式下由 Django 服务 media 文件（开发环境）
+# 生产环境由 Nginx 代理 /media/ → MEDIA_ROOT
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

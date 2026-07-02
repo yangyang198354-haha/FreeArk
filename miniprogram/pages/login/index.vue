@@ -133,6 +133,12 @@
           <view class="divider-line divider-line-r"></view>
         </view>
 
+        <!-- v1.12.0: 记住我 checkbox（共用，默认 false） -->
+        <view class="remember-row" @tap="rememberMe = !rememberMe">
+          <checkbox :checked="rememberMe" class="remember-checkbox" color="#2ff4e0" />
+          <text class="remember-label">记住我（7 天内免登录）</text>
+        </view>
+
         <!-- 微信一键登录 -->
         <button
           class="wechat-btn"
@@ -167,6 +173,7 @@ const wxLoading = ref(false)
 const showPwd = ref(false)
 const focusField = ref('')
 const fxOn = ref(true)
+const rememberMe = ref(false)  // v1.12.0: 记住我 checkbox，默认 false
 
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
@@ -185,7 +192,7 @@ async function handleLogin() {
     const res = await api.login({
       username: username.value.trim(),
       password: password.value,
-      remember_me: true,
+      remember_me: rememberMe.value,
     })
     if (res.success && res.token) {
       // Backend returns res.user (NOT res.user_info) — contains id, username, email, role, first_name, last_name
@@ -221,11 +228,16 @@ function handleWechatLogin() {
         return
       }
       try {
-        const res = await api.miniappWechatLogin({ code })
+        const res = await api.miniappWechatLogin({ code, remember_me: rememberMe.value })
         if (res && res.token) {
           authStore.login(res.token, res.user)
           prefetchOwnerData(res.user)
-          uni.reLaunch({ url: '/pages/home/index' })
+          // v1.12.0: 新用户引导设置头像昵称，老用户直接进首页（REQ-PROFILE-001, OQ-01=A）
+          if (res.is_new) {
+            uni.reLaunch({ url: '/pages/profile-setup/index?mode=initial' })
+          } else {
+            uni.reLaunch({ url: '/pages/home/index' })
+          }
         } else {
           throw new Error('微信登录失败')
         }
@@ -508,6 +520,16 @@ function goRegister() {
 .divider-text {
   font-family: 'Rajdhani', 'Menlo', 'Monaco', monospace;
   font-size: 26rpx; letter-spacing: 4rpx; color: rgba(143,217,255,0.7); margin: 0 24rpx;
+}
+
+/* ── 记住我（v1.12.0）───────────────────────────────────────────────── */
+.remember-row {
+  display: flex; align-items: center; justify-content: center; margin: 16rpx 0 0;
+  padding: 8rpx 0;
+}
+.remember-checkbox { transform: scale(0.8); }
+.remember-label {
+  font-size: 24rpx; letter-spacing: 2rpx; color: rgba(143,217,255,0.6);
 }
 
 /* ── 微信一键登录：50px→100rpx ──────────────────────────────────────── */

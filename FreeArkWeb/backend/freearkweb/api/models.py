@@ -19,6 +19,9 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='operator')
     department = models.CharField(max_length=100, blank=True, null=True)
     position = models.CharField(max_length=100, blank=True, null=True)
+    # v1.12.0: 用户头像和昵称（小程序个人中心，可空字段向后兼容存量用户）
+    avatar_url = models.URLField(max_length=500, blank=True, null=True, verbose_name='头像URL')
+    nickname = models.CharField(max_length=100, blank=True, null=True, verbose_name='昵称')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

@@ -54,4 +54,11 @@ urlpatterns = [
     #              前端结构缓存 TTL=24h；sync_status="pending" 时前端缩短至 5min
     path('owner/structure/', views_ds.miniapp_owner_structure,
          name='miniapp-owner-structure'),
+
+    # v1.12.0 资料更新（IsAuthenticated）：上传头像（multipart）和/或保存昵称
+    #   使用 IsAuthenticated 而非 IsOwnerUser——头像昵称是用户自身资料，不限制 role。
+    #   POST /api/miniapp/profile/update/ multipart/form-data {avatar?, nickname?}
+    #   → 200 {avatar_url, nickname}；400 参数错误/文件校验失败；401 未认证
+    path('profile/update/', views_miniapp.miniapp_profile_update,
+         name='miniapp-profile-update'),
 ]
