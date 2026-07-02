@@ -289,8 +289,9 @@
  * @depends MOD-1110-FE-01 (useMqttClient), MOD-1120-FE-01 (paramPanels)
  */
 import { ref, computed, reactive } from 'vue'
-import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
+import { useOwnerStore } from '@/store/owner'
 import { api } from '@/utils/api'
 import { buildWriteItems } from '@/utils/screenMqtt'
 import { useMqttClient } from '@/utils/useMqttClient'
@@ -300,6 +301,7 @@ import WaveScope from '@/components/WaveScope.vue'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 
 const authStore = useAuthStore()
+const ownerStore = useOwnerStore()
 const mqttClient = useMqttClient()
 
 const sysInfo = uni.getSystemInfoSync()
@@ -320,6 +322,9 @@ const mqttConnected = computed(() => mqttClient.connected.value)
 
 let knownSns = new Set()
 let _offDeviceUpdate = null
+let _deviceUpdateTimer = null
+let _queuedDeviceUpdates = {}
+let _snapshotSaveTimer = null
 
 const currentRoom = computed(() => rooms.value[roomIndex.value] || null)
 const roomLabels = computed(() => rooms.value.map((r) => r.location_name || r.specific_part))
@@ -527,17 +532,21 @@ async function selectUnit(idx) {
 }
 
 // ── 配置加载 + MQTT 连接 ─────────────────────────────────────────────────────
-async function loadConfig() {
-  loading.value = true
+async function loadConfig(force = false) {
+  const hadCached = rooms.value.length > 0
+  if (!hadCached) loading.value = true
   try {
-    const res = await api.getDeviceSettingsConfig()
+    const res = await ownerStore.ensureDeviceSettingsConfig({ force, allowStale: !force })
     broker.value = res.broker
     topics.value = res.topics
     config.value = res.config || config.value
-    rooms.value = res.rooms || []
-    if (rooms.value.length > 0) await selectUnit(0)
+    const newRooms = res.rooms || []
+    rooms.value = newRooms
+    if (newRooms.length > 0) await selectUnit(0)
   } catch (err) {
-    uni.showToast({ title: '加载配置失败，请重试', icon: 'none' })
+    if (!hadCached) {
+      uni.showToast({ title: '加载配置失败，请重试', icon: 'none' })
+    }
   } finally {
     loading.value = false
   }
@@ -555,6 +564,15 @@ async function connectRoom() {
 
   const mac = room.screen_mac
   const sp = room.specific_part
+
+  // 乐观渲染：先从缓存恢复设备快照，再连 MQTT 更新
+  const snapshot = ownerStore.hydrateDeviceSnapshot(sp)
+  if (snapshot) {
+    for (const sn of Object.keys(snapshot)) {
+      devices[sn] = { ...snapshot[sn] }
+      knownSns.add(sn)
+    }
+  }
 
   _offDeviceUpdate = mqttClient.onDeviceUpdate((p) => {
     const prev = devices[p.deviceSn] || { productCode: p.productCode, attrs: {} }
@@ -599,6 +617,63 @@ function loadSns(mac) {
 }
 function persistSns(mac) {
   try { uni.setStorageSync(snCacheKey(mac), Array.from(knownSns)) } catch (e) { /* ignore */ }
+}
+
+function queueDeviceUpdate(p, mac) {
+  if (!p || p.deviceSn == null) return
+  const sn = String(p.deviceSn)
+  const prev = _queuedDeviceUpdates[sn] || devices[sn] || { productCode: p.productCode, attrs: {} }
+  _queuedDeviceUpdates[sn] = {
+    deviceSn: sn,
+    productCode: p.productCode != null ? p.productCode : prev.productCode,
+    attrs: { ...(prev.attrs || {}), ...(p.attrs || {}) },
+    mac,
+  }
+  if (!_deviceUpdateTimer) {
+    _deviceUpdateTimer = setTimeout(flushQueuedDeviceUpdates, 120)
+  }
+}
+
+function flushQueuedDeviceUpdates() {
+  const updates = _queuedDeviceUpdates
+  _queuedDeviceUpdates = {}
+  _deviceUpdateTimer = null
+  const persistMacs = new Set()
+  for (const sn of Object.keys(updates)) {
+    const p = updates[sn]
+    const prev = devices[sn] || { productCode: p.productCode, attrs: {} }
+    devices[sn] = {
+      productCode: p.productCode != null ? p.productCode : prev.productCode,
+      attrs: { ...(prev.attrs || {}), ...(p.attrs || {}) },
+    }
+    if (!knownSns.has(sn)) {
+      knownSns.add(sn)
+      if (p.mac) persistMacs.add(p.mac)
+    }
+  }
+  persistMacs.forEach((m) => persistSns(m))
+  // 每 2 秒保存一次设备快照，供下次进入页面时乐观渲染
+  if (!_snapshotSaveTimer) {
+    _snapshotSaveTimer = setTimeout(() => {
+      _snapshotSaveTimer = null
+      const sp = currentRoom.value?.specific_part
+      if (sp && Object.keys(devices).length > 0) {
+        ownerStore.setDeviceSnapshot(sp, { ...devices })
+      }
+    }, 2000)
+  }
+}
+
+function clearQueuedDeviceUpdates() {
+  if (_deviceUpdateTimer) {
+    clearTimeout(_deviceUpdateTimer)
+    _deviceUpdateTimer = null
+  }
+  if (_snapshotSaveTimer) {
+    clearTimeout(_snapshotSaveTimer)
+    _snapshotSaveTimer = null
+  }
+  _queuedDeviceUpdates = {}
 }
 
 // ── 结构骨架缓存（owner_structure_{sp}，TTL 30 天）────────────────────────────
@@ -722,10 +797,23 @@ onLoad(() => {
 
 onShow(() => {
   if (!authStore.isLoggedIn) { uni.reLaunch({ url: '/pages/login/index' }); return }
-  if (rooms.value.length === 0 && loading.value) loadConfig()
+  if (rooms.value.length === 0) loadConfig()
+})
+
+// tab 页常驻，onUnload 不会触发，用 onHide 保存设备快照
+onHide(() => {
+  const sp = currentRoom.value?.specific_part
+  if (sp && Object.keys(devices).length > 0) {
+    ownerStore.setDeviceSnapshot(sp, { ...devices })
+  }
 })
 
 onUnload(() => {
+  // 保存设备快照，下次进入页面时乐观渲染
+  const sp = currentRoom.value?.specific_part
+  if (sp && Object.keys(devices).length > 0) {
+    ownerStore.setDeviceSnapshot(sp, { ...devices })
+  }
   Object.values(_flushTimers).forEach((t) => clearTimeout(t))
   if (_offDeviceUpdate) { _offDeviceUpdate(); _offDeviceUpdate = null }
   mqttClient.release()

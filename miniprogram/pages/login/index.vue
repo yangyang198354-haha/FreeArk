@@ -155,9 +155,11 @@
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
+import { useOwnerStore } from '@/store/owner'
 import { api } from '@/utils/api'
 
 const authStore = useAuthStore()
+const ownerStore = useOwnerStore()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
@@ -188,6 +190,7 @@ async function handleLogin() {
     if (res.success && res.token) {
       // Backend returns res.user (NOT res.user_info) — contains id, username, email, role, first_name, last_name
       authStore.login(res.token, res.user)
+      prefetchOwnerData(res.user)
       uni.reLaunch({ url: '/pages/home/index' })
     } else {
       throw new Error('登录失败')
@@ -221,6 +224,7 @@ function handleWechatLogin() {
         const res = await api.miniappWechatLogin({ code })
         if (res && res.token) {
           authStore.login(res.token, res.user)
+          prefetchOwnerData(res.user)
           uni.reLaunch({ url: '/pages/home/index' })
         } else {
           throw new Error('微信登录失败')
@@ -241,6 +245,10 @@ function handleWechatLogin() {
       uni.showToast({ title: '微信登录已取消', icon: 'none' })
     },
   })
+}
+
+function prefetchOwnerData(user) {
+  if (user?.role === 'user') ownerStore.bootstrapAfterLogin().catch(() => {})
 }
 
 function goRegister() {

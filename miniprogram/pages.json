@@ -38,7 +38,9 @@
     {
       "path": "pages/change-password/index",
       "style": {
-        "navigationBarTitleText": "修改密码"
+        "navigationBarTitleText": "修改密码",
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f"
       }
     },
     {
@@ -53,6 +55,15 @@
       "path": "pages/bind/index",
       "style": {
         "navigationBarTitleText": "专有部分绑定"
+      }
+    },
+    {
+      "path": "pages/device/param-settings",
+      "style": {
+        "navigationBarTitleText": "参数设置",
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f",
+        "disableScroll": true
       }
     }
   ],
@@ -75,7 +86,9 @@
         {
           "path": "pages/index",
           "style": {
-            "navigationBarTitleText": "设备监控"
+            "navigationBarTitleText": "设备监控",
+            "navigationStyle": "custom",
+            "backgroundColor": "#05070f"
           }
         },
         {
@@ -123,20 +136,6 @@
           "path": "pages/report",
           "style": {
             "navigationBarTitleText": "能耗报表"
-          }
-        }
-      ]
-    },
-    {
-      "root": "subpackages/control",
-      "pages": [
-        {
-          "path": "pages/param-settings",
-          "style": {
-            "navigationBarTitleText": "参数设置",
-            "navigationStyle": "custom",
-            "backgroundColor": "#05070f",
-            "disableScroll": true
           }
         }
       ]
@@ -201,10 +200,10 @@
     }
   },
   "tabBar": {
-    "color": "#7A7E83",
-    "selectedColor": "#1a73e8",
-    "borderStyle": "black",
-    "backgroundColor": "#ffffff",
+    "color": "#4a5a7a",
+    "selectedColor": "#2ff4e0",
+    "borderStyle": "white",
+    "backgroundColor": "#0a0f1a",
     "list": [
       {
         "pagePath": "pages/home/index",
@@ -213,13 +212,21 @@
       {
         "pagePath": "pages/chat/index",
         "text": "AI 问答"
+      },
+      {
+        "pagePath": "pages/device/param-settings",
+        "text": "设备"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
       }
     ]
   },
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "FreeArk",
-    "navigationBarBackgroundColor": "#F8F8F8",
-    "backgroundColor": "#F8F8F8"
+    "navigationBarBackgroundColor": "#05070f",
+    "backgroundColor": "#05070f"
   }
 }

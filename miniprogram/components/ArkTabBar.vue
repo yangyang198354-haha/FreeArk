@@ -49,15 +49,11 @@ function go(key) {
       uni.switchTab({ url: '/pages/chat/index' })
       break
     case 'device':
-      // 业主(user)无设备监控权限（后端 RBAC 会 403）→ 引导到参数设置；其余进设备监控
-      if (authStore.role === 'user') {
-        uni.navigateTo({ url: '/subpackages/control/pages/param-settings' })
-      } else {
-        uni.navigateTo({ url: '/subpackages/monitor/pages/index' })
-      }
+      // 设备参数设置页已移入主包，现在作为 tab 页常驻
+      uni.switchTab({ url: '/pages/device/param-settings' })
       break
     case 'profile':
-      uni.navigateTo({ url: '/pages/profile/index' })
+      uni.switchTab({ url: '/pages/profile/index' })
       break
   }
 }

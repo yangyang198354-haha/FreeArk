@@ -10,7 +10,7 @@ export default {
 
 <style>
 page {
-  background-color: #f5f5f5;
+  background-color: #05070f;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
 }
 /* WXSS 不支持通配选择器 *，改为枚举常用组件设置 box-sizing */

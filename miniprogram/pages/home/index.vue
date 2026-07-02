@@ -264,6 +264,7 @@
 import { ref, computed } from 'vue'
 import { onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
+import { useOwnerStore } from '@/store/owner'
 import { api } from '@/utils/api'
 import { PagePoller } from '@/utils/poller'
 import MetricCard from '@/components/MetricCard.vue'
@@ -271,6 +272,7 @@ import ArkTabBar from '@/components/ArkTabBar.vue'
 import { attrSeverity, worseStatus } from '@/subpackages/game/arkZoneMap'
 
 const authStore = useAuthStore()
+const ownerStore = useOwnerStore()
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
 
@@ -289,12 +291,15 @@ const dashData = ref({
   todayKwh: '--',
 })
 
-const bindings = ref([])
+// admin dashboard 内存缓存（5 分钟有效），避免每次 onShow 重复请求
+let _dashCache = null
+let _dashCacheTs = 0
+const DASH_CACHE_TTL = 5 * 60 * 1000
+
+const bindings = computed(() => ownerStore.bindings)
 const selectedBindingIndex = ref(0)
 const ownerLoading = ref(false)
 const ownerError = ref('')
-const ownerStructure = ref(null)
-const ownerRealtime = ref(null)
 
 const plcText = computed(() => {
   if (dashData.value.plcOnline === '--') return '--'
@@ -315,6 +320,8 @@ const currentDate = computed(() => {
 
 const currentBinding = computed(() => bindings.value[selectedBindingIndex.value] || null)
 const currentSpecificPart = computed(() => currentBinding.value?.specific_part || '')
+const ownerStructure = computed(() => ownerStore.structureFor(currentSpecificPart.value))
+const ownerRealtime = computed(() => ownerStore.realtimeFor(currentSpecificPart.value))
 const currentBindingLabel = computed(() => {
   const b = currentBinding.value
   if (!b) return '未选择'
@@ -348,8 +355,13 @@ const overallStatus = computed(() => {
   return { level: 'idle', text: '等待数据' }
 })
 
-async function fetchDashboard() {
+async function fetchDashboard(force = false) {
   if (authStore.role === 'user') return
+  const now = Date.now()
+  if (!force && _dashCache && (now - _dashCacheTs) < DASH_CACHE_TTL) {
+    dashData.value = { ..._dashCache }
+    return
+  }
   errorMsg.value = ''
   try {
     const [plcRes, faultRes, summaryRes, condensationRes] = await Promise.allSettled([
@@ -359,30 +371,36 @@ async function fetchDashboard() {
       api.getCondensationWarningCount(),
     ])
 
+    const next = { ...dashData.value }
+
     if (plcRes.status === 'fulfilled' && plcRes.value?.data) {
-      dashData.value.plcOnline = plcRes.value.data.online_count
-      dashData.value.plcTotal = plcRes.value.data.total_count
+      next.plcOnline = plcRes.value.data.online_count
+      next.plcTotal = plcRes.value.data.total_count
     }
 
     if (faultRes.status === 'fulfilled' && faultRes.value?.data) {
-      dashData.value.faultCount = faultRes.value.data.active_fault_count
+      next.faultCount = faultRes.value.data.active_fault_count
     }
 
     if (summaryRes.status === 'fulfilled' && summaryRes.value?.data) {
       const kwh = summaryRes.value.data.today_kwh
-      dashData.value.todayKwh = typeof kwh === 'number' ? kwh.toFixed(1) : kwh
+      next.todayKwh = typeof kwh === 'number' ? kwh.toFixed(1) : kwh
     }
 
     if (condensationRes.status === 'fulfilled') {
       const d = condensationRes.value
       if (typeof d?.count === 'number') {
-        dashData.value.condensationCount = d.count
+        next.condensationCount = d.count
       } else if (typeof d?.data?.count === 'number') {
-        dashData.value.condensationCount = d.data.count
+        next.condensationCount = d.data.count
       } else {
-        dashData.value.condensationCount = 0
+        next.condensationCount = 0
       }
     }
+
+    dashData.value = next
+    _dashCache = { ...next }
+    _dashCacheTs = now
   } catch (err) {
     errorMsg.value = '数据加载失败，请下拉刷新重试'
   }
@@ -390,23 +408,30 @@ async function fetchDashboard() {
 
 async function loadOwnerHome(force = false) {
   if (ownerLoading.value && !force) return
-  ownerLoading.value = true
   ownerError.value = ''
   try {
-    const bindRes = await api.getBindStatus()
-    const list = bindRes?.bindings || bindRes?.data?.bindings || []
-    bindings.value = Array.isArray(list) ? list : []
+    await ownerStore.ensureBindings({ force, allowStale: !force })
 
     if (!bindings.value.length) {
-      ownerStructure.value = null
-      ownerRealtime.value = null
+      ownerLoading.value = false
       return
     }
 
     const activeSp = readActiveSpecificPart()
     const matchedIndex = bindings.value.findIndex((b) => b.specific_part === activeSp)
     selectedBindingIndex.value = matchedIndex >= 0 ? matchedIndex : Math.min(selectedBindingIndex.value, bindings.value.length - 1)
-    await loadOwnerPart(currentSpecificPart.value)
+
+    const sp = currentSpecificPart.value
+    if (sp) {
+      ownerStore.setActiveSpecificPart(sp)
+      ownerStore.hydrateStructure(sp)
+      ownerStore.hydrateRealtime(sp)
+    }
+
+    // 先 hydrate 缓存再判断 loading，避免缓存命中时仍显示 loading
+    ownerLoading.value = force || !ownerHasContent.value
+
+    await loadOwnerPart(sp, force)
   } catch (err) {
     ownerError.value = '户型舱图加载失败，请下拉刷新'
   } finally {
@@ -414,31 +439,25 @@ async function loadOwnerHome(force = false) {
   }
 }
 
-async function loadOwnerPart(specificPart) {
+async function loadOwnerPart(specificPart, force = false) {
   if (!specificPart) return
-  try { uni.setStorageSync('active_specific_part', specificPart) } catch (e) {}
 
   const [structureRes, realtimeRes] = await Promise.allSettled([
-    api.getOwnerStructure(specificPart),
-    api.getOwnerRealtimeParams(specificPart),
+    ownerStore.ensureStructure(specificPart, { force, allowStale: !force }),
+    ownerStore.ensureRealtime(specificPart, { force, allowStale: !force }),
   ])
 
-  if (structureRes.status === 'fulfilled' && structureRes.value?.success !== false) {
-    ownerStructure.value = structureRes.value
-  } else {
-    ownerStructure.value = null
+  if ((structureRes.status !== 'fulfilled' || structureRes.value?.success === false) && !ownerStructure.value) {
     ownerError.value = '房间结构暂不可用'
   }
 
-  if (realtimeRes.status === 'fulfilled' && realtimeRes.value?.success !== false) {
-    ownerRealtime.value = realtimeRes.value
-  } else {
-    ownerRealtime.value = null
+  if ((realtimeRes.status !== 'fulfilled' || realtimeRes.value?.success === false) && !ownerRealtime.value) {
     if (!ownerError.value) ownerError.value = '实时参数暂不可用'
   }
 }
 
 function readActiveSpecificPart() {
+  if (ownerStore.activeSpecificPart) return ownerStore.activeSpecificPart
   try { return uni.getStorageSync('active_specific_part') || '' } catch (e) { return '' }
 }
 
@@ -447,8 +466,8 @@ function onBindingChange(e) {
   selectedBindingIndex.value = idx
   const sp = currentSpecificPart.value
   if (sp) {
-    ownerLoading.value = true
-    loadOwnerPart(sp).finally(() => { ownerLoading.value = false })
+    ownerLoading.value = !ownerStore.structureFor(sp) && !ownerStore.realtimeFor(sp)
+    loadOwnerPart(sp, false).finally(() => { ownerLoading.value = false })
   }
 }
 
@@ -710,7 +729,7 @@ onPullDownRefresh(async () => {
   if (authStore.role === 'user') {
     await loadOwnerHome(true)
   } else {
-    await fetchDashboard()
+    await fetchDashboard(true)
   }
   uni.stopPullDownRefresh()
 })
@@ -722,7 +741,7 @@ const NAV_ROUTES = [
   '/subpackages/ops/pages/faults',
   '/subpackages/ops/pages/condensation',
   '/subpackages/ops/pages/workorders',
-  '/subpackages/control/pages/param-settings',
+  '/pages/device/param-settings',
   '/subpackages/game/pages/ark-poc',
   '/subpackages/game/pages/agent-scene',
   '/pages/profile/index',

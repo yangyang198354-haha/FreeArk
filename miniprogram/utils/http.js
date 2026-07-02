@@ -8,6 +8,7 @@
  */
 
 import { getToken, clearAuth } from './auth'
+import { useAuthStore } from '@/store/auth'
 
 // Development: change this to your local backend IP
 // Production: 已备案域名，VPS nginx(443/Let's Encrypt) 终止 TLS → frp 隧道 → Pi nginx:8080
@@ -63,6 +64,9 @@ function request(method, path, data, extraHeaders = {}) {
 
 function handleUnauthorized() {
   clearAuth()
+  // 同时清空 Pinia store 内存中的 token，否则登录页检查 isLoggedIn 仍为 true，
+  // 会立即 reLaunch 回首页，形成 401→登录页→首页→401 的死循环闪屏
+  try { useAuthStore().logout() } catch (e) { /* store 可能未初始化 */ }
   if (!_sessionExpiredShown) {
     _sessionExpiredShown = true
     uni.showToast({ title: '会话已过期，请重新登录', icon: 'none', duration: 2000 })

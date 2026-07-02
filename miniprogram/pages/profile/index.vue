@@ -104,15 +104,16 @@
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
-import { api } from '@/utils/api'
+import { useOwnerStore } from '@/store/owner'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 
 const authStore = useAuthStore()
+const ownerStore = useOwnerStore()
 
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
 
-const bindings = ref([])
+const bindings = computed(() => ownerStore.bindings)
 const loadingBindings = ref(false)
 
 const nickname = computed(() => authStore.username || '未登录')
@@ -131,15 +132,13 @@ const subLine = computed(() => authStore.userInfo?.email || '')
 
 async function loadBindings() {
   if (!authStore.isLoggedIn) return
-  loadingBindings.value = true
+  loadingBindings.value = !ownerStore.bindingsLoaded
   try {
     // getBindStatus → { bound, bindings:[{specific_part, location_name, bound_at}] }
-    const res = await api.getBindStatus()
-    const list = res?.bindings || res?.data?.bindings || []
-    bindings.value = Array.isArray(list) ? list : []
+    await ownerStore.ensureBindings({ allowStale: true })
   } catch (e) {
     // 非致命：无绑定/接口异常时列表留空，展示「尚未绑定房号」
-    bindings.value = []
+    // Keep cached bindings when the silent refresh fails.
   } finally {
     loadingBindings.value = false
   }
@@ -156,7 +155,7 @@ onShow(() => {
 function switchProp(b) {
   // 本地记录当前活跃房号（供其余页面读取 specific_part）；后端无「默认房号」概念，纯前端偏好
   if (b.specific_part) {
-    try { uni.setStorageSync('active_specific_part', b.specific_part) } catch (e) {}
+    ownerStore.setActiveSpecificPart(b.specific_part)
   }
   uni.showToast({ title: `已切换到 ${b.location_name || b.specific_part}`, icon: 'none' })
 }
@@ -168,7 +167,7 @@ function goBind() {
   uni.navigateTo({ url: '/pages/bind/index' })
 }
 function goParamSettings() {
-  uni.navigateTo({ url: '/subpackages/control/pages/param-settings' })
+  uni.navigateTo({ url: '/pages/device/param-settings' })
 }
 function goEdit() {
   // 设计中的「编辑」= 编辑资料；当前可用的账号操作为修改密码，保留其入口

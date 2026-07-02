@@ -38,13 +38,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
+import { useOwnerStore } from '@/store/owner'
 import { api } from '@/utils/api'
 
 const authStore = useAuthStore()
-const bindings = ref([])
+const ownerStore = useOwnerStore()
+const bindings = computed(() => ownerStore.bindings)
 const loading = ref(false)
 const binding = ref(false)
 const macInput = ref('')
@@ -57,11 +59,10 @@ onShow(() => {
   loadStatus()
 })
 
-async function loadStatus() {
-  loading.value = true
+async function loadStatus(force = false) {
+  loading.value = force || !ownerStore.bindingsLoaded
   try {
-    const res = await api.getBindStatus()
-    bindings.value = (res && Array.isArray(res.bindings)) ? res.bindings : []
+    await ownerStore.ensureBindings({ force, allowStale: !force })
   } catch (err) {
     uni.showToast({ title: '加载绑定状态失败', icon: 'none' })
   } finally {
@@ -95,7 +96,8 @@ async function doBind(uniqueId) {
     const res = await api.bindOwner({ unique_id: uniqueId })
     uni.showToast({ title: `绑定成功：${res.specific_part}`, icon: 'none', duration: 2000 })
     macInput.value = ''
-    await loadStatus()
+    ownerStore.markBindingChanged()
+    await loadStatus(true)
   } catch (err) {
     const m = err.message || ''
     const msg =
@@ -119,7 +121,8 @@ function handleUnbind(b) {
       try {
         await api.unbindOwner({ specific_part: b.specific_part })
         uni.showToast({ title: '已解绑', icon: 'none' })
-        await loadStatus()
+        ownerStore.markBindingChanged()
+        await loadStatus(true)
       } catch (err) {
         uni.showToast({ title: '解绑失败，请稍后重试', icon: 'none' })
       } finally {
