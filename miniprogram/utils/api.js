@@ -132,25 +132,34 @@ export const api = {
     http.get('/api/miniapp/owner/structure/', { specific_part: specificPart }),
 
   // v1.12.0: 上传头像 + 保存昵称（MOD-V1120-FE-05, IFC-V1120-FE-05-01）
-  //   使用 uni.uploadFile（非 uni.request），因为后端接收 multipart/form-data
+  //   有头像文件：使用 uni.uploadFile（multipart/form-data），filePath+name 语法
+  //     （微信小程序不支持 files[] 数组 / uri 字段，那是 App 端专用）
+  //   仅昵称：使用 uni.request（JSON body），无需 multipart
   //   @param {String|null} nickname - 用户昵称（可选）
   //   @param {String|null} filePath - 头像临时文件路径（可选，来自 chooseAvatar）
   //   @returns {Promise<{avatar_url: String|null, nickname: String|null}>}
   //   @throws {Error} 网络错误、文件过大、格式不支持、认证失败
   uploadProfile: (nickname, filePath) => {
+    const token = getToken()
+    const authHeader = { 'Authorization': 'Token ' + token }
+
+    // 仅昵称更新（无文件）：用普通 POST JSON 请求
+    if (!filePath) {
+      return http.post('/api/miniapp/profile/update/', { nickname })
+    }
+
+    // 有头像文件：用 uni.uploadFile，微信小程序必须用 filePath+name 语法
     return new Promise((resolve, reject) => {
       const formData = {}
       if (nickname && nickname.trim()) {
         formData.nickname = nickname.trim()
       }
-      const files = filePath ? [{ name: 'avatar', uri: filePath }] : []
       uni.uploadFile({
         url: (API_BASE_URL || '') + '/api/miniapp/profile/update/',
-        files: files,
+        filePath: filePath,
+        name: 'avatar',
         formData: formData,
-        header: {
-          'Authorization': 'Token ' + getToken(),
-        },
+        header: authHeader,
         success: (uploadRes) => {
           try {
             const data = JSON.parse(uploadRes.data)
