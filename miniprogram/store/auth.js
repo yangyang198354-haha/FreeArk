@@ -8,6 +8,7 @@
 
 import { defineStore } from 'pinia'
 import { saveAuth, getToken, getUserInfo, clearAuth } from '@/utils/auth'
+import { BASE_URL } from '@/utils/http'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -21,7 +22,14 @@ export const useAuthStore = defineStore('auth', {
     username: (state) => state.userInfo?.username || '',
     role: (state) => state.userInfo?.role || '',
     // v1.12.0: 头像URL和昵称（来自后端登录响应，为null时前端降级展示）
-    avatarUrl: (state) => state.userInfo?.avatar_url || null,
+    //   后端返回的 avatar_url 可能是相对路径（/media/avatars/xxx.jpg），
+    //   <image> 组件需要绝对 URL，相对路径会被小程序解析为 localhost。
+    avatarUrl: (state) => {
+      const url = state.userInfo?.avatar_url
+      if (!url) return null
+      if (url.startsWith('http://') || url.startsWith('https://')) return url
+      return BASE_URL + url
+    },
     nickname: (state) => state.userInfo?.nickname || null,
   },
   actions: {
