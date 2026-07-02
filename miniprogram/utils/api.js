@@ -11,10 +11,8 @@
  *     reads top-level `count` from DRF paginated response (NOT a custom dashboard endpoint)
  */
 
-import http from './http'
+import http, { BASE_URL } from './http'
 import { getToken } from './auth'
-
-const API_BASE_URL = http.defaults?.baseURL || ''
 
 export const api = {
   // Auth
@@ -155,7 +153,7 @@ export const api = {
         formData.nickname = nickname.trim()
       }
       uni.uploadFile({
-        url: (API_BASE_URL || '') + '/api/miniapp/profile/update/',
+        url: BASE_URL + '/api/miniapp/profile/update/',
         filePath: filePath,
         name: 'avatar',
         formData: formData,
