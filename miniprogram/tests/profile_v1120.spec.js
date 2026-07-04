@@ -177,8 +177,8 @@ describe('v1.12.0 — login page rememberMe (AC-AUTH-001-01/06)', () => {
 describe('v1.12.0 — logout 清空后 avatarUrl/nickname 恢复 null (AC-PROFILE-004-05)', () => {
   it('TC-INT-012: logout 后 avatarUrl 和 nickname 均为 null', () => {
     const s = useAuthStore()
-    s.login('tok', { username: 'a', role: 'user', avatar_url: 'url', nickname: 'N' })
-    expect(s.avatarUrl).toBe('url')
+    s.login('tok', { username: 'a', role: 'user', avatar_url: 'https://img.example.com/avatar.jpg', nickname: 'N' })
+    expect(s.avatarUrl).toBe('https://img.example.com/avatar.jpg')
     expect(s.nickname).toBe('N')
     s.logout()
     expect(s.avatarUrl).toBeNull()
