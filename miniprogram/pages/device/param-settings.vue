@@ -29,7 +29,7 @@
 
     <!-- 自绘头（与 profile/chat 一致，无系统返回箭头，靠底栏 ArkTabBar 切换）-->
     <view class="ps-header">
-      <text class="ps-header-title">参数设置</text>
+      <text class="ps-header-title">指挥</text>
     </view>
 
     <scroll-view scroll-y class="ps-content">
@@ -787,9 +787,7 @@ function goBind() {
 // ── 生命周期 ─────────────────────────────────────────────────────────────────
 onLoad(() => {
   // custom 导航：标题自绘在页面内（.ps-header），无系统返回箭头，由底栏 ArkTabBar 切换。
-  //   仍设置胶囊按钮 frontColor=白（微信右上「⋯/○」两颗胶囊图标色），底色由 backgroundColor 透出的
-  //   页面 bg-base 渐变承接（与 profile/chat 一致的赛博朋克 HUD 观感）。
-  try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#05070f' }) } catch (e) { /* ignore */ }
+  //   页面 bg-base 渐变自然承接胶囊按钮区域（与 profile/chat 一致）。
   // 注：HOLO-HUD 数字/铭牌字体直接走 CSS 字体栈里的系统等宽（Menlo/Monaco/monospace）。
   //   原 uni.loadFontFace 远程拉 jsdelivr Orbitron 不稳（CDN 返回非法 TTF → OTS 解析报错），
   //   已移除；真机若要 Orbitron，改为打包本地 .ttf（static/）并在后台配 downloadFile 合法域名。

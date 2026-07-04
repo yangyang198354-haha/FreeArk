@@ -22,7 +22,7 @@
     <!-- header -->
     <view class="header">
       <view v-if="canGoBack" class="back-btn ico-back" @tap="goBack" />
-      <text class="header-title">方舟助手</text>
+      <text class="header-title">副官</text>
     </view>
 
     <!-- subbar -->

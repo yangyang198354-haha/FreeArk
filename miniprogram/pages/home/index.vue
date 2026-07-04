@@ -15,7 +15,7 @@
 
     <view class="owner-header">
       <view class="owner-title-box">
-        <text class="owner-title">方舟户型舱图</text>
+        <text class="owner-title">方舟舰桥</text>
         <text class="owner-subtitle">{{ ownerHeaderSub }}</text>
       </view>
       <view class="owner-state" :class="'state-' + overallStatus.level">
@@ -169,7 +169,7 @@
     <scroll-view scroll-y class="admin-scroll">
       <view class="home-page">
         <view class="header">
-          <text class="header-title">FreeArk 控制中心</text>
+          <text class="header-title">方舟舰桥</text>
           <text class="header-subtitle">{{ currentDate }}</text>
         </view>
 
@@ -330,9 +330,12 @@ const currentBindingLabel = computed(() => {
 const bindingLabels = computed(() =>
   bindings.value.map((b) => b.location_name || b.specific_part || '未命名专有部分')
 )
-const ownerHeaderSub = computed(() =>
-  currentSpecificPart.value ? `${currentBindingLabel.value} · ${currentSpecificPart.value}` : '等待绑定'
-)
+const ownerHeaderSub = computed(() => {
+  if (!currentBinding.value) return '等待绑定'
+  const loc = currentBinding.value.location_name
+  if (loc) return loc
+  return currentSpecificPart.value || '等待数据'
+})
 const ownerHasContent = computed(() => bindings.value.length > 0 && (roomCards.value.length > 0 || systemModules.value.length > 0))
 
 const realtimeSubTypes = computed(() => flattenRealtimeSubTypes(ownerRealtime.value?.data || ownerRealtime.value || {}))
@@ -712,7 +715,6 @@ onShow(() => {
   poller.stop()
   if (authStore.role === 'user') {
     uni.hideTabBar({ animation: false, fail: () => {} })
-    try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#05070f' }) } catch (e) {}
     loadOwnerHome()
   } else {
     uni.showTabBar({ animation: false, fail: () => {} })
@@ -833,8 +835,8 @@ function goTo(url) {
   position: relative;
   z-index: 5;
   flex: 0 0 auto;
-  min-height: 104rpx;
-  padding: 0 28rpx 10rpx;
+  min-height: 122rpx;
+  padding: 18rpx 200rpx 10rpx 28rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -872,7 +874,7 @@ function goTo(url) {
 .state-led {
   width: 14rpx;
   height: 14rpx;
-  margin-right: 10rpx;
+  margin-right: 16rpx;
   background: #5f7da6;
   transform: rotate(45deg);
 }

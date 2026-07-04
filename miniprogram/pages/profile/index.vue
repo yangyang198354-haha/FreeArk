@@ -18,7 +18,7 @@
 
     <!-- header -->
     <view class="header">
-      <text class="header-title">个人中心</text>
+      <text class="header-title">舰长休息室</text>
     </view>
 
     <!-- body -->
@@ -188,7 +188,7 @@ function goBind() {
   uni.navigateTo({ url: '/pages/bind/index' })
 }
 function goParamSettings() {
-  uni.navigateTo({ url: '/pages/device/param-settings' })
+  uni.switchTab({ url: '/pages/device/param-settings' })
 }
 function goEdit() {
   // 设计中的「编辑」= 编辑资料；当前可用的账号操作为修改密码，保留其入口

@@ -34,10 +34,10 @@ defineProps({
 const authStore = useAuthStore()
 
 const tabs = [
-  { key: 'home', label: '首页' },
-  { key: 'device', label: '设备' },
-  { key: 'chat', label: 'AI问答' },
-  { key: 'profile', label: '我的' },
+  { key: 'home', label: '舰桥' },
+  { key: 'device', label: '指挥' },
+  { key: 'chat', label: '副官' },
+  { key: 'profile', label: '舰长休息室' },
 ]
 
 function go(key) {
@@ -65,6 +65,7 @@ function go(key) {
   display: flex;
   align-items: stretch;
   height: 128rpx;
+  padding-top: 10rpx;
   padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
   background: rgba(6, 10, 20, 0.9);
@@ -86,9 +87,11 @@ function go(key) {
   height: 4rpx;
   border-radius: 4rpx;
   background: #2ff4e0;
-  box-shadow: 0 0 8px #2ff4e0;
+  box-shadow: 0 0 4px #2ff4e0;
 }
 .ico {
+  position: relative;
+  z-index: 1;
   width: 44rpx;
   height: 44rpx;
   background-repeat: no-repeat;
@@ -108,29 +111,37 @@ function go(key) {
 }
 
 /* ── 图标（SVG data-URI，stroke 颜色内联）───────────────────────────── */
-/* 未选中：rgba(170,195,230,.5)；选中：#2ff4e0 */
+/* 未选中：#4a5568；选中：#2ff4e0 */
+
+/* ── 舰桥（Bridge）：雷达扫描屏，十字准星 + 圆弧 ── */
 .ico-home {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(170,195,230,0.5)' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11l9-7 9 7'/%3E%3Cpath d='M5 10v9h14v-9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cline x1='12' y1='3' x2='12' y2='21'/%3E%3Cline x1='3' y1='12' x2='21' y2='12'/%3E%3Cpath d='M12 3 A9 9 0 0 1 21 12'/%3E%3C/svg%3E");
 }
 .ico-home-on {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11l9-7 9 7'/%3E%3Cpath d='M5 10v9h14v-9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cline x1='12' y1='3' x2='12' y2='21'/%3E%3Cline x1='3' y1='12' x2='21' y2='12'/%3E%3Cpath d='M12 3 A9 9 0 0 1 21 12'/%3E%3C/svg%3E");
 }
+
+/* ── 指挥（Command）：六边形战术盾徽 + 对角线交叉 ── */
 .ico-device {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(170,195,230,0.5)' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='2.5'/%3E%3Crect x='9' y='9' width='6' height='6' rx='1'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12,2 21,7 21,17 12,22 3,17 3,7'/%3E%3Cline x1='12' y1='2' x2='12' y2='22'/%3E%3Cline x1='3' y1='7' x2='21' y2='17'/%3E%3Cline x1='21' y1='7' x2='3' y2='17'/%3E%3C/svg%3E");
 }
 .ico-device-on {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='2.5'/%3E%3Crect x='9' y='9' width='6' height='6' rx='1'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12,2 21,7 21,17 12,22 3,17 3,7'/%3E%3Cline x1='12' y1='2' x2='12' y2='22'/%3E%3Cline x1='3' y1='7' x2='21' y2='17'/%3E%3Cline x1='21' y1='7' x2='3' y2='17'/%3E%3C/svg%3E");
 }
+
+/* ── 副官（Adjutant）：AI 神经网络节点拓扑 ── */
 .ico-chat {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(170,195,230,0.5)' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9l-4 4v-4H4z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='4' r='1.5'/%3E%3Ccircle cx='4' cy='12' r='1.5'/%3E%3Ccircle cx='20' cy='12' r='1.5'/%3E%3Ccircle cx='7' cy='20' r='1.5'/%3E%3Ccircle cx='17' cy='20' r='1.5'/%3E%3Cline x1='12' y1='5.5' x2='5.5' y2='10.5'/%3E%3Cline x1='12' y1='5.5' x2='18.5' y2='10.5'/%3E%3Cline x1='5.5' y1='13.5' x2='7' y2='18.5'/%3E%3Cline x1='18.5' y1='13.5' x2='17' y2='18.5'/%3E%3Cline x1='7' y1='18.5' x2='17' y2='18.5'/%3E%3C/svg%3E");
 }
 .ico-chat-on {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9l-4 4v-4H4z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='4' r='1.5'/%3E%3Ccircle cx='4' cy='12' r='1.5'/%3E%3Ccircle cx='20' cy='12' r='1.5'/%3E%3Ccircle cx='7' cy='20' r='1.5'/%3E%3Ccircle cx='17' cy='20' r='1.5'/%3E%3Cline x1='12' y1='5.5' x2='5.5' y2='10.5'/%3E%3Cline x1='12' y1='5.5' x2='18.5' y2='10.5'/%3E%3Cline x1='5.5' y1='13.5' x2='7' y2='18.5'/%3E%3Cline x1='18.5' y1='13.5' x2='17' y2='18.5'/%3E%3Cline x1='7' y1='18.5' x2='17' y2='18.5'/%3E%3C/svg%3E");
 }
+
+/* ── 舰长休息室（Captain's Quarters）：军衔星徽 + 舱室底线 ── */
 .ico-profile {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(170,195,230,0.5)' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 20c0-4 4-6 8-6s8 2 8 6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2l1.5 4.6h4.9l-4 2.9 1.5 4.6-4-2.9-4 2.9 1.5-4.6-4-2.9h4.9z'/%3E%3Cline x1='7' y1='20' x2='17' y2='20'/%3E%3C/svg%3E");
 }
 .ico-profile-on {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 20c0-4 4-6 8-6s8 2 8 6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2l1.5 4.6h4.9l-4 2.9 1.5 4.6-4-2.9-4 2.9 1.5-4.6-4-2.9h4.9z'/%3E%3Cline x1='7' y1='20' x2='17' y2='20'/%3E%3C/svg%3E");
 }
 </style>

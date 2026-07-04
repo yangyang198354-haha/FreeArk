@@ -11,7 +11,7 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "FreeArk 控制中心",
+        "navigationBarTitleText": "舰桥",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f",
         "enablePullDownRefresh": true
@@ -20,7 +20,7 @@
     {
       "path": "pages/chat/index",
       "style": {
-        "navigationBarTitleText": "AI 问答",
+        "navigationBarTitleText": "副官",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f",
         "disableScroll": true
@@ -29,7 +29,7 @@
     {
       "path": "pages/profile/index",
       "style": {
-        "navigationBarTitleText": "个人中心",
+        "navigationBarTitleText": "舰长休息室",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f",
         "disableScroll": true
@@ -54,9 +54,9 @@
     {
       "path": "pages/register/index",
       "style": {
-        "navigationBarTitleText": "注册",
-        "navigationBarBackgroundColor": "#1a73e8",
-        "navigationBarTextStyle": "white"
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f",
+        "disableScroll": true
       }
     },
     {
@@ -68,7 +68,7 @@
     {
       "path": "pages/device/param-settings",
       "style": {
-        "navigationBarTitleText": "参数设置",
+        "navigationBarTitleText": "指挥",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f",
         "disableScroll": true
@@ -208,26 +208,26 @@
     }
   },
   "tabBar": {
-    "color": "#4a5a7a",
+    "color": "#64748b",
     "selectedColor": "#2ff4e0",
     "borderStyle": "white",
     "backgroundColor": "#0a0f1a",
     "list": [
       {
         "pagePath": "pages/home/index",
-        "text": "首页"
+        "text": "舰桥"
       },
       {
         "pagePath": "pages/chat/index",
-        "text": "AI 问答"
+        "text": "副官"
       },
       {
         "pagePath": "pages/device/param-settings",
-        "text": "设备"
+        "text": "指挥"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的"
+        "text": "舰长休息室"
       }
     ]
   },
