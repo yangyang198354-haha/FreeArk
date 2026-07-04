@@ -61,35 +61,16 @@
         :class="m.role === 'user' ? 'row-user' : 'row-ai'"
       >
         <view v-if="m.role !== 'user'" class="avatar-ark"><text>ARK</text></view>
-
-        <!-- AI 思考中：无内容且流式 → 三点跳动 -->
-        <view
-          v-if="m.role !== 'user' && m.streaming && !m.content"
-          class="bubble bubble-ai thinking"
-        >
-          <text v-if="m.statusText" class="status-text">{{ m.statusText }}</text>
-          <view v-else class="dots">
-            <view class="dot" /><view class="dot d2" /><view class="dot d3" />
-          </view>
-        </view>
-
-        <!-- 普通气泡 -->
-        <view
-          v-else
-          class="bubble"
-          :class="m.role === 'user' ? 'bubble-user' : 'bubble-ai'"
-        >
-          <text class="btext">{{ m.content }}<text v-if="m.streaming" class="caret">▋</text></text>
-
-          <!-- 写确认门 -->
-          <view v-if="m.confirmActions && m.confirmActions.length" class="confirm-box">
-            <text class="confirm-tip">智能体请求执行操作，是否同意？</text>
-            <view class="confirm-btns">
-              <view class="cf-btn cf-yes" @tap="handleConfirm(true)"><text>同意</text></view>
-              <view class="cf-btn cf-no" @tap="handleConfirm(false)"><text>拒绝</text></view>
-            </view>
-          </view>
-        </view>
+        <ChatBubble
+          :role="m.role"
+          :content="m.content"
+          :streaming="m.streaming"
+          :reasoning="m.reasoning || ''"
+          :statusText="m.statusText || ''"
+          :confirmActions="m.confirmActions || null"
+          theme="cyberpunk"
+          @confirm="handleConfirm"
+        />
       </view>
       <view :style="{ height: '2rpx' }" />
     </scroll-view>
@@ -148,6 +129,7 @@ import { useChatStore } from '@/store/chat'
 import { ChatWebSocket } from '@/utils/chat-ws'
 import { api } from '@/utils/api'
 import ArkTabBar from '@/components/ArkTabBar.vue'
+import ChatBubble from '@/components/ChatBubble.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
@@ -416,37 +398,12 @@ onUnload(() => {
 
 .bubble { max-width: 78%; padding: 22rpx 26rpx; }
 .bubble-ai { background: rgba(14,22,42,0.85); border: 1px solid rgba(56,230,224,0.2); border-radius: 10rpx 28rpx 28rpx 28rpx; }
-.bubble-user {
-  background: linear-gradient(95deg, #22e6da, #3a8bff);
-  border-radius: 28rpx 10rpx 28rpx 28rpx; box-shadow: 0 0 18px rgba(47,244,224,0.3);
-}
 .btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; word-break: break-all; }
-.bubble-user .btext { color: #04121f; font-weight: 600; line-height: 1.55; }
-.caret { color: #2ff4e0; }
-.status-text { font-size: 24rpx; color: #ffc83c; }
-
-/* thinking dots */
-.thinking { display: flex; align-items: center; }
-.dots { display: flex; align-items: center; gap: 12rpx; padding: 4rpx 0; }
-.dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #2ff4e0; animation: ark-dot 1.2s infinite; }
-.dot.d2 { animation-delay: 0.15s; }
-.dot.d3 { animation-delay: 0.3s; }
-@keyframes ark-dot { 0%,80%,100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-6rpx); } }
 
 /* quick chips */
 .chips { display: flex; flex-wrap: wrap; gap: 16rpx; padding-left: 88rpx; margin-bottom: 26rpx; }
 .chip { border: 1px solid rgba(56,230,224,0.35); border-radius: 28rpx; padding: 12rpx 22rpx; background: rgba(47,244,224,0.05); }
 .chip text { font-size: 24rpx; color: #9fe9e0; }
-
-/* 写确认门 */
-.confirm-box { margin-top: 18rpx; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16rpx; }
-.confirm-tip { font-size: 22rpx; color: #ffd400; display: block; margin-bottom: 12rpx; }
-.confirm-btns { display: flex; gap: 16rpx; }
-.cf-btn { flex: 1; text-align: center; padding: 14rpx 0; border-radius: 10rpx; }
-.cf-yes { background: rgba(0,255,163,0.18); border: 1px solid rgba(0,255,163,0.6); }
-.cf-yes text { color: #00ffa3; font-size: 24rpx; }
-.cf-no { background: rgba(255,46,99,0.15); border: 1px solid rgba(255,46,99,0.5); }
-.cf-no text { color: #ff5c85; font-size: 24rpx; }
 
 /* input bar */
 .input-bar {
