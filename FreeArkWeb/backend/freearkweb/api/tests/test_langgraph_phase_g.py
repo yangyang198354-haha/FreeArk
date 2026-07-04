@@ -5,11 +5,11 @@
 fake LLM 见 'TOOLCALL:<name>' 链按序逐个发起工具调用（含委托工具）。
 
 覆盖：
-  - 读/知识委托：inspection 调 delegate_knowledge→sanheng、delegate_read→energy，
+  - 读/知识委托：inspection 调 delegate_knowledge→sanheng、delegate_read→freeark-expert，
     内联跑只读子专家、结果回灌、审计日志正确；深度限 1（子专家不带委托工具，不递归）。
   - 写委托：delegate_write → pending_write → **复用现有 _gate interrupt 确认门**：
     ①触发 confirm_required ②批准→execute_write（带 operator 追溯）③拒绝→不执行。
-  - 非委托专家（energy）不暴露委托工具。
+  - 所有专家均可委托（is_delegating=True）；深度限 1（子专家不带委托工具，不递归）。
 
 运行：
   cd FreeArkWeb/backend/freearkweb
@@ -52,7 +52,7 @@ class ReadKnowledgeDelegationTests(SimpleTestCase):
             out["delegations"],
             [{"target_agent": "sanheng-knowledge",
               "intent": "knowledge_query", "status": "OK"},
-             {"target_agent": "energy-expert",
+             {"target_agent": "freeark-expert",
               "intent": "read_query", "status": "OK"}])
         self.assertTrue(out["answer"])  # 续推理给出最终答复
 
@@ -61,14 +61,16 @@ class ReadKnowledgeDelegationTests(SimpleTestCase):
         self.assertEqual(
             [d["target_agent"] for d in out["delegations"]], ["sanheng-knowledge"])
 
-    def test_non_delegating_expert_has_no_delegation_tools(self):
-        # 路由到 energy（非委托专家）：脚本里的 delegate_knowledge 未绑定→被过滤→无委托。
+    def test_freeark_expert_can_delegate(self):
+        # 路由到 freeark-expert（系统管家，is_delegating=True）：可委托三恒知识专家。
         out = async_to_sync(self._orch().run)("能耗 TOOLCALL:delegate_knowledge")
-        self.assertEqual(out["experts"], ["energy-expert"])
-        self.assertEqual(out["delegations"], [])
+        self.assertEqual(out["experts"], ["freeark-expert"])
+        # 系统管家拥有委托工具，knowledge 委托会执行并产生审计日志
+        self.assertEqual(
+            [d["intent"] for d in out["delegations"]], ["knowledge_query"])
 
     def test_subexpert_depth_limit_no_recursion(self):
-        # 子专家不带委托工具：即便把委托链塞进 origin_query，被委托的 energy/sanheng
+        # 子专家不带委托工具：即便把委托链塞进 origin_query，被委托的 freeark-expert/sanheng
         # 也不会再触发委托（valid 集合不含 delegate_*）。run 正常返回即证明无无限递归。
         out = async_to_sync(self._orch().run)(
             "巡检 TOOLCALL:delegate_read TOOLCALL:delegate_knowledge")

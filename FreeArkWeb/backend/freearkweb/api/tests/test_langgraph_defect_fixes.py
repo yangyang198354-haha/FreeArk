@@ -38,17 +38,17 @@ class AggregateNoExpertLabelTests(SimpleTestCase):
         return Orchestrator(latency=0.0)
 
     def test_aggregate_digest_excludes_expert_id_labels(self):
-        """直接调 _aggregate：fake LLM final_text 不含 [energy-expert] 等标签。"""
+        """直接调 _aggregate：fake LLM final_text 不含 [freeark-expert] 等标签。"""
         orch = self._orch()
         results = [
-            {"expert": "energy-expert", "answer": "能耗正常，今日用电 120kWh。"},
+            {"expert": "freeark-expert", "answer": "能耗正常，今日用电 120kWh。"},
             {"expert": "inspection-expert", "answer": "巡检发现 2 台设备异常。"},
         ]
         out = async_to_sync(orch._aggregate)({"expert_results": results})
         final_msg = out["messages"][-1].content
         self.assertIsInstance(final_msg, str)
         self.assertTrue(final_msg)
-        self.assertNotIn("[energy-expert]", final_msg)
+        self.assertNotIn("[freeark-expert]", final_msg)
         self.assertNotIn("[inspection-expert]", final_msg)
         self.assertNotIn("[sanheng-knowledge]", final_msg)
 
@@ -64,7 +64,7 @@ class AggregateNoExpertLabelTests(SimpleTestCase):
         """单专家时直接透传 answer，不经 LLM 融合，output 与 answer 一致。"""
         orch = self._orch()
         answer = "今日能耗 120kWh，系统正常。"
-        results = [{"expert": "energy-expert", "answer": answer}]
+        results = [{"expert": "freeark-expert", "answer": answer}]
         out = async_to_sync(orch._aggregate)({"expert_results": results})
         self.assertEqual(out["messages"][-1].content, answer)
 
@@ -95,7 +95,7 @@ class DriveNoduplicateTests(SimpleTestCase):
 
         class _MockGraph:
             async def astream(self, payload, config, stream_mode):
-                yield ("updates", {"route": {"plan": [("energy-expert", "q"), ("inspection-expert", "q")]}})
+                yield ("updates", {"route": {"plan": [("freeark-expert", "q"), ("inspection-expert", "q")]}})
                 yield ("messages", (AIMessageChunk(content="ABC"), {"langgraph_node": "aggregate"}))
                 yield ("messages", (AIMessage(content="ABC"), {"langgraph_node": "aggregate"}))
 
@@ -126,7 +126,7 @@ class DriveNoduplicateTests(SimpleTestCase):
 
         class _MockGraph:
             async def astream(self, payload, config, stream_mode):
-                yield ("updates", {"route": {"plan": [("energy-expert", "q")]}})
+                yield ("updates", {"route": {"plan": [("freeark-expert", "q")]}})
                 yield ("messages", (AIMessageChunk(content="XYZ"), {"langgraph_node": "expert"}))
 
             async def aget_state(self, config):
@@ -156,7 +156,7 @@ class DriveNoduplicateTests(SimpleTestCase):
 
         class _MockGraph:
             async def astream(self, payload, config, stream_mode):
-                yield ("updates", {"route": {"plan": [("energy-expert", "q"), ("inspection-expert", "q")]}})
+                yield ("updates", {"route": {"plan": [("freeark-expert", "q"), ("inspection-expert", "q")]}})
                 yield ("messages", (AIMessage(content="FALLBACK"), {"langgraph_node": "aggregate"}))
 
             async def aget_state(self, config):

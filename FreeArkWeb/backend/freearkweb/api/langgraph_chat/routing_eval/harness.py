@@ -29,10 +29,10 @@ from ..router import (EXPERT_NAMES, _current_query, _keyword_hits,
 
 VALID_CATEGORIES = (
     "knowledge",      # 三恒原理/说明书/技术文档 → sanheng-knowledge
-    "energy",         # 能耗/用电/看板/实时参数 → energy-expert
+    "energy",         # 能耗/用电/看板/实时参数 → freeark-expert
     "inspection",     # 故障/PLC/在线离线/巡检 → inspection-expert
     "composite",      # 明确跨域 → 多专家
-    "control",        # 写/控制类（Tier-2）→ energy-expert
+    "control",        # 写/控制类（Tier-2）→ freeark-expert
     "out_of_domain",  # 闲聊/自我介绍/跑题 → 理想应为空（当前强制 DEFAULT，记录 gap）
 )
 

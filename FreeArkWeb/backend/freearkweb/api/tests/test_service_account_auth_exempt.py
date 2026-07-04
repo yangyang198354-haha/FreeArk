@@ -1,7 +1,7 @@
 """
 服务账号豁免滑动窗口不活跃超时（SlidingWindowTokenAuthentication）。
 
-背景：energy-agent（机器服务账号，供 energy-expert 写设备参数）长期低频调用，
+背景：energy-agent（机器服务账号，供 freeark-expert 写设备参数）长期低频调用，
 被「人类会话」不活跃超时误杀 → 写操作 401「会话已超时」。修复：settings
 SERVICE_ACCOUNT_USERNAMES 白名单内的账号豁免超时检查、永不过期。
 

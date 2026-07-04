@@ -59,7 +59,7 @@ class PromptLoadingTests(SimpleTestCase):
         from pathlib import Path
         from api.langgraph_chat import prompts as P
         with tempfile.TemporaryDirectory() as d:
-            ed = Path(d) / "energy-expert"
+            ed = Path(d) / "freeark-expert"
             ed.mkdir()
             (ed / "SYSTEM_PROMPT.md").write_text(
                 "OPENCLAW_VER exec python3 freeark_tool.py", encoding="utf-8")
@@ -76,7 +76,7 @@ class PromptLoadingTests(SimpleTestCase):
         from pathlib import Path
         from api.langgraph_chat import prompts as P
         with tempfile.TemporaryDirectory() as d:
-            ed = Path(d) / "energy-expert"
+            ed = Path(d) / "freeark-expert"
             ed.mkdir()
             (ed / "SYSTEM_PROMPT.md").write_text("ONLY_OPENCLAW", encoding="utf-8")
             text, fname = P._read_prompt_file(ed)
@@ -88,7 +88,7 @@ class PromptLoadingTests(SimpleTestCase):
         from pathlib import Path
         from api.langgraph_chat import prompts as P
         with tempfile.TemporaryDirectory() as d:
-            ed = Path(d) / "energy-expert"
+            ed = Path(d) / "freeark-expert"
             ed.mkdir()
             with self.assertRaises(FileNotFoundError):
                 P._read_prompt_file(ed)
@@ -100,7 +100,7 @@ class PromptLoadingTests(SimpleTestCase):
         常以**否定指令**提及这些（如「不要输出 freeark_tool.py 之类」），属合法内容。"""
         from api.langgraph_chat.prompts import load_expert_prompts, _FALLBACK_PROMPTS
         prompts = load_expert_prompts()
-        for name in ("energy-expert", "inspection-expert", "sanheng-knowledge"):
+        for name in ("freeark-expert", "inspection-expert", "sanheng-knowledge"):
             self.assertNotEqual(
                 prompts[name], _FALLBACK_PROMPTS[name],
                 f"{name} 退回了内置兜底（应装载 .langgraph.md）")
@@ -135,7 +135,7 @@ class RouterClassifierTests(SimpleTestCase):
     # ── parse_route_response 鲁棒性 ──────────────────────────────
     def test_parse_clean_json(self):
         from api.langgraph_chat.router import parse_route_response
-        self.assertEqual(parse_route_response('["energy-expert"]'), ["energy-expert"])
+        self.assertEqual(parse_route_response('["freeark-expert"]'), ["freeark-expert"])
 
     def test_parse_json_fenced(self):
         from api.langgraph_chat.router import parse_route_response
@@ -144,14 +144,14 @@ class RouterClassifierTests(SimpleTestCase):
 
     def test_parse_prose_wrapped(self):
         from api.langgraph_chat.router import parse_route_response
-        raw = '我认为应当由 ["energy-expert","sanheng-knowledge"] 处理。'
+        raw = '我认为应当由 ["freeark-expert","sanheng-knowledge"] 处理。'
         self.assertEqual(parse_route_response(raw),
-                         ["energy-expert", "sanheng-knowledge"])
+                         ["freeark-expert", "sanheng-knowledge"])
 
     def test_parse_filters_invalid_names_and_dedupes(self):
         from api.langgraph_chat.router import parse_route_response
-        raw = '["foo","energy-expert","energy-expert","bar"]'
-        self.assertEqual(parse_route_response(raw), ["energy-expert"])
+        raw = '["foo","freeark-expert","freeark-expert","bar"]'
+        self.assertEqual(parse_route_response(raw), ["freeark-expert"])
 
     def test_parse_skips_non_name_array_then_finds_valid(self):
         from api.langgraph_chat.router import parse_route_response
@@ -175,8 +175,8 @@ class RouterClassifierTests(SimpleTestCase):
     def test_classify_llm_composite(self):
         from api.langgraph_chat.router import classify_experts
         out = async_to_sync(classify_experts)(
-            _StubLLM('["energy-expert","sanheng-knowledge"]'), "随便问")
-        self.assertEqual(set(out), {"energy-expert", "sanheng-knowledge"})
+            _StubLLM('["freeark-expert","sanheng-knowledge"]'), "随便问")
+        self.assertEqual(set(out), {"freeark-expert", "sanheng-knowledge"})
 
     def test_classify_garbage_falls_back_to_keyword(self):
         from api.langgraph_chat.router import classify_experts
@@ -195,12 +195,12 @@ class RouterClassifierTests(SimpleTestCase):
         from api.langgraph_chat.router import classify_experts
         # LLM 返回 [] → 关键词路由；文本无关键词 → DEFAULT_EXPERT
         out = async_to_sync(classify_experts)(_StubLLM("[]"), "你好啊")
-        self.assertEqual(out, ["energy-expert"])
+        self.assertEqual(out, ["freeark-expert"])
 
     def test_classify_none_llm_uses_keyword(self):
         from api.langgraph_chat.router import classify_experts
         out = async_to_sync(classify_experts)(None, "查一下用电量")
-        self.assertEqual(out, ["energy-expert"])
+        self.assertEqual(out, ["freeark-expert"])
 
     # ── 护栏：数据查询误漏到无工具 sanheng 时按关键词改派（2026-06-14 生产问题）──
     def test_guard_overrides_sanheng_only_on_data_query(self):
@@ -246,13 +246,13 @@ class RouterClassifierTests(SimpleTestCase):
         # 触发/刷新/采集类控制请求被误判纯知识 → 护栏据控制关键词改派 energy（持写工具）
         out = async_to_sync(classify_experts)(
             _StubLLM('["sanheng-knowledge"]'), "请触发设备3-1-7-702的数据采集刷新")
-        self.assertEqual(out, ["energy-expert"])
+        self.assertEqual(out, ["freeark-expert"])
 
     def test_control_keyword_falls_back_to_energy(self):
         from api.langgraph_chat.router import classify_experts
         # LLM 不可用 → 关键词兜底：控制词（设定）命中 energy
         out = async_to_sync(classify_experts)(_StubLLM("乱码无数组"), "把702的温度设定到24度")
-        self.assertEqual(out, ["energy-expert"])
+        self.assertEqual(out, ["freeark-expert"])
 
     def test_guard_excludes_control_concept_from_pure_knowledge(self):
         from api.langgraph_chat.router import classify_experts
@@ -268,7 +268,7 @@ class RouterClassifierTests(SimpleTestCase):
         out = async_to_sync(classify_experts)(
             _StubLLM('["inspection-expert"]'),
             "3栋1单元702号 过去七天的能耗数据具体是多少，列出一个表格看一下")
-        self.assertEqual(out, ["energy-expert"])
+        self.assertEqual(out, ["freeark-expert"])
 
     def test_guard_keeps_llm_when_keyword_agrees(self):
         from api.langgraph_chat.router import classify_experts
@@ -293,7 +293,7 @@ class RouterClassifierTests(SimpleTestCase):
                 "用户: PLC离线情况\n助手: 88台离线\n[历史记忆结束]\n"
                 "[__freeark_user__:u] 查一下3-1-7-702的用电量")
         out = async_to_sync(classify_experts)(None, text)
-        self.assertEqual(out, ["energy-expert"])
+        self.assertEqual(out, ["freeark-expert"])
 
 
 @tag('unit')
@@ -306,7 +306,7 @@ class RouterShortCircuitTargetTests(SimpleTestCase):
         return keyword_shortcircuit_target(text)
 
     def test_single_hit_energy(self):
-        self.assertEqual(self._t("查一下用电量"), "energy-expert")
+        self.assertEqual(self._t("查一下用电量"), "freeark-expert")
 
     def test_single_hit_inspection(self):
         self.assertEqual(self._t("现在有哪些设备故障"), "inspection-expert")
@@ -315,7 +315,7 @@ class RouterShortCircuitTargetTests(SimpleTestCase):
         self.assertEqual(self._t("三恒的恒氧原理是什么"), "sanheng-knowledge")
 
     def test_control_keyword_single_hit_energy(self):
-        self.assertEqual(self._t("把702的温度设定到24度"), "energy-expert")
+        self.assertEqual(self._t("把702的温度设定到24度"), "freeark-expert")
 
     def test_zero_hit_returns_none(self):
         # 无任何关键词 → 需 LLM 语义判断，不短路
@@ -343,19 +343,21 @@ class ExpertRegistryTests(SimpleTestCase):
     def test_registry_golden_values(self):
         from api.langgraph_chat import experts as E
         self.assertEqual(E.names(),
-                         ("energy-expert", "inspection-expert", "sanheng-knowledge"))
-        self.assertEqual(E.default_expert(), "energy-expert")
-        self.assertEqual(E.data_experts(), ("energy-expert", "inspection-expert"))
-        self.assertEqual(E.delegating_experts(), ("inspection-expert",))
+                         ("freeark-expert", "inspection-expert", "sanheng-knowledge"))
+        self.assertEqual(E.default_expert(), "freeark-expert")
+        self.assertEqual(E.data_experts(), ("freeark-expert", "inspection-expert"))
+        self.assertEqual(E.delegating_experts(),
+                         ("freeark-expert", "inspection-expert", "sanheng-knowledge"))
         self.assertEqual(E.cn_map(), {
-            "energy-expert": "能耗分析",
+            "freeark-expert": "系统管家",
             "inspection-expert": "巡检诊断",
             "sanheng-knowledge": "三恒知识",
         })
         self.assertEqual(E.keywords_map()["inspection-expert"],
-                         ("故障", "巡检", "plc", "离线", "在线", "传感器", "报警"))
-        self.assertEqual(E.keywords_map()["energy-expert"][:3], ("能耗", "用电", "用量"))
-        self.assertIn("能耗分析专家", E.fallback_prompts()["energy-expert"])
+                         ("故障", "巡检", "plc", "离线", "在线", "传感器", "报警",
+                          "诊断", "修复"))
+        self.assertEqual(E.keywords_map()["freeark-expert"][:3], ("能耗", "用电", "用量"))
+        self.assertIn("系统管家", E.fallback_prompts()["freeark-expert"])
         # 恰好一个默认专家
         self.assertEqual(sum(1 for s in E.EXPERT_SPECS if s.is_default), 1)
 
@@ -401,11 +403,11 @@ class CapabilityDigestTests(SimpleTestCase):
     def test_digest_lists_each_expert_tools(self):
         from api.langgraph_chat.router import build_capability_digest
         tbe = {
-            "energy-expert": [self._FakeTool("get_usage_daily", "查询日用电量。")],
+            "freeark-expert": [self._FakeTool("get_usage_daily", "查询日用电量。")],
             "sanheng-knowledge": [self._FakeTool("search_sanheng_knowledge", "在三恒知识库检索。")],
         }
         d = build_capability_digest(tbe)
-        self.assertIn("energy-expert", d)
+        self.assertIn("freeark-expert", d)
         self.assertIn("查询日用电量", d)
         self.assertIn("三恒知识库检索", d)
 
@@ -459,7 +461,7 @@ class ClassifyGuardFlagTests(SimpleTestCase):
                 _CaptureLLM.captured = messages
 
                 class _M:
-                    content = '["energy-expert"]'
+                    content = '["freeark-expert"]'
                 return _M()
 
         llm = _CaptureLLM()
@@ -486,7 +488,7 @@ class PreviousTurnExpertTests(SimpleTestCase):
 
     def test_prev_energy(self):
         self.assertEqual(self._p(self._q("今天的总能耗是多少", "那上个月呢")),
-                         "energy-expert")
+                         "freeark-expert")
 
     def test_prev_sanheng(self):
         self.assertEqual(self._p(self._q("三恒恒氧原理是什么", "再细讲讲")),
@@ -522,7 +524,7 @@ class ClassifyStickyFallbackTests(SimpleTestCase):
 
     def test_sticky_ignored_when_keyword_hits(self):
         # 当前问题有关键词(故障)→inspection 胜出，sticky(energy) 不参与
-        out = self._c(_StubLLM("乱码"), "现在有设备故障吗", "energy-expert")
+        out = self._c(_StubLLM("乱码"), "现在有设备故障吗", "freeark-expert")
         self.assertEqual(out, ["inspection-expert"])
 
     def test_sticky_ignored_when_llm_confident(self):
@@ -533,8 +535,8 @@ class ClassifyStickyFallbackTests(SimpleTestCase):
     def test_invalid_sticky_falls_to_default(self):
         # sticky 非法/None + 零信号 → DEFAULT energy（与 P0-2 前一致）
         self.assertEqual(self._c(_StubLLM("[]"), "随便聊聊", "not-an-expert"),
-                         ["energy-expert"])
-        self.assertEqual(self._c(_StubLLM("[]"), "随便聊聊", None), ["energy-expert"])
+                         ["freeark-expert"])
+        self.assertEqual(self._c(_StubLLM("[]"), "随便聊聊", None), ["freeark-expert"])
 
 
 @tag('unit')
@@ -560,13 +562,13 @@ class ParseRouteResponseExTests(SimpleTestCase):
         self.assertEqual(self._p(None), (None, False))
 
     def test_valid_experts_not_ood(self):
-        self.assertEqual(self._p('["energy-expert"]'), (["energy-expert"], False))
+        self.assertEqual(self._p('["freeark-expert"]'), (["freeark-expert"], False))
 
     def test_back_compat_parse_route_response(self):
         # 旧签名仍返回列表/None（域外/失败都 None）
         from api.langgraph_chat.router import parse_route_response
         self.assertIsNone(parse_route_response("[]"))
-        self.assertEqual(parse_route_response('["energy-expert"]'), ["energy-expert"])
+        self.assertEqual(parse_route_response('["freeark-expert"]'), ["freeark-expert"])
 
 
 @tag('unit')
@@ -584,11 +586,11 @@ class ClassifyOODTests(SimpleTestCase):
 
     def test_ood_disabled_falls_to_default(self):
         # allow_ood=False（默认/开关关）→ 仍落 DEFAULT energy（向后兼容）
-        self.assertEqual(self._c(_StubLLM("[]"), "你好啊", False), ["energy-expert"])
+        self.assertEqual(self._c(_StubLLM("[]"), "你好啊", False), ["freeark-expert"])
 
     def test_parse_failure_not_treated_as_ood(self):
         # LLM 输出无法解析（非 []）→ 不当域外 → DEFAULT（避免把失败误判闲聊）
-        self.assertEqual(self._c(_StubLLM("我不确定"), "你好啊", True), ["energy-expert"])
+        self.assertEqual(self._c(_StubLLM("我不确定"), "你好啊", True), ["freeark-expert"])
 
     def test_keyword_overrides_ood(self):
         # 当前问题有关键词 → 关键词胜，绝不因 LLM 说 [] 就当域外
@@ -637,17 +639,17 @@ class OrchestratorRoutingTests(SimpleTestCase):
 
     def test_router_single_intent(self):
         from api.langgraph_chat.router import route_experts
-        self.assertEqual(route_experts("看一下今天的能耗看板"), ["energy-expert"])
+        self.assertEqual(route_experts("看一下今天的能耗看板"), ["freeark-expert"])
 
     def test_router_composite_intent(self):
         from api.langgraph_chat.router import route_experts
         chosen = route_experts("对比能耗看板与 PLC 故障巡检，并解释三恒原理")
         self.assertEqual(set(chosen),
-                         {"energy-expert", "inspection-expert", "sanheng-knowledge"})
+                         {"freeark-expert", "inspection-expert", "sanheng-knowledge"})
 
     def test_run_single_expert(self):
         result = async_to_sync(self._orch().run)("看一下今天的能耗看板")
-        self.assertEqual(result["experts"], ["energy-expert"])
+        self.assertEqual(result["experts"], ["freeark-expert"])
         self.assertIsInstance(result["answer"], str)
         self.assertTrue(result["answer"])
 
@@ -679,7 +681,7 @@ class OrchestratorShortCircuitTests(SimpleTestCase):
         with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
                         new=mock.AsyncMock(return_value=["sanheng-knowledge"])) as mc:
             out = self._route(orch, "查一下用电量")
-        self.assertEqual(out["plan"], [("energy-expert", "查一下用电量")])
+        self.assertEqual(out["plan"], [("freeark-expert", "查一下用电量")])
         mc.assert_not_called()   # 短路：未调 LLM 分类器
 
     def test_disabled_falls_through_to_classifier(self):
@@ -700,10 +702,10 @@ class OrchestratorShortCircuitTests(SimpleTestCase):
         orch = Orchestrator(latency=0.0)
         with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
                         new=mock.AsyncMock(
-                            return_value=["energy-expert", "inspection-expert"])) as mc:
+                            return_value=["freeark-expert", "inspection-expert"])) as mc:
             out = self._route(orch, "对比能耗和设备故障")
         self.assertEqual({n for n, _ in out["plan"]},
-                         {"energy-expert", "inspection-expert"})
+                         {"freeark-expert", "inspection-expert"})
         mc.assert_awaited_once()   # ≥2 命中不短路 → 走分类器
 
     def test_route_passes_sticky_on_zero_signal_followup(self):
@@ -727,7 +729,7 @@ class OrchestratorShortCircuitTests(SimpleTestCase):
                 "[__freeark_user__:u] 那严重吗")
         out = async_to_sync(orch._route)({"messages": [HumanMessage(content=text)]})
         # 关掉粘性 → 零信号落 DEFAULT energy
-        self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
+        self.assertEqual([n for n, _ in out["plan"]], ["freeark-expert"])
 
 
 @tag('unit')
@@ -745,7 +747,7 @@ class SemanticRouterPureTests(SimpleTestCase):
             v = np.asarray(v, dtype=np.float32)
             return v / (np.linalg.norm(v) + 1e-9)
         return {
-            "energy-expert": np.array([n([1.0, 0.0])]),
+            "freeark-expert": np.array([n([1.0, 0.0])]),
             "inspection-expert": np.array([n([0.0, 1.0])]),
             "sanheng-knowledge": np.array([n([-1.0, 0.0])]),
         }
@@ -753,18 +755,18 @@ class SemanticRouterPureTests(SimpleTestCase):
     def test_score_experts_orders_by_max_cosine(self):
         from api.langgraph_chat.semantic_router import score_experts
         scored = score_experts([1.0, 0.0], self._mats())  # 与 energy 完全同向
-        self.assertEqual(scored[0][0], "energy-expert")
+        self.assertEqual(scored[0][0], "freeark-expert")
         self.assertAlmostEqual(scored[0][1], 1.0, places=4)
 
     def test_decide_routes_on_high_conf(self):
         from api.langgraph_chat.semantic_router import decide
         # top 0.9 ≥ τ0.65，margin 0.9-0.2=0.7 ≥ δ0.05 → 命中
-        self.assertEqual(decide([("energy-expert", 0.9), ("x", 0.2)], 0.65, 0.05),
-                         "energy-expert")
+        self.assertEqual(decide([("freeark-expert", 0.9), ("x", 0.2)], 0.65, 0.05),
+                         "freeark-expert")
 
     def test_decide_abstains_below_tau(self):
         from api.langgraph_chat.semantic_router import decide
-        self.assertIsNone(decide([("energy-expert", 0.5), ("x", 0.1)], 0.65, 0.05))
+        self.assertIsNone(decide([("freeark-expert", 0.5), ("x", 0.1)], 0.65, 0.05))
 
     def test_decide_abstains_low_margin(self):
         from api.langgraph_chat.semantic_router import decide
@@ -785,7 +787,7 @@ class SemanticRouterPureTests(SimpleTestCase):
         r = SemanticRouter(tau=0.65, margin=0.05)
         r._exemplars = self._mats()
         r._loaded = True
-        self.assertEqual(r.route_with_vector([1.0, 0.05]), "energy-expert")
+        self.assertEqual(r.route_with_vector([1.0, 0.05]), "freeark-expert")
         self.assertEqual(r.route_with_vector([0.05, 1.0]), "inspection-expert")
 
     def test_load_exemplars_excludes_composite_and_ood(self):
@@ -793,10 +795,10 @@ class SemanticRouterPureTests(SimpleTestCase):
         from api.langgraph_chat.semantic_router import load_exemplar_texts
         groups = load_exemplar_texts()
         self.assertTrue(set(groups).issubset(
-            {"energy-expert", "inspection-expert", "sanheng-knowledge"}))
+            {"freeark-expert", "inspection-expert", "sanheng-knowledge"}))
         # 至少三个专家各有若干范例
         self.assertTrue(all(len(groups.get(e, [])) >= 3 for e in
-                            ("energy-expert", "inspection-expert", "sanheng-knowledge")))
+                            ("freeark-expert", "inspection-expert", "sanheng-knowledge")))
 
     def test_route_fail_open_on_embed_error(self):
         # embedding 抛错 → route() 返回 None（fail-open，穿透 LLM）
@@ -836,7 +838,7 @@ class OrchestratorSemanticTests(SimpleTestCase):
         # 语义命中 inspection（无关键词的问题）→ 跳过 LLM 分类器
         orch._semantic_router.route = mock.AsyncMock(return_value="inspection-expert")
         with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
-                        new=mock.AsyncMock(return_value=["energy-expert"])) as mc:
+                        new=mock.AsyncMock(return_value=["freeark-expert"])) as mc:
             out = self._route(orch, "设备最近怪怪的")  # 无关键词
         self.assertEqual([n for n, _ in out["plan"]], ["inspection-expert"])
         mc.assert_not_called()
@@ -861,7 +863,7 @@ class OrchestratorSemanticTests(SimpleTestCase):
         # 关键词命中（"用电量"→energy）应在语义层之前，语义 route 不被调用
         orch._semantic_router.route = mock.AsyncMock(return_value="inspection-expert")
         out = self._route(orch, "查一下用电量")
-        self.assertEqual([n for n, _ in out["plan"]], ["energy-expert"])
+        self.assertEqual([n for n, _ in out["plan"]], ["freeark-expert"])
         orch._semantic_router.route.assert_not_called()
 
     @override_settings(LANGGRAPH_ROUTER_SEMANTIC=True)
@@ -873,13 +875,13 @@ class OrchestratorSemanticTests(SimpleTestCase):
         orch._semantic_router.route = mock.AsyncMock(return_value="inspection-expert")
         with mock.patch("api.langgraph_chat.orchestrator.classify_experts",
                         new=mock.AsyncMock(
-                            return_value=["energy-expert", "inspection-expert"])) as mc:
+                            return_value=["freeark-expert", "inspection-expert"])) as mc:
             out = self._route(orch, "对比能耗和设备故障")  # ≥2 关键词命中=复合
         # 语义被跳过（≥2 关键词），交 LLM 多专家
         orch._semantic_router.route.assert_not_called()
         mc.assert_awaited_once()
         self.assertEqual({n for n, _ in out["plan"]},
-                         {"energy-expert", "inspection-expert"})
+                         {"freeark-expert", "inspection-expert"})
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
@@ -892,7 +894,7 @@ class OrchestratorCapabilityTests(SimpleTestCase):
         from api.langgraph_chat.orchestrator import Orchestrator
         orch = Orchestrator(latency=0.0)
         self.assertTrue(orch.guard_enabled)
-        self.assertIn("energy-expert", orch._capability_digest)
+        self.assertIn("freeark-expert", orch._capability_digest)
         self.assertIn("用电量", orch._capability_digest)
 
     @override_settings(LANGGRAPH_ROUTER_CAPABILITY_PROMPT=False)
@@ -939,7 +941,7 @@ class OrchestratorOODTests(SimpleTestCase):
     def test_fan_out_disabled_ood_falls_to_expert(self):
         # plan 非空（域外关闭时落 DEFAULT energy）→ 正常走 expert
         orch = self._orch_ood()
-        sends = orch._fan_out({"plan": [("energy-expert", "你好啊")], "route_text": "你好啊"})
+        sends = orch._fan_out({"plan": [("freeark-expert", "你好啊")], "route_text": "你好啊"})
         self.assertEqual([s.node for s in sends], ["expert"])
 
     def test_general_node_produces_answer(self):
@@ -961,7 +963,7 @@ class OrchestratorOODTests(SimpleTestCase):
         # 有关键词的正常问题不受 OOD 影响（仍走专家）
         orch = self._orch_ood()
         res = async_to_sync(orch.run)("查一下今天的能耗看板", thread_id="ood-kw")
-        self.assertEqual(res["experts"], ["energy-expert"])
+        self.assertEqual(res["experts"], ["freeark-expert"])
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过")
@@ -1453,7 +1455,7 @@ class ReasoningPassthroughTests(SimpleTestCase):
                 self.graph = _FakeGraph(events)
 
         events = [
-            ("updates", {"route": {"plan": [("energy-expert", "q")]}}),
+            ("updates", {"route": {"plan": [("freeark-expert", "q")]}}),
             ("messages", (AIMessageChunk(content="",
                           additional_kwargs={"reasoning_content": "先想一想"}),
                           {"langgraph_node": "expert"})),
@@ -1486,4 +1488,4 @@ class ReasoningPassthroughTests(SimpleTestCase):
             "模型 reasoning 应全部早于首个 content")
         # 阶段b 编排步骤也在（两者结合）
         self.assertTrue(any(t.startswith("🔍") for k, t in out if k == "reasoning"))
-        self.assertTrue(any("能耗分析" in t for k, t in out if k == "reasoning"))
+        self.assertTrue(any("系统管家" in t for k, t in out if k == "reasoning"))

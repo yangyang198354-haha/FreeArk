@@ -18,7 +18,7 @@
 ## 数据集 schema（每行一个对象）
 
 ```json
-{"id": "ener-003", "query": "查一下用电量", "expected": ["energy-expert"],
+{"id": "ener-003", "query": "查一下用电量", "expected": ["freeark-expert"],
  "category": "energy", "keyword_floor": true, "tags": [], "source": "unit-test", "notes": ""}
 ```
 
@@ -125,8 +125,8 @@ python manage.py test api.tests.test_routing_eval --settings=freearkweb.test_set
 ## P1-2 域外/闲聊路径（已实现，2026-06-27）
 
 LLM 明确表态问题**不属任何专家**（且无关键词、无粘性）时，路由到 `general` 通用应答节点
-（友好寒暄 + 能力引导），而非盲目塞给能耗专家。解决"你好/你是谁/今天天气/谢谢再见"被
-能耗专家别扭作答的问题（评测 4 条 OOD 用例）。
+（友好寒暄 + 能力引导），而非盲目塞给系统管家。解决"你好/你是谁/今天天气/谢谢再见"被
+系统管家别扭作答的问题（评测 4 条 OOD 用例）。
 
 - **关键区分**：`parse_route_response_ex` 把"LLM 解析出空数组（`[]`/`["foo"]`）"与"输出无法
   解析/异常"分开——只有前者（`saw_empty=True`）才是可信的域外信号，后者仍按解析失败兜底。

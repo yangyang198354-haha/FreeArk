@@ -372,8 +372,17 @@ def search_sanheng_knowledge(query: str) -> str:
 
 SANHENG_TOOLS: list = [search_sanheng_knowledge]  # v1.4.0: RAG 检索工具
 
+# freeark-expert（系统管家）= 全部工具的并集（去重），体现全系统掌控权
+# StructuredTool 不可哈希，不能直接用 dict.fromkeys；按 tool.name 手动去重保序。
+_seen_tool_names: set = set()
+_FREARK_EXPERT_TOOLS: list = []
+for _t in ENERGY_TOOLS + INSPECTION_TOOLS + SANHENG_TOOLS:
+    if _t.name not in _seen_tool_names:
+        _seen_tool_names.add(_t.name)
+        _FREARK_EXPERT_TOOLS.append(_t)
+
 TOOLS_BY_EXPERT = {
-    "energy-expert": ENERGY_TOOLS,
+    "freeark-expert": _FREARK_EXPERT_TOOLS,
     "inspection-expert": INSPECTION_TOOLS,
     "sanheng-knowledge": SANHENG_TOOLS,
 }

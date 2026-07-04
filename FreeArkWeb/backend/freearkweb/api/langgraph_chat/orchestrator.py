@@ -27,7 +27,7 @@ api.langgraph_chat.orchestrator —— 编排图：supervisor 路由 + 专家并
   LANGGRAPH_LLM_TIMEOUT   - 单次调用超时秒，默认 60
 
 阶段D 路由：route 节点经 router.classify_experts() 用 LLM 分类器选专家，失败/空命中
-回退关键词路由、再回退 energy-expert（三级兜底，见 router.py）。fake 模式下分类器返回
+回退关键词路由、再回退 freeark-expert（三级兜底，见 router.py）。fake 模式下分类器返回
 非 JSON → 自动回退关键词路由，故离线单测路由仍确定。
 
 文档引用：PHASE3_ROLLOUT.md 阶段 A/C/D, detailed_design.md §1.2/§1.3,
@@ -489,7 +489,7 @@ class Orchestrator:
                         "expert": name,
                         "pending_write": self._write_from_delegation(dw.get("args", {})),
                         "delegations": delegations + [{
-                            "target_agent": "energy-expert", "intent": "write_command",
+                            "target_agent": "freeark-expert", "intent": "write_command",
                             "status": "PENDING_CONFIRM"}],
                     }]}
 
@@ -551,7 +551,7 @@ class Orchestrator:
     @staticmethod
     def _write_from_delegation(args: dict) -> dict:
         """把 inspection 的 delegate_write 提案映射为 gate 可执行的 pending_write。
-        走能耗专家的写工具（set_device_params / trigger_refresh）+ 既有 execute_write 审计。"""
+        走系统管家的写工具（set_device_params / trigger_refresh）+ 既有 execute_write 审计。"""
         args = args or {}
         sp = args.get("specific_part", "") or ""
         if args.get("trigger_refresh_only"):
@@ -576,10 +576,10 @@ class Orchestrator:
         q = args.get("query") or origin_query
         if part:
             q = f"{q}（设备 {part}）"
-        ans = (await self._run_subexpert("energy-expert", q)).get("answer", "")
-        return ({"status": "OK", "from": "energy-expert",
+        ans = (await self._run_subexpert("freeark-expert", q)).get("answer", "")
+        return ({"status": "OK", "from": "freeark-expert",
                  "intent": "read_query", "data": ans},
-                {"target_agent": "energy-expert",
+                {"target_agent": "freeark-expert",
                  "intent": "read_query", "status": "OK"})
 
     async def _run_subexpert(self, name: str, query: str) -> dict:

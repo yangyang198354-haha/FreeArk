@@ -13,7 +13,7 @@ api.langgraph_chat.experts —— 专家注册表（P2-2：单一真源）
 故 router.py（顶层禁 langchain，便于离线单测）可安全 import 本表。工具对象（@tool，依赖
 langchain）天然留在 fa_tools；本表只给「名字 + 顺序 + langchain-free 元数据」的权威来源。
 
-顺序即全系统专家顺序（energy → inspection → sanheng），各派生常量保持此序。
+顺序即全系统专家顺序（freeark → inspection → sanheng），各派生常量保持此序。
 """
 
 from __future__ import annotations
@@ -29,30 +29,40 @@ class ExpertSpec:
     keywords: Tuple[str, ...]       # 关键词路由命中词（确定性兜底 + P0-1 短路基准）
     is_data_expert: bool            # 是否持有数据查询/写工具（护栏区分：数据查询不可落无工具专家）
     fallback_prompt: str            # 提示文件缺失时的内置兜底系统提示
-    is_delegating: bool = False     # 是否可子委托同侪（阶段 G，目前仅 inspection）
+    is_delegating: bool = False     # 是否可子委托同侪（阶段 G）
     is_default: bool = False        # 零信号兜底默认专家（全系统唯一一个 True）
 
 
 # ── 专家注册表（唯一真源；顺序 = 全系统专家顺序）─────────────────────────────
-# 关键词选词原则（原 router.py 注释，随数据迁来）：
-#   energy-expert 兼"操控"：能耗读词 + Tier-2 写/控制动作词（刷新/采集/下发/触发/设定）；
-#     **不收** 控制/调节（"三恒怎么控制温度的原理"是知识问题，收了会被护栏误改派到 energy）。
+# 关键词选词原则：
+#   freeark-expert = 系统管家，拥有全部工具，覆盖面应收尽收：
+#     能耗读词 + Tier-2 写/控制动作词 + 系统交互词（状态/查询/参数/控制/温度/湿度/CO₂/风量）。
+#     **不收** 纯知识原理词（"为什么/原理/说明书" 归 sanheng-knowledge）。
+#   inspection-expert = 巡检诊断：PLC/故障/传感器 + 在线/离线 + 诊断/修复。
 #   sanheng-knowledge = 知识库/RAG：三恒原理概念 + 设备说明书/技术文档（接口/型号/接线/尺寸/
 #     说明书/热量表…）。选**与数据域低撞车**的词，不收"参数/数据"等泛词（与实时参数查询冲突）。
 EXPERT_SPECS: List[ExpertSpec] = [
     ExpertSpec(
-        name="energy-expert",
-        cn_label="能耗分析",
+        name="freeark-expert",
+        cn_label="系统管家",
         keywords=("能耗", "用电", "用量", "电费", "看板", "节能", "kwh",
-                  "刷新", "采集", "下发", "触发", "设定"),
+                  "刷新", "采集", "下发", "触发", "设定",
+                  "状态", "查询", "参数",
+                  "温度", "湿度", "CO₂", "风量"),
         is_data_expert=True,
-        fallback_prompt="你是 FreeArk 能耗分析专家，基于用电/看板数据给出节能与异常判断。",
+        fallback_prompt=(
+            "你是 FreeArk（自由方舟）系统管家，拥有全系统数据查询与控制能力。"
+            "基于能耗看板、设备实时参数、PLC 状态、故障汇总和三恒知识库，"
+            "为用户提供一站式系统概览、数据查询、设备控制和知识问答。"
+        ),
+        is_delegating=True,
         is_default=True,
     ),
     ExpertSpec(
         name="inspection-expert",
         cn_label="巡检诊断",
-        keywords=("故障", "巡检", "plc", "离线", "在线", "传感器", "报警"),
+        keywords=("故障", "巡检", "plc", "离线", "在线", "传感器", "报警",
+                  "诊断", "修复"),
         is_data_expert=True,
         fallback_prompt="你是 FreeArk 巡检诊断专家，结合 PLC 状态与故障汇总定位设备问题。",
         is_delegating=True,
@@ -65,7 +75,11 @@ EXPERT_SPECS: List[ExpertSpec] = [
                   "热量表", "计量表", "主控箱", "手操器", "新风机",
                   "modbus", "485", "毛细管"),
         is_data_expert=False,
-        fallback_prompt="你是三恒系统知识专家，依据恒温恒湿恒氧原理回答原理性问题。",
+        fallback_prompt=(
+            "你是三恒系统知识专家，依循三层知识源（RAG 检索 > 三恒行业知识 > 通用互联网知识）"
+            "回答原理性问题。需要实时数据支撑时，可委托系统管家获取数据。"
+        ),
+        is_delegating=True,
     ),
 ]
 

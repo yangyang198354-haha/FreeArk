@@ -9,7 +9,7 @@ api.langgraph_chat.router —— 意图路由
 兜底链（决策：总有专家应答）：
   LLM 分类器命中非空 → 用之
   → LLM 失败/解析不出/空 → 关键词路由 route_experts()
-  → 关键词仍空 → DEFAULT_EXPERT（energy-expert）
+  → 关键词仍空 → DEFAULT_EXPERT（freeark-expert）
 
 设计要点：
   - LLM 调用走 tuple 格式消息 `[("system",..),("human",..)]`，router.py 顶层**不 import
@@ -114,16 +114,19 @@ def previous_turn_expert(text: str) -> Optional[str]:
 ROUTER_SYSTEM_PROMPT = (
     "你是 FreeArk（自由方舟）智能客服的意图路由器。根据用户问题，判断应由哪些专家处理。\n"
     "只能从以下 3 个专家里选：\n"
-    "- energy-expert：能耗/用电量/电费/看板摘要，以及设备实时传感器参数（温度/湿度/CO₂/风量）的查询与分析。\n"
-    "- inspection-expert：PLC 在线/离线状态、设备故障汇总、巡检诊断、预警识别。\n"
+    "- freeark-expert：系统管家，拥有全系统掌控权——能耗看板摘要、日用电量、设备实时传感器参数"
+    "（温度/湿度/CO₂/风量）查询与分析、PLC 在线/离线状态、设备故障汇总、设备参数控制（写操作）、"
+    "按需采集刷新、三恒知识库检索。覆盖面最广，是默认承接专家。\n"
+    "- inspection-expert：巡检诊断专家，专注 PLC 在线/离线状态深度诊断、设备故障汇总分析、"
+    "巡检诊断、预警识别、故障修复建议。\n"
     "- sanheng-knowledge：三恒系统（恒温/恒湿/恒氧）的原理、概念、参数含义，以及设备说明书/"
     "技术文档类知识问题（如热量表/计量表接口标准、设备型号、接线方式、尺寸图纸、主控箱/新风机/"
     "手操器/面板等部件的说明）——凡答案来自产品手册或技术文档的，都归本专家。\n"
     "规则：\n"
     "1. 单一意图只选 1 个；只有问题明确同时涉及多个领域时才选多个（控成本与并发，不要滥选）。\n"
     "2. 三者都不沾边则返回空数组 []。\n"
-    "3. 只输出 JSON 数组，元素是上面的专家 id，例如 [\"energy-expert\"] 或 "
-    "[\"energy-expert\",\"sanheng-knowledge\"]。不要任何解释、不要代码围栏、不要多余文字。"
+    "3. 只输出 JSON 数组，元素是上面的专家 id，例如 [\"freeark-expert\"] 或 "
+    "[\"freeark-expert\",\"sanheng-knowledge\"]。不要任何解释、不要代码围栏、不要多余文字。"
 )
 
 # 提取 JSON 数组片段（非贪婪；flash 可能在数组前后夹散文或 ```json 围栏）。
@@ -245,12 +248,21 @@ def _guard_against_misroute(names: List[str], query: str) -> List[str]:
              而它无 get_usage_daily，只能答"我手头工具只能查 PLC/故障"。
 
     仅在「单一路由 + 关键词明确指向数据域」时介入；复合路由、关键词为空、或关键词含
-    所选专家时一律保留 LLM 结果（LLM 仍是判断主力，护栏只兜高置信矛盾），爆炸半径最小。"""
+    所选专家时一律保留 LLM 结果（LLM 仍是判断主力，护栏只兜高置信矛盾），爆炸半径最小。
+
+    2026-07-04（freeark-expert 改名+关键词扩展）：情形1 新增 sanheng 关键词共存检查——
+    freeark-expert 关键词扩大后与 sanheng 可能出现交集（如"温度"既可以是传感器查询也
+    可以是原理话题）。若 query **同时**命中 sanheng 关键词，说明它可能是正当的知识问题，
+    此时不覆盖、保留 LLM 判断。"""
     data_hits = [e for e in _keyword_hits(query) if e in DATA_EXPERTS]
     if not data_hits:
         return names
     # 情形1：仅选无工具的 sanheng，但当前问题是数据查询
     if names == ["sanheng-knowledge"]:
+        # 若 query 同时也命中 sanheng 自身关键词 → 可能是正当知识问题，不覆盖
+        sanheng_kws = ROUTE_KEYWORDS.get("sanheng-knowledge", ())
+        if any(k in query.lower() for k in sanheng_kws):
+            return names
         logger.info("router 护栏1：LLM 仅选 sanheng-knowledge（无工具）但当前问题命中数据域 "
                     "%s，改派", data_hits)
         return data_hits

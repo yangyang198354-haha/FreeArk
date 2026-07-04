@@ -62,11 +62,11 @@ def _agents_dir() -> Path:
             return Path(cfg)
     except Exception:  # pragma: no cover
         pass
-    # 向上逐层找含 agents/energy-expert 的目录（不依赖固定层数，避免 IndexError）。
+    # 向上逐层找含 agents/freeark-expert 的目录（不依赖固定层数，避免 IndexError）。
     here = Path(__file__).resolve()
     for parent in here.parents:
         cand = parent / "agents"
-        if (cand / "energy-expert").is_dir():
+        if (cand / "freeark-expert").is_dir():
             return cand
     return here.parents[-1] / "agents"
 
