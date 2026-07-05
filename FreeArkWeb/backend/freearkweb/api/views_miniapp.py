@@ -25,6 +25,8 @@ UserRoleApiGuardMiddleware 对 /api/miniapp/ 前缀整体放行，
 @implements REQ-AUTH-001, REQ-AUTH-002, REQ-BIND-001 ~ REQ-BIND-004, REQ-OWNER-001
 """
 
+import base64
+import json
 import logging
 import os
 import uuid
@@ -619,23 +621,47 @@ _VOICE_MAX_BYTES = 10 * 1024 * 1024  # 最大 10MB（60s WAV ≈ 1.9MB）
 def miniapp_voice_recognize(request):
     """语音识别端点（v1.12.0 MOD-P1208 方案B）。
 
-    POST /api/miniapp/voice/recognize/
-      Content-Type: multipart/form-data
-      audio_file: WAV 16kHz 16-bit mono（必填，最大 10MB）
+    支持两种提交方式：
+      1. multipart/form-data: audio_file=<WAV 文件>（旧版 uploadFile，需 uploadFile 白名单）
+      2. application/json: {"audio_base64": "...", "format": "wav"}（新版，走 request 白名单）
 
     Response 200: {text: "识别结果文字"}
     Response 400: {detail: "..."} 参数缺失/格式错误
     Response 503: {detail: "语音识别服务暂不可用"} ASR 未就绪
     """
+    wav_bytes = None
+
+    # 方式1：multipart（旧版 uploadFile）
     audio_file = request.FILES.get('audio_file') if hasattr(request, 'FILES') else None
-    if audio_file is None:
+    if audio_file is not None:
+        if audio_file.size > _VOICE_MAX_BYTES:
+            return Response(
+                {'detail': f'音频文件不能超过 {_VOICE_MAX_BYTES // 1024 // 1024}MB'},
+                status=400,
+            )
+        wav_bytes = audio_file.read()
+
+    # 方式2：base64 JSON（新版，绕过 uploadFile 域名限制）
+    if wav_bytes is None and hasattr(request, 'data'):
+        body = request.data
+        if isinstance(body, dict) and body.get('audio_base64'):
+            b64_str = body['audio_base64']
+            if len(b64_str) > _VOICE_MAX_BYTES * 1.4:  # base64 比原始大 ~33%
+                return Response(
+                    {'detail': f'音频数据不能超过 {_VOICE_MAX_BYTES // 1024 // 1024}MB'},
+                    status=400,
+                )
+            try:
+                wav_bytes = base64.b64decode(b64_str)
+            except Exception:
+                return Response(
+                    {'detail': '音频数据格式错误（base64 解码失败）'},
+                    status=400,
+                )
+
+    if wav_bytes is None:
         return Response(
-            {'detail': '请上传音频文件（audio_file 字段）'},
-            status=400,
-        )
-    if audio_file.size > _VOICE_MAX_BYTES:
-        return Response(
-            {'detail': f'音频文件不能超过 {_VOICE_MAX_BYTES // 1024 // 1024}MB'},
+            {'detail': '请提供音频数据（audio_file 或 audio_base64）'},
             status=400,
         )
 
@@ -647,7 +673,6 @@ def miniapp_voice_recognize(request):
                 {'detail': '语音识别服务暂不可用，请稍后重试或使用文字输入'},
                 status=503,
             )
-        wav_bytes = audio_file.read()
         text = recognizer.recognize(wav_bytes)
         if not text:
             return Response(
