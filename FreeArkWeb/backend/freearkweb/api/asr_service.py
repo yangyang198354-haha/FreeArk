@@ -37,7 +37,8 @@ _MODEL_URL = (
     "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
 )
 _MODEL_DIR_NAME = "sense_voice_small"
-_MODEL_FILES = ["model.onnx", "tokens.txt"]
+_MODEL_FILES = ["model.int8.onnx", "model.onnx", "tokens.txt"]
+# 优先 int8 量化模型（~229MB），Pi 4GB RAM 友好；float32 模型 ~895MB 可能 OOM
 
 
 def _default_model_dir() -> Path:
@@ -53,15 +54,17 @@ def _default_model_dir() -> Path:
 # ── 模型下载 ──────────────────────────────────────────────────────────────────
 
 def _download_model(model_dir: Path) -> None:
-    """下载并解压 SenseVoiceSmall 模型到 model_dir。已存在则跳过。"""
+    """下载并解压 SenseVoiceSmall 模型到 model_dir。已有模型文件则跳过。"""
     model_dir = Path(model_dir)
-    # 检查所有必需文件是否存在
-    if all((model_dir / f).exists() for f in _MODEL_FILES):
+    # 检查是否已有可用模型（int8 或 float32）+ tokens
+    has_model = (model_dir / "model.int8.onnx").exists() or (model_dir / "model.onnx").exists()
+    has_tokens = (model_dir / "tokens.txt").exists()
+    if has_model and has_tokens:
         logger.info("ASR 模型已就绪: %s", model_dir)
         return
 
     model_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("首次使用：正在下载 ASR 模型 (~200MB)…")
+    logger.info("首次使用：正在下载 ASR 模型 (~200MB 压缩包)…")
     try:
         with tempfile.NamedTemporaryFile(suffix=".tar.bz2", delete=False) as tmp:
             tmp_path = tmp.name
@@ -136,8 +139,14 @@ class VoiceRecognizer:
     def __init__(self, model_dir: Path):
         import sherpa_onnx
 
-        model_path = str(Path(model_dir) / "model.onnx")
-        tokens_path = str(Path(model_dir) / "tokens.txt")
+        md = Path(model_dir)
+        # 优先 int8 量化模型：~229MB vs float32 ~895MB（Pi 4GB RAM 下 OOM 风险）
+        model_path = str(md / "model.int8.onnx")
+        if not md.joinpath("model.int8.onnx").exists():
+            model_path = str(md / "model.onnx")
+            logger.warning("int8 模型不存在，使用 float32 模型（~895MB，可能内存不足）")
+
+        tokens_path = str(md / "tokens.txt")
 
         self._recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
             model=model_path,
@@ -146,7 +155,7 @@ class VoiceRecognizer:
             use_itn=True,      # 逆文本正则化（数字/日期/标点规范化）
             num_threads=4,     # Pi 5 4核，充分利用
         )
-        logger.info("ASR 识别器初始化完成 (SenseVoiceSmall)")
+        logger.info("ASR 识别器初始化完成 (SenseVoiceSmall, model=%s)", model_path)
 
     def recognize(self, wav_bytes: bytes) -> str:
         """识别 WAV 音频，返回文本。空结果返回空字符串。"""
