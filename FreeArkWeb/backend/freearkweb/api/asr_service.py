@@ -144,7 +144,7 @@ class VoiceRecognizer:
             use_itn=True,      # 逆文本正则化（数字/日期/标点规范化）
         )
         config = sherpa_onnx.OfflineRecognizerConfig(
-            model=sense_voice_config,
+            model_config=sense_voice_config,
         )
         self._recognizer = sherpa_onnx.OfflineRecognizer(config)
         logger.info("ASR 识别器初始化完成 (SenseVoiceSmall)")
