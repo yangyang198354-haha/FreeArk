@@ -70,7 +70,7 @@ import { useChatStore } from '@/store/chat'
 import { ChatWebSocket } from '@/utils/chat-ws'
 import { api } from '@/utils/api'
 import ChatBubble from '@/components/ChatBubble.vue'
-import ChatInputBar from '../components/ChatInputBar.vue'
+import ChatInputBar from '@/components/ChatInputBar.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()

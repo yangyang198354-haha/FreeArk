@@ -124,7 +124,7 @@ import { ChatWebSocket } from '@/utils/chat-ws'
 import { api } from '@/utils/api'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
-import ChatInputBar from '@/subpackages/chat/components/ChatInputBar.vue'
+import ChatInputBar from '@/components/ChatInputBar.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()

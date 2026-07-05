@@ -44,7 +44,7 @@ vi.mock('@/utils/auth', () => ({
   getToken: vi.fn(() => 'mock-token'),
 }))
 
-import ChatInputBar from '@/subpackages/chat/components/ChatInputBar.vue'
+import ChatInputBar from '@/components/ChatInputBar.vue'
 import { requestPermission } from '@/utils/permission'
 import { startRecording, stopAndRecognize } from '@/utils/voice-input'
 import { uploadImage, isUploadIdExpired } from '@/utils/media-uploader'
