@@ -81,27 +81,14 @@
       <view :id="bottomAnchor" style="height:2rpx" />
     </scroll-view>
 
-    <!-- input bar -->
-    <view class="input-bar">
-      <textarea
-        class="msg-input"
-        v-model="inputText"
-        placeholder="向智能方舟副官提问"
-        placeholder-style="color:rgba(143,217,255,0.55);font-size:28rpx;line-height:44rpx"
-        :disabled="!wsConnected || isStreaming"
-        auto-height
-        :maxlength="-1"
-        @confirm="onSend"
-      />
-      <view class="voice-btn ico-mic" @touchstart="onVoiceStart" @touchend="onVoiceEnd" />
-      <view
-        class="send-btn"
-        :class="{ 'send-disabled': !wsConnected || isStreaming || !inputText.trim() }"
-        @tap="onSend"
-      >
-        <view class="ico-send" />
-      </view>
-    </view>
+    <!-- input bar (v1.13.0: ChatInputBar 豆包风格四按钮) -->
+    <ChatInputBar
+      :wsConnected="wsConnected"
+      :isStreaming="isStreaming"
+      theme="dark"
+      @send="onSend"
+      @error="onInputError"
+    />
 
     <!-- 底栏 -->
     <ArkTabBar active="chat" />
@@ -134,10 +121,10 @@ import { useAuthStore } from '@/store/auth'
 import { useChatStore } from '@/store/chat'
 import { useOwnerStore } from '@/store/owner'
 import { ChatWebSocket } from '@/utils/chat-ws'
-import { startRecording, stopAndRecognize } from '@/utils/voice-input'
 import { api } from '@/utils/api'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
+import ChatInputBar from '@/subpackages/chat/components/ChatInputBar.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
@@ -146,7 +133,6 @@ const ownerStore = useOwnerStore()
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
 
-const inputText = ref('')
 const scrollTopDyn = ref(0)
 const bottomAnchor = ref('anchor-a')
 const connecting = ref(false)
@@ -240,28 +226,34 @@ async function loadHistory(sessionKey) {
 }
 
 // 发送
-function sendText(text) {
-  const t = (text || '').trim()
-  if (!t || !wsConnected.value || isStreaming.value) return
-  chatStore.addMessage({ role: 'user', content: t, streaming: false, reasoning: '', statusText: '', confirmActions: null })
+function onSend({ text, media }) {
+  const hasText = text && text.trim().length > 0
+  const hasMedia = media && media.length > 0
+  if (!hasText && !hasMedia) return
+  if (!wsConnected.value || isStreaming.value) return
+
+  const parts = []
+  if (hasMedia) {
+    const imageCount = media.filter(m => m.type === 'image').length
+    parts.push(imageCount > 0 ? ('[图片' + (imageCount > 1 ? ' x' + imageCount : '') + ']') : '[媒体消息]')
+  }
+  if (hasText) parts.push(text.trim())
+  const userLabel = parts.join(' ')
+
+  chatStore.addMessage({ role: 'user', content: userLabel, streaming: false, reasoning: '', statusText: '', confirmActions: null })
   chatStore.addMessage({ role: 'assistant', content: '', streaming: true, reasoning: '', statusText: '', confirmActions: null })
-  chatWs.send(t)
+
+  if (hasMedia) {
+    const uploadIds = media.map(m => m.url)
+    chatWs.sendWithImages(text ? text.trim() : '', uploadIds)
+  } else {
+    chatWs.send(text.trim())
+  }
   scrollToBottom()
 }
-function onSend() {
-  const t = inputText.value.trim()
-  if (!t) return
-  inputText.value = ''
-  sendText(t)
-}
 
-function onVoiceStart() {
-  if (!wsConnected.value || isStreaming.value) return
-  startRecording()
-}
-async function onVoiceEnd() {
-  const text = await stopAndRecognize()
-  if (text) sendText(text)
+function onInputError(error) {
+  uni.showToast({ title: error.message || '操作失败', icon: 'none', duration: 2000 })
 }
 
 function handleConfirm(approved) {
@@ -459,30 +451,7 @@ onUnload(() => {
 .chip { border: 1px solid rgba(56,230,224,0.35); border-radius: 28rpx; padding: 12rpx 22rpx; background: rgba(47,244,224,0.05); }
 .chip text { font-size: 24rpx; color: #9fe9e0; }
 
-/* input bar */
-.input-bar {
-  position: relative; z-index: 5; flex: 0 0 auto; display: flex; align-items: center; gap: 18rpx;
-  padding: 18rpx 28rpx; background: rgba(8,14,28,0.7); border-top: 1px solid rgba(56,230,224,0.12);
-}
-/* textarea 不吃 flex 居中；用 line-height=min-height-padding*2 让占位/文字垂直居中于单行态。
-   min-height 84rpx − padding 20rpx*2 = 44rpx → line-height:44rpx；placeholder-style 同步 line-height 才对齐（bug#5）。 */
-.msg-input {
-  flex: 1; min-height: 84rpx; max-height: 240rpx;
-  padding: 20rpx 30rpx; border-radius: 42rpx; background: rgba(4,10,22,0.7);
-  border: 1px solid rgba(56,230,224,0.25); font-size: 28rpx; line-height: 44rpx; color: #eaf6ff;
-}
-.voice-btn {
-  flex: 0 0 auto; width: 84rpx; height: 84rpx; border-radius: 50%;
-  border: 1px solid rgba(56,230,224,0.5); background-color: rgba(47,244,224,0.07);
-  background-repeat: no-repeat; background-position: center; background-size: 40rpx 40rpx;
-}
-.send-btn {
-  flex: 0 0 auto; width: 84rpx; height: 84rpx; border-radius: 50%;
-  background: linear-gradient(135deg, #22e6da, #3a8bff); box-shadow: 0 0 16px rgba(47,244,224,0.4);
-  display: flex; align-items: center; justify-content: center;
-}
-.send-btn.send-disabled { opacity: 0.45; box-shadow: none; }
-.ico-send { width: 38rpx; height: 38rpx; background-repeat: no-repeat; background-position: center; background-size: 38rpx 38rpx; }
+/* v1.13.0: input bar replaced by ChatInputBar component (theme="dark") */
 
 /* 历史下拉 */
 .hist-mask { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.4); }
@@ -514,6 +483,4 @@ onUnload(() => {
 
 /* 图标（SVG data-URI）*/
 .ico-back { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23eaf6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E"); }
-.ico-mic { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
-.ico-send { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
 </style>

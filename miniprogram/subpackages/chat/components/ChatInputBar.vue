@@ -11,7 +11,7 @@
     - ASR text goes through chat_message (ADR-008, not audio URL).
 -->
 <template>
-  <view class="chat-input-bar">
+  <view class="chat-input-bar" :class="'chat-input-bar--' + theme">
     <!-- Uploading indicator -->
     <view v-if="isUploading" class="uploading-bar">
       <text class="uploading-bar__text">图片上传中...</text>
@@ -106,6 +106,10 @@ const props = defineProps({
   isStreaming: {
     type: Boolean,
     required: true
+  },
+  theme: {
+    type: String,
+    default: 'light'  // 'light' | 'dark' (cyberpunk)
   }
 })
 
@@ -564,5 +568,60 @@ function handleChooseImageError(err, name) {
 .hold-to-speak--disabled {
   opacity: 0.35;
   pointer-events: none;
+}
+
+/* ========================================================================
+   Dark theme (cyberpunk) — for pages/chat/index.vue "副官" page
+   ======================================================================== */
+.chat-input-bar--dark {
+  background: rgba(8,14,28,0.7);
+  border-top: 1px solid rgba(56,230,224,0.12);
+}
+.chat-input-bar--dark .uploading-bar {
+  background: rgba(47,244,224,0.08);
+}
+.chat-input-bar--dark .uploading-bar__text {
+  color: #7df9ff;
+}
+.chat-input-bar--dark .icon-btn {
+  background: rgba(47,244,224,0.07);
+  border: 1px solid rgba(56,230,224,0.5);
+}
+.chat-input-bar--dark .icon-btn__text {
+  color: #2ff4e0;
+}
+.chat-input-bar--dark .text-input {
+  background: rgba(4,10,22,0.7);
+  border: 1px solid rgba(56,230,224,0.25);
+  color: #eaf6ff;
+}
+.chat-input-bar--dark .send-btn--active {
+  background: linear-gradient(135deg, #22e6da, #3a8bff);
+  box-shadow: 0 0 16px rgba(47,244,224,0.4);
+  border: none;
+}
+.chat-input-bar--dark .send-btn--active .icon-btn__text {
+  color: #04121f;
+}
+.chat-input-bar--dark .send-btn--disabled {
+  background: rgba(56,230,224,0.1);
+  border: 1px solid rgba(56,230,224,0.2);
+  opacity: 0.45;
+}
+.chat-input-bar--dark .send-btn--disabled .icon-btn__text {
+  color: rgba(143,217,255,0.4);
+}
+.chat-input-bar--dark .hold-to-speak {
+  background: rgba(4,10,22,0.7);
+  border: 1px solid rgba(56,230,224,0.25);
+  color: #eaf6ff;
+}
+.chat-input-bar--dark .hold-to-speak--recording {
+  background: rgba(47,244,224,0.12);
+  color: #7df9ff;
+}
+.chat-input-bar--dark .hold-to-speak--cancelling {
+  background: rgba(255,100,100,0.12);
+  color: #ff6b6b;
 }
 </style>
