@@ -101,3 +101,93 @@ describe('utils/chat-ws ChatWebSocket（协议复刻）', () => {
     expect(ws.connected).toBe(false)
   })
 })
+
+// ============================================================================
+// MOD-002 EXTEND: sendMultimedia (IFC-002-05) — TC-UNIT-016 ~ TC-UNIT-020
+// ============================================================================
+describe('utils/chat-ws — sendMultimedia 多媒体发送', () => {
+  let socket
+  let ws
+
+  beforeEach(() => {
+    socket = makeFakeSocket()
+    uni.connectSocket = vi.fn(() => socket)
+    ws = new ChatWebSocket({})
+    ws.connect('TOK')
+    socket.emitFrame({ type: 'connected' }) // establish connection
+  })
+
+  // TC-UNIT-016: Normal frame format
+  it('TC-UNIT-016: 正常帧格式 {type:chat_multimedia, media:[{type:image,url:...}]}', () => {
+    const mediaList = [{ type: 'image', url: 'https://example.com/img1.jpg' }]
+    ws.sendMultimedia(mediaList)
+
+    expect(socket.send).toHaveBeenCalledTimes(1)
+    const sentData = JSON.parse(socket.send.mock.calls[0][0].data)
+    expect(sentData).toEqual({
+      type: 'chat_multimedia',
+      media: [{ type: 'image', url: 'https://example.com/img1.jpg' }],
+    })
+  })
+
+  // TC-UNIT-017: Empty array
+  it('TC-UNIT-017: 空数组 → 不发送', () => {
+    ws.sendMultimedia([])
+    expect(socket.send).not.toHaveBeenCalled()
+  })
+
+  // TC-UNIT-018: Non-array parameter
+  it('TC-UNIT-018: 非数组参数 → 不发送', () => {
+    ws.sendMultimedia('not-an-array')
+    expect(socket.send).not.toHaveBeenCalled()
+  })
+
+  it('TC-UNIT-018-b: null参数 → 不发送', () => {
+    ws.sendMultimedia(null)
+    expect(socket.send).not.toHaveBeenCalled()
+  })
+
+  // TC-UNIT-019: Not connected
+  it('TC-UNIT-019: 未连接状态(connected=false) → 不发送', () => {
+    ws.close() // disconnect
+    ws.sendMultimedia([{ type: 'image', url: 'test.jpg' }])
+    expect(socket.send).not.toHaveBeenCalled()
+  })
+
+  // TC-UNIT-020: Multiple media items
+  it('TC-UNIT-020: 多个媒体项 → 全部包含在media数组中', () => {
+    const mediaList = [
+      { type: 'image', url: 'https://example.com/img1.jpg' },
+      { type: 'image', url: 'https://example.com/img2.jpg' },
+    ]
+    ws.sendMultimedia(mediaList)
+
+    expect(socket.send).toHaveBeenCalledTimes(1)
+    const sentData = JSON.parse(socket.send.mock.calls[0][0].data)
+    expect(sentData.type).toBe('chat_multimedia')
+    expect(sentData.media).toHaveLength(2)
+    expect(sentData.media[0].url).toBe('https://example.com/img1.jpg')
+    expect(sentData.media[1].url).toBe('https://example.com/img2.jpg')
+  })
+
+  // Bonus: media items with extra fields (text) are mapped correctly
+  it('media项额外字段(如text)不出现在输出帧中(仅映射type和url)', () => {
+    const mediaList = [
+      { type: 'image', url: 'test.jpg', text: 'extra', other: 'field' },
+    ]
+    ws.sendMultimedia(mediaList)
+
+    const sentData = JSON.parse(socket.send.mock.calls[0][0].data)
+    expect(sentData.media[0]).toEqual({ type: 'image', url: 'test.jpg' })
+    expect(sentData.media[0].text).toBeUndefined()
+  })
+
+  // Bonus: backward compatibility — send() is unchanged
+  it('send()保持不变 — chat_message文本帧格式不变', () => {
+    ws.send('hello world')
+
+    expect(socket.send).toHaveBeenCalledTimes(1)
+    const sentData = JSON.parse(socket.send.mock.calls[0][0].data)
+    expect(sentData).toEqual({ type: 'chat_message', message: 'hello world' })
+  })
+})

@@ -108,9 +108,36 @@ export class ChatWebSocket {
     })
   }
 
+  /**
+   * @implements IFC-002-02
+   * Send a text message. Frame: { type: 'chat_message', message: text }.
+   * Signature unchanged for backward compatibility (ADR-001, REQ-NFUNC-001).
+   */
   send(message) {
     if (!this.socketTask || !this.connected) return
     this.socketTask.send({ data: JSON.stringify({ type: 'chat_message', message }) })
+  }
+
+  /**
+   * @implements IFC-002-05
+   * Send a multimedia message (ADR-001 Option A).
+   * Frame: { type: 'chat_multimedia', media: [{ type: 'image', url: '...' }] }.
+   *
+   * @param {Array<{type: string, url: string, text?: string}>} mediaList
+   *   Each item represents one media attachment. type is 'image' (or 'audio' in future).
+   */
+  sendMultimedia(mediaList) {
+    if (!this.socketTask || !this.connected) return
+    if (!Array.isArray(mediaList) || mediaList.length === 0) return
+    this.socketTask.send({
+      data: JSON.stringify({
+        type: 'chat_multimedia',
+        media: mediaList.map((m) => ({
+          type: m.type,
+          url: m.url
+        }))
+      })
+    })
   }
 
   sendConfirm(approved) {

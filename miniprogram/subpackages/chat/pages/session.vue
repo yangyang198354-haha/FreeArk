@@ -52,25 +52,14 @@
       <view id="msg-bottom" />
     </scroll-view>
 
-    <!-- Input area -->
-    <view class="input-area">
-      <textarea
-        class="msg-input"
-        v-model="inputText"
-        placeholder="输入消息…"
-        :disabled="!wsConnected || isStreaming"
-        auto-height
-        :max-height="200"
-        @confirm="sendMessage"
-      />
-      <button
-        class="send-btn"
-        :disabled="!wsConnected || isStreaming || !inputText.trim()"
-        @tap="sendMessage"
-      >
-        发送
-      </button>
-    </view>
+    <!-- Input area (MOD-001 ChatInputBar -- Doubao style) -->
+    <ChatInputBar
+      :wsConnected="wsConnected"
+      :isStreaming="isStreaming"
+      @send-text="onSendText"
+      @send-media="onSendMedia"
+      @error="onInputError"
+    />
   </view>
 </template>
 
@@ -82,11 +71,11 @@ import { useChatStore } from '@/store/chat'
 import { ChatWebSocket } from '@/utils/chat-ws'
 import { api } from '@/utils/api'
 import ChatBubble from '@/components/ChatBubble.vue'
+import ChatInputBar from '../components/ChatInputBar.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 
-const inputText = ref('')
 const scrollTop = ref(0)
 const connecting = ref(false)
 const sessionKeyParam = ref(null)
@@ -176,7 +165,7 @@ async function loadHistory(sessionKey) {
         role: m.role,
         content: m.content,
         streaming: false,
-        reasoning: '',
+        reasoning: m.reasoning || m.thinking || m.reasoning_content || '',
         statusText: '',
         confirmActions: null,
       })
@@ -187,16 +176,58 @@ async function loadHistory(sessionKey) {
   }
 }
 
-function sendMessage() {
-  const text = inputText.value.trim()
+/**
+ * @implements MOD-007 IFC via @send-text event
+ * Handle text send from ChatInputBar. Same logic as old sendMessage().
+ */
+function onSendText(text) {
   if (!text || !wsConnected.value || isStreaming.value) return
 
-  inputText.value = ''
+  // Check if onSendMedia already pushed an assistant streaming placeholder
+  // (occurs when user sends both images and text together)
+  const msgs = messages.value
+  const assistantAlreadyStreaming = msgs.length > 0 && msgs[msgs.length - 1].streaming === true
 
-  // Push user message immediately for instant feedback
+  // Push user text message immediately for instant feedback
   chatStore.addMessage({
     role: 'user',
     content: text,
+    streaming: false,
+    reasoning: '',
+    statusText: '',
+    confirmActions: null,
+  })
+
+  // Only push assistant placeholder if not already created by onSendMedia
+  if (!assistantAlreadyStreaming) {
+    chatStore.addMessage({
+      role: 'assistant',
+      content: '',
+      streaming: true,
+      reasoning: '',
+      statusText: '',
+      confirmActions: null,
+    })
+  }
+
+  chatWs.send(text)
+  scrollToBottom()
+}
+
+/**
+ * @implements MOD-007 IFC via @send-media event
+ * Handle multimedia send from ChatInputBar (ADR-001: sendMultimedia).
+ */
+function onSendMedia(mediaList) {
+  if (!mediaList || mediaList.length === 0) return
+  if (!wsConnected.value || isStreaming.value) return
+
+  // Push a user placeholder message for instant visual feedback
+  const imageCount = mediaList.filter(m => m.type === 'image').length
+  const label = imageCount > 0 ? ('[图片' + (imageCount > 1 ? ' x' + imageCount : '') + ']') : '[媒体消息]'
+  chatStore.addMessage({
+    role: 'user',
+    content: label,
     streaming: false,
     reasoning: '',
     statusText: '',
@@ -213,8 +244,16 @@ function sendMessage() {
     confirmActions: null,
   })
 
-  chatWs.send(text)
+  chatWs.sendMultimedia(mediaList)
   scrollToBottom()
+}
+
+/**
+ * @implements MOD-007 IFC via @error event
+ * Handle non-fatal errors from ChatInputBar (upload failures, permission denials, etc.).
+ */
+function onInputError(error) {
+  uni.showToast({ title: error.message || '操作失败', icon: 'none', duration: 2000 })
 }
 
 function handleConfirm(approved) {
@@ -291,38 +330,5 @@ onUnload(() => {
 .message-list {
   flex: 1;
   padding: 16rpx 0;
-}
-.input-area {
-  display: flex;
-  align-items: flex-end;
-  padding: 16rpx 24rpx;
-  background: #fff;
-  border-top: 1rpx solid #eee;
-  gap: 16rpx;
-  flex-shrink: 0;
-}
-.msg-input {
-  flex: 1;
-  min-height: 72rpx;
-  max-height: 200rpx;
-  background: #f5f5f5;
-  border-radius: 8rpx;
-  padding: 16rpx;
-  font-size: 28rpx;
-  line-height: 1.5;
-}
-.send-btn {
-  background: #1a73e8;
-  color: #fff;
-  font-size: 28rpx;
-  border-radius: 8rpx;
-  padding: 0 32rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  flex-shrink: 0;
-  border: none;
-}
-.send-btn[disabled] {
-  opacity: 0.5;
 }
 </style>

@@ -23,11 +23,20 @@ globalThis.uni = {
   // 网络（测试内覆盖 implementation）
   request: vi.fn(),
   connectSocket: vi.fn(),
+  uploadFile: vi.fn(),
+  chooseImage: vi.fn(),
   // 图表用（组件未在此层测试，占位即可）
   getSystemInfoSync: vi.fn(() => ({ pixelRatio: 2, windowWidth: 375 })),
   createSelectorQuery: vi.fn(() => ({
     in: () => ({ select: () => ({ fields: () => ({ exec: () => {} }) }) }),
   })),
+}
+
+// wx global mock for permission.js (uses wx.getSetting, wx.authorize, wx.openSetting)
+globalThis.wx = {
+  getSetting: vi.fn(),
+  authorize: vi.fn(),
+  openSetting: vi.fn(),
 }
 
 // 暴露给个别用例直接操作内存 storage
