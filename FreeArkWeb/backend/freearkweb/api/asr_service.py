@@ -162,7 +162,7 @@ class VoiceRecognizer:
         samples = _decode_wav(wav_bytes)
         stream = self._recognizer.create_stream()
         stream.accept_waveform(16000, samples)
-        self._recognizer.decode_streams()
+        self._recognizer.decode_stream(stream)
         result = stream.result
         return (result.text or "").strip()
 
