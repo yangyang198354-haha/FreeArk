@@ -39,7 +39,7 @@ describe('utils/chat-ws ChatWebSocket（协议复刻）', () => {
     expect(ws.connected).toBe(false) // onOpen 不置连
     socket.emitFrame({ type: 'connected', session_key: 'k', session_id: 'i' })
     expect(ws.connected).toBe(true)
-    expect(onConnected).toHaveBeenCalledWith('k', 'i')
+    expect(onConnected).toHaveBeenCalledWith('k', 'i', null, { is_bound: false, rooms: [], active_room: null })
   })
 
   it('各帧类型分发到对应回调', () => {
