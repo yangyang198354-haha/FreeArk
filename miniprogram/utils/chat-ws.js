@@ -120,22 +120,25 @@ export class ChatWebSocket {
 
   /**
    * @implements IFC-002-05
-   * Send a multimedia message (ADR-001 Option A).
-   * Frame: { type: 'chat_multimedia', media: [{ type: 'image', url: '...' }] }.
+   * Send a message with image attachments.
+   * Uses the existing backend protocol: chat_message + image_upload_ids field.
+   * Backend consumers.py (v1.5.0/v1.9.0) already supports this format.
    *
-   * @param {Array<{type: string, url: string, text?: string}>} mediaList
-   *   Each item represents one media attachment. type is 'image' (or 'audio' in future).
+   * @param {string} message - Text message (can be empty if only images)
+   * @param {string[]} uploadIds - Array of upload_id strings from image-upload endpoint
    */
-  sendMultimedia(mediaList) {
+  sendWithImages(message, uploadIds) {
     if (!this.socketTask || !this.connected) return
-    if (!Array.isArray(mediaList) || mediaList.length === 0) return
+    if (!Array.isArray(uploadIds) || uploadIds.length === 0) {
+      // Fallback to plain text if no images
+      this.send(message)
+      return
+    }
     this.socketTask.send({
       data: JSON.stringify({
-        type: 'chat_multimedia',
-        media: mediaList.map((m) => ({
-          type: m.type,
-          url: m.url
-        }))
+        type: 'chat_message',
+        message: message || '',
+        image_upload_ids: uploadIds
       })
     })
   }

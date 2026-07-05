@@ -113,15 +113,15 @@ describe('E2E — US-001: 拍照发送图片 (AC-001-01)', () => {
     // Step 3: Verify uploadImage was called with the temp file path
     expect(uploadImage).toHaveBeenCalledWith('/tmp/camera_shot.jpg')
 
-    // Step 4: Click send to emit send-media
+    // Step 4: Click send to emit send (统一)
     const sendBtn = findSendBtn(wrapper)
     await sendBtn.trigger('tap')
     await nextTick()
 
     // Step 5: Verify send-media event with correct payload
-    const emitted = wrapper.emitted('send-media')
+    const emitted = wrapper.emitted('send')
     expect(emitted).toBeTruthy()
-    expect(emitted[0]).toEqual([[{ type: 'image', url: 'e2e-camera-uuid-001' }]])
+    expect(emitted[0]).toEqual([{ text: '', media: [{ type: 'image', url: 'e2e-camera-uuid-001' }] }])
   })
 })
 
@@ -152,10 +152,10 @@ describe('E2E — US-002: 文字输入与发送 (AC-002-01/02/03)', () => {
     await findSendBtn(wrapper).trigger('tap')
     await nextTick()
 
-    // Step 5: Verify emit('send-text', '你好，方舟助手')
-    const emitted = wrapper.emitted('send-text')
+    // Step 5: Verify emit('send', '你好，方舟助手')
+    const emitted = wrapper.emitted('send')
     expect(emitted).toBeTruthy()
-    expect(emitted[0]).toEqual(['你好，方舟助手'])
+    expect(emitted[0]).toEqual([{ text: '你好，方舟助手', media: [] }])
 
     // Step 6: Input should be cleared
     const textareaEl = wrapper.find('textarea')
@@ -174,7 +174,7 @@ describe('E2E — US-002: 文字输入与发送 (AC-002-01/02/03)', () => {
     await nextTick()
 
     // No send-text event should be emitted
-    expect(wrapper.emitted('send-text')).toBeFalsy()
+    expect(wrapper.emitted('send')).toBeFalsy()
   })
 })
 
@@ -238,7 +238,7 @@ describe('E2E — US-004: 按住说话发送语音 (AC-004-01)', () => {
   })
 
   // TC-E2E-004
-  it('TC-E2E-004: 按住说话 → 录音开始 → 松手 → ASR识别 → emit send-text', async () => {
+  it('TC-E2E-004: 按住说话 → 录音开始 → 松手 → ASR识别 → emit send (统一)', async () => {
     const permModule = await import('@/utils/permission')
     permModule.requestPermission.mockResolvedValue('authorized')
 
@@ -279,9 +279,9 @@ describe('E2E — US-004: 按住说话发送语音 (AC-004-01)', () => {
     expect(stopAndRecognize).toHaveBeenCalled()
 
     // Step 6: Verify send-text emitted with ASR result
-    const emitted = wrapper.emitted('send-text')
+    const emitted = wrapper.emitted('send')
     expect(emitted).toBeTruthy()
-    expect(emitted[0]).toEqual(['今天天气怎么样'])
+    expect(emitted[0]).toEqual([{ text: '今天天气怎么样', media: [] }])
   })
 
   // AC-004-02: Permission denied → error emit
@@ -317,7 +317,7 @@ describe('E2E — US-005: 相册选图发送 (AC-005-01)', () => {
   })
 
   // TC-E2E-005
-  it('TC-E2E-005: +号 → album → upload → emit send-media', async () => {
+  it('TC-E2E-005: +号 → album → upload → emit send (统一)', async () => {
     isUploadIdExpired.mockReturnValue(false)
 
     // Mock album selection with 2 photos
@@ -359,11 +359,11 @@ describe('E2E — US-005: 相册选图发送 (AC-005-01)', () => {
     await nextTick()
 
     // Step 5: Verify send-media event
-    const emitted = wrapper.emitted('send-media')
+    const emitted = wrapper.emitted('send')
     expect(emitted).toBeTruthy()
-    expect(emitted[0][0]).toHaveLength(2)
-    expect(emitted[0][0][0]).toMatchObject({ type: 'image', url: 'e2e-album-uuid-1' })
-    expect(emitted[0][0][1]).toMatchObject({ type: 'image', url: 'e2e-album-uuid-2' })
+    expect(emitted[0][0].media).toHaveLength(2)
+    expect(emitted[0][0].media[0]).toMatchObject({ type: 'image', url: 'e2e-album-uuid-1' })
+    expect(emitted[0][0].media[1]).toMatchObject({ type: 'image', url: 'e2e-album-uuid-2' })
   })
 })
 

@@ -322,8 +322,8 @@ describe('ChatInputBar — 事件发射 (emit) — TC-INT-015 ~ TC-INT-018', () 
     vi.clearAllMocks()
   })
 
-  // TC-INT-015: emit send-text with correct payload
-  it('TC-INT-015: 输入文字点击发送 → emit send-text 正确 payload', async () => {
+  // TC-INT-015: emit send with correct payload (text only)
+  it('TC-INT-015: 输入文字点击发送 → emit send 正确 payload (仅文本)', async () => {
     const wrapper = mountBar({ wsConnected: true, isStreaming: false })
 
     // Type text
@@ -336,13 +336,13 @@ describe('ChatInputBar — 事件发射 (emit) — TC-INT-015 ~ TC-INT-018', () 
     await nextTick()
 
     // Check emit
-    const emitted = wrapper.emitted('send-text')
+    const emitted = wrapper.emitted('send')
     expect(emitted).toBeTruthy()
-    expect(emitted[0]).toEqual(['你好世界'])
+    expect(emitted[0]).toEqual([{ text: '你好世界', media: [] }])
   })
 
-  // TC-INT-016: emit send-media with correct structure
-  it('TC-INT-016: 有图片上传后点击发送 → emit send-media 正确结构', async () => {
+  // TC-INT-016: emit send with text + media
+  it('TC-INT-016: 有图片上传后点击发送 → emit send 正确结构 (图文)', async () => {
     // Mock isUploadIdExpired to return false (not expired)
     isUploadIdExpired.mockReturnValue(false)
 
@@ -372,10 +372,10 @@ describe('ChatInputBar — 事件发射 (emit) — TC-INT-015 ~ TC-INT-018', () 
     await sendBtn.trigger('tap')
     await nextTick()
 
-    // Check send-media emit
-    const emitted = wrapper.emitted('send-media')
+    // Check unified send emit
+    const emitted = wrapper.emitted('send')
     expect(emitted).toBeTruthy()
-    expect(emitted[0]).toEqual([[{ type: 'image', url: 'test-upload-id-001' }]])
+    expect(emitted[0]).toEqual([{ text: '', media: [{ type: 'image', url: 'test-upload-id-001' }] }])
   })
 
   // TC-INT-017: emit error with correct format

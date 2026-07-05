@@ -88,7 +88,7 @@
  * @module MOD-001 ChatInputBar
  * @implements IFC-001
  * Props: wsConnected(Boolean), isStreaming(Boolean)
- * Events: @send-text(text), @send-media(mediaList), @error({code, message})
+ * Events: @send({ text, media }), @error({code, message})
  */
 import { ref, computed } from 'vue'
 import { requestPermission } from '@/utils/permission'
@@ -112,7 +112,7 @@ const props = defineProps({
 // ==========================================================================
 // Events
 // ==========================================================================
-const emit = defineEmits(['send-text', 'send-media', 'error'])
+const emit = defineEmits(['send', 'error'])
 
 // ==========================================================================
 // Internal state (component-scoped refs -- ADR-004)
@@ -224,22 +224,18 @@ async function handleSend() {
   // Check TTL expiry and re-upload expired items (ADR-002)
   await refreshExpiredMedia()
 
-  // Emit pending media first (REQ-FUNC-008)
-  if (pendingMedia.value.length > 0) {
-    const mediaPayload = pendingMedia.value.map((m) => ({
-      type: m.type || 'image',
-      url: m.upload_id
-    }))
-    emit('send-media', mediaPayload)
-    pendingMedia.value = []
-  }
-
-  // Emit text if present (REQ-FUNC-002)
   const text = inputText.value.trim()
-  if (text) {
-    emit('send-text', text)
-    inputText.value = ''
-  }
+  const media = pendingMedia.value.map((m) => ({
+    type: m.type || 'image',
+    url: m.upload_id
+  }))
+
+  if (!text && media.length === 0) return
+
+  // Emit unified send event — session.vue batches into single WS frame
+  emit('send', { text: text || '', media })
+  inputText.value = ''
+  pendingMedia.value = []
 }
 
 // ==========================================================================
@@ -296,7 +292,7 @@ async function handleVoiceEnd() {
     const result = await stopAndRecognize()
     if (result && result.text) {
       // ADR-008: send ASR text as chat_message, not audio URL
-      emit('send-text', result.text)
+      emit('send', { text: result.text, media: [] })
     }
   } catch (err) {
     emit('error', { code: 'RECORD_STOP_FAILED', message: '语音识别失败，请使用文字输入' })

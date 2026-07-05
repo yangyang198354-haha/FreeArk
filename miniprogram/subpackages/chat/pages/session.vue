@@ -56,8 +56,7 @@
     <ChatInputBar
       :wsConnected="wsConnected"
       :isStreaming="isStreaming"
-      @send-text="onSendText"
-      @send-media="onSendMedia"
+      @send="onSend"
       @error="onInputError"
     />
   </view>
@@ -177,64 +176,40 @@ async function loadHistory(sessionKey) {
 }
 
 /**
- * @implements MOD-007 IFC via @send-text event
- * Handle text send from ChatInputBar. Same logic as old sendMessage().
+ * @implements MOD-007 IFC via @send event
+ * Unified handler: batches text + images into a single chat_message frame.
+ * Backend consumers.py (v1.5.0/v1.9.0) expects:
+ *   { type: 'chat_message', message: "...", image_upload_ids: [...] }
  */
-function onSendText(text) {
-  if (!text || !wsConnected.value || isStreaming.value) return
+function onSend({ text, media }) {
+  const hasText = text && text.trim().length > 0
+  const hasMedia = media && media.length > 0
 
-  // Check if onSendMedia already pushed an assistant streaming placeholder
-  // (occurs when user sends both images and text together)
-  const msgs = messages.value
-  const assistantAlreadyStreaming = msgs.length > 0 && msgs[msgs.length - 1].streaming === true
-
-  // Push user text message immediately for instant feedback
-  chatStore.addMessage({
-    role: 'user',
-    content: text,
-    streaming: false,
-    reasoning: '',
-    statusText: '',
-    confirmActions: null,
-  })
-
-  // Only push assistant placeholder if not already created by onSendMedia
-  if (!assistantAlreadyStreaming) {
-    chatStore.addMessage({
-      role: 'assistant',
-      content: '',
-      streaming: true,
-      reasoning: '',
-      statusText: '',
-      confirmActions: null,
-    })
-  }
-
-  chatWs.send(text)
-  scrollToBottom()
-}
-
-/**
- * @implements MOD-007 IFC via @send-media event
- * Handle multimedia send from ChatInputBar (ADR-001: sendMultimedia).
- */
-function onSendMedia(mediaList) {
-  if (!mediaList || mediaList.length === 0) return
+  if (!hasText && !hasMedia) return
   if (!wsConnected.value || isStreaming.value) return
 
-  // Push a user placeholder message for instant visual feedback
-  const imageCount = mediaList.filter(m => m.type === 'image').length
-  const label = imageCount > 0 ? ('[图片' + (imageCount > 1 ? ' x' + imageCount : '') + ']') : '[媒体消息]'
+  // Build user message label for instant feedback
+  const parts = []
+  if (hasMedia) {
+    const imageCount = media.filter(m => m.type === 'image').length
+    parts.push(imageCount > 0 ? ('[图片' + (imageCount > 1 ? ' x' + imageCount : '') + ']') : '[媒体消息]')
+  }
+  if (hasText) {
+    parts.push(text.trim())
+  }
+  const userLabel = parts.join(' ')
+
+  // Push user message bubble
   chatStore.addMessage({
     role: 'user',
-    content: label,
+    content: userLabel,
     streaming: false,
     reasoning: '',
     statusText: '',
     confirmActions: null,
   })
 
-  // Push streaming placeholder for AI response
+  // Push streaming assistant placeholder
   chatStore.addMessage({
     role: 'assistant',
     content: '',
@@ -244,7 +219,13 @@ function onSendMedia(mediaList) {
     confirmActions: null,
   })
 
-  chatWs.sendMultimedia(mediaList)
+  // Send single frame: text-only → send(), with images → sendWithImages()
+  if (hasMedia) {
+    const uploadIds = media.map(m => m.url)
+    chatWs.sendWithImages(text ? text.trim() : '', uploadIds)
+  } else {
+    chatWs.send(text.trim())
+  }
   scrollToBottom()
 }
 
