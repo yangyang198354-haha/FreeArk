@@ -126,6 +126,10 @@ jobs:
         working-directory: miniprogram
         run: npm install
 
-      - name: Run Vitest
+      - name: Run Vitest (纯逻辑单测)
         working-directory: miniprogram
         run: npm run test
+
+      - name: Run Vitest (组件/E2E)
+        working-directory: miniprogram
+        run: npx vitest run --config vitest.component.config.mjs

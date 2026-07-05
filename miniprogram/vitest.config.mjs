@@ -14,5 +14,6 @@ export default defineConfig({
     setupFiles: ['./tests/setup.js'],
     // 只跑纯逻辑单测（utils/store/api）；.vue 组件与 e2e 不在此层
     include: ['tests/**/*.spec.js'],
+    exclude: ['tests/chat-input-bar.spec.js', 'tests/chat-input-e2e.spec.js'],
   },
 })
