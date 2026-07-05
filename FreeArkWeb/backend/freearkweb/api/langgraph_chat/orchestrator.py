@@ -134,6 +134,9 @@ class State(TypedDict, total=False):
     # ── v1.8.0 新增（MOD-180-07）：用户数据访问范围上下文
     # MiniAppChatConsumer 经 adapter 注入；None=无限制（admin/operator 路径直通）
     user_scope: Optional[object]  # UserScope instance or None
+    # ── v1.12.0 新增（MOD-P1203/04）：人格偏好 + 活跃房间
+    persona: Optional[dict]  # {"greeting_style": "...", "tone_style": "..."} or None
+    active_specific_part: Optional[str]  # 前端首页选中的房间号（如 "3-1-7-702"），None=未选择
 
 
 # 从消息里提取 ChatConsumer 注入的 [__freeark_user__:<name>] 前缀，构造 operator 追溯。
@@ -149,6 +152,84 @@ def _operator_from_state(state: State) -> str:
     mt = _CHATUSER_RE.search(text)
     user = (mt.group(1).strip() if mt else "") or "unknown"
     return f"energy-agent::{user}"
+
+
+# ── v1.12.0 人格与座舱上下文注入（MOD-P1203/04）────────────────────────────────
+
+def build_persona_message(persona: Optional[dict]) -> Optional[SystemMessage]:
+    """将人格偏好构造成独立的 SystemMessage 块。
+
+    若 persona 为空或 None：返回默认人格（智能方舟副官 + 尊敬的舰长大人）。
+    否则按用户自定义的 greeting_style / tone_style 动态构造。
+    """
+    greeting = (persona or {}).get('greeting_style') or None
+    tone = (persona or {}).get('tone_style') or None
+
+    if greeting and tone:
+        content = (
+            f"你的身份是'{greeting}'。请以'{tone}'风格与当前用户交流。"
+            "保持该角色定位贯穿整个对话。"
+        )
+    elif greeting:
+        content = (
+            f"你的身份是'{greeting}'。请以'尊敬的舰长大人'称呼当前用户。"
+            "保持该角色定位贯穿整个对话。"
+        )
+    elif tone:
+        content = (
+            f"你是智能方舟的副官。请以'{tone}'风格与当前用户交流。"
+            "保持该角色定位贯穿整个对话。"
+        )
+    else:
+        # 默认人格
+        content = (
+            "你是智能方舟的副官，请以'尊敬的舰长大人'称呼当前用户。"
+            "保持该角色定位贯穿整个对话。"
+        )
+    return SystemMessage(content=content)
+
+
+def build_cabin_context_message(
+    user_scope: Optional[object],
+    active_specific_part: Optional[str] = None,
+) -> Optional[SystemMessage]:
+    """将座舱绑定信息构造成独立的 SystemMessage 块。
+
+    user_scope 为 None（admin/operator 路径）→ 返回 None（不注入）。
+    user 未绑定 → 提醒绑定。
+    user 已绑定 → 列出房间号，若有 active 则标注为"当前活跃"。"""
+    if user_scope is None:
+        return None
+    if not getattr(user_scope, 'is_owner', False):
+        return None
+
+    parts = list(user_scope.bound_specific_parts) if getattr(user_scope, 'bound_specific_parts', None) else []
+
+    if not parts:
+        return SystemMessage(content=(
+            "当前用户尚未绑定任何房间。如用户询问房间相关问题，"
+            "请提醒其先在小程序首页绑定专有部分（座舱）。"
+        ))
+
+    if active_specific_part and active_specific_part in parts:
+        others = [p for p in parts if p != active_specific_part]
+        if others:
+            content = (
+                f"当前活跃房间：{active_specific_part}。"
+                f"该用户还绑定了以下房间：{', '.join(others)}。"
+                "回答用户关于房间的问题时请根据此信息定位具体房间。"
+            )
+        else:
+            content = (
+                f"当前用户绑定的房间：{active_specific_part}。"
+                "回答用户关于房间的问题时请根据此信息定位具体房间。"
+            )
+    else:
+        content = (
+            f"该用户绑定的房间：{', '.join(parts)}。"
+            "回答用户关于房间的问题时请根据此信息定位具体房间。"
+        )
+    return SystemMessage(content=content)
 
 
 def _preview_write(tool: str, args: dict) -> str:
@@ -461,8 +542,13 @@ class Orchestrator:
         bound = list(base_tools) + (DELEGATION_TOOLS if allow_deleg else [])
         llm = self.llm.bind_tools(bound) if bound else self.llm
 
+        # v1.12.0：人格 + 座舱上下文注入（MOD-P1203/04）
+        _persona = build_persona_message(state.get("persona"))
+        _cabin = build_cabin_context_message(
+            state.get("user_scope"), state.get("active_specific_part"))
         msgs: List[BaseMessage] = [
             SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
+        ] + ([_persona] if _persona else []) + ([_cabin] if _cabin else []) + [
             HumanMessage(content=query),
         ]
         delegations: List[dict] = []

@@ -760,14 +760,34 @@ class MiniAppChatConsumer(ChatConsumer):
         from api.langgraph_chat.user_scope import build_user_scope
         self.user_scope = await sync_to_async(build_user_scope)(user)
 
+        # ── v1.12.0 新增：读取活跃房间号（query param）+ 人格偏好 ──
+        active_sp_bytes = params.get(b'active_sp', [None])[0]
+        self.active_specific_part = (
+            active_sp_bytes.decode('utf-8', errors='replace')
+            if active_sp_bytes else None
+        )
+        persona_raw = user.persona if isinstance(user.persona, dict) else {}
+        self.persona = persona_raw if persona_raw else None
+
         await self.accept()
         # 与父类 ChatConsumer.connect() 对齐：accept() 后必须发送 connected 帧，
         # 前端凭此帧（而非 onOpen）才把 wsConnected 置真、解禁输入框。
         # 此前本覆盖漏发该帧，导致小程序聊天输入框永久灰显、无法输入（见 BUG 修复）。
+        # v1.12.0：connected 帧扩展 persona + cabin_status（ADR-008）
+        _parts = list(self.user_scope.bound_specific_parts) if self.user_scope else []
         await self.send(json.dumps({
             'type': 'connected',
             'session_id': self.session_key,
             'session_key': self.session_key,
+            'persona': {
+                'greeting_style': self.persona.get('greeting_style') if self.persona else None,
+                'tone_style': self.persona.get('tone_style') if self.persona else None,
+            } if self.persona else None,
+            'cabin_status': {
+                'is_bound': len(_parts) > 0,
+                'rooms': _parts,
+                'active_room': self.active_specific_part,
+            },
         }))
         logger.info(
             'MiniAppChatConsumer: 连接接受 user=%s role=%s bound_parts=%s',
@@ -828,14 +848,16 @@ class MiniAppChatConsumer(ChatConsumer):
 
         try:
             adapter = get_chat_adapter()
-            # ── 关键差异：附带 user_scope，注入数据范围过滤 ──
+            # ── 关键差异：附带 user_scope + persona + active_sp ──
             status, accumulated_content = await self._pump(
                 adapter.stream_chat(
                     message=augmented_message,
                     session_key=self.session_key,
                     upload_id=None,           # 小程序暂不支持图文混合（v1.8.0）
                     user_id=None,
-                    user_scope=self.user_scope,  # v1.8.0 新增
+                    user_scope=self.user_scope,           # v1.8.0 新增
+                    persona=self.persona,                 # v1.12.0 新增（MOD-P1203）
+                    active_specific_part=self.active_specific_part,  # v1.12.0 新增（MOD-P1204）
                 ))
 
             if status == 'confirm':

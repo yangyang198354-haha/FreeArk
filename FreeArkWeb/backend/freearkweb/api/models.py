@@ -22,6 +22,9 @@ class CustomUser(AbstractUser):
     # v1.12.0: 用户头像和昵称（小程序个人中心，可空字段向后兼容存量用户）
     avatar_url = models.URLField(max_length=500, blank=True, null=True, verbose_name='头像URL')
     nickname = models.CharField(max_length=100, blank=True, null=True, verbose_name='昵称')
+    # v1.12.0: 人格偏好（副官称呼风格/交互语气），空字典=未设置→使用默认人格
+    persona = models.JSONField(default=dict, blank=True, verbose_name='人格偏好',
+                               help_text='{"greeting_style": "副官", "tone_style": "尊敬的舰长大人"}')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

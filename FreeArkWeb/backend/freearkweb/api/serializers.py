@@ -169,3 +169,14 @@ class DeviceParamHistorySerializer(serializers.ModelSerializer):
         if obj.collected_at is None:
             return None
         return obj.collected_at.strftime('%Y-%m-%d %H:%M:%S')
+
+
+class PersonaSerializer(serializers.Serializer):
+    """人格偏好序列化器（v1.12.0 方舟副官人格）"""
+    greeting_style = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    tone_style = serializers.CharField(max_length=50, required=False, allow_blank=True)
+
+    def validate(self, data):
+        if not data.get('greeting_style') and not data.get('tone_style'):
+            raise serializers.ValidationError("至少需要设置 greeting_style 或 tone_style 之一")
+        return data

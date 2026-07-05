@@ -38,14 +38,20 @@
       <text>连接已断开，</text><text class="relink" @tap="reconnect">点击重连</text>
     </view>
 
-    <!-- chat feed -->
-    <scroll-view class="feed" scroll-y :scroll-top="scrollTop" :scroll-with-animation="true">
+    <!-- v1.12.0: 座舱未绑定提醒 -->
+    <view v-if="wsConnected && !chatStore.cabinStatus.is_bound" class="cabin-banner" @tap="goToBind">
+      <text>⚠️ 您尚未绑定座舱（房间），副官无法获取您的房间信息。</text>
+      <text class="cabin-link">点击绑定 →</text>
+    </view>
+
+    <!-- chat feed: scroll-into-view anchor ensures reliable auto-scroll on new messages -->
+    <scroll-view class="feed" scroll-y :scroll-top="scrollTopDyn" :scroll-into-view="bottomAnchor" :scroll-with-animation="true">
       <!-- 问候 + 快捷提问（空会话）-->
       <block v-if="messages.length === 0">
         <view class="row row-ai">
           <view class="avatar-ark"><text>ARK</text></view>
           <view class="bubble bubble-ai">
-            <text class="btext">你好，我是方舟助手 ARK。可以帮你控制设备、排查故障，也能解答空调与新风知识。</text>
+            <text class="btext">{{ personaGreeting }}</text>
           </view>
         </view>
         <view class="chips">
@@ -72,7 +78,7 @@
           @confirm="handleConfirm"
         />
       </view>
-      <view :style="{ height: '2rpx' }" />
+      <view :id="bottomAnchor" style="height:2rpx" />
     </scroll-view>
 
     <!-- input bar -->
@@ -80,14 +86,14 @@
       <textarea
         class="msg-input"
         v-model="inputText"
-        placeholder="向方舟助手提问…"
+        placeholder="向智能方舟副官提问"
         placeholder-style="color:rgba(143,217,255,0.55);font-size:28rpx;line-height:44rpx"
         :disabled="!wsConnected || isStreaming"
         auto-height
         :maxlength="-1"
         @confirm="onSend"
       />
-      <view class="voice-btn ico-mic" @tap="onVoice" />
+      <view class="voice-btn ico-mic" @touchstart="onVoiceStart" @touchend="onVoiceEnd" />
       <view
         class="send-btn"
         :class="{ 'send-disabled': !wsConnected || isStreaming || !inputText.trim() }"
@@ -126,19 +132,23 @@ import { ref, computed, nextTick } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store/auth'
 import { useChatStore } from '@/store/chat'
+import { useOwnerStore } from '@/store/owner'
 import { ChatWebSocket } from '@/utils/chat-ws'
+import { startRecording, stopAndRecognize } from '@/utils/voice-input'
 import { api } from '@/utils/api'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
+const ownerStore = useOwnerStore()
 
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
 
 const inputText = ref('')
-const scrollTop = ref(0)
+const scrollTopDyn = ref(0)
+const bottomAnchor = ref('anchor-a')
 const connecting = ref(false)
 const sessionKeyParam = ref(null)
 const shouldLoadHistoryOnConnect = ref(false)
@@ -158,12 +168,20 @@ const isStreaming = computed(() => {
   return !!(last?.streaming)
 })
 
+// v1.12.0: 人格感知问候语
+const personaGreeting = computed(() => {
+  const p = chatStore.persona
+  const greeting = p?.greeting_style || '智能方舟的副官'
+  const tone = p?.tone_style || '尊敬的舰长大人'
+  return `${tone}，我是${greeting}。可以帮您控制设备、排查故障，也能解答空调与新风知识。`
+})
+
 let chatWs = null
 
 function initWs() {
   chatWs = new ChatWebSocket({
-    onConnected(sessionKey, sessionId) {
-      chatStore.setConnected(true, sessionKey, sessionId)
+    onConnected(sessionKey, sessionId, persona, cabinStatus) {
+      chatStore.setConnected(true, sessionKey, sessionId, persona, cabinStatus)
       sessionKeyParam.value = sessionKey || sessionKeyParam.value
       connecting.value = false
       // 仅在「恢复既有会话」时取历史；新会话 connect 阶段尚无 DB 行，取历史必 404。
@@ -198,7 +216,8 @@ function initWs() {
 function connectWs() {
   if (!authStore.token) return
   connecting.value = true
-  chatWs.connect(authStore.token, sessionKeyParam.value)
+  const activeSp = ownerStore.activeSpecificPart || ''
+  chatWs.connect(authStore.token, sessionKeyParam.value, activeSp)
 }
 
 function reconnect() { connectWs() }
@@ -211,7 +230,9 @@ async function loadHistory(sessionKey) {
     msgs.forEach((m) => {
       chatStore.addMessage({
         role: m.role, content: m.content,
-        streaming: false, reasoning: '', statusText: '', confirmActions: null,
+        streaming: false,
+        reasoning: m.reasoning || m.thinking || m.reasoning_content || '',
+        statusText: '', confirmActions: null,
       })
     })
     scrollToBottom()
@@ -234,9 +255,13 @@ function onSend() {
   sendText(t)
 }
 
-function onVoice() {
-  // 语音输入：需接语音转文字（同声传译插件/后端 ASR），当前占位
-  uni.showToast({ title: '语音输入开发中', icon: 'none' })
+function onVoiceStart() {
+  if (!wsConnected.value || isStreaming.value) return
+  startRecording()
+}
+async function onVoiceEnd() {
+  const text = await stopAndRecognize()
+  if (text) sendText(text)
 }
 
 function handleConfirm(approved) {
@@ -290,9 +315,20 @@ function normalizeSessionList(res) {
   return Array.isArray(list) ? list : []
 }
 
-function scrollToBottom() { nextTick(() => { scrollTop.value = 1e7 }) }
+function scrollToBottom() {
+  nextTick(() => {
+    // Toggle between two anchors so scroll-into-view always triggers, even
+    // if the previous target was the same value (fixes auto-scroll stalling).
+    bottomAnchor.value = bottomAnchor.value === 'anchor-a' ? 'anchor-b' : 'anchor-a'
+    scrollTopDyn.value = Date.now()
+  })
+}
 
 function goBack() { uni.navigateBack() }
+
+function goToBind() {
+  uni.navigateTo({ url: '/pages/bind/index' })
+}
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -314,6 +350,8 @@ onLoad((options) => {
   if (sessionKeyParam.value) chatStore.sessionKey = sessionKeyParam.value
   initWs()
   connectWs()
+  // Preload history list in background so it's ready when the user opens the panel
+  loadHistList()
 })
 
 onShow(() => {
@@ -369,16 +407,32 @@ onUnload(() => {
 
 /* subbar */
 .subbar { position: relative; z-index: 5; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 4rpx 32rpx 16rpx; }
-.new-pill { border: 1px solid rgba(56,230,224,0.4); border-radius: 28rpx; padding: 8rpx 22rpx; background: rgba(47,244,224,0.06); }
-.new-pill text { font-size: 24rpx; color: #2ff4e0; }
-.history-entry { display: flex; align-items: center; gap: 8rpx; }
-.history-entry text { font-size: 24rpx; color: rgba(143,217,255,0.7); }
-.caret-dn { font-size: 20rpx; }
+/* subbar pills: unified height / border / bg / text */
+.subbar pill,
+.new-pill,
+.history-entry {
+  display: flex; align-items: center; gap: 8rpx;
+  height: 56rpx; line-height: 56rpx;
+  border: 1px solid rgba(56,230,224,0.4);
+  border-radius: 28rpx; padding: 0 22rpx;
+  background: rgba(47,244,224,0.06);
+  transition: background 0.15s;
+}
+.new-pill text,
+.history-entry text { font-size: 24rpx; color: #2ff4e0; }
+.new-pill:active,
+.history-entry:active { background: rgba(47,244,224,0.14); }
+.caret-dn { font-size: 22rpx; color: #2ff4e0; margin-left: -2rpx; }
 
 /* 断连横幅 */
 .disc-banner { position: relative; z-index: 5; flex: 0 0 auto; text-align: center; padding: 12rpx; background: rgba(255,212,0,0.1); }
 .disc-banner text { font-size: 24rpx; color: #ffe066; }
 .relink { color: #7df9ff; text-decoration: underline; }
+
+/* v1.12.0: 座舱未绑定提醒横幅 */
+.cabin-banner { position: relative; z-index: 5; flex: 0 0 auto; text-align: center; padding: 12rpx 24rpx; background: rgba(0,180,255,0.12); display: flex; justify-content: center; align-items: center; gap: 12rpx; }
+.cabin-banner text { font-size: 24rpx; color: rgba(143,217,255,0.8); }
+.cabin-link { color: #7df9ff !important; text-decoration: underline; }
 
 /* feed：mp-weixin scroll-view 在 flex 列内必须 flex-basis:0 + min-height:0 才能真正滚动；
    之前 `flex: 1 1 auto` 会让 scroll-view 高度被内容撑破，超出屏幕外的消息就看不到（用户 bug#4）。 */
@@ -441,9 +495,20 @@ onUnload(() => {
 .hist-title { padding: 24rpx 28rpx; border-bottom: 1px solid rgba(56,230,224,0.14); }
 .hist-title text { font-size: 26rpx; font-weight: 700; color: #7df9ff; letter-spacing: 2rpx; }
 .hist-list { max-height: calc(60vh - 80rpx); }
-.hist-item { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 28rpx; border-bottom: 1px solid rgba(56,230,224,0.08); }
-.hist-summary { flex: 1; min-width: 0; font-size: 26rpx; color: #dbeeff; margin-right: 16rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hist-time { flex: 0 0 auto; font-size: 22rpx; color: rgba(143,217,255,0.5); }
+.hist-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24rpx 28rpx; border-bottom: 1px solid rgba(56,230,224,0.08);
+  transition: background 0.12s;
+}
+.hist-item:active { background: rgba(47,244,224,0.08); }
+.hist-summary {
+  flex: 1; min-width: 0; font-size: 26rpx; color: #dbeeff;
+  margin-right: 16rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hist-time {
+  flex: 0 0 auto; font-size: 22rpx; color: rgba(143,217,255,0.45);
+  font-variant-numeric: tabular-nums;
+}
 .hist-empty { padding: 48rpx; text-align: center; }
 .hist-empty text { font-size: 24rpx; color: rgba(143,217,255,0.5); }
 

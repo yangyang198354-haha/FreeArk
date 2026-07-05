@@ -16,9 +16,10 @@
 
 import { WS_BASE_URL } from './http'
 
-function buildWsUrl(token, sessionKey) {
+function buildWsUrl(token, sessionKey, activeSp) {
   let url = `${WS_BASE_URL}/ws/miniapp/chat/?token=${encodeURIComponent(token)}`
   if (sessionKey) url += `&session_key=${encodeURIComponent(sessionKey)}`
+  if (activeSp) url += `&active_sp=${encodeURIComponent(activeSp)}`
   return url
 }
 
@@ -29,7 +30,7 @@ export class ChatWebSocket {
     this.callbacks = callbacks
     this._connSeq = 0
     // callbacks: {
-    //   onConnected(sessionKey, sessionId),
+    //   onConnected(sessionKey, sessionId, persona, cabinStatus),
     //   onStatusUpdate(message),
     //   onReasoningToken(token),
     //   onReasoningEnd(),
@@ -41,10 +42,10 @@ export class ChatWebSocket {
     // }
   }
 
-  connect(token, sessionKey) {
+  connect(token, sessionKey, activeSp = '') {
     this.close()
     const seq = ++this._connSeq
-    const url = buildWsUrl(token, sessionKey)
+    const url = buildWsUrl(token, sessionKey, activeSp)
     const socketTask = uni.connectSocket({ url, complete: () => {} })
     this.socketTask = socketTask
 
@@ -62,7 +63,11 @@ export class ChatWebSocket {
       switch (msg.type) {
         case 'connected':
           this.connected = true
-          this.callbacks.onConnected?.(msg.session_key, msg.session_id)
+          this.callbacks.onConnected?.(
+            msg.session_key, msg.session_id,
+            msg.persona || null,
+            msg.cabin_status || { is_bound: false, rooms: [], active_room: null },
+          )
           break
         case 'status_update':
           this.callbacks.onStatusUpdate?.(msg.message)

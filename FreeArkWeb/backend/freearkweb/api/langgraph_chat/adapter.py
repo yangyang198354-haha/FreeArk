@@ -263,6 +263,8 @@ class LangGraphAdapter:
         upload_id: Optional[str] = None,    # v1.5.0 旧参数（向后兼容保留）
         user_id: Optional[int] = None,
         user_scope=None,  # v1.8.0 新增（MOD-180-10）：UserScope or None，向后兼容默认 None
+        persona: Optional[dict] = None,  # v1.12.0 新增（MOD-P1203）：人格偏好 or None
+        active_specific_part: Optional[str] = None,  # v1.12.0 新增（MOD-P1204）：活跃房间号
     ) -> AsyncGenerator[tuple[str, str], None]:
         """
         流式聊天入口（v1.9.0 扩展）。
@@ -361,6 +363,11 @@ class LangGraphAdapter:
             # v1.8.0（MOD-180-10）：若 user_scope 非 None，写入初始 State（数据隔离）
             if user_scope is not None:
                 _payload["user_scope"] = user_scope
+            # v1.12.0（MOD-P1203/04）：人格偏好 + 活跃房间注入初始 State
+            if persona is not None:
+                _payload["persona"] = persona
+            if active_specific_part is not None:
+                _payload["active_specific_part"] = active_specific_part
             async for kind, text in _drive(orch, _payload, config):
                 yield (kind, text)
 

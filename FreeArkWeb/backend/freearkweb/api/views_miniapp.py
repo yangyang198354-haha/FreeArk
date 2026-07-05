@@ -39,7 +39,7 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 
 from .models import OwnerInfo, OwnerUserBinding, WechatBinding
-from .serializers import UserRegistrationSerializer
+from .serializers import UserRegistrationSerializer, PersonaSerializer
 from .views import IsOwnerUser, IsOperatorOrAbove
 
 logger = logging.getLogger('api.views_miniapp')
@@ -551,3 +551,118 @@ def miniapp_profile_update(request):
         'avatar_url': avatar_url_out or user.avatar_url or None,
         'nickname': nickname_out or user.nickname or None,
     }, status=status.HTTP_200_OK)
+
+
+# ── v1.12.0 人格偏好 ──────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_persona_get(request):
+    """读取当前用户的人格偏好。
+
+    Response 200: {greeting_style: str|null, tone_style: str|null}
+        未设置时两个字段均为 null（前端据此判断是否展示首次设置引导）。
+    """
+    user = request.user
+    persona = user.persona if isinstance(user.persona, dict) else {}
+    return Response({
+        'greeting_style': persona.get('greeting_style') or None,
+        'tone_style': persona.get('tone_style') or None,
+    })
+
+
+@api_view(['PUT'])
+@permission_classes([IsOwnerUser])
+def miniapp_persona_update(request):
+    """更新当前用户的人格偏好。
+
+    Request body (JSON): {greeting_style?: str, tone_style?: str}
+        至少一个非空，max 50 chars each。
+    Response 200: {greeting_style: str|null, tone_style: str|null}
+    Response 400: {detail: "..."} 参数校验失败
+    """
+    serializer = PersonaSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(
+            {'detail': '; '.join(
+                f'{k}: {", ".join(v) if isinstance(v, list) else v}'
+                for k, v in serializer.errors.items())},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = request.user
+    validated = serializer.validated_data
+    current = user.persona if isinstance(user.persona, dict) else {}
+
+    # 只更新传入的非空字段，未传入的保留原值
+    if 'greeting_style' in validated and validated['greeting_style']:
+        current['greeting_style'] = validated['greeting_style']
+    if 'tone_style' in validated and validated['tone_style']:
+        current['tone_style'] = validated['tone_style']
+
+    user.persona = current
+    user.save(update_fields=['persona', 'updated_at'])
+
+    return Response({
+        'greeting_style': current.get('greeting_style') or None,
+        'tone_style': current.get('tone_style') or None,
+    })
+
+
+# ── v1.12.0 语音识别 ──────────────────────────────────────────────────────────
+
+_VOICE_MAX_BYTES = 10 * 1024 * 1024  # 最大 10MB（60s WAV ≈ 1.9MB）
+
+
+@api_view(['POST'])
+@permission_classes([IsOwnerUser])
+def miniapp_voice_recognize(request):
+    """语音识别端点（v1.12.0 MOD-P1208 方案B）。
+
+    POST /api/miniapp/voice/recognize/
+      Content-Type: multipart/form-data
+      audio_file: WAV 16kHz 16-bit mono（必填，最大 10MB）
+
+    Response 200: {text: "识别结果文字"}
+    Response 400: {detail: "..."} 参数缺失/格式错误
+    Response 503: {detail: "语音识别服务暂不可用"} ASR 未就绪
+    """
+    audio_file = request.FILES.get('audio_file') if hasattr(request, 'FILES') else None
+    if audio_file is None:
+        return Response(
+            {'detail': '请上传音频文件（audio_file 字段）'},
+            status=400,
+        )
+    if audio_file.size > _VOICE_MAX_BYTES:
+        return Response(
+            {'detail': f'音频文件不能超过 {_VOICE_MAX_BYTES // 1024 // 1024}MB'},
+            status=400,
+        )
+
+    try:
+        from .asr_service import get_recognizer
+        recognizer = get_recognizer()
+        if recognizer is None:
+            return Response(
+                {'detail': '语音识别服务暂不可用，请稍后重试或使用文字输入'},
+                status=503,
+            )
+        wav_bytes = audio_file.read()
+        text = recognizer.recognize(wav_bytes)
+        if not text:
+            return Response(
+                {'detail': '未识别到语音内容，请确保语音清晰后重试'},
+                status=422,
+            )
+        return Response({'text': text})
+    except ValueError as exc:
+        return Response(
+            {'detail': f'音频格式不支持：{exc}'},
+            status=400,
+        )
+    except Exception as exc:
+        logger.exception('miniapp_voice_recognize: 识别异常')
+        return Response(
+            {'detail': '语音识别处理失败，请使用文字输入'},
+            status=500,
+        )

@@ -61,4 +61,12 @@ urlpatterns = [
     #   → 200 {avatar_url, nickname}；400 参数错误/文件校验失败；401 未认证
     path('profile/update/', views_miniapp.miniapp_profile_update,
          name='miniapp-profile-update'),
+
+    # v1.12.0 人格偏好（IsOwnerUser）：方舟副官称呼风格/交互语气读写
+    path('persona/', views_miniapp.miniapp_persona_get, name='miniapp-persona-get'),
+    path('persona/update/', views_miniapp.miniapp_persona_update, name='miniapp-persona-update'),
+
+    # v1.12.0 语音识别（IsOwnerUser）：上传 WAV → Sherpa-ONNX SenseVoiceSmall 离线 ASR
+    path('voice/recognize/', views_miniapp.miniapp_voice_recognize,
+         name='miniapp-voice-recognize'),
 ]
