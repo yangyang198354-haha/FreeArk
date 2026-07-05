@@ -137,16 +137,14 @@ class VoiceRecognizer:
         import sherpa_onnx
 
         model_path = str(Path(model_dir) / "model.onnx")
-        tokens_path = str(Path(model_dir) / "tokens.txt")
 
         sense_voice_config = sherpa_onnx.OfflineSenseVoiceModelConfig(
             model=model_path,
-            tokens=tokens_path,
-            use_itn=True,  # 逆文本正则化（数字/日期/标点规范化）
+            language="zh",     # 中文识别
+            use_itn=True,      # 逆文本正则化（数字/日期/标点规范化）
         )
         config = sherpa_onnx.OfflineRecognizerConfig(
             model=sense_voice_config,
-            decoding_method="greedy_search",
         )
         self._recognizer = sherpa_onnx.OfflineRecognizer(config)
         logger.info("ASR 识别器初始化完成 (SenseVoiceSmall)")
