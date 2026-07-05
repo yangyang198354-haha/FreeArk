@@ -34,7 +34,7 @@
           class="text-input"
           v-model="inputText"
           placeholder="输入消息…"
-          :disabled="isTextareaDisabled"
+          :disabled="isTextDisabled"
           auto-height
           :max-height="200"
           @confirm="handleSend"
@@ -56,7 +56,7 @@
           :class="{
             'hold-to-speak--recording': isRecording,
             'hold-to-speak--cancelling': isCancelling,
-            'hold-to-speak--disabled': isGloballyDisabled
+            'hold-to-speak--disabled': isVoiceDisabled
           }"
           @touchstart="handleVoiceStart"
           @touchend="handleVoiceEnd"
@@ -136,17 +136,21 @@ const TOUCH_MOVE_THRESHOLD = 60  // px threshold for cancel detection
 // Computed: disable states (per module_design.md disable matrix)
 // ==========================================================================
 
-/** Global disable condition: WS disconnected OR AI streaming. */
-const isGloballyDisabled = computed(() => !props.wsConnected || props.isStreaming)
+/** Global disable condition: AI streaming. Camera/album are NOT tied to WS — user can
+    select photos anytime, only send is blocked when disconnected. */
+const isGloballyDisabled = computed(() => props.isStreaming)
 
-/** Camera: disabled when globally disabled. */
-const isCameraDisabled = computed(() => isGloballyDisabled.value)
+/** Text input: disabled when WS disconnected OR streaming. */
+const isTextDisabled = computed(() => !props.wsConnected || props.isStreaming)
 
-/** Textarea: disabled when globally disabled. */
-const isTextareaDisabled = computed(() => isGloballyDisabled.value)
+/** Camera: only disabled during AI streaming — user can shoot even when disconnected. */
+const isCameraDisabled = computed(() => props.isStreaming)
 
-/** Album: disabled when globally disabled. */
-const isAlbumDisabled = computed(() => isGloballyDisabled.value)
+/** Album: only disabled during AI streaming — user can pick even when disconnected. */
+const isAlbumDisabled = computed(() => props.isStreaming)
+
+/** Voice: disabled when WS disconnected OR streaming. */
+const isVoiceDisabled = computed(() => !props.wsConnected || props.isStreaming)
 
 /** Whether input text has non-whitespace content. */
 const hasText = computed(() => inputText.value.trim().length > 0)
@@ -155,7 +159,7 @@ const hasText = computed(() => inputText.value.trim().length > 0)
 const hasPendingMedia = computed(() => pendingMedia.value.length > 0)
 
 /** Whether the send button should be active (blue, clickable). */
-const canSend = computed(() => !isGloballyDisabled.value && (hasText.value || hasPendingMedia.value))
+const canSend = computed(() => props.wsConnected && !props.isStreaming && (hasText.value || hasPendingMedia.value))
 
 /** Send button CSS class binding. */
 const sendBtnClass = computed(() => ({
@@ -247,7 +251,7 @@ async function handleSend() {
 // ==========================================================================
 
 async function handleVoiceStart(e) {
-  if (isGloballyDisabled.value) return
+  if (isVoiceDisabled.value) return
   if (isRecording.value) return
 
   // Request recording permission via MOD-004 (ADR-006)
@@ -607,6 +611,10 @@ function handleChooseImageError(err, name) {
   background: rgba(56,230,224,0.1);
   border: 1px solid rgba(56,230,224,0.2);
   opacity: 0.45;
+}
+/* Dark theme: disabled icon buttons visible at 60% opacity (up from 35%) */
+.chat-input-bar--dark .icon-btn--disabled {
+  opacity: 0.6;
 }
 .chat-input-bar--dark .send-btn--disabled .icon-btn__text {
   color: rgba(143,217,255,0.4);

@@ -216,11 +216,11 @@ describe('ChatInputBar — 禁用矩阵 (!wsConnected) — TC-INT-005 ~ TC-INT-0
     return mountBar({ wsConnected: false, isStreaming: false })
   }
 
-  // TC-INT-005: Camera disabled when WS down
-  it('TC-INT-005: !wsConnected → 拍照按钮 disabled', () => {
+  // TC-INT-005: Camera NOT disabled when WS down (user can take photos)
+  it('TC-INT-005: !wsConnected → 拍照按钮 enabled（可拍照选图，仅发送受阻）', () => {
     const wrapper = mountDisconnected()
     const cameraBtn = findCameraBtn(wrapper)
-    expect(cameraBtn.classes()).toContain('icon-btn--disabled')
+    expect(cameraBtn.classes()).not.toContain('icon-btn--disabled')
   })
 
   // TC-INT-006: Textarea disabled when WS down
@@ -234,22 +234,21 @@ describe('ChatInputBar — 禁用矩阵 (!wsConnected) — TC-INT-005 ~ TC-INT-0
   it('TC-INT-007: !wsConnected → 发送按钮 disabled', () => {
     const wrapper = mountDisconnected()
     const sendBtn = findSendBtn(wrapper)
-    // Can be either send-btn--disabled or the global disabled state
     expect(sendBtn.classes()).toContain('send-btn--disabled')
   })
 
-  // TC-INT-008: Voice toggle enabled when WS down
+  // TC-INT-008: Voice toggle always enabled
   it('TC-INT-008: !wsConnected → 语音切换按钮 enabled', () => {
     const wrapper = mountDisconnected()
     const voiceBtn = findVoiceToggleBtn(wrapper)
     expect(voiceBtn.classes()).not.toContain('icon-btn--disabled')
   })
 
-  // TC-INT-009: Album disabled when WS down
-  it('TC-INT-009: !wsConnected → 相册按钮 disabled', () => {
+  // TC-INT-009: Album NOT disabled when WS down (user can pick photos)
+  it('TC-INT-009: !wsConnected → 相册按钮 enabled（可选图，仅发送受阻）', () => {
     const wrapper = mountDisconnected()
     const albumBtn = findAlbumBtn(wrapper)
-    expect(albumBtn.classes()).toContain('icon-btn--disabled')
+    expect(albumBtn.classes()).not.toContain('icon-btn--disabled')
   })
 })
 

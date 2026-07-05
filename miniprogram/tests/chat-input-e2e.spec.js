@@ -219,8 +219,8 @@ describe('E2E — US-003: 语音模式切换 (AC-003-01/02/03)', () => {
   it('AC-003-03: WS断开时模式切换仍可操作', async () => {
     const wrapper = mountBar({ wsConnected: false, isStreaming: false })
 
-    // Camera should be disabled, but voice toggle should be enabled
-    expect(findCameraBtn(wrapper).classes()).toContain('icon-btn--disabled')
+    // Camera enabled (user can take photos), voice toggle should be enabled
+    expect(findCameraBtn(wrapper).classes()).not.toContain('icon-btn--disabled')
     expect(findVoiceToggleBtn(wrapper).classes()).not.toContain('icon-btn--disabled')
 
     // Switch to voice mode
@@ -372,17 +372,19 @@ describe('E2E — US-006: 输入区域状态管理 (AC-006-01/02/03)', () => {
     vi.clearAllMocks()
   })
 
-  // TC-E2E-006: WS disconnected → global disable
-  it('TC-E2E-006: WS断开 → 拍照/textarea/发送/相册 disabled, 语音切换 enabled', () => {
+  // TC-E2E-006: WS disconnected → textarea/send/voice disabled, camera/album/toggle always enabled
+  it('TC-E2E-006: WS断开 → textarea/发送禁用, 拍照/相册/语音切换仍可用', () => {
     const wrapper = mountBar({ wsConnected: false, isStreaming: false })
 
-    // All action elements should be disabled
-    expect(findCameraBtn(wrapper).classes()).toContain('icon-btn--disabled')
+    // Camera and album remain enabled (user can take/pick photos offline)
+    expect(findCameraBtn(wrapper).classes()).not.toContain('icon-btn--disabled')
+    expect(findAlbumBtn(wrapper).classes()).not.toContain('icon-btn--disabled')
+
+    // Textarea and send are disabled (cannot send without connection)
     expect(findTextarea(wrapper).attributes('disabled')).toBeDefined()
     expect(findSendBtn(wrapper).classes()).toContain('send-btn--disabled')
-    expect(findAlbumBtn(wrapper).classes()).toContain('icon-btn--disabled')
 
-    // Only voice toggle should remain enabled
+    // Voice toggle always enabled
     expect(findVoiceToggleBtn(wrapper).classes()).not.toContain('icon-btn--disabled')
   })
 
