@@ -25,7 +25,7 @@
         :class="{ 'icon-btn--disabled': isCameraDisabled }"
         @tap="handleCamera"
       >
-        <text class="icon-btn__text">📷</text>
+        <view class="ico ico-camera" />
       </view>
 
       <!-- TEXT MODE: textarea + send button -->
@@ -44,8 +44,8 @@
           :class="sendBtnClass"
           @tap="handleSend"
         >
-          <text v-if="!isUploading" class="icon-btn__text">↑</text>
-          <text v-else class="icon-btn__text icon-btn__text--spinner">⏳</text>
+          <view v-if="!isUploading" class="ico ico-send" />
+          <view v-else class="ico ico-spinner" />
         </view>
       </template>
 
@@ -68,7 +68,7 @@
 
       <!-- Voice/Keyboard toggle (always enabled per ADR-004, AC-003-03) -->
       <view class="icon-btn" @tap="toggleVoiceMode">
-        <text class="icon-btn__text">{{ isVoiceMode ? '⌨' : '🎤' }}</text>
+        <view class="ico" :class="isVoiceMode ? 'ico-keyboard' : 'ico-mic'" />
       </view>
 
       <!-- Album button -->
@@ -77,7 +77,7 @@
         :class="{ 'icon-btn--disabled': isAlbumDisabled }"
         @tap="handleAlbum"
       >
-        <text class="icon-btn__text">+</text>
+        <view class="ico ico-plus" />
       </view>
     </view>
   </view>
@@ -499,13 +499,37 @@ function handleChooseImageError(err, name) {
   justify-content: center;
   flex-shrink: 0;
 }
-.icon-btn__text {
-  font-size: 32rpx;
-  line-height: 1;
-}
 .icon-btn--disabled {
   opacity: 0.35;
   pointer-events: none;
+}
+
+/* Icon inner element */
+.ico {
+  width: 36rpx;
+  height: 36rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* ---- SVG icons (data-URI — WeChat Android no-emoji) ---- */
+/* Light theme: #666 grey */
+.ico-camera { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
+.ico-send { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
+.ico-mic { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
+.ico-keyboard { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
+.ico-plus { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
+.ico-spinner {
+  width: 28rpx; height: 28rpx;
+  border: 3rpx solid #ccc;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: ico-spin 0.8s linear infinite;
+}
+@keyframes ico-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Text input (textarea replacement) */
@@ -523,29 +547,18 @@ function handleChooseImageError(err, name) {
 
 /* Send button states */
 .send-btn--active {
-  background: #1a73e8;
+  background-color: #1a73e8;
 }
-.send-btn--active .icon-btn__text {
-  color: #fff;
+.send-btn--active .ico-send {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E");
 }
 .send-btn--disabled {
-  background: #e0e0e0;
+  background-color: #e0e0e0;
   pointer-events: none;
-}
-.send-btn--disabled .icon-btn__text {
-  color: #999;
 }
 .send-btn--uploading {
-  background: #f5f5f5;
+  background-color: #f5f5f5;
   pointer-events: none;
-}
-.icon-btn__text--spinner {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 /* Hold-to-speak button (voice mode) */
@@ -588,39 +601,38 @@ function handleChooseImageError(err, name) {
   color: #7df9ff;
 }
 .chat-input-bar--dark .icon-btn {
-  background: rgba(47,244,224,0.18);
+  background-color: rgba(47,244,224,0.18);
   border: 1px solid rgba(56,230,224,0.65);
   box-shadow: 0 0 10px rgba(47,244,224,0.15);
 }
-.chat-input-bar--dark .icon-btn__text {
-  color: #2ff4e0;
-  font-size: 38rpx;
-  text-shadow: 0 0 6px rgba(47,244,224,0.4);
-}
+/* Dark theme: cyan stroke for all SVG icons */
+.chat-input-bar--dark .ico-camera { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
+.chat-input-bar--dark .ico-send { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232ff4e0'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
+.chat-input-bar--dark .ico-mic { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
+.chat-input-bar--dark .ico-keyboard { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
+.chat-input-bar--dark .ico-plus { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
 .chat-input-bar--dark .text-input {
   background: rgba(4,10,22,0.7);
   border: 1px solid rgba(56,230,224,0.25);
   color: #eaf6ff;
 }
 .chat-input-bar--dark .send-btn--active {
-  background: linear-gradient(135deg, #22e6da, #3a8bff);
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"), linear-gradient(135deg, #22e6da, #3a8bff);
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, center;
+  background-size: 36rpx 36rpx, 100% 100%;
   box-shadow: 0 0 20px rgba(47,244,224,0.55);
   border: none;
 }
-.chat-input-bar--dark .send-btn--active .icon-btn__text {
-  color: #04121f;
-}
 .chat-input-bar--dark .send-btn--disabled {
-  background: rgba(56,230,224,0.14);
+  background-color: rgba(56,230,224,0.14);
   border: 1px solid rgba(56,230,224,0.35);
   opacity: 0.6;
 }
 /* Dark theme: disabled icon buttons stay visible */
 .chat-input-bar--dark .icon-btn--disabled {
   opacity: 0.55;
-}
-.chat-input-bar--dark .send-btn--disabled .icon-btn__text {
-  color: rgba(143,217,255,0.5);
 }
 .chat-input-bar--dark .hold-to-speak {
   background: rgba(4,10,22,0.7);
@@ -634,5 +646,9 @@ function handleChooseImageError(err, name) {
 .chat-input-bar--dark .hold-to-speak--cancelling {
   background: rgba(255,100,100,0.18);
   color: #ff6b6b;
+}
+.chat-input-bar--dark .ico-spinner {
+  border-color: rgba(56,230,224,0.2);
+  border-top-color: #2ff4e0;
 }
 </style>
