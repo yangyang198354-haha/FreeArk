@@ -236,10 +236,12 @@ function handleVoiceMove(e) {
   height: 56rpx;
   border-radius: 28rpx;
   padding: 0 18rpx;
+  background-color: #eee;
+  border: 2rpx solid #d0d0d0;
 }
 .cib-voice-label {
   font-size: 24rpx;
-  color: #555;
+  color: #444;
   white-space: nowrap;
 }
 .cib-voice--recording {
