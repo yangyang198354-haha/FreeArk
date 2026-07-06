@@ -229,19 +229,23 @@ function handleVoiceMove(e) {
   pointer-events: none;
 }
 
-/* ---- voice button ---- */
+/* ---- voice button (self-contained — no reliance on .cib-btn cascade) ---- */
 .cib-voice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   width: auto;
   min-width: 72rpx;
   height: 56rpx;
   border-radius: 28rpx;
   padding: 0 18rpx;
-  background-color: #eee;
-  border: 2rpx solid #d0d0d0;
+  background-color: #e0e0e0;
+  border: 2rpx solid #ccc;
 }
 .cib-voice-label {
   font-size: 24rpx;
-  color: #444;
+  color: #333;
   white-space: nowrap;
 }
 .cib-voice--recording {
