@@ -1,41 +1,21 @@
 /**
  * @vitest-environment jsdom
  *
- * Integration tests for MOD-001: ChatInputBar.vue
- * Simplified — text input + send button + voice toggle
+ * ChatInputBar tests — ultra-simple: textarea + send + voice (always visible)
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-// ============================================================================
-// Mock dependencies
-// ============================================================================
-vi.mock('@/utils/permission', () => ({
-  requestPermission: vi.fn(),
-}))
-
-vi.mock('@/utils/voice-input', () => ({
-  startRecording: vi.fn(),
-  stopAndRecognize: vi.fn(),
-}))
-
-vi.mock('@/utils/http', () => ({
-  BASE_URL: 'https://api.test.local',
-  WS_BASE_URL: 'wss://api.test.local',
-}))
-
-vi.mock('@/utils/auth', () => ({
-  getToken: vi.fn(() => 'mock-token'),
-}))
+vi.mock('@/utils/permission', () => ({ requestPermission: vi.fn() }))
+vi.mock('@/utils/voice-input', () => ({ startRecording: vi.fn(), stopAndRecognize: vi.fn() }))
+vi.mock('@/utils/http', () => ({ BASE_URL: 'https://api.test.local', WS_BASE_URL: 'wss://api.test.local' }))
+vi.mock('@/utils/auth', () => ({ getToken: vi.fn(() => 'mock-token') }))
 
 import ChatInputBar from '@/components/ChatInputBar.vue'
 import { requestPermission } from '@/utils/permission'
 import { startRecording, stopAndRecognize } from '@/utils/voice-input'
 
-// ============================================================================
-// Helpers
-// ============================================================================
 function mountBar(props = {}) {
   return mount(ChatInputBar, {
     props: { wsConnected: true, isStreaming: false, ...props },
@@ -44,90 +24,27 @@ function mountBar(props = {}) {
 }
 
 function findTextarea(w) { return w.find('.cib-text') }
-function findSendBtn(w) {
-  // Send button is the first .cib-btn in text mode
-  return w.findAll('.cib-btn')[0]
-}
-function findVoiceToggle(w) {
-  // Voice toggle is the last .cib-btn
-  const btns = w.findAll('.cib-btn')
-  return btns[btns.length - 1]
-}
-function findHoldToSpeak(w) { return w.find('.cib-hold') }
+function findSendBtn(w) { return w.findAll('.cib-btn')[0] }
+function findVoiceBtn(w) { return w.findAll('.cib-btn')[1] }
 
-function expectIcon(btn, icoClass) {
-  const ico = btn.find('.cib-ico')
-  expect(ico.exists()).toBe(true)
-  expect(ico.classes()).toContain(icoClass)
-}
-
-// ============================================================================
-// Tests
 // ============================================================================
 
 describe('ChatInputBar — 初始状态', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('初始为文字模式，textarea 可见，发送按钮禁用', () => {
+  it('三个元素同时存在: textarea, 发送, 语音', () => {
     const w = mountBar()
     expect(findTextarea(w).exists()).toBe(true)
     expect(findSendBtn(w).exists()).toBe(true)
-    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
-    expect(findHoldToSpeak(w).exists()).toBe(false)
-    expectIcon(findVoiceToggle(w), 'cib-ico-mic')
+    expect(findVoiceBtn(w).exists()).toBe(true)
   })
-})
 
-describe('ChatInputBar — 模式切换', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('点击麦克风 → 语音模式', async () => {
+  it('空输入时发送按钮禁用', () => {
     const w = mountBar()
-    await findVoiceToggle(w).trigger('tap')
-    await nextTick()
-
-    expect(findTextarea(w).exists()).toBe(false)
-    expect(findHoldToSpeak(w).exists()).toBe(true)
-    expect(findHoldToSpeak(w).text()).toBe('按住说话')
-    expectIcon(findVoiceToggle(w), 'cib-ico-keyboard')
-  })
-
-  it('点击键盘 → 回到文字模式', async () => {
-    const w = mountBar()
-    await findVoiceToggle(w).trigger('tap')
-    await nextTick()
-    await findVoiceToggle(w).trigger('tap')
-    await nextTick()
-
-    expect(findTextarea(w).exists()).toBe(true)
-    expect(findHoldToSpeak(w).exists()).toBe(false)
-    expectIcon(findVoiceToggle(w), 'cib-ico-mic')
-  })
-
-  it('WS 断开时模式切换仍可用', async () => {
-    const w = mountBar({ wsConnected: false })
-    await findVoiceToggle(w).trigger('tap')
-    await nextTick()
-    expect(findHoldToSpeak(w).exists()).toBe(true)
-  })
-})
-
-describe('ChatInputBar — 禁用逻辑', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('!wsConnected → textarea 和 voice 禁用', () => {
-    const w = mountBar({ wsConnected: false })
-    expect(findTextarea(w).attributes('disabled')).toBeDefined()
     expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
   })
 
-  it('isStreaming → textarea 禁用', () => {
-    const w = mountBar({ isStreaming: true })
-    expect(findTextarea(w).attributes('disabled')).toBeDefined()
-    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
-  })
-
-  it('正常 + 输入文字 → 发送按钮高亮', async () => {
+  it('输入文字后发送按钮高亮', async () => {
     const w = mountBar()
     await findTextarea(w).setValue('hello')
     await nextTick()
@@ -135,30 +52,21 @@ describe('ChatInputBar — 禁用逻辑', () => {
   })
 })
 
-describe('ChatInputBar — 发送', () => {
+describe('ChatInputBar — 发送文字', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('输入文字点击发送 → emit send 正确 payload', async () => {
+  it('输入 → 点击发送 → emit + 清空', async () => {
     const w = mountBar()
-    await findTextarea(w).setValue('你好世界')
+    await findTextarea(w).setValue('你好')
     await nextTick()
     await findSendBtn(w).trigger('tap')
     await nextTick()
 
-    expect(w.emitted('send')).toBeTruthy()
-    expect(w.emitted('send')[0]).toEqual([{ text: '你好世界', media: [] }])
-  })
-
-  it('发送后输入框清空', async () => {
-    const w = mountBar()
-    await findTextarea(w).setValue('test')
-    await nextTick()
-    await findSendBtn(w).trigger('tap')
-    await nextTick()
+    expect(w.emitted('send')[0]).toEqual([{ text: '你好', media: [] }])
     expect(w.find('textarea').element.value).toBe('')
   })
 
-  it('空输入点击发送 → 不 emit', async () => {
+  it('空输入点发送 → 不 emit', async () => {
     const w = mountBar()
     await findSendBtn(w).trigger('tap')
     await nextTick()
@@ -166,57 +74,86 @@ describe('ChatInputBar — 发送', () => {
   })
 })
 
-describe('ChatInputBar — 语音模式', () => {
+describe('ChatInputBar — 语音录音', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('语音模式下降权被拒 → emit error', async () => {
-    const { requestPermission: rp } = await import('@/utils/permission')
-    rp.mockResolvedValue('denied')
-
-    const w = mountBar()
-    await findVoiceToggle(w).trigger('tap')
-    await nextTick()
-    await findHoldToSpeak(w).trigger('touchstart')
-    await nextTick()
-
-    const errs = w.emitted('error')
-    expect(errs).toBeTruthy()
-    expect(errs[0][0]).toMatchObject({
-      code: 'PERMISSION_DENIED',
-      message: expect.stringContaining('录音权限'),
-    })
-    expect(startRecording).not.toHaveBeenCalled()
-  })
-
-  it('按住说话 → 录音 → 松手 → ASR 识别 → emit send', async () => {
+  it('长按 → 录音 → 松手 → 识别 → emit send', async () => {
     const { requestPermission: rp } = await import('@/utils/permission')
     rp.mockResolvedValue('authorized')
     startRecording.mockResolvedValue(undefined)
-    stopAndRecognize.mockResolvedValue({ text: '今天天气怎么样' })
+    stopAndRecognize.mockResolvedValue({ text: '识别结果' })
 
     const w = mountBar()
-    await findVoiceToggle(w).trigger('tap')
-    await nextTick()
+    const voice = findVoiceBtn(w)
 
     // Press
-    await findHoldToSpeak(w).trigger('touchstart')
+    await voice.trigger('touchstart')
     await nextTick()
+    expect(rp).toHaveBeenCalled()
     expect(startRecording).toHaveBeenCalled()
+    expect(voice.classes()).toContain('cib-voice--recording')
 
     // Release
-    await findHoldToSpeak(w).trigger('touchend')
+    await voice.trigger('touchend')
     await nextTick()
     await new Promise(r => setTimeout(r, 20))
     await nextTick()
 
     expect(stopAndRecognize).toHaveBeenCalled()
-    expect(w.emitted('send')[0]).toEqual([{ text: '今天天气怎么样', media: [] }])
+    expect(w.emitted('send')[0]).toEqual([{ text: '识别结果', media: [] }])
   })
 
-  it('语音模式在全局禁用时 hold-to-speak 不可交互', async () => {
-    const w = mountBar({ isStreaming: true })
-    await findVoiceToggle(w).trigger('tap')
+  it('权限拒绝 → emit error，不录音', async () => {
+    const { requestPermission: rp } = await import('@/utils/permission')
+    rp.mockResolvedValue('denied')
+
+    const w = mountBar()
+    await findVoiceBtn(w).trigger('touchstart')
     await nextTick()
-    expect(findHoldToSpeak(w).classes()).toContain('cib-hold--disabled')
+
+    expect(w.emitted('error')[0][0]).toMatchObject({ code: 'PERMISSION_DENIED' })
+    expect(startRecording).not.toHaveBeenCalled()
+  })
+
+  it('上滑取消 → 不发送', async () => {
+    const { requestPermission: rp } = await import('@/utils/permission')
+    rp.mockResolvedValue('authorized')
+    startRecording.mockResolvedValue(undefined)
+
+    const w = mountBar()
+    const voice = findVoiceBtn(w)
+
+    // Press
+    await voice.trigger('touchstart', { touches: [{ pageY: 300 }] })
+    await nextTick()
+
+    // Slide up (cancel)
+    await voice.trigger('touchmove', { touches: [{ pageY: 200 }] })
+    await nextTick()
+    expect(voice.classes()).toContain('cib-voice--cancelling')
+
+    // Release
+    await voice.trigger('touchend')
+    await nextTick()
+
+    expect(w.emitted('send')).toBeFalsy()
+  })
+})
+
+describe('ChatInputBar — 禁用逻辑', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('WS 断开 → textarea 禁用 + 发送禁用 + 语音禁用', () => {
+    const w = mountBar({ wsConnected: false })
+    expect(findTextarea(w).attributes('disabled')).toBeDefined()
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
+    expect(findVoiceBtn(w).classes()).toContain('cib-voice--disabled')
+  })
+
+  it('Streaming → 全局禁用', () => {
+    const w = mountBar({ isStreaming: true })
+    expect(findTextarea(w).attributes('disabled')).toBeDefined()
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
+    expect(findVoiceBtn(w).classes()).toContain('cib-voice--disabled')
   })
 })
