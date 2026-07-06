@@ -99,13 +99,17 @@ function _checkPermission() {
  */
 export async function startRecording() {
   if (_recording) return
+
+  // ⚠️  Set _recording BEFORE await to close the double-tap race window.
+  //     If permission check fails we reset it below.
+  _recording = true
+
   var ok = await _checkPermission()
-  if (!ok) return
+  if (!ok) { _recording = false; return }
 
   var manager = _getManager()
-  if (!manager) return
+  if (!manager) { _recording = false; return }
 
-  _recording = true
   uni.showToast({ title: '正在聆听…', icon: 'none', duration: 60000 })
 
   manager.start({

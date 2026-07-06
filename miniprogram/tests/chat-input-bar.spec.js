@@ -72,27 +72,27 @@ function mountBar(props = {}) {
 // Helper: find elements by their text/class selectors
 // ============================================================================
 function findCameraBtn(wrapper) {
-  // Camera button is the first .icon-btn (📷)
+  // Camera button is the first .icon-btn — Doubao layout: [📷, +, text/voice, 🎤/⌨]
   return wrapper.findAll('.icon-btn')[0]
 }
 
 function findSendBtn(wrapper) {
-  // Send button has class .send-btn
+  // Send button is inside .input-wrap (not an .icon-btn), class .send-btn
   return wrapper.find('.send-btn')
 }
 
 function findVoiceToggleBtn(wrapper) {
-  // Voice/Keyboard toggle is always the second-to-last .icon-btn element.
-  // In text mode:  [camera, send, voice-toggle, album] → index 2 of 4
-  // In voice mode: [camera, voice-toggle, album]          → index 1 of 3
-  // So we use the element second from the end.
+  // Voice/Keyboard toggle is always the LAST .icon-btn (rightmost).
+  // Text mode:  [📷(0), +(1), text-wrap, 🎤(2)]
+  // Voice mode: [📷(0), +(1), hold-to-speak, ⌨(2)]
   const btns = wrapper.findAll('.icon-btn')
-  return btns[btns.length - 2]
+  return btns[btns.length - 1]
 }
 
 function findAlbumBtn(wrapper) {
+  // Album (+) button is second .icon-btn (index 1) — Doubao layout
   const btns = wrapper.findAll('.icon-btn')
-  return btns[btns.length - 1]
+  return btns[1]
 }
 
 /** Assert that a button wrapper contains an icon child with the given CSS class.
@@ -458,5 +458,109 @@ describe('ChatInputBar — 语音模式禁用逻辑', () => {
     const hts = findHoldToSpeak(wrapper)
     expect(hts.exists()).toBe(true)
     expect(hts.classes()).not.toContain('hold-to-speak--disabled')
+  })
+})
+
+describe('ChatInputBar — Doubao 布局 (v1.13.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('按钮顺序: 拍照 → 相册(+) → 语音切换 (共 3 个 icon-btn)', () => {
+    const wrapper = mountBar()
+    const btns = wrapper.findAll('.icon-btn')
+
+    // Exactly 3 icon buttons: camera, album, voice-toggle
+    expect(btns.length).toBe(3)
+
+    // Camera is first (index 0)
+    expectIcon(btns[0], 'ico-camera')
+    // Album (+) is second (index 1) — moved next to camera
+    expectIcon(btns[1], 'ico-plus')
+    // Voice toggle is last (index 2) — rightmost
+    expectIcon(btns[2], 'ico-mic')
+  })
+
+  it('发送按钮在输入区域内（非 icon-btn）', () => {
+    const wrapper = mountBar()
+
+    // Send button should be inside .input-wrap, not an .icon-btn
+    const inputWrap = wrapper.find('.input-wrap')
+    expect(inputWrap.exists()).toBe(true)
+
+    const sendBtn = inputWrap.find('.send-btn')
+    expect(sendBtn.exists()).toBe(true)
+  })
+
+  it('空输入时发送按钮隐藏（v-show）', () => {
+    const wrapper = mountBar()
+
+    const sendBtn = findSendBtn(wrapper)
+    // Element exists in DOM but hidden via v-show
+    expect(sendBtn.exists()).toBe(true)
+    expect(sendBtn.isVisible()).toBe(false)
+  })
+
+  it('输入文字后发送按钮出现', async () => {
+    const wrapper = mountBar()
+
+    // Type text
+    const textarea = findTextarea(wrapper)
+    await textarea.setValue('hello')
+    await nextTick()
+
+    // Send button should now be visible
+    const sendBtn = findSendBtn(wrapper)
+    expect(sendBtn.isVisible()).toBe(true)
+    expect(sendBtn.classes()).toContain('send-btn--active')
+  })
+
+  it('发送后文字清空且发送按钮消失', async () => {
+    const wrapper = mountBar({ wsConnected: true, isStreaming: false })
+
+    // Type text
+    const textarea = findTextarea(wrapper)
+    await textarea.setValue('hello')
+    await nextTick()
+
+    const sendBtn1 = findSendBtn(wrapper)
+    expect(sendBtn1.isVisible()).toBe(true)
+    // Verify v-show is not hiding it: display should not be 'none'
+    expect(sendBtn1.element.style.display).not.toBe('none')
+
+    // Click send — handleSend() clears inputText
+    await sendBtn1.trigger('tap')
+    // Wait for async handleSend to complete
+    await new Promise((r) => setTimeout(r, 10))
+    await nextTick()
+
+    // After send: text cleared, hasText=false → v-show hides button
+    const sendBtn2 = findSendBtn(wrapper)
+    expect(sendBtn2.element.style.display).toBe('none')
+  })
+
+  it('上传图片后发送按钮出现（即使无文字）', async () => {
+    isUploadIdExpired.mockReturnValue(false)
+    uploadImage.mockResolvedValue({
+      upload_id: 'test-upload-id',
+      expires_in: 600,
+      uploaded_at: Date.now(),
+    })
+    uni.chooseImage.mockImplementation((opts) => {
+      opts.success({ tempFilePaths: ['/tmp/photo.jpg'] })
+    })
+
+    const wrapper = mountBar()
+
+    // Click album button to trigger photo selection
+    const albumBtn = findAlbumBtn(wrapper)
+    await albumBtn.trigger('tap')
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+    await nextTick()
+
+    // Send button should be visible (hasPendingMedia is true)
+    const sendBtn = findSendBtn(wrapper)
+    expect(sendBtn.isVisible()).toBe(true)
   })
 })

@@ -60,11 +60,11 @@ function findCameraBtn(w) { return w.findAll('.icon-btn')[0] }
 function findSendBtn(w) { return w.find('.send-btn') }
 function findVoiceToggleBtn(w) {
   const btns = w.findAll('.icon-btn')
-  return btns[btns.length - 2]
+  return btns[btns.length - 1]
 }
 function findAlbumBtn(w) {
   const btns = w.findAll('.icon-btn')
-  return btns[btns.length - 1]
+  return btns[1]
 }
 function findTextarea(w) { return w.find('textarea') }
 function findHoldToSpeak(w) { return w.find('.hold-to-speak') }

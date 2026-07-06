@@ -4,8 +4,8 @@
   @depends MOD-002 (ChatWebSocket -- via parent), MOD-003 (MediaUploader), MOD-004 (PermissionManager), MOD-005 (VoiceInput), MOD-006 (ChatStore -- via parent props)
   @author sub_agent_software_developer
   @description Chat input bar in Doubao (豆包) style with 4 icon buttons: camera, text/send, voice toggle, album.
-    - Text mode: [📷] [textarea flex:1] [↑] [🎤] [+]
-    - Voice mode: [📷] [hold-to-speak flex:1] [⌨] [+]
+    - Text mode: [📷] [+] [textarea+↑send inside flex:1] [🎤]
+    - Voice mode: [📷] [+] [hold-to-speak flex:1] [⌨]
     - Disable matrix per module_design.md (ADR-004: voice toggle always enabled).
     - Pre-upload strategy per ADR-002 with TTL expiry fallback.
     - ASR text goes through chat_message (ADR-008, not audio URL).
@@ -17,36 +17,53 @@
       <text class="uploading-bar__text">图片上传中...</text>
     </view>
 
-    <!-- Main input row -->
+    <!-- Main input row — Doubao layout: [📷] [+] [text area / hold-to-speak] [🎤/⌨] -->
     <view class="input-row" :class="'input-row--' + theme">
       <!-- Camera button -->
       <view
         class="icon-btn"
-        :class="[{ 'icon-btn--disabled': isCameraDisabled }, theme === 'dark' ? 'icon-btn-d' : '']"
+        :class="[iconDisabledCls(isCameraDisabled), theme === 'dark' ? 'icon-btn-d' : '']"
+        :style="isCameraDisabled ? dkIconBtnDisabled : dkIconBtn"
         @tap="handleCamera"
       >
         <view :class="['ico', theme === 'dark' ? 'ico-camera-d' : 'ico-camera']" />
       </view>
 
-      <!-- TEXT MODE: textarea + send button -->
+      <!-- Album (+) button — next to camera (Doubao layout) -->
+      <view
+        class="icon-btn"
+        :class="[iconDisabledCls(isAlbumDisabled), theme === 'dark' ? 'icon-btn-d' : '']"
+        :style="isAlbumDisabled ? dkIconBtnDisabled : dkIconBtn"
+        @tap="handleAlbum"
+      >
+        <view :class="['ico', theme === 'dark' ? 'ico-plus-d' : 'ico-plus']" />
+      </view>
+
+      <!-- TEXT MODE: input wrapper with send button inside -->
       <template v-if="!isVoiceMode">
-        <textarea
-          class="text-input"
-          :class="theme === 'dark' ? 'text-input-d' : ''"
-          v-model="inputText"
-          placeholder="输入消息…"
-          :disabled="isTextDisabled"
-          auto-height
-          :max-height="200"
-          @confirm="handleSend"
-        />
-        <view
-          class="icon-btn send-btn"
-          :class="[sendBtnClass, theme === 'dark' ? 'send-btn-d' : '']"
-          @tap="handleSend"
-        >
-          <view v-if="!isUploading" :class="['ico', theme === 'dark' ? 'ico-send-d' : 'ico-send']" />
-          <view v-else :class="['ico', theme === 'dark' ? 'ico-spinner-d' : 'ico-spinner']" />
+        <view class="input-wrap" :class="theme === 'dark' ? 'input-wrap-d' : ''">
+          <textarea
+            class="text-input"
+            :class="theme === 'dark' ? 'text-input-d' : ''"
+            :style="dkTextInput"
+            v-model="inputText"
+            placeholder="输入消息…"
+            :disabled="isTextDisabled"
+            auto-height
+            :max-height="200"
+            @confirm="handleSend"
+          />
+          <!-- Send button inside input area — visible when there's content to send (Doubao UX) -->
+          <view
+            v-show="hasText || hasPendingMedia"
+            class="send-btn"
+            :class="sendBtnClass"
+            :style="canSend && !isUploading ? dkSendActive : dkSendDisabled"
+            @tap="handleSend"
+          >
+            <view v-if="!isUploading" :class="['ico', theme === 'dark' ? 'ico-send-d' : 'ico-send']" />
+            <view v-else :class="['ico', theme === 'dark' ? 'ico-spinner-d' : 'ico-spinner']" />
+          </view>
         </view>
       </template>
 
@@ -54,11 +71,8 @@
       <template v-else>
         <view
           class="hold-to-speak"
-          :class="[{
-            'hold-to-speak--recording': isRecording,
-            'hold-to-speak--cancelling': isCancelling,
-            'hold-to-speak--disabled': isVoiceDisabled
-          }, theme === 'dark' ? 'hold-to-speak-d' : '']"
+          :class="[holdToSpeakStateClass, isVoiceDisabled ? (theme === 'dark' ? 'hold-to-speak--disabled-d' : 'hold-to-speak--disabled') : '', theme === 'dark' ? 'hold-to-speak-d' : '']"
+          :style="isCancelling ? dkHoldToSpeakCancelling : isRecording ? dkHoldToSpeakRecording : dkHoldToSpeak"
           @touchstart="handleVoiceStart"
           @touchend="handleVoiceEnd"
           @touchmove="handleVoiceMove"
@@ -67,18 +81,9 @@
         </view>
       </template>
 
-      <!-- Voice/Keyboard toggle (always enabled per ADR-004, AC-003-03) -->
-      <view class="icon-btn" :class="theme === 'dark' ? 'icon-btn-d' : ''" @tap="toggleVoiceMode">
+      <!-- Voice/Keyboard toggle — rightmost (always enabled per ADR-004, AC-003-03) -->
+      <view class="icon-btn" :class="theme === 'dark' ? 'icon-btn-d' : ''" :style="dkIconBtn" @tap="toggleVoiceMode">
         <view :class="['ico', isVoiceMode ? (theme === 'dark' ? 'ico-keyboard-d' : 'ico-keyboard') : (theme === 'dark' ? 'ico-mic-d' : 'ico-mic')]" />
-      </view>
-
-      <!-- Album button -->
-      <view
-        class="icon-btn"
-        :class="[{ 'icon-btn--disabled': isAlbumDisabled }, theme === 'dark' ? 'icon-btn-d' : '']"
-        @tap="handleAlbum"
-      >
-        <view :class="['ico', theme === 'dark' ? 'ico-plus-d' : 'ico-plus']" />
       </view>
     </view>
   </view>
@@ -162,12 +167,71 @@ const hasPendingMedia = computed(() => pendingMedia.value.length > 0)
 /** Whether the send button should be active (blue, clickable). */
 const canSend = computed(() => props.wsConnected && !props.isStreaming && (hasText.value || hasPendingMedia.value))
 
-/** Send button CSS class binding. */
+/** Dark suffix: '-d' in dark theme, '' in light. Baked into class names to avoid
+    compound CSS selectors (WeChat Android mangles .a.b → .a .b descendant). */
+const ds = computed(() => props.theme === 'dark' ? '-d' : '')
+
+/** Inline styles for dark theme — BYPASSES WeChat WXSS style isolation entirely.
+    CSS class-based dark theme has failed across 5 rounds of fixes on real Android
+    devices.  Inline styles CANNOT be rewritten or stripped by WeChat's scoping engine
+    and are the only reliable way to deliver dark visuals on older WebView versions. */
+const isDark = computed(() => props.theme === 'dark')
+
+const dkIconBtn = computed(() => isDark.value
+  ? 'background-color:#1a5a6a;border:2px solid #2ff4e0;box-shadow:0 0 12px rgba(47,244,224,0.4)'
+  : '')
+
+const dkIconBtnDisabled = computed(() => isDark.value
+  ? 'background-color:#1a5a6a;border:2px solid #2ff4e0;box-shadow:0 0 12px rgba(47,244,224,0.4);opacity:0.55'
+  : '')
+
+const dkTextInput = computed(() => isDark.value
+  ? 'background:rgba(4,10,22,0.7);border:1px solid rgba(56,230,224,0.25);color:#eaf6ff'
+  : '')
+
+const dkSendActive = computed(() => isDark.value
+  ? 'background-color:transparent;background-image:url(data:image/svg+xml,' +
+    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#04121f"><path d="M3 11l18-8-8 18-2-7-8-3z"/></svg>') +
+    '),linear-gradient(135deg,#22e6da,#3a8bff);background-repeat:no-repeat,no-repeat;background-position:center,center;background-size:28rpx 28rpx,100% 100%;box-shadow:0 0 14px rgba(47,244,224,0.55);border:none'
+  : '')
+
+const dkSendDisabled = computed(() => isDark.value
+  ? 'background-color:rgba(56,230,224,0.25);border:1px solid rgba(56,230,224,0.50);opacity:0.7'
+  : '')
+
+const dkHoldToSpeak = computed(() => isDark.value
+  ? 'background-color:rgba(4,10,22,0.7);border:1px solid rgba(56,230,224,0.25);color:#eaf6ff'
+  : '')
+
+const dkHoldToSpeakRecording = computed(() => isDark.value
+  ? 'background-color:rgba(47,244,224,0.30);color:#7df9ff'
+  : '')
+
+const dkHoldToSpeakCancelling = computed(() => isDark.value
+  ? 'background-color:rgba(255,100,100,0.30);color:#ff6b6b'
+  : '')
+
+/** Send button CSS class binding — single-class names for WeChat compatibility. */
 const sendBtnClass = computed(() => ({
-  'send-btn--active': canSend.value && !isUploading.value,
-  'send-btn--disabled': !canSend.value,
-  'send-btn--uploading': isUploading.value
+  ['send-btn--active' + ds.value]: canSend.value && !isUploading.value,
+  ['send-btn--disabled' + ds.value]: !canSend.value,
+  ['send-btn--uploading' + ds.value]: isUploading.value
 }))
+
+/** Icon-button disabled class — single-class dark variant avoids compound.
+    Template auto-unwraps refs, so `isDisabled` is a raw boolean here. */
+function iconDisabledCls(isDisabled) {
+  if (!isDisabled) return ''
+  return props.theme === 'dark' ? 'icon-btn--disabled-d' : 'icon-btn--disabled'
+}
+
+/** Hold-to-speak state class — single-class dark variant. */
+const holdToSpeakStateClass = computed(() => {
+  const d = props.theme === 'dark' ? '-d' : ''
+  if (isCancelling.value) return 'hold-to-speak--cancelling' + d
+  if (isRecording.value) return 'hold-to-speak--recording' + d
+  return ''
+})
 
 /** Hold-to-speak label based on recording/cancelling state. */
 const holdToSpeakLabel = computed(() => {
@@ -533,20 +597,43 @@ function handleChooseImageError(err, name) {
   to { transform: rotate(360deg); }
 }
 
+/* Text input wrapper — contains textarea + inline send button (Doubao layout) */
+.input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
 /* Text input (textarea replacement) */
 .text-input {
-  flex: 1;
+  width: 100%;
   min-height: 56rpx;
   max-height: 200rpx;
   background: #f5f5f5;
   border-radius: 12rpx;
-  padding: 12rpx 20rpx;
+  padding: 12rpx 56rpx 12rpx 20rpx;  /* right padding leaves room for send button */
   font-size: 28rpx;
   line-height: 1.5;
   box-sizing: border-box;
 }
 
-/* Send button states */
+/* Send button — positioned inside input area, only visible when hasText */
+.send-btn {
+  position: absolute;
+  right: 6rpx;
+  bottom: 6rpx;
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  background-color: #e0e0e0;  /* base: visible even if state class fails */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Send button states — light theme */
 .send-btn--active {
   background-color: #1a73e8;
 }
@@ -591,11 +678,11 @@ function handleChooseImageError(err, name) {
 /* ========================================================================
    Dark theme (cyberpunk) — for pages/chat/index.vue "副官" page
 
-   ⚠️  Every dark rule uses a SINGLE class name (e.g. .ico-camera-d),
-   NOT compound selectors (.ico-camera.ico--dark).  WeChat Android
-   isolated style isolation can mangle compound selectors into
-   descendant selectors, breaking the match.  ArkTabBar works because
-   it uses .ico-home / .ico-home-on — single-class naming.
+   ⚠️  ZERO compound selectors. Every dark rule is a single-class name
+   (e.g. .send-btn--active-d not .send-btn--active.send-btn-d).
+   WeChat Android rewrites .a.b → .a .b (descendant), breaking all
+   state styling.  Single classes are preserved verbatim — same
+   pattern ArkTabBar uses successfully on real devices.
    ======================================================================== */
 .chat-input-bar--dark {
   background: rgba(8,14,28,0.7);
@@ -606,13 +693,14 @@ function handleChooseImageError(err, name) {
 .uploading-bar-d { background: rgba(47,244,224,0.18); }
 .uploading-bar-d .uploading-bar__text { color: #7df9ff; }
 
-/* Icon button — dark (solid colors, no rgba) */
+/* Icon button — dark base */
 .icon-btn-d {
   background-color: #1a5a6a;
   border: 2px solid #2ff4e0;
   box-shadow: 0 0 12px rgba(47,244,224,0.4);
 }
-.icon-btn--disabled.icon-btn-d { opacity: 0.55; }
+/* Icon button — dark disabled (SINGLE class) */
+.icon-btn--disabled-d { opacity: 0.55; }
 
 /* Icons — dark: single-class cyan SVG backgrounds */
 .ico-camera-d    { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
@@ -621,6 +709,14 @@ function handleChooseImageError(err, name) {
 .ico-keyboard-d   { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
 .ico-plus-d        { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
 
+/* Input wrap — dark (container for textarea + inline send button) */
+.input-wrap-d {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
 /* Text input — dark */
 .text-input-d {
   background: rgba(4,10,22,0.7);
@@ -628,35 +724,44 @@ function handleChooseImageError(err, name) {
   color: #eaf6ff;
 }
 
-/* Send button — dark */
-.send-btn--active.send-btn-d {
+/* Send button — dark states (ALL single-class, no compounds) */
+.send-btn--active-d {
   background-color: transparent;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"), linear-gradient(135deg, #22e6da, #3a8bff);
   background-repeat: no-repeat, no-repeat;
   background-position: center, center;
-  background-size: 36rpx 36rpx, 100% 100%;
-  box-shadow: 0 0 20px rgba(47,244,224,0.55);
+  background-size: 28rpx 28rpx, 100% 100%;
+  box-shadow: 0 0 14px rgba(47,244,224,0.55);
   border: none;
 }
-.send-btn--disabled.send-btn-d {
+.send-btn--disabled-d {
   background-color: rgba(56,230,224,0.25);
   border: 1px solid rgba(56,230,224,0.50);
   opacity: 0.7;
 }
+.send-btn--uploading-d {
+  background-color: rgba(4,10,22,0.4);
+  pointer-events: none;
+}
 
-/* Hold-to-speak — dark */
+/* Hold-to-speak — dark base */
 .hold-to-speak-d {
   background-color: rgba(4,10,22,0.7);
   border: 1px solid rgba(56,230,224,0.25);
   color: #eaf6ff;
 }
-.hold-to-speak--recording.hold-to-speak-d {
+/* Hold-to-speak — dark states (SINGLE class, no compounds) */
+.hold-to-speak--recording-d {
   background-color: rgba(47,244,224,0.30);
   color: #7df9ff;
 }
-.hold-to-speak--cancelling.hold-to-speak-d {
+.hold-to-speak--cancelling-d {
   background-color: rgba(255,100,100,0.30);
   color: #ff6b6b;
+}
+.hold-to-speak--disabled-d {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 /* Spinner — dark */
