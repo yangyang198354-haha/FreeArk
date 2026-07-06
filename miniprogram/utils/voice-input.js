@@ -112,13 +112,24 @@ export async function startRecording() {
 
   uni.showToast({ title: '正在聆听…', icon: 'none', duration: 60000 })
 
-  manager.start({
-    format: 'wav',
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    encodeBitRate: 48000,
-    duration: 60000,
-  })
+  // Ensure any stale recording is stopped before starting a new one.
+  // Previous onStop callback may not have fired yet, leaving the native
+  // recorder in "recording" state → start() would throw.
+  try { manager.stop() } catch (_) { /* ignore */ }
+
+  try {
+    manager.start({
+      format: 'wav',
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      encodeBitRate: 48000,
+      duration: 60000,
+    })
+  } catch (e) {
+    uni.hideToast()
+    _recording = false
+    throw e
+  }
 }
 
 /**
