@@ -6,12 +6,12 @@
     - Camera/album buttons removed for phased stabilization.
 -->
 <template>
-  <view class="chat-input-bar">
-    <view class="input-row">
+  <view class="cib-root">
+    <view class="cib-row">
       <!-- TEXT MODE -->
       <template v-if="!isVoiceMode">
         <textarea
-          class="text-input"
+          class="cib-text"
           v-model="inputText"
           placeholder="输入消息…"
           :disabled="isTextDisabled"
@@ -20,22 +20,22 @@
           @confirm="handleSend"
         />
         <view
-          class="icon-btn send-btn"
+          class="cib-btn cib-send"
           :class="sendBtnClass"
           @tap="handleSend"
         >
-          <view class="ico ico-send" />
+          <view class="cib-ico cib-ico-send" />
         </view>
       </template>
 
       <!-- VOICE MODE -->
       <template v-else>
         <view
-          class="hold-to-speak"
+          class="cib-hold"
           :class="{
-            'hold-to-speak--recording': isRecording,
-            'hold-to-speak--cancelling': isCancelling,
-            'hold-to-speak--disabled': isVoiceDisabled
+            'cib-hold--recording': isRecording,
+            'cib-hold--cancelling': isCancelling,
+            'cib-hold--disabled': isVoiceDisabled
           }"
           @touchstart="handleVoiceStart"
           @touchend="handleVoiceEnd"
@@ -46,8 +46,8 @@
       </template>
 
       <!-- Voice/Keyboard toggle (always enabled) -->
-      <view class="icon-btn" @tap="toggleVoiceMode">
-        <view :class="['ico', isVoiceMode ? 'ico-keyboard' : 'ico-mic']" />
+      <view class="cib-btn" @tap="toggleVoiceMode">
+        <view :class="['cib-ico', isVoiceMode ? 'cib-ico-keyboard' : 'cib-ico-mic']" />
       </view>
     </view>
   </view>
@@ -91,8 +91,8 @@ const hasText = computed(() => inputText.value.trim().length > 0)
 const canSend = computed(() => props.wsConnected && !props.isStreaming && hasText.value)
 
 const sendBtnClass = computed(() => ({
-  'send-btn--active': canSend.value,
-  'send-btn--disabled': !canSend.value,
+  'cib-send--active': canSend.value,
+  'cib-send--disabled': !canSend.value,
 }))
 
 const holdToSpeakLabel = computed(() => {
@@ -127,8 +127,15 @@ async function handleVoiceStart(e) {
   if (isVoiceDisabled.value) return
   if (isRecording.value) return
 
+  // ⚠️  Set isRecording BEFORE await to close the race window.  If the user
+  //     releases during the permission dialog, handleVoiceEnd must see that
+  //     recording is in progress so it calls stopAndRecognize().
+  isRecording.value = true
+  isCancelling.value = false
+
   const permResult = await requestPermission('scope.record', { name: '录音' })
   if (permResult !== 'authorized') {
+    isRecording.value = false
     if (permResult === 'denied') {
       emit('error', { code: 'PERMISSION_DENIED', message: '录音权限未开启，请在设置中允许' })
     }
@@ -137,9 +144,6 @@ async function handleVoiceStart(e) {
 
   const touch = e.touches && e.touches[0]
   _touchStartY = touch ? touch.pageY : 0
-
-  isRecording.value = true
-  isCancelling.value = false
 
   try {
     await startRecording()
@@ -183,20 +187,20 @@ function handleVoiceMove(e) {
 }
 </script>
 
-<style scoped>
+<style>
 /* ========================================================================
-   ChatInputBar — Simplified layout
-   Text mode:  [textarea flex:1] [↑ send 56rpx] [🎤 56rpx]
-   Voice mode: [hold-to-speak flex:1] [⌨ 56rpx]
+   ChatInputBar — Simplified layout (NO scoped — avoids WeChat compound-
+   selector mangling on Android where .a.b → .a .b breaks everything)
+   All classes use cib- (chat-input-bar) namespace prefix.
    ======================================================================== */
 
-.chat-input-bar {
+.cib-root {
   background: #fff;
   border-top: 1rpx solid #eee;
   flex-shrink: 0;
 }
 
-.input-row {
+.cib-row {
   display: flex;
   align-items: flex-end;
   padding: 16rpx 24rpx;
@@ -204,7 +208,7 @@ function handleVoiceMove(e) {
 }
 
 /* ---- icon button (send / voice-toggle) ---- */
-.icon-btn {
+.cib-btn {
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
@@ -215,7 +219,7 @@ function handleVoiceMove(e) {
   flex-shrink: 0;
 }
 
-.ico {
+.cib-ico {
   width: 36rpx;
   height: 36rpx;
   background-repeat: no-repeat;
@@ -224,12 +228,12 @@ function handleVoiceMove(e) {
 }
 
 /* SVG icons (data-URI) */
-.ico-send    { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
-.ico-mic     { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
-.ico-keyboard { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
+.cib-ico-send     { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
+.cib-ico-mic      { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
+.cib-ico-keyboard  { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
 
 /* ---- textarea ---- */
-.text-input {
+.cib-text {
   flex: 1;
   min-height: 56rpx;
   max-height: 200rpx;
@@ -242,19 +246,19 @@ function handleVoiceMove(e) {
 }
 
 /* ---- send button states ---- */
-.send-btn--active {
+.cib-send--active {
   background-color: #1a73e8;
 }
-.send-btn--active .ico-send {
+.cib-send--active .cib-ico-send {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E");
 }
-.send-btn--disabled {
+.cib-send--disabled {
   opacity: 0.35;
   pointer-events: none;
 }
 
 /* ---- hold-to-speak ---- */
-.hold-to-speak {
+.cib-hold {
   flex: 1;
   height: 56rpx;
   border-radius: 12rpx;
@@ -266,15 +270,15 @@ function handleVoiceMove(e) {
   color: #333;
   user-select: none;
 }
-.hold-to-speak--recording {
+.cib-hold--recording {
   background-color: #c8daf7;
   color: #1a73e8;
 }
-.hold-to-speak--cancelling {
+.cib-hold--cancelling {
   background-color: #fce4e4;
   color: #d93025;
 }
-.hold-to-speak--disabled {
+.cib-hold--disabled {
   opacity: 0.35;
   pointer-events: none;
 }

@@ -42,13 +42,13 @@ function mountBar(props = {}) {
   })
 }
 
-function findTextarea(w) { return w.find('textarea') }
-function findSendBtn(w) { return w.findAll('.icon-btn')[0] }
+function findTextarea(w) { return w.find(".cib-text") }
+function findSendBtn(w) { return w.findAll('.cib-btn')[0] }
 function findVoiceToggle(w) {
-  const btns = w.findAll('.icon-btn')
+  const btns = w.findAll('.cib-btn')
   return btns[btns.length - 1]
 }
-function findHoldToSpeak(w) { return w.find('.hold-to-speak') }
+function findHoldToSpeak(w) { return w.find('.cib-hold') }
 
 // ============================================================================
 // E2E Tests
@@ -61,12 +61,12 @@ describe('E2E — 文字输入与发送', () => {
     const w = mountBar()
 
     // Empty → send disabled
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
 
     // Type → send active
     await findTextarea(w).setValue('你好，方舟助手')
     await nextTick()
-    expect(findSendBtn(w).classes()).toContain('send-btn--active')
+    expect(findSendBtn(w).classes()).toContain('cib-send--active')
 
     // Click send
     await findSendBtn(w).trigger('tap')
@@ -79,7 +79,7 @@ describe('E2E — 文字输入与发送', () => {
     expect(w.find('textarea').element.value).toBe('')
 
     // Send disabled again
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
   })
 
   it('空输入点击发送 → 无响应', async () => {
@@ -167,13 +167,13 @@ describe('E2E — 状态管理', () => {
   it('WS 断开 → textarea 禁用 + 发送禁用', () => {
     const w = mountBar({ wsConnected: false })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
   })
 
   it('Streaming → 全局禁用 → stream 结束后恢复', async () => {
     const w = mountBar({ isStreaming: true })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
 
     await w.setProps({ isStreaming: false })
     await nextTick()

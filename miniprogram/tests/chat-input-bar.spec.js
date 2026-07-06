@@ -43,20 +43,20 @@ function mountBar(props = {}) {
   })
 }
 
-function findTextarea(w) { return w.find('textarea') }
+function findTextarea(w) { return w.find('.cib-text') }
 function findSendBtn(w) {
-  // Send button is the first .icon-btn in text mode
-  return w.findAll('.icon-btn')[0]
+  // Send button is the first .cib-btn in text mode
+  return w.findAll('.cib-btn')[0]
 }
 function findVoiceToggle(w) {
-  // Voice toggle is the last .icon-btn
-  const btns = w.findAll('.icon-btn')
+  // Voice toggle is the last .cib-btn
+  const btns = w.findAll('.cib-btn')
   return btns[btns.length - 1]
 }
-function findHoldToSpeak(w) { return w.find('.hold-to-speak') }
+function findHoldToSpeak(w) { return w.find('.cib-hold') }
 
 function expectIcon(btn, icoClass) {
-  const ico = btn.find('.ico')
+  const ico = btn.find('.cib-ico')
   expect(ico.exists()).toBe(true)
   expect(ico.classes()).toContain(icoClass)
 }
@@ -72,9 +72,9 @@ describe('ChatInputBar — 初始状态', () => {
     const w = mountBar()
     expect(findTextarea(w).exists()).toBe(true)
     expect(findSendBtn(w).exists()).toBe(true)
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
     expect(findHoldToSpeak(w).exists()).toBe(false)
-    expectIcon(findVoiceToggle(w), 'ico-mic')
+    expectIcon(findVoiceToggle(w), 'cib-ico-mic')
   })
 })
 
@@ -89,7 +89,7 @@ describe('ChatInputBar — 模式切换', () => {
     expect(findTextarea(w).exists()).toBe(false)
     expect(findHoldToSpeak(w).exists()).toBe(true)
     expect(findHoldToSpeak(w).text()).toBe('按住说话')
-    expectIcon(findVoiceToggle(w), 'ico-keyboard')
+    expectIcon(findVoiceToggle(w), 'cib-ico-keyboard')
   })
 
   it('点击键盘 → 回到文字模式', async () => {
@@ -101,7 +101,7 @@ describe('ChatInputBar — 模式切换', () => {
 
     expect(findTextarea(w).exists()).toBe(true)
     expect(findHoldToSpeak(w).exists()).toBe(false)
-    expectIcon(findVoiceToggle(w), 'ico-mic')
+    expectIcon(findVoiceToggle(w), 'cib-ico-mic')
   })
 
   it('WS 断开时模式切换仍可用', async () => {
@@ -118,20 +118,20 @@ describe('ChatInputBar — 禁用逻辑', () => {
   it('!wsConnected → textarea 和 voice 禁用', () => {
     const w = mountBar({ wsConnected: false })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
   })
 
   it('isStreaming → textarea 禁用', () => {
     const w = mountBar({ isStreaming: true })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
-    expect(findSendBtn(w).classes()).toContain('send-btn--disabled')
+    expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
   })
 
   it('正常 + 输入文字 → 发送按钮高亮', async () => {
     const w = mountBar()
     await findTextarea(w).setValue('hello')
     await nextTick()
-    expect(findSendBtn(w).classes()).toContain('send-btn--active')
+    expect(findSendBtn(w).classes()).toContain('cib-send--active')
   })
 })
 
@@ -217,6 +217,6 @@ describe('ChatInputBar — 语音模式', () => {
     const w = mountBar({ isStreaming: true })
     await findVoiceToggle(w).trigger('tap')
     await nextTick()
-    expect(findHoldToSpeak(w).classes()).toContain('hold-to-speak--disabled')
+    expect(findHoldToSpeak(w).classes()).toContain('cib-hold--disabled')
   })
 })
