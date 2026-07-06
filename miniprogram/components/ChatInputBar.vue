@@ -13,7 +13,7 @@
 <template>
   <view class="chat-input-bar" :class="'chat-input-bar--' + theme">
     <!-- Uploading indicator -->
-    <view v-if="isUploading" class="uploading-bar" :class="'uploading-bar--' + theme">
+    <view v-if="isUploading" class="uploading-bar" :class="theme === 'dark' ? 'uploading-bar-d' : ''">
       <text class="uploading-bar__text">图片上传中...</text>
     </view>
 
@@ -22,17 +22,17 @@
       <!-- Camera button -->
       <view
         class="icon-btn"
-        :class="[{ 'icon-btn--disabled': isCameraDisabled }, 'icon-btn--' + theme]"
+        :class="[{ 'icon-btn--disabled': isCameraDisabled }, theme === 'dark' ? 'icon-btn-d' : '']"
         @tap="handleCamera"
       >
-        <view :class="['ico', 'ico-camera', 'ico--' + theme]" />
+        <view :class="['ico', theme === 'dark' ? 'ico-camera-d' : 'ico-camera']" />
       </view>
 
       <!-- TEXT MODE: textarea + send button -->
       <template v-if="!isVoiceMode">
         <textarea
           class="text-input"
-          :class="'text-input--' + theme"
+          :class="theme === 'dark' ? 'text-input-d' : ''"
           v-model="inputText"
           placeholder="输入消息…"
           :disabled="isTextDisabled"
@@ -42,11 +42,11 @@
         />
         <view
           class="icon-btn send-btn"
-          :class="[sendBtnClass, 'send-btn--' + theme]"
+          :class="[sendBtnClass, theme === 'dark' ? 'send-btn-d' : '']"
           @tap="handleSend"
         >
-          <view v-if="!isUploading" :class="['ico', 'ico-send', 'ico--' + theme]" />
-          <view v-else :class="['ico', 'ico-spinner', 'ico--' + theme]" />
+          <view v-if="!isUploading" :class="['ico', theme === 'dark' ? 'ico-send-d' : 'ico-send']" />
+          <view v-else :class="['ico', theme === 'dark' ? 'ico-spinner-d' : 'ico-spinner']" />
         </view>
       </template>
 
@@ -58,7 +58,7 @@
             'hold-to-speak--recording': isRecording,
             'hold-to-speak--cancelling': isCancelling,
             'hold-to-speak--disabled': isVoiceDisabled
-          }, 'hold-to-speak--' + theme]"
+          }, theme === 'dark' ? 'hold-to-speak-d' : '']"
           @touchstart="handleVoiceStart"
           @touchend="handleVoiceEnd"
           @touchmove="handleVoiceMove"
@@ -68,17 +68,17 @@
       </template>
 
       <!-- Voice/Keyboard toggle (always enabled per ADR-004, AC-003-03) -->
-      <view class="icon-btn" :class="'icon-btn--' + theme" @tap="toggleVoiceMode">
-        <view :class="['ico', isVoiceMode ? 'ico-keyboard' : 'ico-mic', 'ico--' + theme]" />
+      <view class="icon-btn" :class="theme === 'dark' ? 'icon-btn-d' : ''" @tap="toggleVoiceMode">
+        <view :class="['ico', isVoiceMode ? (theme === 'dark' ? 'ico-keyboard-d' : 'ico-keyboard') : (theme === 'dark' ? 'ico-mic-d' : 'ico-mic')]" />
       </view>
 
       <!-- Album button -->
       <view
         class="icon-btn"
-        :class="[{ 'icon-btn--disabled': isAlbumDisabled }, 'icon-btn--' + theme]"
+        :class="[{ 'icon-btn--disabled': isAlbumDisabled }, theme === 'dark' ? 'icon-btn-d' : '']"
         @tap="handleAlbum"
       >
-        <view :class="['ico', 'ico-plus', 'ico--' + theme]" />
+        <view :class="['ico', theme === 'dark' ? 'ico-plus-d' : 'ico-plus']" />
       </view>
     </view>
   </view>
@@ -591,11 +591,11 @@ function handleChooseImageError(err, name) {
 /* ========================================================================
    Dark theme (cyberpunk) — for pages/chat/index.vue "副官" page
 
-   ⚠️  All selectors use COMPOUND classes (e.g. .ico-camera.ico--dark),
-   NOT descendant selectors (e.g. .chat-input-bar--dark .ico-camera).
-   WeChat Android isolated style isolation breaks descendant selectors
-   on custom components, causing SVG data-URI background-images to not
-   render → buttons appear transparent.
+   ⚠️  Every dark rule uses a SINGLE class name (e.g. .ico-camera-d),
+   NOT compound selectors (.ico-camera.ico--dark).  WeChat Android
+   isolated style isolation can mangle compound selectors into
+   descendant selectors, breaking the match.  ArkTabBar works because
+   it uses .ico-home / .ico-home-on — single-class naming.
    ======================================================================== */
 .chat-input-bar--dark {
   background: rgba(8,14,28,0.7);
@@ -603,39 +603,33 @@ function handleChooseImageError(err, name) {
 }
 
 /* Uploading bar */
-.uploading-bar--dark {
-  background: rgba(47,244,224,0.18);
-}
-.uploading-bar--dark .uploading-bar__text {
-  color: #7df9ff;
-}
+.uploading-bar-d { background: rgba(47,244,224,0.18); }
+.uploading-bar-d .uploading-bar__text { color: #7df9ff; }
 
-/* Icon button base — dark */
-.icon-btn--dark {
-  background-color: rgba(47,244,224,0.40);
-  border: 1.5px solid rgba(56,230,224,0.85);
-  box-shadow: 0 0 14px rgba(47,244,224,0.35);
+/* Icon button — dark (solid colors, no rgba) */
+.icon-btn-d {
+  background-color: #1a5a6a;
+  border: 2px solid #2ff4e0;
+  box-shadow: 0 0 12px rgba(47,244,224,0.4);
 }
-.icon-btn--disabled.icon-btn--dark {
-  opacity: 0.55;
-}
+.icon-btn--disabled.icon-btn-d { opacity: 0.55; }
 
-/* Dark theme: cyan stroke/fill for all SVG icons */
-.ico-camera.ico--dark { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
-.ico-send.ico--dark { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232ff4e0'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
-.ico-mic.ico--dark { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
-.ico-keyboard.ico--dark { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
-.ico-plus.ico--dark { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
+/* Icons — dark: single-class cyan SVG backgrounds */
+.ico-camera-d    { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
+.ico-send-d       { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232ff4e0'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
+.ico-mic-d        { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
+.ico-keyboard-d   { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
+.ico-plus-d        { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
 
 /* Text input — dark */
-.text-input--dark {
+.text-input-d {
   background: rgba(4,10,22,0.7);
   border: 1px solid rgba(56,230,224,0.25);
   color: #eaf6ff;
 }
 
-/* Send button active — dark */
-.send-btn--active.send-btn--dark {
+/* Send button — dark */
+.send-btn--active.send-btn-d {
   background-color: transparent;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"), linear-gradient(135deg, #22e6da, #3a8bff);
   background-repeat: no-repeat, no-repeat;
@@ -644,34 +638,32 @@ function handleChooseImageError(err, name) {
   box-shadow: 0 0 20px rgba(47,244,224,0.55);
   border: none;
 }
-/* The white send-icon inside active button must NOT win over dark cyan */
-.send-btn--active.send-btn--dark .ico-send.ico--dark {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E");
-}
-.send-btn--disabled.send-btn--dark {
+.send-btn--disabled.send-btn-d {
   background-color: rgba(56,230,224,0.25);
   border: 1px solid rgba(56,230,224,0.50);
   opacity: 0.7;
 }
 
 /* Hold-to-speak — dark */
-.hold-to-speak--dark {
+.hold-to-speak-d {
   background-color: rgba(4,10,22,0.7);
   border: 1px solid rgba(56,230,224,0.25);
   color: #eaf6ff;
 }
-.hold-to-speak--recording.hold-to-speak--dark {
+.hold-to-speak--recording.hold-to-speak-d {
   background-color: rgba(47,244,224,0.30);
   color: #7df9ff;
 }
-.hold-to-speak--cancelling.hold-to-speak--dark {
+.hold-to-speak--cancelling.hold-to-speak-d {
   background-color: rgba(255,100,100,0.30);
   color: #ff6b6b;
 }
 
 /* Spinner — dark */
-.ico-spinner.ico--dark {
-  border-color: rgba(56,230,224,0.2);
+.ico-spinner-d {
+  border: 3rpx solid rgba(56,230,224,0.2);
   border-top-color: #2ff4e0;
+  border-radius: 50%;
+  animation: ico-spin 0.8s linear infinite;
 }
 </style>
