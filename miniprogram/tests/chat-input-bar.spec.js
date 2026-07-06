@@ -95,6 +95,15 @@ function findAlbumBtn(wrapper) {
   return btns[btns.length - 1]
 }
 
+/** Assert that a button wrapper contains an icon child with the given CSS class.
+ *  Used instead of .text() because icons are now SVG data-URI background images,
+ *  not emoji text (commit 0da26f7). */
+function expectIcon(btnWrapper, icoClass) {
+  const ico = btnWrapper.find('.ico')
+  expect(ico.exists()).toBe(true)
+  expect(ico.classes()).toContain(icoClass)
+}
+
 function findTextarea(wrapper) {
   return wrapper.find('textarea')
 }
@@ -136,7 +145,7 @@ describe('ChatInputBar — 模式切换 (TC-INT-001 ~ TC-INT-004, TC-INT-019)', 
 
     // Click voice toggle (microphone icon)
     const voiceBtn = findVoiceToggleBtn(wrapper)
-    expect(voiceBtn.text()).toBe('🎤') // initially microphone
+    expectIcon(voiceBtn, 'ico-mic') // initially microphone (SVG icon)
 
     await voiceBtn.trigger('tap')
     await nextTick()
@@ -150,7 +159,7 @@ describe('ChatInputBar — 模式切换 (TC-INT-001 ~ TC-INT-004, TC-INT-019)', 
     expect(hts.text()).toBe('按住说话')
 
     // Voice toggle icon should change to keyboard
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('⌨')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-keyboard')
   })
 
   // TC-INT-003: Click keyboard → back to text mode
@@ -170,7 +179,7 @@ describe('ChatInputBar — 模式切换 (TC-INT-001 ~ TC-INT-004, TC-INT-019)', 
     expect(findHoldToSpeak(wrapper).exists()).toBe(false)
 
     // Icon should be microphone again
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('🎤')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-mic')
   })
 
   // TC-INT-004: Mode switch works even when WS disconnected
@@ -191,19 +200,19 @@ describe('ChatInputBar — 模式切换 (TC-INT-001 ~ TC-INT-004, TC-INT-019)', 
   })
 
   // TC-INT-019: Icon changes between microphone and keyboard
-  it('TC-INT-019: 语音切换时图标在🎤和⌨之间切换', async () => {
+  it('TC-INT-019: 语音切换时图标在麦克风和键盘之间切换', async () => {
     const wrapper = mountBar()
     const voiceBtn = findVoiceToggleBtn(wrapper)
 
-    expect(voiceBtn.text()).toBe('🎤')
+    expectIcon(voiceBtn, 'ico-mic')
 
     await voiceBtn.trigger('tap')
     await nextTick()
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('⌨')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-keyboard')
 
     await findVoiceToggleBtn(wrapper).trigger('tap')
     await nextTick()
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('🎤')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-mic')
   })
 })
 

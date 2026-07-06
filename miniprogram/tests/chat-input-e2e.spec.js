@@ -69,6 +69,15 @@ function findAlbumBtn(w) {
 function findTextarea(w) { return w.find('textarea') }
 function findHoldToSpeak(w) { return w.find('.hold-to-speak') }
 
+/** Assert that a button wrapper contains an icon child with the given CSS class.
+ *  Used instead of .text() because icons are now SVG data-URI background images,
+ *  not emoji text (commit 0da26f7). */
+function expectIcon(btnWrapper, icoClass) {
+  const ico = btnWrapper.find('.ico')
+  expect(ico.exists()).toBe(true)
+  expect(ico.classes()).toContain(icoClass)
+}
+
 // ============================================================================
 // E2E Tests
 // ============================================================================
@@ -146,7 +155,7 @@ describe('E2E — US-002: 文字输入与发送 (AC-002-01/02/03)', () => {
 
     // Step 3: Send button should now be active (blue/highlighted)
     expect(findSendBtn(wrapper).classes()).toContain('send-btn--active')
-    expect(findSendBtn(wrapper).text()).toContain('↑') // arrow icon
+    expectIcon(findSendBtn(wrapper), 'ico-send') // send arrow (SVG icon)
 
     // Step 4: Click send
     await findSendBtn(wrapper).trigger('tap')
@@ -190,7 +199,7 @@ describe('E2E — US-003: 语音模式切换 (AC-003-01/02/03)', () => {
     // Step 1: Initial state — text mode
     expect(findTextarea(wrapper).exists()).toBe(true)
     expect(findHoldToSpeak(wrapper).exists()).toBe(false)
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('🎤')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-mic')
 
     // Step 2: Click microphone → voice mode
     await findVoiceToggleBtn(wrapper).trigger('tap')
@@ -200,7 +209,7 @@ describe('E2E — US-003: 语音模式切换 (AC-003-01/02/03)', () => {
     expect(findTextarea(wrapper).exists()).toBe(false)
     expect(findHoldToSpeak(wrapper).exists()).toBe(true)
     expect(findHoldToSpeak(wrapper).text()).toBe('按住说话')
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('⌨')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-keyboard')
 
     // Step 4: Click keyboard → back to text mode
     await findVoiceToggleBtn(wrapper).trigger('tap')
@@ -209,7 +218,7 @@ describe('E2E — US-003: 语音模式切换 (AC-003-01/02/03)', () => {
     // Step 5: Verify text mode restored
     expect(findTextarea(wrapper).exists()).toBe(true)
     expect(findHoldToSpeak(wrapper).exists()).toBe(false)
-    expect(findVoiceToggleBtn(wrapper).text()).toBe('🎤')
+    expectIcon(findVoiceToggleBtn(wrapper), 'ico-mic')
 
     // Step 6: Input should be empty after round-trip
     expect(wrapper.find('textarea').element.value).toBe('')
@@ -337,7 +346,7 @@ describe('E2E — US-005: 相册选图发送 (AC-005-01)', () => {
 
     // Step 1: Click album (+) button
     const albumBtn = findAlbumBtn(wrapper)
-    expect(albumBtn.text()).toBe('+')
+    expectIcon(albumBtn, 'ico-plus')
     await albumBtn.trigger('tap')
 
     // Wait for uploads
