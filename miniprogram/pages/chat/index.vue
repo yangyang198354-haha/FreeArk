@@ -453,6 +453,12 @@ onUnload(() => {
 
 /* v1.13.0: input bar replaced by ChatInputBar component (theme="dark") */
 
+/* 防止 ChatInputBar 和 ArkTabBar 在真机 flex 列布局中被压缩至零高度。
+   Android 100vh 计算与模拟器不同，flex: 1 1 0 的 scroll-view 会挤占所有剩余空间，
+   宿主元素无 flex-shrink:0 时组件会被 overflow:hidden 裁掉不可见。 */
+:deep(chat-input-bar) { flex-shrink: 0; }
+:deep(ark-tab-bar) { flex-shrink: 0; }
+
 /* 历史下拉 */
 .hist-mask { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.4); }
 .hist-panel {

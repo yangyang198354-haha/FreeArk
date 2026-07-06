@@ -312,4 +312,6 @@ onUnload(() => {
   flex: 1;
   padding: 16rpx 0;
 }
+
+:deep(chat-input-bar) { flex-shrink: 0; }
 </style>
