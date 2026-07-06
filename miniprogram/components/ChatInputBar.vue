@@ -1,78 +1,42 @@
 <!--
-  @module MOD-001
-  @implements IFC-001 (props: wsConnected, isStreaming; events: send-text, send-media, error)
-  @depends MOD-002 (ChatWebSocket -- via parent), MOD-003 (MediaUploader), MOD-004 (PermissionManager), MOD-005 (VoiceInput), MOD-006 (ChatStore -- via parent props)
-  @author sub_agent_software_developer
-  @description Chat input bar in Doubao (豆包) style with 4 icon buttons: camera, text/send, voice toggle, album.
-    - Text mode: [📷] [+] [textarea+↑send inside flex:1] [🎤]
-    - Voice mode: [📷] [+] [hold-to-speak flex:1] [⌨]
-    - Disable matrix per module_design.md (ADR-004: voice toggle always enabled).
-    - Pre-upload strategy per ADR-002 with TTL expiry fallback.
-    - ASR text goes through chat_message (ADR-008, not audio URL).
+  @module MOD-001  ChatInputBar
+  @description  Simplified chat input bar — text input + send button + voice toggle.
+    - Text mode:  [textarea flex:1] [↑ send] [🎤 mic]
+    - Voice mode: [hold-to-speak flex:1] [⌨ keyboard]
+    - Camera/album buttons removed for phased stabilization.
 -->
 <template>
-  <view class="chat-input-bar" :class="'chat-input-bar--' + theme">
-    <!-- Uploading indicator -->
-    <view v-if="isUploading" class="uploading-bar" :class="theme === 'dark' ? 'uploading-bar-d' : ''">
-      <text class="uploading-bar__text">图片上传中...</text>
-    </view>
-
-    <!-- Main input row — Doubao layout: [📷] [+] [text area / hold-to-speak] [🎤/⌨] -->
-    <view class="input-row" :class="'input-row--' + theme">
-      <!-- Camera button -->
-      <view
-        class="icon-btn"
-        :class="[iconDisabledCls(isCameraDisabled), theme === 'dark' ? 'icon-btn-d' : '']"
-        :style="isCameraDisabled ? dkIconBtnDisabled : dkIconBtn"
-        @tap="handleCamera"
-      >
-        <view :class="['ico', theme === 'dark' ? 'ico-camera-d' : 'ico-camera']" />
-      </view>
-
-      <!-- Album (+) button — next to camera (Doubao layout) -->
-      <view
-        class="icon-btn"
-        :class="[iconDisabledCls(isAlbumDisabled), theme === 'dark' ? 'icon-btn-d' : '']"
-        :style="isAlbumDisabled ? dkIconBtnDisabled : dkIconBtn"
-        @tap="handleAlbum"
-      >
-        <view :class="['ico', theme === 'dark' ? 'ico-plus-d' : 'ico-plus']" />
-      </view>
-
-      <!-- TEXT MODE: input wrapper with send button inside -->
+  <view class="chat-input-bar">
+    <view class="input-row">
+      <!-- TEXT MODE -->
       <template v-if="!isVoiceMode">
-        <view class="input-wrap" :class="theme === 'dark' ? 'input-wrap-d' : ''">
-          <textarea
-            class="text-input"
-            :class="theme === 'dark' ? 'text-input-d' : ''"
-            :style="dkTextInput"
-            v-model="inputText"
-            placeholder="输入消息…"
-            :disabled="isTextDisabled"
-            auto-height
-            :max-height="200"
-            @confirm="handleSend"
-          />
-          <!-- Send button inside input area — visible when there's content to send (Doubao UX) -->
-          <view
-            v-show="hasText || hasPendingMedia"
-            class="send-btn"
-            :class="sendBtnClass"
-            :style="canSend && !isUploading ? dkSendActive : dkSendDisabled"
-            @tap="handleSend"
-          >
-            <view v-if="!isUploading" :class="['ico', theme === 'dark' ? 'ico-send-d' : 'ico-send']" />
-            <view v-else :class="['ico', theme === 'dark' ? 'ico-spinner-d' : 'ico-spinner']" />
-          </view>
+        <textarea
+          class="text-input"
+          v-model="inputText"
+          placeholder="输入消息…"
+          :disabled="isTextDisabled"
+          auto-height
+          :max-height="200"
+          @confirm="handleSend"
+        />
+        <view
+          class="icon-btn send-btn"
+          :class="sendBtnClass"
+          @tap="handleSend"
+        >
+          <view class="ico ico-send" />
         </view>
       </template>
 
-      <!-- VOICE MODE: hold-to-speak button -->
+      <!-- VOICE MODE -->
       <template v-else>
         <view
           class="hold-to-speak"
-          :class="[holdToSpeakStateClass, isVoiceDisabled ? (theme === 'dark' ? 'hold-to-speak--disabled-d' : 'hold-to-speak--disabled') : '', theme === 'dark' ? 'hold-to-speak-d' : '']"
-          :style="isCancelling ? dkHoldToSpeakCancelling : isRecording ? dkHoldToSpeakRecording : dkHoldToSpeak"
+          :class="{
+            'hold-to-speak--recording': isRecording,
+            'hold-to-speak--cancelling': isCancelling,
+            'hold-to-speak--disabled': isVoiceDisabled
+          }"
           @touchstart="handleVoiceStart"
           @touchend="handleVoiceEnd"
           @touchmove="handleVoiceMove"
@@ -81,159 +45,56 @@
         </view>
       </template>
 
-      <!-- Voice/Keyboard toggle — rightmost (always enabled per ADR-004, AC-003-03) -->
-      <view class="icon-btn" :class="theme === 'dark' ? 'icon-btn-d' : ''" :style="dkIconBtn" @tap="toggleVoiceMode">
-        <view :class="['ico', isVoiceMode ? (theme === 'dark' ? 'ico-keyboard-d' : 'ico-keyboard') : (theme === 'dark' ? 'ico-mic-d' : 'ico-mic')]" />
+      <!-- Voice/Keyboard toggle (always enabled) -->
+      <view class="icon-btn" @tap="toggleVoiceMode">
+        <view :class="['ico', isVoiceMode ? 'ico-keyboard' : 'ico-mic']" />
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-/**
- * @module MOD-001 ChatInputBar
- * @implements IFC-001
- * Props: wsConnected(Boolean), isStreaming(Boolean)
- * Events: @send({ text, media }), @error({code, message})
- */
 import { ref, computed } from 'vue'
 import { requestPermission } from '@/utils/permission'
-import { uploadImage, uploadImages, isUploadIdExpired } from '@/utils/media-uploader'
 import { startRecording, stopAndRecognize } from '@/utils/voice-input'
 
 // ==========================================================================
 // Props
 // ==========================================================================
 const props = defineProps({
-  wsConnected: {
-    type: Boolean,
-    required: true
-  },
-  isStreaming: {
-    type: Boolean,
-    required: true
-  },
-  theme: {
-    type: String,
-    default: 'light'  // 'light' | 'dark' (cyberpunk)
-  }
+  wsConnected: { type: Boolean, required: true },
+  isStreaming: { type: Boolean, required: true },
+  theme: { type: String, default: 'light' },
 })
 
 // ==========================================================================
-// Events
+// Emits
 // ==========================================================================
 const emit = defineEmits(['send', 'error'])
 
 // ==========================================================================
-// Internal state (component-scoped refs -- ADR-004)
+// State
 // ==========================================================================
 const inputText = ref('')
 const isVoiceMode = ref(false)
-const pendingMedia = ref([])       // Array<{ upload_id, expires_in, uploaded_at, type:'image' }>
-const isUploading = ref(false)
 const isRecording = ref(false)
 const isCancelling = ref(false)
 
-// For touch-move cancellation detection
 let _touchStartY = 0
-const TOUCH_MOVE_THRESHOLD = 60  // px threshold for cancel detection
 
 // ==========================================================================
-// Computed: disable states (per module_design.md disable matrix)
+// Computed
 // ==========================================================================
-
-/** Global disable condition: AI streaming. Camera/album are NOT tied to WS — user can
-    select photos anytime, only send is blocked when disconnected. */
-const isGloballyDisabled = computed(() => props.isStreaming)
-
-/** Text input: disabled when WS disconnected OR streaming. */
 const isTextDisabled = computed(() => !props.wsConnected || props.isStreaming)
-
-/** Camera: only disabled during AI streaming — user can shoot even when disconnected. */
-const isCameraDisabled = computed(() => props.isStreaming)
-
-/** Album: only disabled during AI streaming — user can pick even when disconnected. */
-const isAlbumDisabled = computed(() => props.isStreaming)
-
-/** Voice: disabled when WS disconnected OR streaming. */
 const isVoiceDisabled = computed(() => !props.wsConnected || props.isStreaming)
-
-/** Whether input text has non-whitespace content. */
 const hasText = computed(() => inputText.value.trim().length > 0)
+const canSend = computed(() => props.wsConnected && !props.isStreaming && hasText.value)
 
-/** Whether pending media exists. */
-const hasPendingMedia = computed(() => pendingMedia.value.length > 0)
-
-/** Whether the send button should be active (blue, clickable). */
-const canSend = computed(() => props.wsConnected && !props.isStreaming && (hasText.value || hasPendingMedia.value))
-
-/** Dark suffix: '-d' in dark theme, '' in light. Baked into class names to avoid
-    compound CSS selectors (WeChat Android mangles .a.b → .a .b descendant). */
-const ds = computed(() => props.theme === 'dark' ? '-d' : '')
-
-/** Inline styles for dark theme — BYPASSES WeChat WXSS style isolation entirely.
-    CSS class-based dark theme has failed across 5 rounds of fixes on real Android
-    devices.  Inline styles CANNOT be rewritten or stripped by WeChat's scoping engine
-    and are the only reliable way to deliver dark visuals on older WebView versions. */
-const isDark = computed(() => props.theme === 'dark')
-
-const dkIconBtn = computed(() => isDark.value
-  ? 'background-color:#1a5a6a;border:2px solid #2ff4e0;box-shadow:0 0 12px rgba(47,244,224,0.4)'
-  : '')
-
-const dkIconBtnDisabled = computed(() => isDark.value
-  ? 'background-color:#1a5a6a;border:2px solid #2ff4e0;box-shadow:0 0 12px rgba(47,244,224,0.4);opacity:0.55'
-  : '')
-
-const dkTextInput = computed(() => isDark.value
-  ? 'background:rgba(4,10,22,0.7);border:1px solid rgba(56,230,224,0.25);color:#eaf6ff'
-  : '')
-
-const dkSendActive = computed(() => isDark.value
-  ? 'background-color:transparent;background-image:url(data:image/svg+xml,' +
-    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#04121f"><path d="M3 11l18-8-8 18-2-7-8-3z"/></svg>') +
-    '),linear-gradient(135deg,#22e6da,#3a8bff);background-repeat:no-repeat,no-repeat;background-position:center,center;background-size:28rpx 28rpx,100% 100%;box-shadow:0 0 14px rgba(47,244,224,0.55);border:none'
-  : '')
-
-const dkSendDisabled = computed(() => isDark.value
-  ? 'background-color:rgba(56,230,224,0.25);border:1px solid rgba(56,230,224,0.50);opacity:0.7'
-  : '')
-
-const dkHoldToSpeak = computed(() => isDark.value
-  ? 'background-color:rgba(4,10,22,0.7);border:1px solid rgba(56,230,224,0.25);color:#eaf6ff'
-  : '')
-
-const dkHoldToSpeakRecording = computed(() => isDark.value
-  ? 'background-color:rgba(47,244,224,0.30);color:#7df9ff'
-  : '')
-
-const dkHoldToSpeakCancelling = computed(() => isDark.value
-  ? 'background-color:rgba(255,100,100,0.30);color:#ff6b6b'
-  : '')
-
-/** Send button CSS class binding — single-class names for WeChat compatibility. */
 const sendBtnClass = computed(() => ({
-  ['send-btn--active' + ds.value]: canSend.value && !isUploading.value,
-  ['send-btn--disabled' + ds.value]: !canSend.value,
-  ['send-btn--uploading' + ds.value]: isUploading.value
+  'send-btn--active': canSend.value,
+  'send-btn--disabled': !canSend.value,
 }))
 
-/** Icon-button disabled class — single-class dark variant avoids compound.
-    Template auto-unwraps refs, so `isDisabled` is a raw boolean here. */
-function iconDisabledCls(isDisabled) {
-  if (!isDisabled) return ''
-  return props.theme === 'dark' ? 'icon-btn--disabled-d' : 'icon-btn--disabled'
-}
-
-/** Hold-to-speak state class — single-class dark variant. */
-const holdToSpeakStateClass = computed(() => {
-  const d = props.theme === 'dark' ? '-d' : ''
-  if (isCancelling.value) return 'hold-to-speak--cancelling' + d
-  if (isRecording.value) return 'hold-to-speak--recording' + d
-  return ''
-})
-
-/** Hold-to-speak label based on recording/cancelling state. */
 const holdToSpeakLabel = computed(() => {
   if (isCancelling.value) return '松手取消'
   if (isRecording.value) return '松手发送'
@@ -241,85 +102,31 @@ const holdToSpeakLabel = computed(() => {
 })
 
 // ==========================================================================
-// Mode toggle (always enabled -- AC-003-03)
+// Mode toggle
 // ==========================================================================
-
 function toggleVoiceMode() {
   isVoiceMode.value = !isVoiceMode.value
-  // Reset input text when switching to voice mode (AC-003-02)
-  if (isVoiceMode.value) {
-    inputText.value = ''
-  }
+  if (isVoiceMode.value) inputText.value = ''
 }
 
 // ==========================================================================
-// Camera button (REQ-FUNC-001)
+// Send
 // ==========================================================================
-
-async function handleCamera() {
-  if (isCameraDisabled.value) return
-
-  try {
-    const res = await chooseImage({ sourceType: ['camera'], count: 1 })
-    if (!res || !res.tempFilePaths || res.tempFilePaths.length === 0) return
-
-    await uploadAndTrack([res.tempFilePaths[0]])
-  } catch (err) {
-    handleChooseImageError(err, '相机')
-  }
-}
-
-// ==========================================================================
-// Album button (REQ-FUNC-007)
-// ==========================================================================
-
-async function handleAlbum() {
-  if (isAlbumDisabled.value) return
-
-  try {
-    const res = await chooseImage({ sourceType: ['album'], count: 9 })
-    if (!res || !res.tempFilePaths || res.tempFilePaths.length === 0) return
-
-    await uploadAndTrack(res.tempFilePaths)
-  } catch (err) {
-    handleChooseImageError(err, '相册')
-  }
-}
-
-// ==========================================================================
-// Send button (REQ-FUNC-003)
-// ==========================================================================
-
-async function handleSend() {
+function handleSend() {
   if (!canSend.value) return
-  if (isUploading.value) return
-
-  // Check TTL expiry and re-upload expired items (ADR-002)
-  await refreshExpiredMedia()
-
   const text = inputText.value.trim()
-  const media = pendingMedia.value.map((m) => ({
-    type: m.type || 'image',
-    url: m.upload_id
-  }))
-
-  if (!text && media.length === 0) return
-
-  // Emit unified send event — session.vue batches into single WS frame
-  emit('send', { text: text || '', media })
+  if (!text) return
+  emit('send', { text, media: [] })
   inputText.value = ''
-  pendingMedia.value = []
 }
 
 // ==========================================================================
-// Voice: start recording (REQ-FUNC-006)
+// Voice start
 // ==========================================================================
-
 async function handleVoiceStart(e) {
   if (isVoiceDisabled.value) return
   if (isRecording.value) return
 
-  // Request recording permission via MOD-004 (ADR-006)
   const permResult = await requestPermission('scope.record', { name: '录音' })
   if (permResult !== 'authorized') {
     if (permResult === 'denied') {
@@ -328,7 +135,6 @@ async function handleVoiceStart(e) {
     return
   }
 
-  // Track initial touch position for cancel detection
   const touch = e.touches && e.touches[0]
   _touchStartY = touch ? touch.pageY : 0
 
@@ -344,19 +150,14 @@ async function handleVoiceStart(e) {
 }
 
 // ==========================================================================
-// Voice: stop recording and recognize (REQ-FUNC-006, ADR-008)
+// Voice end
 // ==========================================================================
-
 async function handleVoiceEnd() {
   if (!isRecording.value) return
-
   isRecording.value = false
 
-  // If user cancelled by sliding out
   if (isCancelling.value) {
     isCancelling.value = false
-    // Cancel the recording -- RecorderManager.stop() will still fire,
-    // but we ignore the result by not awaiting the text
     try { stopAndRecognize() } catch (_) { /* discard */ }
     return
   }
@@ -364,7 +165,6 @@ async function handleVoiceEnd() {
   try {
     const result = await stopAndRecognize()
     if (result && result.text) {
-      // ADR-008: send ASR text as chat_message, not audio URL
       emit('send', { text: result.text, media: [] })
     }
   } catch (err) {
@@ -373,157 +173,21 @@ async function handleVoiceEnd() {
 }
 
 // ==========================================================================
-// Voice: touch move -- detect cancellation gesture
+// Voice move — cancel detection
 // ==========================================================================
-
 function handleVoiceMove(e) {
   if (!isRecording.value) return
-
   const touch = e.touches && e.touches[0]
   if (!touch) return
-
-  // If finger moved significantly upward from start position, mark as cancelling
-  const deltaY = _touchStartY - touch.pageY
-  isCancelling.value = deltaY > TOUCH_MOVE_THRESHOLD
-}
-
-// ==========================================================================
-// Image upload helpers (MOD-003 integration)
-// ==========================================================================
-
-/**
- * Upload file paths and add results to pendingMedia.
- * Single image: uploadImage. Multi-image: uploadImages (Promise.allSettled).
- */
-async function uploadAndTrack(filePaths) {
-  if (!filePaths || filePaths.length === 0) return
-
-  isUploading.value = true
-
-  try {
-    if (filePaths.length === 1) {
-      const result = await uploadImage(filePaths[0])
-      pendingMedia.value.push({
-        upload_id: result.upload_id,
-        expires_in: result.expires_in,
-        uploaded_at: result.uploaded_at,
-        type: 'image'
-      })
-    } else {
-      const results = await uploadImages(filePaths)
-      let successCount = 0
-      let failCount = 0
-
-      results.forEach((r) => {
-        if (r.status === 'fulfilled') {
-          pendingMedia.value.push({
-            upload_id: r.value.upload_id,
-            expires_in: r.value.expires_in,
-            uploaded_at: r.value.uploaded_at,
-            type: 'image'
-          })
-          successCount++
-        } else {
-          failCount++
-        }
-      })
-
-      if (failCount > 0) {
-        emit('error', {
-          code: 'PARTIAL_UPLOAD_FAILED',
-          message: successCount + '张上传成功，' + failCount + '张上传失败'
-        })
-      }
-    }
-  } catch (err) {
-    emit('error', {
-      code: err.code || 'UPLOAD_FAILED',
-      message: err.message || '图片上传失败，请重试'
-    })
-  } finally {
-    isUploading.value = false
-  }
-}
-
-/**
- * Check all pending media for TTL expiry and re-upload expired ones (ADR-002).
- */
-async function refreshExpiredMedia() {
-  const expiredIndices = []
-  const reuploadTasks = []
-
-  pendingMedia.value.forEach((m, i) => {
-    if (isUploadIdExpired(m.uploaded_at)) {
-      expiredIndices.push(i)
-      reuploadTasks.push({ index: i, media: m })
-    }
-  })
-
-  if (reuploadTasks.length === 0) return
-
-  // Re-upload expired items one by one (they need individual file paths which we don't have)
-  // Since we don't store the original file path, expired items are removed and user is notified
-  // This is the pragmatic approach: expired upload_ids can't be re-uploaded without the file
-  const removed = reuploadTasks.length
-  pendingMedia.value = pendingMedia.value.filter((_, i) => !expiredIndices.includes(i))
-
-  if (removed > 0) {
-    emit('error', {
-      code: 'UPLOAD_EXPIRED',
-      message: removed + '张图片已过期，请重新选择上传'
-    })
-  }
-}
-
-// ==========================================================================
-// Utility: wrap uni.chooseImage in a Promise
-// ==========================================================================
-
-function chooseImage(options) {
-  return new Promise((resolve, reject) => {
-    uni.chooseImage({
-      ...options,
-      success: resolve,
-      fail: reject
-    })
-  })
-}
-
-// ==========================================================================
-// Utility: handle chooseImage errors (permission issues etc.)
-// ==========================================================================
-
-function handleChooseImageError(err, name) {
-  const errMsg = (err && err.errMsg) || ''
-  if (errMsg.indexOf('cancel') !== -1) {
-    // User cancelled -- not an error, just ignore
-    return
-  }
-  if (errMsg.indexOf('auth') !== -1 || errMsg.indexOf('permission') !== -1 ||
-      errMsg.indexOf('deny') !== -1 || errMsg.indexOf('denied') !== -1) {
-    // Permission denied -- guide to settings
-    uni.showModal({
-      title: '需要' + name + '权限',
-      content: '请在设置中开启' + name + '权限后重试',
-      confirmText: '去设置',
-      success: (modalRes) => {
-        if (modalRes.confirm) {
-          // #ifdef MP-WEIXIN
-          wx.openSetting({})
-          // #endif
-        }
-      }
-    })
-  } else {
-    emit('error', { code: 'CHOOSE_IMAGE_FAILED', message: name + '操作失败，请重试' })
-  }
+  isCancelling.value = (_touchStartY - touch.pageY) > 60
 }
 </script>
 
 <style scoped>
 /* ========================================================================
-   ChatInputBar — Doubao-style bottom input bar
-   Layout: Flex row, fixed-width icon buttons 56rpx, gap 12rpx (ADR-005)
+   ChatInputBar — Simplified layout
+   Text mode:  [textarea flex:1] [↑ send 56rpx] [🎤 56rpx]
+   Voice mode: [hold-to-speak flex:1] [⌨ 56rpx]
    ======================================================================== */
 
 .chat-input-bar {
@@ -532,20 +196,6 @@ function handleChooseImageError(err, name) {
   flex-shrink: 0;
 }
 
-/* Uploading indicator bar */
-.uploading-bar {
-  padding: 8rpx 24rpx;
-  background: #e8f0fe;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.uploading-bar__text {
-  font-size: 24rpx;
-  color: #1a73e8;
-}
-
-/* Main input row */
 .input-row {
   display: flex;
   align-items: flex-end;
@@ -553,23 +203,18 @@ function handleChooseImageError(err, name) {
   gap: 12rpx;
 }
 
-/* Icon button base */
+/* ---- icon button (send / voice-toggle) ---- */
 .icon-btn {
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background-color: #f5f5f5;  /* longhand — 与 dark 覆盖的 background-color 一致，避免 WeChat WXSS 简写/长写覆盖 bug */
+  background-color: #f5f5f5;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.icon-btn--disabled {
-  opacity: 0.35;
-  pointer-events: none;
-}
 
-/* Icon inner element */
 .ico {
   width: 36rpx;
   height: 36rpx;
@@ -578,62 +223,25 @@ function handleChooseImageError(err, name) {
   background-size: contain;
 }
 
-/* ---- SVG icons (data-URI — WeChat Android no-emoji) ---- */
-/* Light theme: #666 grey */
-.ico-camera { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
-.ico-send { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
-.ico-mic { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
+/* SVG icons (data-URI) */
+.ico-send    { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
+.ico-mic     { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
 .ico-keyboard { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
-.ico-plus { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
-.ico-spinner {
-  width: 28rpx; height: 28rpx;
-  border: 3rpx solid #ccc;
-  border-top-color: #1a73e8;
-  border-radius: 50%;
-  animation: ico-spin 0.8s linear infinite;
-}
-@keyframes ico-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 
-/* Text input wrapper — contains textarea + inline send button (Doubao layout) */
-.input-wrap {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-}
-
-/* Text input (textarea replacement) */
+/* ---- textarea ---- */
 .text-input {
-  width: 100%;
+  flex: 1;
   min-height: 56rpx;
   max-height: 200rpx;
   background: #f5f5f5;
   border-radius: 12rpx;
-  padding: 12rpx 56rpx 12rpx 20rpx;  /* right padding leaves room for send button */
+  padding: 12rpx 20rpx;
   font-size: 28rpx;
   line-height: 1.5;
   box-sizing: border-box;
 }
 
-/* Send button — positioned inside input area, only visible when hasText */
-.send-btn {
-  position: absolute;
-  right: 6rpx;
-  bottom: 6rpx;
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
-  background-color: #e0e0e0;  /* base: visible even if state class fails */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* Send button states — light theme */
+/* ---- send button states ---- */
 .send-btn--active {
   background-color: #1a73e8;
 }
@@ -641,15 +249,11 @@ function handleChooseImageError(err, name) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E");
 }
 .send-btn--disabled {
-  background-color: #e0e0e0;
-  pointer-events: none;
-}
-.send-btn--uploading {
-  background-color: #f5f5f5;
+  opacity: 0.35;
   pointer-events: none;
 }
 
-/* Hold-to-speak button (voice mode) */
+/* ---- hold-to-speak ---- */
 .hold-to-speak {
   flex: 1;
   height: 56rpx;
@@ -673,102 +277,5 @@ function handleChooseImageError(err, name) {
 .hold-to-speak--disabled {
   opacity: 0.35;
   pointer-events: none;
-}
-
-/* ========================================================================
-   Dark theme (cyberpunk) — for pages/chat/index.vue "副官" page
-
-   ⚠️  ZERO compound selectors. Every dark rule is a single-class name
-   (e.g. .send-btn--active-d not .send-btn--active.send-btn-d).
-   WeChat Android rewrites .a.b → .a .b (descendant), breaking all
-   state styling.  Single classes are preserved verbatim — same
-   pattern ArkTabBar uses successfully on real devices.
-   ======================================================================== */
-.chat-input-bar--dark {
-  background: rgba(8,14,28,0.7);
-  border-top: 1px solid rgba(56,230,224,0.12);
-}
-
-/* Uploading bar */
-.uploading-bar-d { background: rgba(47,244,224,0.18); }
-.uploading-bar-d .uploading-bar__text { color: #7df9ff; }
-
-/* Icon button — dark base */
-.icon-btn-d {
-  background-color: #1a5a6a;
-  border: 2px solid #2ff4e0;
-  box-shadow: 0 0 12px rgba(47,244,224,0.4);
-}
-/* Icon button — dark disabled (SINGLE class) */
-.icon-btn--disabled-d { opacity: 0.55; }
-
-/* Icons — dark: single-class cyan SVG backgrounds */
-.ico-camera-d    { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E"); }
-.ico-send-d       { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232ff4e0'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
-.ico-mic-d        { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
-.ico-keyboard-d   { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M6 8h.01M10 8h8M10 12h8M6 12h.01M14 16h4M6 16h2'/%3E%3C/svg%3E"); }
-.ico-plus-d        { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v8M8 12h8'/%3E%3C/svg%3E"); }
-
-/* Input wrap — dark (container for textarea + inline send button) */
-.input-wrap-d {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-}
-
-/* Text input — dark */
-.text-input-d {
-  background: rgba(4,10,22,0.7);
-  border: 1px solid rgba(56,230,224,0.25);
-  color: #eaf6ff;
-}
-
-/* Send button — dark states (ALL single-class, no compounds) */
-.send-btn--active-d {
-  background-color: transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2304121f'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"), linear-gradient(135deg, #22e6da, #3a8bff);
-  background-repeat: no-repeat, no-repeat;
-  background-position: center, center;
-  background-size: 28rpx 28rpx, 100% 100%;
-  box-shadow: 0 0 14px rgba(47,244,224,0.55);
-  border: none;
-}
-.send-btn--disabled-d {
-  background-color: rgba(56,230,224,0.25);
-  border: 1px solid rgba(56,230,224,0.50);
-  opacity: 0.7;
-}
-.send-btn--uploading-d {
-  background-color: rgba(4,10,22,0.4);
-  pointer-events: none;
-}
-
-/* Hold-to-speak — dark base */
-.hold-to-speak-d {
-  background-color: rgba(4,10,22,0.7);
-  border: 1px solid rgba(56,230,224,0.25);
-  color: #eaf6ff;
-}
-/* Hold-to-speak — dark states (SINGLE class, no compounds) */
-.hold-to-speak--recording-d {
-  background-color: rgba(47,244,224,0.30);
-  color: #7df9ff;
-}
-.hold-to-speak--cancelling-d {
-  background-color: rgba(255,100,100,0.30);
-  color: #ff6b6b;
-}
-.hold-to-speak--disabled-d {
-  opacity: 0.35;
-  pointer-events: none;
-}
-
-/* Spinner — dark */
-.ico-spinner-d {
-  border: 3rpx solid rgba(56,230,224,0.2);
-  border-top-color: #2ff4e0;
-  border-radius: 50%;
-  animation: ico-spin 0.8s linear infinite;
 }
 </style>
