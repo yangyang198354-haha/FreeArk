@@ -25,7 +25,7 @@ function mountBar(props = {}) {
 
 function findTextarea(w) { return w.find('.cib-text') }
 function findSendBtn(w) { return w.findAll('.cib-btn')[0] }
-function findVoiceBtn(w) { return w.findAll('.cib-btn')[1] }
+function findVoiceBtn(w) { return w.find('.cib-voice') }
 
 // ============================================================================
 

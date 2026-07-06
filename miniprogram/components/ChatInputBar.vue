@@ -35,7 +35,7 @@
         @touchend="handleVoiceEnd"
         @touchmove="handleVoiceMove"
       >
-        <view class="cib-ico cib-ico-mic" />
+        <text class="cib-voice-label">{{ isRecording ? '松手' : '语音' }}</text>
       </view>
     </view>
   </view>
@@ -138,7 +138,11 @@ async function handleVoiceEnd() {
 
   try {
     const result = await stopAndRecognize()
-    if (result && result.text) {
+    // stopAndRecognize() resolves with a plain string (the recognized text),
+    // NOT an object.  See voice-input.js:179 resolve(text).
+    if (result && typeof result === 'string') {
+      emit('send', { text: result, media: [] })
+    } else if (result && result.text) {
       emit('send', { text: result.text, media: [] })
     }
   } catch (err) {
@@ -199,7 +203,6 @@ function handleVoiceMove(e) {
 
 /* SVG icons (data-URI) */
 .cib-ico-send { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E"); }
-.cib-ico-mic  { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E"); }
 
 /* ---- textarea ---- */
 .cib-text {
@@ -226,15 +229,30 @@ function handleVoiceMove(e) {
   pointer-events: none;
 }
 
-/* ---- voice button states ---- */
+/* ---- voice button ---- */
+.cib-voice {
+  width: auto;
+  min-width: 72rpx;
+  height: 56rpx;
+  border-radius: 28rpx;
+  padding: 0 18rpx;
+}
+.cib-voice-label {
+  font-size: 24rpx;
+  color: #555;
+  white-space: nowrap;
+}
 .cib-voice--recording {
   background-color: #c8daf7;
 }
-.cib-voice--recording .cib-ico-mic {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231a73e8' stroke='%231a73e8' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E");
+.cib-voice--recording .cib-voice-label {
+  color: #1a73e8;
 }
 .cib-voice--cancelling {
   background-color: #fce4e4;
+}
+.cib-voice--cancelling .cib-voice-label {
+  color: #d93025;
 }
 .cib-voice--disabled {
   opacity: 0.35;
