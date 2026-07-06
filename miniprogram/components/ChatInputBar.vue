@@ -494,7 +494,7 @@ function handleChooseImageError(err, name) {
   width: 56rpx;
   height: 56rpx;
   border-radius: 50%;
-  background: #f5f5f5;
+  background-color: #f5f5f5;  /* longhand — 与 dark 覆盖的 background-color 一致，避免 WeChat WXSS 简写/长写覆盖 bug */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -567,7 +567,7 @@ function handleChooseImageError(err, name) {
   flex: 1;
   height: 56rpx;
   border-radius: 12rpx;
-  background: #f5f5f5;
+  background-color: #f5f5f5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -576,11 +576,11 @@ function handleChooseImageError(err, name) {
   user-select: none;
 }
 .hold-to-speak--recording {
-  background: #c8daf7;
+  background-color: #c8daf7;
   color: #1a73e8;
 }
 .hold-to-speak--cancelling {
-  background: #fce4e4;
+  background-color: #fce4e4;
   color: #d93025;
 }
 .hold-to-speak--disabled {
@@ -656,16 +656,16 @@ function handleChooseImageError(err, name) {
 
 /* Hold-to-speak — dark */
 .hold-to-speak--dark {
-  background: rgba(4,10,22,0.7);
+  background-color: rgba(4,10,22,0.7);
   border: 1px solid rgba(56,230,224,0.25);
   color: #eaf6ff;
 }
 .hold-to-speak--recording.hold-to-speak--dark {
-  background: rgba(47,244,224,0.30);
+  background-color: rgba(47,244,224,0.30);
   color: #7df9ff;
 }
 .hold-to-speak--cancelling.hold-to-speak--dark {
-  background: rgba(255,100,100,0.30);
+  background-color: rgba(255,100,100,0.30);
   color: #ff6b6b;
 }
 

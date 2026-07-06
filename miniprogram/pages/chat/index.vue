@@ -10,7 +10,7 @@
     图标为 SVG data-URI 背景（微信小程序不渲染 inline SVG）；字体不远程加载（规避 OTS 崩溃）。
 -->
 <template>
-  <view class="ai-page">
+  <view class="ai-page" :style="{ paddingBottom: keyboardHeight + 'px' }">
     <!-- 背景装饰 -->
     <view class="bg-base" />
     <view class="bg-grid" />
@@ -83,6 +83,7 @@
 
     <!-- input bar (v1.13.0: ChatInputBar 豆包风格四按钮) -->
     <ChatInputBar
+      class="chat-input-bar-comp"
       :wsConnected="wsConnected"
       :isStreaming="isStreaming"
       theme="dark"
@@ -91,7 +92,7 @@
     />
 
     <!-- 底栏 -->
-    <ArkTabBar active="chat" />
+    <ArkTabBar class="ark-tabbar-comp" active="chat" />
 
     <!-- 历史会话下拉 -->
     <view v-if="showHistory" class="hist-mask" @tap="toggleHistory" />
@@ -139,6 +140,9 @@ const connecting = ref(false)
 const sessionKeyParam = ref(null)
 const shouldLoadHistoryOnConnect = ref(false)
 const canGoBack = ref(false)
+
+// 键盘高度（用于将输入栏顶到键盘上方）
+const keyboardHeight = ref(0)
 
 // 历史会话下拉
 const showHistory = ref(false)
@@ -322,6 +326,11 @@ function goToBind() {
   uni.navigateTo({ url: '/pages/bind/index' })
 }
 
+// 键盘高度变化时，将输入栏顶到键盘上方
+function keyboardListener(res) {
+  keyboardHeight.value = res.height || 0
+}
+
 function formatTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -344,6 +353,10 @@ onLoad((options) => {
   connectWs()
   // Preload history list in background so it's ready when the user opens the panel
   loadHistList()
+  // 监听键盘高度变化，动态顶起输入栏
+  // #ifdef MP-WEIXIN
+  wx.onKeyboardHeightChange(keyboardListener)
+  // #endif
 })
 
 onShow(() => {
@@ -359,6 +372,9 @@ onHide(() => {
 
 onUnload(() => {
   if (chatWs) chatWs.close()
+  // #ifdef MP-WEIXIN
+  wx.offKeyboardHeightChange(keyboardListener)
+  // #endif
 })
 </script>
 
@@ -455,9 +471,10 @@ onUnload(() => {
 
 /* 防止 ChatInputBar 和 ArkTabBar 在真机 flex 列布局中被压缩至零高度。
    Android 100vh 计算与模拟器不同，flex: 1 1 0 的 scroll-view 会挤占所有剩余空间，
-   宿主元素无 flex-shrink:0 时组件会被 overflow:hidden 裁掉不可见。 */
-:deep(chat-input-bar) { flex-shrink: 0; }
-:deep(ark-tab-bar) { flex-shrink: 0; }
+   宿主元素无 flex-shrink:0 时组件会被 overflow:hidden 裁掉不可见。
+   使用类名选择器（替代 :deep 标签选择器），避免微信小程序编译后标签选择器对自定义组件不生效。 */
+.chat-input-bar-comp { flex-shrink: 0; }
+.ark-tabbar-comp { flex-shrink: 0; }
 
 /* 历史下拉 */
 .hist-mask { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.4); }
