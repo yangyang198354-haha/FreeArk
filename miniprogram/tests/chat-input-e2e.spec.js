@@ -1,6 +1,6 @@
 /**
  * @vitest-environment jsdom
- * ChatInputBar E2E — mic state via :style, class stays fixed.
+ * ChatInputBar E2E — v1.12.0: mic 外观走固定 CSS class，禁用走 JS 拦截。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -24,7 +24,6 @@ function mountBar(props = {}) {
 function findTextarea(w) { return w.find('.cib-text') }
 function findSendBtn(w) { return w.find('[data-testid="send-btn"]') }
 function findMicBtn(w) { return w.find('[data-testid="voice-btn"]') }
-function micStyle(w) { return findMicBtn(w).attributes('style') || '' }
 
 describe('E2E — 文字输入发送', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -54,7 +53,7 @@ describe('E2E — 语音录音发送', () => {
     await mic.trigger('touchstart')
     await nextTick()
     expect(startRecording).toHaveBeenCalled()
-    expect(micStyle(w)).toContain('background-color: rgb(200, 218, 247)')
+    // v1.12.0: mic 走固定 CSS class，录音态无 inline style 变化。
     await mic.trigger('touchend')
     await nextTick()
     await new Promise(r => setTimeout(r, 20))
@@ -75,11 +74,16 @@ describe('E2E — 语音录音发送', () => {
 
 describe('E2E — 状态管理', () => {
   beforeEach(() => vi.clearAllMocks())
-  it('WS 断开 → textarea/send/mic 全部禁用', () => {
+  it('WS 断开 → textarea/send 禁用 + 语音操作被拦截', async () => {
     const w = mountBar({ wsConnected: false })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
     expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
-    expect(micStyle(w)).toContain('opacity: 0.35')
+    // v1.12.0: mic 外观不变，但 WS 断开时操作被 JS 拦截。
+    const mic = findMicBtn(w)
+    expect(mic.exists()).toBe(true)
+    await mic.trigger('touchstart')
+    await nextTick()
+    expect(startRecording).not.toHaveBeenCalled()
   })
   it('Streaming 结束 → 全部恢复', async () => {
     const w = mountBar({ isStreaming: true })

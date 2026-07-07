@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  * ChatInputBar tests — textarea + send + mic (56rpx circle icon)
- * Mic state via :style (bg + opacity), class stays fixed.
+ * v1.12.0 重构：mic 按钮外观走固定 CSS class，禁用逻辑走 JS 拦截而非视觉变化。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -25,7 +25,6 @@ function mountBar(props = {}) {
 function findTextarea(w) { return w.find('.cib-text') }
 function findSendBtn(w) { return w.find('[data-testid="send-btn"]') }
 function findMicBtn(w) { return w.find('[data-testid="voice-btn"]') }
-function micStyle(w) { return findMicBtn(w).attributes('style') || '' }
 
 describe('ChatInputBar — 初始状态', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -45,9 +44,11 @@ describe('ChatInputBar — 初始状态', () => {
     await nextTick()
     expect(findSendBtn(w).classes()).toContain('cib-send--active')
   })
-  it('语音按钮默认可见', () => {
+  it('语音按钮默认存在且可见', () => {
     const w = mountBar()
-    expect(micStyle(w)).toContain('opacity: 1')
+    const mic = findMicBtn(w)
+    expect(mic.exists()).toBe(true)
+    expect(mic.classes()).toContain('cib-mic')
   })
 })
 
@@ -82,7 +83,8 @@ describe('ChatInputBar — 语音录音', () => {
     await mic.trigger('touchstart')
     await nextTick()
     expect(startRecording).toHaveBeenCalled()
-    expect(micStyle(w)).toContain('background-color: rgb(200, 218, 247)')
+    // v1.12.0: mic 走固定 CSS class，录音态无 inline style 变化；
+    // 录音中外观一致性由 class 保证，此处只验证行为。
     await mic.trigger('touchend')
     await nextTick()
     await new Promise(r => setTimeout(r, 20))
@@ -109,7 +111,7 @@ describe('ChatInputBar — 语音录音', () => {
     await nextTick()
     await mic.trigger('touchmove', { touches: [{ pageY: 200 }] })
     await nextTick()
-    expect(micStyle(w)).toContain('background-color: rgb(252, 228, 228)')
+    // v1.12.0: 取消态无 inline style 变化（走固定 class），只验证不发送。
     await mic.trigger('touchend')
     await nextTick()
     expect(w.emitted('send')).toBeFalsy()
@@ -118,16 +120,25 @@ describe('ChatInputBar — 语音录音', () => {
 
 describe('ChatInputBar — 禁用逻辑', () => {
   beforeEach(() => vi.clearAllMocks())
-  it('WS断开 → textarea禁用 + 发送禁用 + 语音低透明度', () => {
+  it('WS断开 → textarea禁用 + 发送禁用 + 语音操作被拦截', async () => {
     const w = mountBar({ wsConnected: false })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
     expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
-    expect(micStyle(w)).toContain('opacity: 0.35')
+    // v1.12.0: mic 外观不变，但点击不触发录音（JS 拦截 isVoiceDisabled）。
+    const mic = findMicBtn(w)
+    expect(mic.exists()).toBe(true)
+    await mic.trigger('touchstart')
+    await nextTick()
+    expect(startRecording).not.toHaveBeenCalled()
   })
-  it('Streaming → 全部禁用', () => {
+  it('Streaming → 全部禁用', async () => {
     const w = mountBar({ isStreaming: true })
     expect(findTextarea(w).attributes('disabled')).toBeDefined()
     expect(findSendBtn(w).classes()).toContain('cib-send--disabled')
-    expect(micStyle(w)).toContain('opacity: 0.35')
+    // v1.12.0: streaming 期间语音操作被拦截。
+    const mic = findMicBtn(w)
+    await mic.trigger('touchstart')
+    await nextTick()
+    expect(startRecording).not.toHaveBeenCalled()
   })
 })

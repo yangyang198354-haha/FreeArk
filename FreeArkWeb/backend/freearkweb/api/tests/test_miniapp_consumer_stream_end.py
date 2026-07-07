@@ -138,5 +138,8 @@ class MiniAppConsumerStreamEndTest(TransactionTestCase):
 
         user_msg = next(m for m in msgs if m.role == 'user')
         self.assertEqual(user_msg.content, user_text, 'user 消息应存原始文本（不含注入前缀）')
-        assistant_msg = next(m for m in msgs if m.role == 'assistant')
-        self.assertEqual(assistant_msg.content, llm_response)
+        # v1.12.0 加入人格问候语后，新会话首次发言会自动写入问候语为首条 assistant 消息，
+        # 因此 LLM 回复不再是唯一的 assistant 消息——改用「内容包含」断言。
+        assistant_contents = [m.content for m in msgs if m.role == 'assistant']
+        self.assertIn(llm_response, assistant_contents,
+                      f'LLM 回复的内容应存在于 assistant 消息中，实际内容：{assistant_contents}')

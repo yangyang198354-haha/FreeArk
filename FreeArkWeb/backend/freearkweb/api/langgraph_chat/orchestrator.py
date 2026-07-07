@@ -520,16 +520,23 @@ class Orchestrator:
     def _fan_out(self, state: State):
         # 条件边：一次返回多个 Send → LangGraph 并发执行（核心并行点）
         # v1.8.0 新增：透传 user_scope 到每个 expert 子节点 State（MOD-180-07）
+        # v1.12.0 修复：透传 persona + active_specific_part（此前 _fan_out 丢弃了
+        #   这两个字段，导致 expert/general 节点的 state.get("persona") 恒为 None，
+        #   build_persona_message 永远走默认"尊敬的舰长大人"分支，用户自定义人格不生效）
         plan = state.get("plan") or []
         if not plan:
             # P1-2 域外：无专家应答 → 通用应答节点（友好寒暄/能力引导，不调工具）。
             return [Send("general", {
                 "query": state.get("route_text", ""), "messages": [],
                 "user_scope": state.get("user_scope"),
+                "persona": state.get("persona"),
+                "active_specific_part": state.get("active_specific_part"),
             })]
         return [Send("expert", {
             "name": name, "query": q, "messages": [],
             "user_scope": state.get("user_scope"),
+            "persona": state.get("persona"),
+            "active_specific_part": state.get("active_specific_part"),
         }) for name, q in plan]
 
     # ── expert：单专家 ReAct（读工具内联；写工具延迟到 gate；委托专家可子委托同侪）──

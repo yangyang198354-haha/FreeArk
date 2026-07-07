@@ -33,7 +33,7 @@
           @change="onBindingChange"
         >
           <view class="unit-picker">
-            <text class="unit-label">当前专有部分</text>
+            <text class="unit-label">当前座舱</text>
             <text class="unit-value">{{ currentBindingLabel }} ›</text>
           </view>
         </picker>
@@ -45,9 +45,9 @@
 
       <view v-else-if="!bindings.length" class="owner-empty">
         <view class="empty-frame">
-          <text class="empty-title">未绑定专有部分</text>
-          <text class="empty-sub">绑定房号后可查看方舟户型舱图</text>
-          <view class="empty-btn" @tap="goBind"><text>去绑定</text></view>
+          <text class="empty-title">未链接座舱</text>
+          <text class="empty-sub">链接座舱后可查看方舟户型舱图</text>
+          <view class="empty-btn" @tap="goBind"><text>激活座舱</text></view>
         </view>
       </view>
 

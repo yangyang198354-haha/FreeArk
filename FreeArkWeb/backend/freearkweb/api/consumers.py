@@ -817,6 +817,41 @@ class MiniAppChatConsumer(ChatConsumer):
         # 且恢复已有会话时 _ensure_session_created 会查询并复用，填充 self.chat_session）。
         await self._ensure_session_created(user_message)
 
+        # ── v1.12.0 修复：新会话保存人格问候语为首条 assistant 消息 ──────────
+        # 此前问候语仅在前端空会话 UI 显示（personaGreeting），从未落库；
+        # 加载历史时 messages.length > 0，跳过空会话分支 → 问候语凭空消失。
+        # 修复：新会话（尚无任何消息）首次发言时，按 persona 构造问候语并写入
+        # assistant 消息，确保历史加载时问候语出现在对话最前面。
+        if self.chat_session is not None:
+            try:
+                from .models import ChatMessage as _CM
+                _existing_count = await sync_to_async(
+                    lambda: _CM.objects.filter(session=self.chat_session).count()
+                )()
+                if _existing_count == 0:
+                    _greeting = (
+                        self.persona.get('greeting_style') if self.persona else None
+                    ) or '智能方舟的副官'
+                    _tone = (
+                        self.persona.get('tone_style') if self.persona else None
+                    ) or '尊敬的舰长大人'
+                    _greeting_text = (
+                        f"{_tone}，我是{_greeting}。"
+                        "可以帮您控制设备、排查故障，也能解答空调与新风知识。"
+                    )
+                    await sync_to_async(chat_memory.append_message)(
+                        self.chat_session, 'assistant', _greeting_text,
+                    )
+                    logger.info(
+                        'MiniAppChatConsumer: 已保存人格问候语 session=%s tone=%r greeting=%r',
+                        self.session_key[:8] + '...', _tone, _greeting,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    'MiniAppChatConsumer: 保存问候语失败（非致命）: %s', exc
+                )
+        # ─────────────────────────────────────────────────────────────────────
+
         # 加载本会话历史并构建注入前缀（与父类一致：按 session 对象查询）。
         # 此前误传 self.session_key 字符串 → filter(session=<str>) 必失败、被吞 → 注入前缀恒空，
         # 多轮对话 AI 丢失上下文记忆。改为按 self.chat_session 对象查询。
