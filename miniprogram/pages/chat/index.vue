@@ -460,7 +460,7 @@ onUnload(() => {
 
 .bubble { max-width: 78%; padding: 22rpx 26rpx; }
 .bubble-ai { background: rgba(14,22,42,0.85); border: 1px solid rgba(56,230,224,0.2); border-radius: 10rpx 28rpx 28rpx 28rpx; }
-.btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; word-break: break-all; }
+.btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; overflow-wrap: break-word; word-wrap: break-word; }
 
 /* quick chips */
 .chips { display: flex; flex-wrap: wrap; gap: 16rpx; padding-left: 88rpx; margin-bottom: 26rpx; }

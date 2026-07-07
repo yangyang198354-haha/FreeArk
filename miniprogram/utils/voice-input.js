@@ -24,9 +24,27 @@ function _getManager() {
 
   _manager.onError(function (res) {
     console.warn('[voice-input] 录音错误:', JSON.stringify(res))
+    var msg = (res && (res.errMsg || res.message)) || '录音失败'
+
+    // "stop record fail" 是 startRecording() 中清理残留录音的预期行为，
+    // 此时录音尚未开始或已正常停止，不应重置 _recording 标志。
+    if (msg.indexOf('stop record fail') !== -1) {
+      uni.hideToast()
+      return
+    }
+
+    // "audio is recording, don't start again" 表示上一次录音的原生层 stop
+    // 尚未完成。主动停止残留录音机，提示用户重试。
+    if (msg.indexOf("don't start") !== -1 || msg.indexOf('already') !== -1) {
+      _recording = false
+      uni.hideToast()
+      uni.showToast({ title: '录音繁忙，请稍后重试', icon: 'none', duration: 2000 })
+      try { _manager.stop() } catch (_) { /* ignore */ }
+      return
+    }
+
     _recording = false
     uni.hideToast()
-    var msg = (res && (res.errMsg || res.message)) || '录音失败'
     // 权限错误：引导用户去设置页打开
     if (msg.indexOf('auth') !== -1 || msg.indexOf('permission') !== -1 || msg.indexOf('deny') !== -1) {
       uni.showModal({

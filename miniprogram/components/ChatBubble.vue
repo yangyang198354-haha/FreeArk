@@ -118,7 +118,8 @@ const renderedHtml = computed(() => {
   max-width: 75%;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
-  word-break: break-all;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 .bubble--user {
   background: #1a73e8;
@@ -141,7 +142,8 @@ const renderedHtml = computed(() => {
   color: #333;
   font-size: 28rpx;
   line-height: 1.6;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 .cursor {
   color: #1a73e8;
@@ -227,7 +229,8 @@ const renderedHtml = computed(() => {
 .bubble--cyber {
   max-width: 78%;
   padding: 22rpx 26rpx;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 /* AI bubble — cyberpunk (matches .bubble-ai in index.vue) */
@@ -249,7 +252,8 @@ const renderedHtml = computed(() => {
 .bubble--cyber .bubble-text {
   font-size: 27rpx;
   line-height: 1.65;
-  word-break: break-all;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 .bubble--ai.bubble--cyber .bubble-text {
   color: #dbeeff;
@@ -264,7 +268,8 @@ const renderedHtml = computed(() => {
 .bubble-rich--cyber {
   font-size: 27rpx;
   line-height: 1.65;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 /* Cursor — cyberpunk */
