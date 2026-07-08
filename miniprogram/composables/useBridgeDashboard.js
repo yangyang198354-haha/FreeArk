@@ -215,6 +215,7 @@ function aggregateSubsystemStatus(structure, realtimeParams) {
  */
 function aggregateRoomStatus(structure, faultEvents, condensationCount) {
   const rooms = structure?.rooms || []
+  const systemDevices = structure?.system_devices || []
   const eventMap = groupFaultEventsByRoom(faultEvents)
 
   const result = rooms.map((room) => {
@@ -241,6 +242,49 @@ function aggregateRoomStatus(structure, faultEvents, condensationCount) {
       warningCount,
       hasCondensation,
     }
+  })
+
+  // v1.13.0: Pull main_thermostat devices from system_devices into rooms
+  // (Web DeviceCardsView shows them in 温控面板 row alongside panel rooms)
+  const thermostatDevs = systemDevices.filter((d) => d.sub_type === 'main_thermostat')
+  for (const dev of thermostatDevs) {
+    const devName = dev.device_name || '主温控'
+    const devSn = dev.device_sn || dev.sn || ''
+    // Match fault events by device_sn for this thermostat
+    const devEvents = (faultEvents || []).filter((ev) => ev.device_sn === devSn)
+
+    let status = 'normal'
+    let faultCount = 0
+    let warningCount = 0
+    for (const ev of devEvents) {
+      const s = severityToStatus(ev.severity)
+      if (s === 'fault') faultCount++
+      else if (s === 'warning') warningCount++
+      status = worseStatus(status, s)
+    }
+
+    result.push({
+      id: `thermostat-${devSn || devName}`,
+      name: devName,
+      status,
+      faultCount,
+      warningCount,
+      hasCondensation: false,
+      // v1.13.0: carry device info so drawer can find it in system_devices
+      _thermostatDeviceSn: devSn,
+    })
+  }
+
+  // v1.13.0: Sort rooms to enforce deterministic order:
+  // 主温控 > 主卧 > 次卧 > 儿童房 > 书房
+  const ROOM_ORDER = ['主温控', '主卧', '次卧', '儿童房', '书房']
+  result.sort((a, b) => {
+    const ai = ROOM_ORDER.indexOf(a.name)
+    const bi = ROOM_ORDER.indexOf(b.name)
+    if (ai >= 0 && bi >= 0) return ai - bi
+    if (ai >= 0) return -1
+    if (bi >= 0) return 1
+    return a.name.localeCompare(b.name, 'zh-CN')
   })
 
   return result
@@ -306,6 +350,10 @@ function filterFaultEventsByCompartment(faultEvents, compartment, structureCache
   }
 
   if (compartment.type === 'room') {
+    // v1.13.0: thermostat pseudo-rooms match by device_sn, not room_name
+    if (compartment._thermostatDeviceSn) {
+      return faultEvents.filter((ev) => ev.device_sn === compartment._thermostatDeviceSn)
+    }
     return faultEvents.filter((ev) =>
       ev.room_name === compartment.name ||
       ev.room_name === compartment.id
@@ -635,12 +683,26 @@ export function useBridgeDashboard() {
         }
       }
     } else if (compType === 'room') {
-      // Room: find devices in this room, collect their sub_types, show per sub_type
-      const rooms = structure.rooms || []
-      const room = rooms.find((r) => (r.room_name || r.ori_room_name) === compartment.name)
-        || rooms.find((r) => (r.name || r.room_name) === compartment.name)
+      // v1.13.0: thermostat pseudo-rooms — find device in system_devices
+      if (compartment._thermostatDeviceSn) {
+        const systemDevices = structure.system_devices || []
+        const dev = systemDevices.find((d) =>
+          (d.device_sn || d.sn) === compartment._thermostatDeviceSn
+        )
+        if (dev) {
+          const subType = dev.sub_type || 'main_thermostat'
+          const enriched = _collectParamsForSubType(realtime, subType, true)
+          if (enriched.length > 0) {
+            params.push(_makeParamBlock(subType, dev.device_name || '主温控', enriched))
+          }
+        }
+      } else {
+        // Room: find devices in this room, collect their sub_types, show per sub_type
+        const rooms = structure.rooms || []
+        const room = rooms.find((r) => (r.room_name || r.ori_room_name) === compartment.name)
+          || rooms.find((r) => (r.name || r.room_name) === compartment.name)
 
-      if (room && room.devices) {
+        if (room && room.devices) {
         // Collect unique sub_types used in this room
         const roomSubTypes = new Set(
           room.devices.map((d) => d.sub_type).filter(Boolean)
@@ -653,6 +715,7 @@ export function useBridgeDashboard() {
             const label = dev?.device_name || subType
             params.push(_makeParamBlock(subType, label, enriched))
           }
+        }
         }
       }
     }
@@ -712,6 +775,8 @@ export function useBridgeDashboard() {
       id: compartment.id,
       name: compartment.name,
       status: compartment.status,
+      // v1.13.0: carry thermostat device_sn for drawer param lookup
+      _thermostatDeviceSn: compartment._thermostatDeviceSn || undefined,
       faultEvents: events.map((ev) => ({
         id: ev.id,
         deviceName: ev.device_name || '未知设备',

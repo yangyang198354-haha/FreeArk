@@ -29,7 +29,7 @@
 
     <!-- 自绘头（与 profile/chat 一致，无系统返回箭头，靠底栏 ArkTabBar 切换）-->
     <view class="ps-header">
-      <text class="ps-header-title">指挥</text>
+      <text class="ps-header-title">指挥室</text>
     </view>
 
     <scroll-view scroll-y class="ps-content">
@@ -869,8 +869,14 @@ onUnload(() => {
   height: 92rpx; display: flex; align-items: center; justify-content: center;
 }
 .ps-header-title {
-  font-size: 34rpx; font-weight: 700; letter-spacing: 8rpx; color: #f4fbff;
-  text-shadow: 0 0 12px rgba(56,230,224,0.5);
+  font-family: 'Courier New', 'SF Mono', 'Menlo', monospace;
+  font-size: 36rpx; font-weight: 700; letter-spacing: 12rpx;
+  background: linear-gradient(90deg, #e0e0ff 0%, #00f0ff 40%, #e0e0ff 60%, #00f0ff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
 }
 
 /* 内容滚动区（flex 列内滚动，让 ArkTabBar 固定底部）*/
@@ -1072,4 +1078,9 @@ onUnload(() => {
 /* 空卡占位 */
 .empty-tip { text-align: center; padding: 30rpx 0; position: relative; z-index: 2; }
 .empty-tip text { font-size: 24rpx; color: #4d5878; }
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
 </style>

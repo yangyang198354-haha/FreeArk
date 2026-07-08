@@ -256,8 +256,14 @@ function onLogout() {
   height: 92rpx; display: flex; align-items: center; justify-content: center;
 }
 .header-title {
-  font-size: 34rpx; font-weight: 700; letter-spacing: 8rpx; color: #f4fbff;
-  text-shadow: 0 0 12px rgba(56,230,224,0.5);
+  font-family: 'Courier New', 'SF Mono', 'Menlo', monospace;
+  font-size: 36rpx; font-weight: 700; letter-spacing: 8rpx;
+  background: linear-gradient(90deg, #e0e0ff 0%, #00f0ff 40%, #e0e0ff 60%, #00f0ff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
 }
 
 /* ── body ─────────────────────────────────────────── */
@@ -366,4 +372,9 @@ function onLogout() {
 .ico-house-purple { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4a6ff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 21V9l8-5 8 5v12'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E"); }
 .ico-gear { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2'/%3E%3C/svg%3E"); }
 .ico-power { width: 34rpx; height: 34rpx; background-repeat: no-repeat; background-position: center; background-size: 34rpx 34rpx; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff7ab5' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3v9'/%3E%3Cpath d='M6.5 6a8 8 0 1 0 11 0'/%3E%3C/svg%3E"); }
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
 </style>

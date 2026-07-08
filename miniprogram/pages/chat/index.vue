@@ -411,7 +411,16 @@ onUnload(() => {
 /* header */
 .header { position: relative; z-index: 5; flex: 0 0 auto; height: 92rpx; display: flex; align-items: center; justify-content: center; }
 .back-btn { position: absolute; left: 24rpx; width: 44rpx; height: 44rpx; background-repeat: no-repeat; background-position: center; background-size: 44rpx 44rpx; }
-.header-title { font-size: 34rpx; font-weight: 700; letter-spacing: 4rpx; color: #eaf6ff; text-shadow: 0 0 12px rgba(56,230,224,0.5); }
+.header-title {
+  font-family: 'Courier New', 'SF Mono', 'Menlo', monospace;
+  font-size: 36rpx; font-weight: 700; letter-spacing: 12rpx;
+  background: linear-gradient(90deg, #e0e0ff 0%, #00f0ff 40%, #e0e0ff 60%, #00f0ff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
 
 /* subbar */
 .subbar { position: relative; z-index: 5; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 4rpx 32rpx 16rpx; }
@@ -506,4 +515,9 @@ onUnload(() => {
 
 /* 图标（SVG data-URI）*/
 .ico-back { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23eaf6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E"); }
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
 </style>

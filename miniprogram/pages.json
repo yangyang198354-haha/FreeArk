@@ -68,7 +68,7 @@
     {
       "path": "pages/device/param-settings",
       "style": {
-        "navigationBarTitleText": "指挥",
+        "navigationBarTitleText": "指挥室",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f",
         "disableScroll": true
@@ -223,7 +223,7 @@
       },
       {
         "pagePath": "pages/device/param-settings",
-        "text": "指挥"
+        "text": "指挥室"
       },
       {
         "pagePath": "pages/profile/index",

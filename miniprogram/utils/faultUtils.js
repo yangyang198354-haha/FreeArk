@@ -99,6 +99,7 @@ export const SUB_TYPE_TO_ID = {
   'energy_meter': 'energy',
   'hydraulic_module': 'hydraulic',
   'air_quality': 'air-quality',
+  'main_thermostat': 'main-thermostat',
 }
 
 // ── 子系统 ID → 中文名映射 ─────────────────────────────────
@@ -108,6 +109,7 @@ export const SUBSYSTEM_NAMES = {
   'energy': '能耗中枢',
   'hydraulic': '水力模块',
   'air-quality': '空气品质',
+  'main-thermostat': '主温控',
 }
 
 // ── 子系统 ID → sub_type 反向映射 ─────────────────────────
@@ -117,6 +119,7 @@ export const ID_TO_SUB_TYPE = {
   'energy': 'energy_meter',
   'hydraulic': 'hydraulic_module',
   'air-quality': 'air_quality',
+  'main-thermostat': 'main_thermostat',
 }
 
 // ═══════════════════════════════════════════════════════════════
