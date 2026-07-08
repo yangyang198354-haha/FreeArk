@@ -617,7 +617,11 @@ export function useBridgeDashboard() {
 
     if (!structure) return params
 
-    if (compartment.type === 'subsystem') {
+    // v1.12.0: compartment objects from aggregateSubsystemStatus lack a `type`
+    // field. Use the same fallback as openCompartment: ID_TO_SUB_TYPE lookup.
+    const compType = compartment.type || (ID_TO_SUB_TYPE[compartment.id] ? 'subsystem' : 'room')
+
+    if (compType === 'subsystem') {
       // Subsystem: one param block for the matching sub_type
       const targetSubType = ID_TO_SUB_TYPE[compartment.id]
       if (targetSubType) {
@@ -630,7 +634,7 @@ export function useBridgeDashboard() {
           ))
         }
       }
-    } else if (compartment.type === 'room') {
+    } else if (compType === 'room') {
       // Room: find devices in this room, collect their sub_types, show per sub_type
       const rooms = structure.rooms || []
       const room = rooms.find((r) => (r.room_name || r.ori_room_name) === compartment.name)

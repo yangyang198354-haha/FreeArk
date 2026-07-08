@@ -379,7 +379,10 @@ function makeBuildCompartmentParams(structureCache, realtimeParamsCache) {
 
     if (!structure) return params;
 
-    if (compartment.type === 'subsystem') {
+    // v1.12.0: subsystem objects lack a `type` field; use ID_TO_SUB_TYPE fallback
+    const compType = compartment.type || (ID_TO_SUB_TYPE[compartment.id] ? 'subsystem' : 'room');
+
+    if (compType === 'subsystem') {
       const targetSubType = ID_TO_SUB_TYPE[compartment.id];
       if (targetSubType) {
         const enriched = _collectParamsForSubType(realtime, targetSubType, true);
@@ -391,7 +394,7 @@ function makeBuildCompartmentParams(structureCache, realtimeParamsCache) {
           ));
         }
       }
-    } else if (compartment.type === 'room') {
+    } else if (compType === 'room') {
       const rooms = structure.rooms || [];
       const room = rooms.find((r) => (r.room_name || r.ori_room_name) === compartment.name)
         || rooms.find((r) => (r.name || r.room_name) === compartment.name);
