@@ -73,6 +73,53 @@ function groupFaultEventsByRoom(faultEvents) {
   return map
 }
 
+// ── Realtime Params Helpers (v1.12.0: nested group→sub_type→params structure) ──
+
+/**
+ * Walk the nested realtime params structure to collect all PLC params
+ * for a given sub_type key.
+ *
+ * The realtime params API returns data as:
+ *   { group_key: { sub_types: { sub_type_key: { display, params: [
+ *       { param_name, display_name, value, collected_at, is_stale }
+ *   ] } } } }
+ *
+ * This helper unwraps one level (group→sub_type) and returns a flat
+ * array of {paramName, value} suitable for computeFaultCount().
+ *
+ * Also returns the enriched param list (with displayName, isStale) for
+ * drawer display when `enriched=true`.
+ *
+ * @param {object} realtimeParams — nested group→sub_type→params structure
+ * @param {string} targetSubType — e.g. 'fresh_air', 'energy_meter'
+ * @param {boolean} enriched — if true, return full {tag, displayName, value, isStale} objects
+ * @returns {Array} flat param array
+ */
+function _collectParamsForSubType(realtimeParams, targetSubType, enriched = false) {
+  const result = []
+  if (!realtimeParams || !targetSubType) return result
+
+  for (const groupData of Object.values(realtimeParams)) {
+    const subTypes = groupData?.sub_types || {}
+    const subTypeData = subTypes[targetSubType]
+    if (subTypeData?.params) {
+      for (const p of subTypeData.params) {
+        if (enriched) {
+          result.push({
+            tag: p.param_name,
+            displayName: p.display_name || p.param_name,
+            value: p.value,
+            isStale: p.is_stale || false,
+          })
+        } else {
+          result.push({ paramName: p.param_name, value: p.value })
+        }
+      }
+    }
+  }
+  return result
+}
+
 // ── Subsystem Status Aggregation (v1.12.0: per-座舱 PLC params) ──
 
 /**
@@ -81,15 +128,17 @@ function groupFaultEventsByRoom(faultEvents) {
  * Replaces old aggregateSubsystemStatus(faultSummary, plcRate, faultEvents, cockpitPlcStatus).
  * New signature: (structure, realtimeParams).
  *
+ * realtimeParams is the nested group→sub_type→params structure from
+ * getOwnerRealtimeParams(sp).data — NOT keyed by device_sn.
+ *
  * Algorithm:
  *   1. Extract sub_types from structure.system_devices
  *   2. Intersect with SYSTEM_SUB_KEYS → determine which subsystems this cockpit has
  *   3. For each subsystem:
- *      a. Find all devices of that sub_type
- *      b. Collect their PLC params from realtimeParams
- *      c. Call computeFaultCount(params) → fault count
- *      d. faultCount > 0 → 'fault', faultCount === 0 → 'normal'
- *      e. If realtimeParams unavailable → 'idle'
+ *      a. Collect PLC params via _collectParamsForSubType(realtimeParams, subType)
+ *      b. Call computeFaultCount(params) → fault count
+ *      c. faultCount > 0 → 'fault', faultCount === 0 → 'normal'
+ *      d. If realtimeParams unavailable → 'idle'
  *   4. Return only subsystems this cockpit actually has
  *
  * REQ-NFUNC-004 fallback:
@@ -97,7 +146,7 @@ function groupFaultEventsByRoom(faultEvents) {
  *   - realtimeParams empty/missing → show all present subsystems with 'idle' status
  *
  * @param {object} structure — getOwnerStructure() response
- * @param {object} realtimeParams — getOwnerRealtimeParams() response, keyed by device_sn
+ * @param {object} realtimeParams — nested group→sub_type→params from getOwnerRealtimeParams().data
  * @returns {Array<SubsystemState>}
  */
 function aggregateSubsystemStatus(structure, realtimeParams) {
@@ -127,25 +176,14 @@ function aggregateSubsystemStatus(structure, realtimeParams) {
     let status = 'idle'
 
     if (realtimeAvailable && structureAvailable) {
-      // Find all devices of this sub_type
-      const devices = systemDevices.filter((d) => d.sub_type === subType)
-
-      // Collect all PLC params from these devices
-      const params = []
-      for (const dev of devices) {
-        const sn = dev.device_sn || dev.sn || ''
-        const attrs = realtime[sn] || {}
-        for (const [tag, value] of Object.entries(attrs)) {
-          params.push({ paramName: tag, value })
-        }
-      }
+      // Collect PLC params from nested group→sub_type→params structure
+      const params = _collectParamsForSubType(realtime, subType)
 
       // Compute fault count using fault_utils equivalent logic
       faultCount = computeFaultCount(params)
       status = faultCount > 0 ? 'fault' : 'normal'
     } else if (!structureAvailable) {
       // Structure unavailable → no device info to match params
-      // Show 'normal' as default (don't alarm without structure context)
       status = 'normal'
     }
 
@@ -546,16 +584,28 @@ export function useBridgeDashboard() {
     if (_poller) _poller.start()
   }
 
-  // ── Compartment Drawer Helpers ──────────────────────────
+  // ── Compartment Drawer Helpers (v1.12.0: uses nested group→sub_type→params) ──
 
   /**
    * IFC-BD-002-25/26: Build device param list from structure + realtime data
    * for a given compartment.
    *
+   * The realtime params API returns data nested as:
+   *   { group_key: { sub_types: { sub_type_key: { display, params: [
+   *       { param_name, display_name, value, collected_at, is_stale }
+   *   ] } } } }
+   *
+   * NOT keyed by device_sn — PLCLatestData is per-(specific_part, param_name),
+   * not per-device.  Therefore drawer params are displayed per sub_type
+   * (matching the Web device panel's card-per-sub_type layout), not per
+   * individual device.
+   *
    * v1.12.0 changes:
-   *   - Subsystem matching uses sub_type (not product_code)
-   *   - Removed energy compensation logic (all subsystems use unified pipeline)
-   *   - Integrated expandFreshAirFaultBits for fresh_air_fault_status
+   *   - Subsystem: one param block per sub_type, collected from nested
+   *     group→sub_type→params structure
+   *   - Room: collect sub_types used by this room's devices, then show
+   *     one param block per sub_type
+   *   - Integrated expandFreshAirFaultBits and isFaultValueForDisplay
    *
    * @param {object} compartment — { type, id, name }
    * @returns {Array<DeviceParamBlock>}
@@ -567,24 +617,38 @@ export function useBridgeDashboard() {
 
     if (!structure) return params
 
-    const rooms = structure.rooms || []
-    const systemDevices = structure.system_devices || []
-
-    if (compartment.type === 'room') {
-      // Room: find devices in this room
-      const room = rooms.find((r) => (r.name || r.room_name) === compartment.name)
-      if (room && room.devices) {
-        for (const dev of room.devices) {
-          params.push(_buildSingleDeviceParams(dev, realtime))
-        }
-      }
-    } else if (compartment.type === 'subsystem') {
-      // v1.12.0: Subsystem matching by sub_type (not product_code)
+    if (compartment.type === 'subsystem') {
+      // Subsystem: one param block for the matching sub_type
       const targetSubType = ID_TO_SUB_TYPE[compartment.id]
       if (targetSubType) {
-        const matchedDevices = systemDevices.filter((d) => d.sub_type === targetSubType)
-        for (const dev of matchedDevices) {
-          params.push(_buildSingleDeviceParams(dev, realtime))
+        const enriched = _collectParamsForSubType(realtime, targetSubType, true)
+        if (enriched.length > 0) {
+          params.push(_makeParamBlock(
+            targetSubType,
+            SUBSYSTEM_NAMES[compartment.id] || compartment.name,
+            enriched,
+          ))
+        }
+      }
+    } else if (compartment.type === 'room') {
+      // Room: find devices in this room, collect their sub_types, show per sub_type
+      const rooms = structure.rooms || []
+      const room = rooms.find((r) => (r.room_name || r.ori_room_name) === compartment.name)
+        || rooms.find((r) => (r.name || r.room_name) === compartment.name)
+
+      if (room && room.devices) {
+        // Collect unique sub_types used in this room
+        const roomSubTypes = new Set(
+          room.devices.map((d) => d.sub_type).filter(Boolean)
+        )
+        for (const subType of roomSubTypes) {
+          const enriched = _collectParamsForSubType(realtime, subType, true)
+          if (enriched.length > 0) {
+            // Use sub_type display from first matching device
+            const dev = room.devices.find((d) => d.sub_type === subType)
+            const label = dev?.device_name || subType
+            params.push(_makeParamBlock(subType, label, enriched))
+          }
         }
       }
     }
@@ -593,37 +657,36 @@ export function useBridgeDashboard() {
   }
 
   /**
-   * Build a single device's param block for drawer display.
+   * Build a single sub_type's param block for drawer display.
    *
-   * v1.12.0: Integrates expandFreshAirFaultBits for fresh_air_fault_status
-   * and isFaultValueForDisplay for fault highlighting.
+   * Each block represents one sub_type card (like Web DeviceCardsView's
+   * fresh_air / energy_meter / hydraulic_module / air_quality panels),
+   * with all its params listed as attribute rows.
    *
-   * @param {object} dev — device entry from structure
-   * @param {object} realtime — realtime params cache
+   * @param {string} subType — e.g. 'fresh_air', 'energy_meter'
+   * @param {string} label — display name for the card header
+   * @param {Array} enrichedParams — from _collectParamsForSubType(..., true)
    * @returns {DeviceParamBlock}
    */
-  function _buildSingleDeviceParams(dev, realtime) {
-    const sn = dev.device_sn || dev.sn || ''
-    const attrs = realtime[sn] || {}
-
+  function _makeParamBlock(subType, label, enrichedParams) {
     const block = {
-      deviceSn: sn,
-      deviceName: dev.name || dev.device_name || sn,
-      subType: dev.sub_type || '',
+      deviceSn: subType,           // use sub_type as stable key
+      deviceName: label,
+      subType,
       attrs: [],
     }
 
-    for (const [tag, value] of Object.entries(attrs)) {
+    for (const p of enrichedParams) {
       const attr = {
-        tag,
-        displayName: tag,
-        value,
-        isFault: isFaultValueForDisplay(tag, value),
+        tag: p.tag,
+        displayName: p.displayName,
+        value: p.value,
+        isFault: isFaultValueForDisplay(p.tag, p.value),
       }
 
       // v1.12.0: Expand fresh_air_fault_status bit field (ADR-007)
-      if (tag === 'fresh_air_fault_status') {
-        attr.expandedBits = expandFreshAirFaultBits(value)
+      if (p.tag === 'fresh_air_fault_status') {
+        attr.expandedBits = expandFreshAirFaultBits(p.value)
       }
 
       block.attrs.push(attr)

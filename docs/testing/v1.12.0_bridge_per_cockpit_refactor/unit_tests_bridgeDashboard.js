@@ -187,8 +187,35 @@ function groupFaultEventsByRoom(faultEvents) {
   return map;
 }
 
+// ── _collectParamsForSubType (useBridgeDashboard.js internal, v1.12.0) ──
+// Walks nested group→sub_type→params: { hvac: { sub_types: { fresh_air: { params: [...] } } } }
+function _collectParamsForSubType(realtimeParams, targetSubType, enriched = false) {
+  const result = [];
+  if (!realtimeParams || !targetSubType) return result;
+  for (const groupData of Object.values(realtimeParams)) {
+    const subTypes = groupData?.sub_types || {};
+    const subTypeData = subTypes[targetSubType];
+    if (subTypeData?.params) {
+      for (const p of subTypeData.params) {
+        if (enriched) {
+          result.push({
+            tag: p.param_name,
+            displayName: p.display_name || p.param_name,
+            value: p.value,
+            isStale: p.is_stale || false,
+          });
+        } else {
+          result.push({ paramName: p.param_name, value: p.value });
+        }
+      }
+    }
+  }
+  return result;
+}
+
 // ── aggregateSubsystemStatus (useBridgeDashboard.js internal) ──
 // 1:1 reproduction of the v1.12.0 refactored function
+// realtimeParams is nested group→sub_type→params — NOT keyed by device_sn
 function aggregateSubsystemStatus(structure, realtimeParams) {
   const realtime = realtimeParams || {};
   const systemDevices = structure?.system_devices || [];
@@ -214,15 +241,7 @@ function aggregateSubsystemStatus(structure, realtimeParams) {
     let status = 'idle';
 
     if (realtimeAvailable && structureAvailable) {
-      const devices = systemDevices.filter((d) => d.sub_type === subType);
-      const params = [];
-      for (const dev of devices) {
-        const sn = dev.device_sn || dev.sn || '';
-        const attrs = realtime[sn] || {};
-        for (const [tag, value] of Object.entries(attrs)) {
-          params.push({ paramName: tag, value });
-        }
-      }
+      const params = _collectParamsForSubType(realtime, subType);
       faultCount = computeFaultCount(params);
       status = faultCount > 0 ? 'fault' : 'normal';
     } else if (!structureAvailable) {
@@ -326,40 +345,32 @@ function filterFaultEventsByCompartment(faultEvents, compartment, structureCache
   return [];
 }
 
-// ── _buildSingleDeviceParams (useBridgeDashboard.js internal) ──
-// 1:1 reproduction of v1.12.0 refactored function
-function _buildSingleDeviceParams(dev, realtime) {
-  const sn = dev.device_sn || dev.sn || '';
-  const attrs = realtime[sn] || {};
-
+// ── _makeParamBlock (useBridgeDashboard.js internal, v1.12.0) ──
+// Builds one sub_type's param block for drawer display (card-per-sub_type layout)
+function _makeParamBlock(subType, label, enrichedParams) {
   const block = {
-    deviceSn: sn,
-    deviceName: dev.name || dev.device_name || sn,
-    subType: dev.sub_type || '',
+    deviceSn: subType,
+    deviceName: label,
+    subType,
     attrs: [],
   };
-
-  for (const [tag, value] of Object.entries(attrs)) {
+  for (const p of enrichedParams) {
     const attr = {
-      tag,
-      displayName: tag,
-      value,
-      isFault: isFaultValueForDisplay(tag, value),
+      tag: p.tag,
+      displayName: p.displayName,
+      value: p.value,
+      isFault: isFaultValueForDisplay(p.tag, p.value),
     };
-
-    if (tag === 'fresh_air_fault_status') {
-      attr.expandedBits = expandFreshAirFaultBits(value);
+    if (p.tag === 'fresh_air_fault_status') {
+      attr.expandedBits = expandFreshAirFaultBits(p.value);
     }
-
     block.attrs.push(attr);
   }
-
   return block;
 }
 
 // ── _buildCompartmentParams (useBridgeDashboard.js internal) ───
-// 1:1 reproduction of v1.12.0 refactored function
-// Uses closure variables: _structureCache, _realtimeParamsCache
+// v1.12.0: uses nested group→sub_type→params structure, NOT device_sn
 function makeBuildCompartmentParams(structureCache, realtimeParamsCache) {
   return function _buildCompartmentParams(compartment) {
     const params = [];
@@ -368,22 +379,34 @@ function makeBuildCompartmentParams(structureCache, realtimeParamsCache) {
 
     if (!structure) return params;
 
-    const rooms = structure.rooms || [];
-    const systemDevices = structure.system_devices || [];
-
-    if (compartment.type === 'room') {
-      const room = rooms.find((r) => (r.name || r.room_name) === compartment.name);
-      if (room && room.devices) {
-        for (const dev of room.devices) {
-          params.push(_buildSingleDeviceParams(dev, realtime));
-        }
-      }
-    } else if (compartment.type === 'subsystem') {
+    if (compartment.type === 'subsystem') {
       const targetSubType = ID_TO_SUB_TYPE[compartment.id];
       if (targetSubType) {
-        const matchedDevices = systemDevices.filter((d) => d.sub_type === targetSubType);
-        for (const dev of matchedDevices) {
-          params.push(_buildSingleDeviceParams(dev, realtime));
+        const enriched = _collectParamsForSubType(realtime, targetSubType, true);
+        if (enriched.length > 0) {
+          params.push(_makeParamBlock(
+            targetSubType,
+            SUBSYSTEM_NAMES[compartment.id] || compartment.name,
+            enriched,
+          ));
+        }
+      }
+    } else if (compartment.type === 'room') {
+      const rooms = structure.rooms || [];
+      const room = rooms.find((r) => (r.room_name || r.ori_room_name) === compartment.name)
+        || rooms.find((r) => (r.name || r.room_name) === compartment.name);
+
+      if (room && room.devices) {
+        const roomSubTypes = new Set(
+          room.devices.map((d) => d.sub_type).filter(Boolean)
+        );
+        for (const subType of roomSubTypes) {
+          const enriched = _collectParamsForSubType(realtime, subType, true);
+          if (enriched.length > 0) {
+            const dev = room.devices.find((d) => d.sub_type === subType);
+            const label = dev?.device_name || subType;
+            params.push(_makeParamBlock(subType, label, enriched));
+          }
         }
       }
     }
@@ -420,21 +443,64 @@ function makeStructure(opts = {}) {
 }
 
 function makeRealtimeParams(overrides = {}) {
-  // Default: all parameters are 0 (no faults)
-  const defaults = {};
-  const allDevices = {
-    'FA-001': { fresh_air_unit_stop_error: 0, fresh_air_unit_communication_error: 0, fresh_air_fault_status: 0, coil_inlet_temp: 220, fan_speed: 3 },
-    'EM-001': { energy_meter_status_communication_error: 0, total_power: 1250 },
-    'HM-001': { hydraulic_module_low_temp_error: 0, water_temp: 45 },
-    'AQ-001': { air_quality_sensor_communication_error: 0, pm25: 15, co2: 450 },
+  // Nested group→sub_type→params format matching getOwnerRealtimeParams().data
+  // overrides: { sub_type: { param_name: value, ... }, ... }
+  //   e.g. { fresh_air: { fresh_air_unit_stop_error: 1 } }
+  const defaults = {
+    'hvac': {
+      display: '暖通空调',
+      sub_types: {
+        'fresh_air': {
+          display: '新风机',
+          params: [
+            { param_name: 'fresh_air_unit_stop_error', display_name: '新风机停机故障', value: 0 },
+            { param_name: 'fresh_air_unit_communication_error', display_name: '新风机通讯故障', value: 0 },
+            { param_name: 'fresh_air_fault_status', display_name: '新风机故障状态', value: 0 },
+            { param_name: 'coil_inlet_temp', display_name: '盘管进水温度', value: 220 },
+            { param_name: 'fan_speed', display_name: '风机转速', value: 3 },
+          ],
+        },
+        'energy_meter': {
+          display: '能耗表',
+          params: [
+            { param_name: 'energy_meter_status_communication_error', display_name: '能耗表通讯故障', value: 0 },
+            { param_name: 'total_power', display_name: '总功率', value: 1250 },
+          ],
+        },
+        'hydraulic_module': {
+          display: '水力模块',
+          params: [
+            { param_name: 'hydraulic_module_low_temp_error', display_name: '水力模块低温故障', value: 0 },
+            { param_name: 'water_temp', display_name: '水温', value: 45 },
+          ],
+        },
+        'air_quality': {
+          display: '空气品质传感器',
+          params: [
+            { param_name: 'air_quality_sensor_communication_error', display_name: '空气品质通讯故障', value: 0 },
+            { param_name: 'pm25', display_name: 'PM2.5', value: 15 },
+            { param_name: 'co2', display_name: 'CO2', value: 450 },
+          ],
+        },
+      },
+    },
   };
 
-  // Apply defaults then overrides
-  const result = JSON.parse(JSON.stringify(allDevices));
+  const result = JSON.parse(JSON.stringify(defaults));
 
-  for (const [sn, params] of Object.entries(overrides)) {
-    if (!result[sn]) result[sn] = {};
-    Object.assign(result[sn], params);
+  // Apply overrides: { sub_type: { param_name: value, ... } }
+  for (const [subType, paramOverrides] of Object.entries(overrides)) {
+    for (const [groupKey, groupData] of Object.entries(result)) {
+      const subTypes = groupData?.sub_types || {};
+      const subTypeData = subTypes[subType];
+      if (subTypeData?.params) {
+        for (const p of subTypeData.params) {
+          if (paramOverrides.hasOwnProperty(p.param_name)) {
+            p.value = paramOverrides[p.param_name];
+          }
+        }
+      }
+    }
   }
 
   return result;
@@ -471,7 +537,7 @@ test('TC-INT-001: Full cockpit, all normal → 4 subsystems, all normal', () => 
 test('TC-INT-002: Fresh air fault → only fresh-air has fault status', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'FA-001': { fresh_air_unit_communication_error: 1 },
+    fresh_air: { fresh_air_unit_communication_error: 1 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -491,7 +557,7 @@ test('TC-INT-002: Fresh air fault → only fresh-air has fault status', () => {
 test('TC-INT-003: Fresh air bit fault → faultCount = popcount', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'FA-001': { fresh_air_fault_status: 5 }, // bits 0+2 = 2 faults
+    fresh_air: { fresh_air_fault_status: 5 }, // bits 0+2 = 2 faults
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -586,7 +652,7 @@ test('TC-INT-008: Cockpit A vs B subsystems differ', () => {
 test('TC-INT-009: Hydraulic module fault → hydraulic status=fault', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'HM-001': { hydraulic_module_low_temp_error: 1 },
+    hydraulic_module: { hydraulic_module_low_temp_error: 1 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -605,7 +671,7 @@ test('TC-INT-009: Hydraulic module fault → hydraulic status=fault', () => {
 test('TC-INT-010: Hydraulic module normal → status=normal', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'HM-001': { hydraulic_module_low_temp_error: 0 },
+    hydraulic_module: { hydraulic_module_low_temp_error: 0 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -617,7 +683,7 @@ test('TC-INT-010: Hydraulic module normal → status=normal', () => {
 test('TC-INT-011: Air quality sensor fault → air-quality status=fault', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'AQ-001': { air_quality_sensor_communication_error: 1 },
+    air_quality: { air_quality_sensor_communication_error: 1 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -629,7 +695,7 @@ test('TC-INT-011: Air quality sensor fault → air-quality status=fault', () => 
 test('TC-INT-012: Air quality normal → status=normal', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'AQ-001': { air_quality_sensor_communication_error: 0 },
+    air_quality: { air_quality_sensor_communication_error: 0 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -641,7 +707,7 @@ test('TC-INT-012: Air quality normal → status=normal', () => {
 test('TC-INT-013: Energy meter fault → energy status=fault', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'EM-001': { energy_meter_status_communication_error: 1 },
+    energy_meter: { energy_meter_status_communication_error: 1 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -653,7 +719,7 @@ test('TC-INT-013: Energy meter fault → energy status=fault', () => {
 test('TC-INT-014: Energy meter normal → status=normal', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'EM-001': { energy_meter_status_communication_error: 0 },
+    energy_meter: { energy_meter_status_communication_error: 0 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -690,7 +756,7 @@ test('TC-INT-016b: Energy status independent of global data (ADR-008 verificatio
   // Energy status is purely from per-cockpit PLC realtime params.
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'EM-001': { energy_meter_status_communication_error: 0 },
+    energy_meter: { energy_meter_status_communication_error: 0 },
   });
   const result = aggregateSubsystemStatus(structure, realtime);
 
@@ -943,7 +1009,7 @@ test('TC-INT-050: Fresh air subsystem compartment → returns fresh air device p
   const result = _buildCompartmentParams({ type: 'subsystem', id: 'fresh-air' });
 
   assertEquals(result.length, 1, 'should have 1 device block');
-  assertEquals(result[0].deviceSn, 'FA-001');
+  assertEquals(result[0].deviceSn, 'fresh_air');
   assertEquals(result[0].subType, 'fresh_air');
   assert(result[0].attrs.length > 0, 'should have attrs');
 });
@@ -956,7 +1022,7 @@ test('TC-INT-051: Hydraulic subsystem compartment → returns hydraulic params',
   const result = _buildCompartmentParams({ type: 'subsystem', id: 'hydraulic' });
 
   assertEquals(result.length, 1);
-  assertEquals(result[0].deviceSn, 'HM-001');
+  assertEquals(result[0].deviceSn, 'hydraulic_module');
   assertEquals(result[0].subType, 'hydraulic_module');
 });
 
@@ -968,7 +1034,7 @@ test('TC-INT-052: Air quality subsystem compartment → returns air quality para
   const result = _buildCompartmentParams({ type: 'subsystem', id: 'air-quality' });
 
   assertEquals(result.length, 1);
-  assertEquals(result[0].deviceSn, 'AQ-001');
+  assertEquals(result[0].deviceSn, 'air_quality');
   assertEquals(result[0].subType, 'air_quality');
 });
 
@@ -980,14 +1046,14 @@ test('TC-INT-053: Energy subsystem compartment → returns energy meter params',
   const result = _buildCompartmentParams({ type: 'subsystem', id: 'energy' });
 
   assertEquals(result.length, 1);
-  assertEquals(result[0].deviceSn, 'EM-001');
+  assertEquals(result[0].deviceSn, 'energy_meter');
   assertEquals(result[0].subType, 'energy_meter');
 });
 
 test('TC-INT-054: Fault param → isFault=true in drawer', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'FA-001': { fresh_air_unit_communication_error: 1, coil_inlet_temp: 220 },
+    fresh_air: { fresh_air_unit_communication_error: 1, coil_inlet_temp: 220 },
   });
   const _buildCompartmentParams = makeBuildCompartmentParams(structure, realtime);
 
@@ -1017,7 +1083,7 @@ test('TC-INT-055: Normal param → isFault=false in drawer', () => {
 test('TC-INT-056: fresh_air_fault_status expanded in drawer (single bit)', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'FA-001': { fresh_air_fault_status: 1 },
+    fresh_air: { fresh_air_fault_status: 1 },
   });
   const _buildCompartmentParams = makeBuildCompartmentParams(structure, realtime);
 
@@ -1038,7 +1104,7 @@ test('TC-INT-056: fresh_air_fault_status expanded in drawer (single bit)', () =>
 test('TC-INT-057: fresh_air_fault_status expanded with multiple bits', () => {
   const structure = makeStructure();
   const realtime = makeRealtimeParams({
-    'FA-001': { fresh_air_fault_status: 260 }, // bits 2+8
+    fresh_air: { fresh_air_fault_status: 260 }, // bits 2+8
   });
   const _buildCompartmentParams = makeBuildCompartmentParams(structure, realtime);
 
