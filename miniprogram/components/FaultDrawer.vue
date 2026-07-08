@@ -47,10 +47,24 @@
               <text class="pdc-code">{{ dev.deviceType || dev.productCode }}</text>
             </view>
             <view v-if="dev.attrs && dev.attrs.length > 0" class="pdc-attrs">
+              <!-- Regular params -->
               <view v-for="attr in dev.attrs" :key="attr.tag" class="pdc-attr-row">
-                <text class="pdc-attr-tag">{{ attr.tag }}</text>
-                <text class="pdc-attr-val">{{ formatAttrVal(attr.value) }}</text>
+                <text class="pdc-attr-tag">{{ attr.displayName }}</text>
+                <text
+                  class="pdc-attr-val"
+                  :class="{ 'val-fault': attr.isFault, 'val-stale': attr.isStale }"
+                >{{ formatAttrValue(attr.tag, attr.value) }}</text>
               </view>
+              <!-- Expanded fresh_air_fault_status bits -->
+              <template v-if="attrHasExpandedBits(dev.attrs)">
+                <view class="pdc-expanded-sep" />
+                <view v-for="bit in getExpandedBits(dev.attrs)" :key="'bit-'+bit.bitIndex" class="pdc-attr-row pdc-attr-bit">
+                  <text class="pdc-attr-tag pdc-attr-tag-bit">{{ bit.name }}</text>
+                  <text class="pdc-attr-val" :class="bit.active ? 'val-fault' : 'val-ok'">
+                    {{ bit.active ? '故障' : '正常' }}
+                  </text>
+                </view>
+              </template>
             </view>
             <view v-else class="pdc-empty">
               <text>暂无实时数据</text>
@@ -99,6 +113,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { formatAttrValue } from '@/utils/faultUtils'
 
 /**
  * IFC-BD-007-01: Compartment detail { type, id, name, status, faultEvents[] } | null.
@@ -159,14 +174,15 @@ const statusClass = computed(() => {
   return `status-${st}`
 })
 
-/** Format attribute value for display. */
-function formatAttrVal(val) {
-  if (val === null || val === undefined) return '—'
-  if (typeof val === 'number') {
-    if (Number.isInteger(val)) return String(val)
-    return val.toFixed(1)
-  }
-  return String(val)
+/** Check if any attr in a block has expandedBits (fresh_air_fault_status). */
+function attrHasExpandedBits(attrs) {
+  return attrs.some((a) => a.expandedBits && a.expandedBits.length > 0)
+}
+
+/** Get the expanded bits array from the attrs block. */
+function getExpandedBits(attrs) {
+  const attr = attrs.find((a) => a.expandedBits && a.expandedBits.length > 0)
+  return attr ? attr.expandedBits : []
 }
 
 /** Format ISO timestamp to readable short form. */
@@ -471,6 +487,42 @@ function onTouchEnd() {
   font-size: 24rpx;
   font-weight: 600;
   color: #eaf6ff;
+}
+
+/* Fault value — red badge matching Web DeviceCardsView .status-fault */
+.val-fault {
+  background-color: #ff315d;
+  color: #ffffff;
+  font-weight: normal;
+  padding: 1rpx 8rpx;
+  border-radius: 4rpx;
+}
+
+/* Normal/ok value — green text */
+.val-ok {
+  color: #27f5b5;
+  font-weight: 500;
+}
+
+/* Stale value — dimmed */
+.val-stale {
+  opacity: 0.45;
+}
+
+/* ── Expanded fresh_air_fault_status bits ── */
+.pdc-expanded-sep {
+  height: 1rpx;
+  margin: 6rpx 0;
+  background: rgba(47, 244, 224, 0.10);
+}
+
+.pdc-attr-bit {
+  padding-left: 8rpx;
+}
+
+.pdc-attr-tag-bit {
+  font-size: 20rpx;
+  color: #5f7da6;
 }
 
 .pdc-empty {

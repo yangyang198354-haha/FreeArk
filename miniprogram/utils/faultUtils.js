@@ -260,3 +260,143 @@ export function isFaultValueForDisplay(paramName, value) {
   if (isFaultParam(paramName)) return true
   return false
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 参数分类集合 — 同步来源：Web DeviceCardsView.vue
+// ═══════════════════════════════════════════════════════════════
+// 修改此处时必须同步修改 Web 端对应的常量集合。
+
+// 温度字段 — int16 ÷ 10 → °C
+export const TEMP_PARAMS = new Set([
+  'living_room_temperature', 'living_room_ntc_temp', 'living_room_dew_point_setting', 'living_room_temp_setting',
+  'study_room_temperature', 'study_room_ntc_temperature', 'study_room_dew_point_setting', 'study_room_temp_setting',
+  'bedroom_temperature', 'bedroom_ntc_temperature', 'bedroom_dew_point_setting', 'bedroom_temp_setting',
+  'children_room_temperature', 'children_room_ntc_temperature', 'children_room_dew_point_setting', 'children_room_temp_setting',
+  'fourth_children_room_temperature', 'fourth_children_room_ntc_temperature', 'fourth_children_room_dew_point_setting', 'fourth_children_room_temp_setting',
+  'hydraulic_module_inlet_temp', 'hydraulic_module_outlet_temp',
+  'fresh_air_inlet_temp', 'coil_inlet_temp', 'coil_outlet_temp', 'coil_supply_air_temp',
+  'supply_air_temp_setting',
+])
+
+// 湿度字段 — int16 ÷ 10 → %
+export const HUMIDITY_PARAMS = new Set([
+  'living_room_humidity', 'study_room_humidity', 'bedroom_humidity',
+  'children_room_humidity', 'fourth_children_room_humidity',
+])
+
+// 开关字段 — 0→关闭, 1→开启
+export const SWITCH_PARAMS = new Set([
+  'living_room_switch', 'study_room_switch', 'bedroom_switch',
+  'children_room_switch', 'fourth_children_room_switch',
+  'system_switch', 'humidification_switch',
+])
+
+// ═══════════════════════════════════════════════════════════════
+// 公共接口 — 参数值格式化（1:1 复制 Web DeviceCardsView.formatValue）
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * IFC-FU-006: Format a PLC parameter value for display.
+ *
+ * 1:1 reproduction of Web DeviceCardsView.vue formatValue(paramName, rawValue).
+ * Applies unit suffixes (°C, %, ppm, h, kw·h, μg/m³), enum mappings
+ * (开关/运行模式/风机档位), and ÷10 scaling for fixed-point int16 values.
+ *
+ * @param {string} paramName - PLC parameter name
+ * @param {number|null|undefined} rawValue - raw PLC value
+ * @returns {string} formatted display string
+ */
+export function formatAttrValue(paramName, rawValue) {
+  if (rawValue === null || rawValue === undefined) return '—'
+  const v = Number(rawValue)
+
+  // 温度 ÷10 → °C
+  if (TEMP_PARAMS.has(paramName)) {
+    return (v / 10).toFixed(1) + '°C'
+  }
+
+  // 湿度 ÷10 → %
+  if (HUMIDITY_PARAMS.has(paramName)) {
+    return (v / 10).toFixed(1) + '%'
+  }
+
+  // 开关
+  if (SWITCH_PARAMS.has(paramName)) {
+    return v === 0 ? '关闭' : '开启'
+  }
+
+  // 新风机故障位（展开后的虚拟字段名 fresh_air_fault_bit_N）
+  if (paramName.startsWith('fresh_air_fault_bit_')) {
+    return v === 0 ? '正常' : '故障'
+  }
+
+  // 通用故障字段
+  if (isFaultParam(paramName)) {
+    return v === 0 ? '正常' : '故障'
+  }
+
+  // 阀门开度
+  if (paramName === 'hydraulic_module_valve_opening' || paramName === 'fresh_air_valve_opening') {
+    return (v / 10).toFixed(1)
+  }
+
+  // 滤网小时
+  if (paramName === 'filter_alarm_hours_setting' || paramName === 'filter_used_hours') {
+    return v + 'h'
+  }
+
+  // 工时
+  if (paramName === 'work_time') {
+    return v + 'h'
+  }
+
+  // 冷热量
+  if (paramName === 'total_hot_quantity' || paramName === 'total_cold_quantity') {
+    return v + 'kw·h'
+  }
+
+  // CO2
+  if (paramName === 'co2') {
+    return v + 'ppm'
+  }
+
+  // PM2.5
+  if (paramName === 'pm25') {
+    return v + 'μg/m³'
+  }
+
+  // 加湿限值
+  if (paramName === 'humidification_humidity_upper_limit' || paramName === 'humidification_humidity_lower_limit') {
+    return v + '%'
+  }
+
+  // 风机档位
+  if (paramName === 'fan_gear_feedback' || paramName === 'system_air_volume_setting') {
+    const gears = { 0: '低速', 1: '中速', 2: '高速' }
+    return gears[v] !== undefined ? gears[v] : String(v)
+  }
+
+  // 运行模式
+  if (paramName === 'operation_mode') {
+    const modes = { 0: '制冷', 1: '制冷', 2: '制热', 3: '通风', 4: '除湿' }
+    return modes[v] !== undefined ? modes[v] : String(v)
+  }
+
+  // 集中能源供给
+  if (paramName === 'central_energy_supply') {
+    const supplyModes = { 1: '制冷', 2: '制热', 3: '无' }
+    return supplyModes[v] !== undefined ? supplyModes[v] : '无'
+  }
+
+  // 离家节能
+  if (paramName === 'away_energy_saving') {
+    return v === 0 ? '关闭' : '开启'
+  }
+
+  // 凝露提醒
+  if (paramName === 'living_room_condensation_alert' || paramName.endsWith('_condensation_alert')) {
+    return v === 0 ? '无' : '告警'
+  }
+
+  return String(rawValue)
+}
