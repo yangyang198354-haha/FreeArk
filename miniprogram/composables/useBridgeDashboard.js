@@ -86,16 +86,21 @@ function groupFaultEventsByRoom(faultEvents) {
  * @param {Array} faultEvents — all active fault events
  * @returns {SubsystemState}
  */
-function deriveEnergyStatus(plcRate, faultEvents) {
+function deriveEnergyStatus(plcRate, faultEvents, cockpitPlcStatus) {
   const plcOnline = plcRate?.online_count ?? 0
   const plcTotal = plcRate?.total_count ?? 0
 
-  // PLC status
+  // PLC status from fleet-wide aggregate (blocked for owners → cockpit fallback)
   let plcStatus = 'idle'
   if (plcTotal > 0) {
     if (plcOnline === plcTotal) plcStatus = 'normal'
     else if (plcOnline > 0) plcStatus = 'warning'
     else plcStatus = 'fault'
+  } else if (cockpitPlcStatus === 'online') {
+    // Fallback: use cockpit-level PLC status from /api/miniapp/owner/connectivity/
+    plcStatus = 'normal'
+  } else if (cockpitPlcStatus === 'offline') {
+    plcStatus = 'warning'
   }
 
   // Filter energy-related fault events
@@ -110,9 +115,23 @@ function deriveEnergyStatus(plcRate, faultEvents) {
     eventStatus = worseStatus(eventStatus, s)
   }
 
-  const status = plcTotal > 0
-    ? worseStatus(plcStatus, eventStatus)
-    : (energyFaults.length > 0 ? eventStatus : 'idle')
+  // Derive final status: energy is a derived aggregate without a discrete product code.
+  // When no fleet PLC data AND no energy faults → 'normal' (no news = good news),
+  // not 'idle' which implies a problem.
+  let status
+  if (plcTotal > 0) {
+    status = worseStatus(plcStatus, eventStatus)
+  } else if (cockpitPlcStatus) {
+    status = worseStatus(plcStatus, eventStatus)
+  } else if (energyFaults.length > 0) {
+    status = eventStatus
+  } else {
+    status = 'normal'
+  }
+
+  const dataSource = plcTotal > 0
+    ? 'PLC在线率'
+    : (cockpitPlcStatus ? '座舱PLC' : 'FaultEvent')
 
   return {
     id: 'energy',
@@ -121,7 +140,7 @@ function deriveEnergyStatus(plcRate, faultEvents) {
     faultCount,
     warningCount,
     productCode: null,
-    dataSource: eventStatus === 'normal' && plcTotal > 0 ? 'PLC在线率' : 'FaultEvent+PLC',
+    dataSource,
   }
 }
 
@@ -132,7 +151,7 @@ function deriveEnergyStatus(plcRate, faultEvents) {
  * @param {Array} faultEvents — all active fault events
  * @returns {Array<SubsystemState>}
  */
-function aggregateSubsystemStatus(faultSummary, plcRate, faultEvents) {
+function aggregateSubsystemStatus(faultSummary, plcRate, faultEvents, cockpitPlcStatus) {
   const data = faultSummary?.data || faultSummary || {}
   const freshAir = data.fresh_air_unit || {}
   const hydraulic = data.hydraulic_module || {}
@@ -174,7 +193,7 @@ function aggregateSubsystemStatus(faultSummary, plcRate, faultEvents) {
   })
 
   // Energy (derived)
-  subsystems.push(deriveEnergyStatus(plcRate, faultEvents))
+  subsystems.push(deriveEnergyStatus(plcRate, faultEvents, cockpitPlcStatus))
 
   return subsystems
 }
@@ -480,7 +499,7 @@ export function useBridgeDashboard() {
     // Aggregate
     const hasAnyData = faultSummary || structure || faultEvents.length > 0
     if (hasAnyData) {
-      state.subsystems = aggregateSubsystemStatus(faultSummary || {}, plcRate, faultEvents)
+      state.subsystems = aggregateSubsystemStatus(faultSummary || {}, plcRate, faultEvents, state.plcCockpitStatus)
       state.rooms = aggregateRoomStatus(structure || {}, faultEvents, state.condensationCount)
       state.overallStatus = computeOverallStatus(state.subsystems, state.rooms)
     }
