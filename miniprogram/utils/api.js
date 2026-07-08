@@ -43,6 +43,12 @@ export const api = {
   // Condensation: use paginated list endpoint; read `count` from DRF response root
   getCondensationWarningCount: () => http.get('/api/devices/condensation-warning-events/', { page: 1, page_size: 1 }),
 
+  // v1.11.0 Bridge Dashboard — device fault summary by category (MOD-BD-011)
+  // IFC-BD-011-01: GET /api/dashboard/device-fault-summary/
+  //   → {success, data: {fresh_air_unit: {total, fault_count}, hydraulic_module: {total, fault_count},
+  //      air_quality_sensor: {total, fault_count}, other_devices: {total, fault_count}}}
+  getDashboardDeviceFaultSummary: () => http.get('/api/dashboard/device-fault-summary/'),
+
   // Monitoring — 分包A（接口对齐现有 Web 视图）
   // PlcStatusView：GET /api/plc/connection-status/ {page,page_size,building,unit,connection_status}
   //   → {success, data:[{specific_part,connection_status,last_online_time,building,unit,room_number}], total, statistics}
