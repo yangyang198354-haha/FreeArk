@@ -349,11 +349,16 @@ export function useBridgeDashboard() {
 
     /** IFC-BD-002-14: Per-subsystem error messages. */
     subsystemErrors: {},
+
+    /** Device params for currently opened compartment (replicating web system panel). */
+    compartmentParams: null,
   })
 
   // Internal caches for drawer data
   let _faultEventsCache = []
   let _condensationEventsCache = []
+  let _structureCache = null
+  let _realtimeParamsCache = null
 
   // ── Poller ──────────────────────────────────────────────
 
@@ -390,6 +395,8 @@ export function useBridgeDashboard() {
       api.getCondensationWarningCount(),
       // 5: bindings (refresh cockpit list)
       api.getBindStatus(),
+      // 6: realtime params (for drawer device detail)
+      api.getOwnerRealtimeParams(sp),
     ])
 
     // Bindings
@@ -398,10 +405,16 @@ export function useBridgeDashboard() {
       state.bindings = res?.bindings || res?.data?.bindings || []
     }
 
+    // Realtime params (for drawer device detail)
+    if (results[6].status === 'fulfilled' && results[6].value?.success !== false) {
+      _realtimeParamsCache = results[6].value?.data || results[6].value || null
+    }
+
     // Structure
     let structure = null
     if (results[0].status === 'fulfilled' && results[0].value?.success !== false) {
       structure = results[0].value
+      _structureCache = structure
       state.subsystemErrors['structure'] = null
     } else {
       state.subsystemErrors['structure'] = '房间结构暂不可用'
@@ -555,9 +568,80 @@ export function useBridgeDashboard() {
     if (_poller) _poller.start()
   }
 
+  /** Build device param list from structure + realtime data for a compartment. */
+  function _buildCompartmentParams(compartment) {
+    const params = []
+    const structure = _structureCache
+    const realtime = _realtimeParamsCache || {}
+
+    if (!structure) return params
+
+    // Collect devices for this compartment
+    const rooms = structure.rooms || []
+    const systemDevices = structure.system_devices || []
+
+    if (compartment.type === 'room' || compartment.id === compartment.name) {
+      // Room: find devices in this room
+      const room = rooms.find(r => (r.name || r.room_name) === compartment.name)
+      if (room && room.devices) {
+        for (const dev of room.devices) {
+          const sn = dev.device_sn || dev.sn || ''
+          const attrs = realtime[sn] || {}
+          params.push({
+            deviceSn: sn,
+            deviceName: dev.name || dev.device_name || sn,
+            productCode: dev.product_code || '',
+            deviceType: dev.device_type || dev.type_label || '',
+            attrs: Object.entries(attrs).map(([tag, val]) => ({ tag, value: val })),
+          })
+        }
+      }
+    } else if (compartment.type === 'subsystem') {
+      // Subsystem: find matching system devices
+      const productMap = { 'fresh-air': 130004, 'hydraulic': 270001, 'air-quality': 100007 }
+      const targetCode = productMap[compartment.id]
+      const candidates = targetCode
+        ? systemDevices.filter(d => d.product_code === targetCode)
+        : systemDevices
+      for (const dev of candidates) {
+        const sn = dev.device_sn || dev.sn || ''
+        const attrs = realtime[sn] || {}
+        params.push({
+          deviceSn: sn,
+          deviceName: dev.name || dev.device_name || sn,
+          productCode: dev.product_code || '',
+          deviceType: dev.device_type || dev.type_label || '',
+          attrs: Object.entries(attrs).map(([tag, val]) => ({ tag, value: val })),
+        })
+      }
+      // Energy: also include devices found via energy keywords in fault events
+      if (compartment.id === 'energy') {
+        for (const dev of systemDevices) {
+          const sn = dev.device_sn || dev.sn || ''
+          if (!params.find(p => p.deviceSn === sn)) {
+            const attrs = realtime[sn] || {}
+            const hasData = Object.keys(attrs).length > 0
+            if (hasData) {
+              params.push({
+                deviceSn: sn,
+                deviceName: dev.name || dev.device_name || sn,
+                productCode: dev.product_code || '',
+                deviceType: dev.device_type || dev.type_label || '',
+                attrs: Object.entries(attrs).map(([tag, val]) => ({ tag, value: val })),
+              })
+            }
+          }
+        }
+      }
+    }
+
+    return params
+  }
+
   /** IFC-BD-002-19: Open compartment drawer. */
   function openCompartment(compartment) {
     const events = filterFaultEventsByCompartment(_faultEventsCache, compartment)
+    const params = _buildCompartmentParams(compartment)
 
     state.activeCompartment = {
       type: compartment.type || (compartment.productCode !== undefined ? 'subsystem' : 'room'),
@@ -575,11 +659,13 @@ export function useBridgeDashboard() {
         roomName: ev.room_name || '',
       })),
     }
+    state.compartmentParams = params
   }
 
   /** IFC-BD-002-20: Close compartment drawer. */
   function closeCompartment() {
     state.activeCompartment = null
+    state.compartmentParams = null
   }
 
   // ── Return ──────────────────────────────────────────────

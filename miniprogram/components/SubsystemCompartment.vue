@@ -83,7 +83,7 @@ const statusClass = computed(() => `state-${props.subsystem.status || 'idle'}`)
 const displayName = computed(() => {
   const id = props.subsystem.id
   if (id === 'fresh-air') return '新风模块'
-  if (id === 'energy') return '能耗中枢'
+  if (id === 'energy') return '能耗表'
   if (id === 'hydraulic') return '水力模块'
   if (id === 'air-quality') return '空气品质'
   return props.subsystem.name || id || '子系统'

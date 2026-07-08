@@ -12,7 +12,7 @@
 -->
 <template>
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- OWNER PATH — v1.11.1 Bridge Dashboard (HOLO-HUD card layout)    -->
+  <!-- OWNER PATH — v1.11.2 Bridge Dashboard (HOLO-HUD card layout)    -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <view v-if="isOwner" class="owner-page" :class="{ 'animations-paused': animationsPaused }">
     <!-- Background layers (consistent with 指挥/param-settings) -->
@@ -20,16 +20,34 @@
     <view class="bg-grid" />
     <view class="hud-scan" />
 
-    <!-- Status bar spacer -->
+    <!-- Status bar spacer (push content below system status bar + capsule) -->
     <view :style="{ height: statusBarHeight + 'px' }" class="status-spacer" />
 
-    <!-- Header: clean title + health LED -->
+    <!-- Header: centered title (matching 指挥 page style) -->
     <view class="owner-header">
+      <view class="header-spacer" />
       <text class="owner-title">舰桥</text>
-      <HealthIndicator
-        :status="dash.state.overallStatus"
-        :condensationCount="dash.state.condensationCount"
-      />
+      <view class="header-spacer" />
+    </view>
+
+    <!-- Top status bar: fault count | condensation | health LED | PLC -->
+    <view class="top-status-bar">
+      <view class="ts-item" :class="faultPillClass" @tap="onFaultPillTap">
+        <text class="ts-num">{{ faultTotal }}</text>
+        <text class="ts-label">故障</text>
+      </view>
+      <view class="ts-item" :class="condensationPillClass" @tap="onCondensationTap">
+        <text class="ts-num">{{ dash.state.condensationCount }}</text>
+        <text class="ts-label">结露</text>
+      </view>
+      <view class="ts-item ts-health" :class="healthPillClass">
+        <view class="ts-led" />
+        <text class="ts-label">{{ dash.state.overallStatus.text }}</text>
+      </view>
+      <view class="ts-item ts-plc" :class="plcPillClass">
+        <text class="ts-num">{{ dash.state.plcOnline }}/{{ dash.state.plcTotal }}</text>
+        <text class="ts-label">在线</text>
+      </view>
     </view>
 
     <!-- Main content area -->
@@ -69,22 +87,6 @@
           </view>
         </view>
 
-        <!-- ── Section: 通讯 & 预警 ── -->
-        <view class="status-row">
-          <PlcIndicator
-            :onlineCount="dash.state.plcOnline"
-            :totalCount="dash.state.plcTotal"
-            :loading="dash.state.loading"
-          />
-          <view class="condensation-card" :class="condensationCardClass" @tap="onCondensationTap">
-            <view class="cc-led" />
-            <view class="cc-body">
-              <text class="cc-label">结露预警</text>
-              <text class="cc-count">{{ dash.state.condensationCount }}</text>
-            </view>
-          </view>
-        </view>
-
         <!-- ── Section: 房间状态 ── -->
         <view class="dash-section">
           <view class="section-head">
@@ -114,10 +116,12 @@
       </view>
     </scroll-view>
 
-    <!-- Fault drawer -->
+    <!-- Fault drawer (shows all device params read-only, replicating web system panel) -->
     <FaultDrawer
       :compartment="dash.state.activeCompartment"
       :visible="!!dash.state.activeCompartment"
+      :faultEvents="dash.state.compartmentFaults"
+      :deviceParams="dash.state.compartmentParams"
       @close="dash.closeCompartment()"
     />
 
@@ -243,8 +247,6 @@ import MetricCard from '@/components/MetricCard.vue'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 
 // ── Owner component imports ────────────────────────────────
-import HealthIndicator from '@/components/HealthIndicator.vue'
-import PlcIndicator from '@/components/PlcIndicator.vue'
 import SubsystemCompartment from '@/components/SubsystemCompartment.vue'
 import RoomCompartment from '@/components/RoomCompartment.vue'
 import FaultDrawer from '@/components/FaultDrawer.vue'
@@ -276,25 +278,46 @@ const hasInitialData = computed(() =>
   dash.state.subsystems.length > 0 || dash.state.rooms.length > 0
 )
 
-/** Compartment open event from subsystem or room. */
+/** Total fault count across subsystems + rooms. */
+const faultTotal = computed(() => {
+  let total = 0
+  for (const s of dash.state.subsystems) total += (s.faultCount || 0)
+  for (const r of dash.state.rooms) total += (r.faultCount || 0)
+  return total
+})
+
+/** Top status pill classes. */
+const faultPillClass = computed(() => faultTotal.value > 0 ? 'ts-fault' : 'ts-ok')
+const condensationPillClass = computed(() => dash.state.condensationCount > 0 ? 'ts-warn' : 'ts-ok')
+const healthPillClass = computed(() => `ts-${dash.state.overallStatus.level}`)
+const plcPillClass = computed(() => {
+  if (dash.state.loading) return 'ts-idle'
+  if (dash.state.plcTotal === 0) return 'ts-idle'
+  if (dash.state.plcOnline === dash.state.plcTotal) return 'ts-ok'
+  if (dash.state.plcOnline > 0) return 'ts-warn'
+  return 'ts-fault'
+})
+
+/** Compartment open event. */
 function onCompartmentOpen(compartment) {
   dash.openCompartment(compartment)
 }
 
-/** Condensation card tap → open first room with active condensation warning. */
+/** Fault pill tap → open first fault room. */
+function onFaultPillTap() {
+  const room = dash.state.rooms.find(r => r.faultCount > 0)
+  if (room) {
+    dash.openCompartment(room)
+  }
+}
+
+/** Condensation tap → open first room with condensation. */
 function onCondensationTap() {
   const room = dash.state.rooms.find(r => r.hasCondensation)
   if (room) {
     dash.openCompartment(room)
   }
 }
-
-/** Condensation card visual class based on count. */
-const condensationCardClass = computed(() => {
-  const c = dash.state.condensationCount
-  if (c > 0) return 'cc-warn'
-  return 'cc-ok'
-})
 
 function goBind() {
   uni.navigateTo({ url: '/pages/bind/index' })
@@ -450,7 +473,7 @@ function goTo(url) {
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- STYLES: Owner (v1.11.1 HOLO-HUD card dashboard)                 -->
+<!-- STYLES: Owner (v1.11.2 HOLO-HUD card dashboard)                 -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <style scoped>
 /* ── Page base ──────────────────────────────────────────── */
@@ -463,7 +486,7 @@ function goTo(url) {
   overflow: hidden;
 }
 
-/* ── Background layers (consistent with 指挥 page) ──────── */
+/* ── Background layers ──────────────────────────────────── */
 .bg-base,
 .bg-grid,
 .hud-scan {
@@ -499,30 +522,98 @@ function goTo(url) {
   animation: ownerScan 5s linear infinite;
 }
 
-/* ── Status spacer ──────────────────────────────────────── */
 .status-spacer {
   position: relative;
   z-index: 5;
   flex: 0 0 auto;
 }
 
-/* ── Header (matching 指挥 style: clean title) ──────────── */
+/* ── Header (centered, matching 指挥/副官 page) ─────────── */
 .owner-header {
   position: relative;
   z-index: 5;
   flex: 0 0 auto;
-  padding: 14rpx 28rpx 8rpx;
+  height: 88rpx;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+}
+
+.header-spacer {
+  width: 180rpx; /* offset to center the title accounting for capsule buttons on right */
+  flex: 0 0 auto;
 }
 
 .owner-title {
-  font-size: 38rpx;
-  font-weight: 800;
+  flex: 1;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 700;
+  letter-spacing: 8rpx;
   color: #f4fbff;
-  text-shadow: 0 0 18rpx rgba(47, 244, 224, 0.45);
-  letter-spacing: 4rpx;
+  text-shadow: 0 0 12rpx rgba(56, 230, 224, 0.50);
+}
+
+/* ── Top status bar ─────────────────────────────────────── */
+.top-status-bar {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12rpx;
+  padding: 2rpx 22rpx 14rpx;
+}
+
+.ts-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  padding: 12rpx 6rpx;
+  border: 1rpx solid rgba(47, 244, 224, 0.14);
+  background: rgba(7, 15, 32, 0.60);
+}
+
+.ts-num {
+  font-size: 26rpx;
+  font-weight: 800;
+  color: #eaf6ff;
+  letter-spacing: 2rpx;
+}
+
+.ts-label {
+  font-size: 18rpx;
+  color: #6f8cad;
+}
+
+.ts-led {
+  width: 14rpx;
+  height: 14rpx;
+  background: #5f7da6;
+  transform: rotate(45deg);
+  margin-bottom: 2rpx;
+}
+
+/* Status pill colors */
+.ts-ok { border-color: rgba(39, 245, 181, 0.22); }
+.ts-ok .ts-num { color: #27f5b5; }
+.ts-ok .ts-led { background: #27f5b5; box-shadow: 0 0 8rpx rgba(39, 245, 181, 0.6); }
+
+.ts-warn { border-color: rgba(255, 212, 0, 0.36); }
+.ts-warn .ts-num { color: #ffd400; }
+.ts-warn .ts-led { background: #ffd400; box-shadow: 0 0 8rpx rgba(255, 212, 0, 0.6); }
+
+.ts-fault { border-color: rgba(255, 49, 93, 0.44); animation: pillFaultGlow 1.4s ease-in-out infinite; }
+.ts-fault .ts-num { color: #ff315d; }
+.ts-fault .ts-led { background: #ff315d; box-shadow: 0 0 10rpx rgba(255, 49, 93, 0.7); }
+
+.ts-idle { opacity: 0.45; }
+.ts-idle .ts-num { color: #5f7da6; }
+
+@keyframes pillFaultGlow {
+  0%, 100% { border-color: rgba(255, 49, 93, 0.44); }
+  50% { border-color: rgba(255, 49, 93, 0.72); }
 }
 
 /* ── Content scroll ─────────────────────────────────────── */
@@ -618,7 +709,6 @@ function goTo(url) {
   padding: 0 22rpx;
 }
 
-/* ── Section header ─────────────────────────────────────── */
 .dash-section {
   margin-bottom: 18rpx;
 }
@@ -651,77 +741,10 @@ function goTo(url) {
   gap: 14rpx;
 }
 
-/* ── Status row (PLC + condensation) ────────────────────── */
-.status-row {
-  display: flex;
-  gap: 14rpx;
-  margin: 8rpx 0 22rpx;
-}
-
-/* ── Condensation card ──────────────────────────────────── */
-.condensation-card {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 14rpx;
-  padding: 20rpx 22rpx;
-  border: 1rpx solid rgba(47, 244, 224, 0.20);
-  background: rgba(7, 15, 32, 0.65);
-}
-
-.cc-ok {
-  border-color: rgba(47, 244, 224, 0.16);
-}
-
-.cc-warn {
-  border-color: rgba(255, 212, 0, 0.38);
-  animation: condPulse 2s ease-in-out infinite;
-}
-
-@keyframes condPulse {
-  0%, 100% { border-color: rgba(255, 212, 0, 0.38); }
-  50% { border-color: rgba(255, 212, 0, 0.68); }
-}
-
-.cc-led {
-  width: 14rpx;
-  height: 14rpx;
-  transform: rotate(45deg);
-  background: #27f5b5;
-  box-shadow: 0 0 10rpx rgba(39, 245, 181, 0.6);
-  flex: 0 0 auto;
-}
-
-.cc-warn .cc-led {
-  background: #ffd400;
-  box-shadow: 0 0 12rpx rgba(255, 212, 0, 0.75);
-}
-
-.cc-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.cc-label {
-  font-size: 20rpx;
-  color: #6f8cad;
-}
-
-.cc-count {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #eaf6ff;
-}
-
-.cc-warn .cc-count {
-  color: #ffd400;
-}
-
-/* ── Room grid ──────────────────────────────────────────── */
+/* ── Room grid (2 columns) ──────────────────────────────── */
 .room-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 14rpx;
 }
 
@@ -738,13 +761,13 @@ function goTo(url) {
   color: #ffe28a;
 }
 
-/* ── Animations paused state ────────────────────────────── */
+/* ── Animations paused ──────────────────────────────────── */
 .animations-paused .hud-scan,
-.animations-paused .condensation-card.cc-warn {
+.animations-paused .ts-fault {
   animation-play-state: paused;
 }
 
-/* ── CSS Keyframes ──────────────────────────────────────── */
+/* ── Keyframes ──────────────────────────────────────────── */
 @keyframes ownerScan {
   0% { transform: translateY(-260rpx); }
   100% { transform: translateY(1700rpx); }

@@ -30,41 +30,67 @@
       <!-- Title -->
       <view class="drawer-title">
         <text class="drawer-title-text">{{ title }}</text>
-        <text class="drawer-title-status" :class="statusClass">{{ compartment.status === 'fault' ? '告警' : compartment.status === 'warning' ? '预警' : '正常' }}</text>
+        <text class="drawer-title-status" :class="statusClass">{{ statusLabel }}</text>
       </view>
 
-      <!-- Event list -->
+      <!-- Content -->
       <scroll-view scroll-y class="drawer-list">
-        <view v-if="!hasEvents" class="drawer-empty">
-          <text>该隔舱运行正常，无活跃故障或预警</text>
-        </view>
-
-        <view
-          v-for="(event, idx) in eventsBySeverity"
-          :key="event.id || idx"
-          class="drawer-item"
-          :class="event.severity === 'fault' || event.severity === 'error' ? 'item-fault' : 'item-warning'"
-        >
-          <!-- Status color left bar -->
-          <view class="item-bar" />
-
-          <view class="item-content">
-            <view class="item-header">
-              <text class="item-device">{{ event.deviceName || '未知设备' }}</text>
-              <text class="item-severity" :class="event.severity === 'fault' || event.severity === 'error' ? 'sev-fault' : 'sev-warning'">
-                {{ event.severity === 'fault' || event.severity === 'error' ? '故障' : event.severity === 'condensation' ? '结露' : '预警' }}
-              </text>
+        <!-- ── Device Params (read-only, replicating web system panel) ── -->
+        <view v-if="hasDeviceParams" class="params-section">
+          <view class="params-section-title">
+            <view class="ps-bar" />
+            <text>设备参数</text>
+          </view>
+          <view v-for="dev in localDeviceParams" :key="dev.deviceSn" class="param-device-card">
+            <view class="pdc-head">
+              <text class="pdc-name">{{ dev.deviceName || dev.deviceSn }}</text>
+              <text class="pdc-code">{{ dev.deviceType || dev.productCode }}</text>
             </view>
-
-            <text class="item-type">{{ event.faultType || event.deviceTypeLabel || '' }}</text>
-
-            <text v-if="event.faultMessage" class="item-message">{{ event.faultMessage }}</text>
-
-            <view class="item-footer">
-              <text v-if="event.roomName" class="item-room">{{ event.roomName }}</text>
-              <text class="item-time">{{ formatTime(event.firstSeenAt) }}</text>
+            <view v-if="dev.attrs && dev.attrs.length > 0" class="pdc-attrs">
+              <view v-for="attr in dev.attrs" :key="attr.tag" class="pdc-attr-row">
+                <text class="pdc-attr-tag">{{ attr.tag }}</text>
+                <text class="pdc-attr-val">{{ formatAttrVal(attr.value) }}</text>
+              </view>
+            </view>
+            <view v-else class="pdc-empty">
+              <text>暂无实时数据</text>
             </view>
           </view>
+        </view>
+
+        <!-- ── Fault Events ── -->
+        <view v-if="hasEvents" class="faults-section">
+          <view class="params-section-title">
+            <view class="ps-bar ps-bar-warn" />
+            <text>故障记录</text>
+          </view>
+          <view
+            v-for="(event, idx) in eventsBySeverity"
+            :key="event.id || idx"
+            class="drawer-item"
+            :class="event.severity === 'fault' || event.severity === 'error' ? 'item-fault' : 'item-warning'"
+          >
+            <view class="item-bar" />
+            <view class="item-content">
+              <view class="item-header">
+                <text class="item-device">{{ event.deviceName || '未知设备' }}</text>
+                <text class="item-severity" :class="event.severity === 'fault' || event.severity === 'error' ? 'sev-fault' : 'sev-warning'">
+                  {{ event.severity === 'fault' || event.severity === 'error' ? '故障' : event.severity === 'condensation' ? '结露' : '预警' }}
+                </text>
+              </view>
+              <text class="item-type">{{ event.faultType || event.deviceTypeLabel || '' }}</text>
+              <text v-if="event.faultMessage" class="item-message">{{ event.faultMessage }}</text>
+              <view class="item-footer">
+                <text v-if="event.roomName" class="item-room">{{ event.roomName }}</text>
+                <text class="item-time">{{ formatTime(event.firstSeenAt) }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- Empty state: no faults and no params -->
+        <view v-if="!hasEvents && !hasDeviceParams" class="drawer-empty">
+          <text>该隔舱运行正常，无活跃故障或预警</text>
         </view>
       </scroll-view>
     </view>
@@ -81,11 +107,13 @@ import { computed, ref } from 'vue'
 const props = defineProps({
   compartment: { type: Object, default: null },
   visible: { type: Boolean, default: false },
+  faultEvents: { type: Array, default: () => [] },
+  deviceParams: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['close'])
 
-/** IFC-BD-007-04: Drawer title. */
+/** Drawer title. */
 const title = computed(() => {
   const c = props.compartment
   if (!c) return ''
@@ -93,14 +121,24 @@ const title = computed(() => {
   return `${c.name} — ${typeLabel}状态`
 })
 
-/** IFC-BD-007-05: Whether there are any events. */
-const hasEvents = computed(() => {
-  return props.compartment?.faultEvents?.length > 0
+const statusLabel = computed(() => {
+  const st = props.compartment?.status || 'normal'
+  if (st === 'fault') return '告警'
+  if (st === 'warning') return '预警'
+  if (st === 'idle') return '待机'
+  return '正常'
 })
 
-/** IFC-BD-007-06: Events sorted by severity (errors first). */
+/** Whether there are any fault events. */
+const hasEvents = computed(() => {
+  const comp = props.compartment?.faultEvents || []
+  const ext = props.faultEvents || []
+  return comp.length > 0 || ext.length > 0
+})
+
+/** Events sorted by severity (errors first). */
 const eventsBySeverity = computed(() => {
-  const events = props.compartment?.faultEvents || []
+  const events = [...(props.compartment?.faultEvents || []), ...(props.faultEvents || [])]
   return [...events].sort((a, b) => {
     const sevA = a.severity === 'error' ? 2 : a.severity === 'fault' ? 2 : 1
     const sevB = b.severity === 'error' ? 2 : b.severity === 'fault' ? 2 : 1
@@ -108,10 +146,28 @@ const eventsBySeverity = computed(() => {
   })
 })
 
+/** Device params from prop OR from compartment (fallback). */
+const localDeviceParams = computed(() => {
+  if (props.deviceParams && props.deviceParams.length > 0) return props.deviceParams
+  return props.compartment?.deviceParams || []
+})
+
+const hasDeviceParams = computed(() => localDeviceParams.value.length > 0)
+
 const statusClass = computed(() => {
   const st = props.compartment?.status || 'normal'
   return `status-${st}`
 })
+
+/** Format attribute value for display. */
+function formatAttrVal(val) {
+  if (val === null || val === undefined) return '—'
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) return String(val)
+    return val.toFixed(1)
+  }
+  return String(val)
+}
 
 /** Format ISO timestamp to readable short form. */
 function formatTime(isoString) {
@@ -332,5 +388,102 @@ function onTouchEnd() {
 .item-time {
   font-size: 20rpx;
   color: rgba(143, 217, 255, 0.45);
+}
+
+/* ── Device Params Section (read-only, replicating web system panel) ── */
+.params-section {
+  margin-bottom: 12rpx;
+}
+
+.params-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 8rpx 0 14rpx;
+}
+
+.params-section-title text {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: rgba(143, 217, 255, 0.55);
+  letter-spacing: 3rpx;
+}
+
+.ps-bar {
+  width: 4rpx;
+  height: 18rpx;
+  background: linear-gradient(180deg, #2ff4e0, #7c3aed);
+  border-radius: 2rpx;
+}
+
+.ps-bar-warn {
+  background: linear-gradient(180deg, #ffd400, #ff315d);
+}
+
+.param-device-card {
+  margin-bottom: 14rpx;
+  border: 1rpx solid rgba(47, 244, 224, 0.14);
+  background: rgba(7, 14, 31, 0.50);
+  overflow: hidden;
+}
+
+.pdc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14rpx 16rpx;
+  border-bottom: 1rpx solid rgba(47, 244, 224, 0.08);
+}
+
+.pdc-name {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #cde7f7;
+}
+
+.pdc-code {
+  font-size: 20rpx;
+  color: #5f7da6;
+}
+
+.pdc-attrs {
+  padding: 8rpx 16rpx 12rpx;
+}
+
+.pdc-attr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10rpx 0;
+  border-bottom: 1rpx solid rgba(47, 244, 224, 0.05);
+}
+
+.pdc-attr-row:last-child {
+  border-bottom: none;
+}
+
+.pdc-attr-tag {
+  font-size: 22rpx;
+  color: #6f8cad;
+}
+
+.pdc-attr-val {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #eaf6ff;
+}
+
+.pdc-empty {
+  padding: 24rpx 16rpx;
+  text-align: center;
+}
+
+.pdc-empty text {
+  font-size: 22rpx;
+  color: #5f7da6;
+}
+
+.faults-section {
+  margin-top: 6rpx;
 }
 </style>
