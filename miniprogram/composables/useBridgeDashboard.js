@@ -453,13 +453,15 @@ export function useBridgeDashboard() {
 
     // v1.12.0: Removed items [1] getDashboardDeviceFaultSummary and [2] getDashboardPlcOnlineRate.
     // New indices: 0=structure, 1=faultEvents, 2=condensation, 3=bindings, 4=realtimeParams, 5=connectivity
+    // v1.12.x: Owner users now use dedicated miniapp endpoints (getOwnerFaultEvents /
+    // getOwnerCondensationWarnings) that auto-restrict to their bound specific_part.
     const results = await Promise.allSettled([
       // 0: structure
       api.getOwnerStructure(sp),
-      // 1: fault events
-      api.getFaultEvents({ specific_part: sp, is_active: true, page_size: 200 }),
-      // 2: condensation count
-      api.getCondensationWarningCount(),
+      // 1: fault events (owner-specific endpoint)
+      api.getOwnerFaultEvents({ specific_part: sp, is_active: true, page_size: 200 }),
+      // 2: condensation count (owner-specific endpoint)
+      api.getOwnerCondensationWarnings({ specific_part: sp, is_active: true, page_size: 100 }),
       // 3: bindings (refresh cockpit list)
       api.getBindStatus(),
       // 4: realtime params (for subsystem status + drawer device detail)

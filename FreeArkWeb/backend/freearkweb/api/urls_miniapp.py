@@ -75,4 +75,14 @@ urlpatterns = [
     #   用于舰桥仪表盘的接驳方舟神经网络 / 链接座舱双指示器（REQ-BD-CONN-001）
     path('owner/connectivity/', views_ds.miniapp_owner_connectivity,
          name='miniapp-owner-connectivity'),
+
+    # v1.12.x 业主专属故障事件查询（IsOwnerUser + 归属过滤）
+    #   仅返回业主自己绑定专有部分的故障事件
+    path('owner/fault-events/', views_ds.miniapp_owner_fault_events,
+         name='miniapp-owner-fault-events'),
+
+    # v1.12.x 业主专属结露预警查询（IsOwnerUser + 归属过滤）
+    #   仅返回业主自己绑定专有部分的结露预警事件
+    path('owner/condensation-events/', views_ds.miniapp_owner_condensation_warnings,
+         name='miniapp-owner-condensation-events'),
 ]

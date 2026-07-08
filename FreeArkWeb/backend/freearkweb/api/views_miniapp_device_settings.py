@@ -46,7 +46,12 @@ from .models import (
     OwnerUserBinding, PLCWriteRecord,
     PLCLatestData, DeviceConfig, DeviceNode, OwnerInfo,
     DeviceFloor, DeviceRoom,
+    FaultEvent, CondensationWarningEvent,  # v1.12.x: 业主故障/结露查询
 )
+from .serializers_fault import FaultEventSerializer
+from .serializers_condensation import CondensationWarningEventSerializer
+from .views_fault import FaultEventPagination
+from .views_condensation import CondensationWarningPagination
 from .screen_param_config import get_screen_param_config, is_writable_attr
 from .utils_room_filter import (
     get_available_sub_types, get_allowed_param_names,
@@ -716,3 +721,141 @@ def miniapp_owner_connectivity(request):
         'plc_last_online_time': plc_last_online.isoformat() if plc_last_online else None,
         'screen_last_seen_at': screen_last_seen.isoformat() if screen_last_seen else None,
     })
+
+
+# ── v1.12.x 业主专属故障事件查询 ──────────────────────────────────────────────
+
+def _apply_specific_part_segment_filter(qs, specific_part, field='specific_part'):
+    """段数映射过滤：3段→startswith+endswith，其他→icontains（复用 BUG-FM-004 修复逻辑）。
+
+    生产 DB 的 specific_part 为 4 段格式（栋-单元-楼层-房号），如 "9-1-6-604"。
+    前端传 3 段格式（栋-单元-房号），如 "9-1-604"。
+    """
+    parts = specific_part.split('-')
+    if len(parts) == 3:
+        prefix = f"{parts[0]}-{parts[1]}-"
+        suffix = f"-{parts[2]}"
+        return qs.filter(**{
+            f'{field}__startswith': prefix,
+            f'{field}__endswith': suffix,
+        })
+    return qs.filter(**{f'{field}__icontains': specific_part})
+
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_owner_fault_events(request):
+    """业主专属故障事件查询（v1.12.x）。
+
+    GET /api/miniapp/owner/fault-events/?specific_part=3-1-7-702&is_active=true&page_size=200
+
+    仅返回业主自己绑定专有部分的故障事件，与运维 /api/devices/fault-events/ 互斥。
+
+    安全：IsOwnerUser + OwnerUserBinding 归属校验，越权访问 403。
+    """
+    specific_part = request.GET.get('specific_part', '').strip()
+    if not specific_part:
+        return Response(
+            {'detail': 'specific_part 参数为必填项'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ── 归属校验 ──────────────────────────────────────────────────────────────
+    allowed_parts = {
+        b.owner.specific_part
+        for b in OwnerUserBinding.objects
+        .filter(user=request.user, active=True)
+        .select_related('owner')
+    }
+    if specific_part not in allowed_parts:
+        logger.warning(
+            'miniapp_owner_fault_events: 越权访问 specific_part=%s user=%s',
+            specific_part, request.user.username,
+        )
+        return Response({'detail': '无权访问该专有部分'}, status=status.HTTP_403_FORBIDDEN)
+
+    # ── 查询过滤 ──────────────────────────────────────────────────────────────
+    qs = FaultEvent.objects.all()
+    qs = _apply_specific_part_segment_filter(qs, specific_part, field='specific_part')
+
+    # is_active 过滤
+    is_active_param = request.GET.get('is_active', '').strip()
+    if is_active_param.lower() == 'true':
+        qs = qs.filter(is_active=True)
+    elif is_active_param.lower() == 'false':
+        qs = qs.filter(is_active=False)
+
+    # 默认最近 7 天
+    from .views_fault import timezone as _tz, timedelta as _td
+    default_after = _tz.now() - _td(days=7)
+    qs = qs.filter(first_seen_at__gte=default_after)
+    qs = qs.order_by('-first_seen_at')
+
+    # ── 分页 ──────────────────────────────────────────────────────────────────
+    paginator = FaultEventPagination()
+    page = paginator.paginate_queryset(qs, request)
+    serializer = FaultEventSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_owner_condensation_warnings(request):
+    """业主专属结露预警查询（v1.12.x）。
+
+    GET /api/miniapp/owner/condensation-events/?specific_part=3-1-7-702&is_active=true&page_size=100
+
+    仅返回业主自己绑定专有部分的结露预警事件。
+    注入 is_screen_online 字段（复用 ADR-CW-05 逻辑）。
+
+    安全：IsOwnerUser + OwnerUserBinding 归属校验。
+    """
+    specific_part = request.GET.get('specific_part', '').strip()
+    if not specific_part:
+        return Response(
+            {'detail': 'specific_part 参数为必填项'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ── 归属校验 ──────────────────────────────────────────────────────────────
+    allowed_parts = {
+        b.owner.specific_part
+        for b in OwnerUserBinding.objects
+        .filter(user=request.user, active=True)
+        .select_related('owner')
+    }
+    if specific_part not in allowed_parts:
+        logger.warning(
+            'miniapp_owner_condensation_warnings: 越权访问 specific_part=%s user=%s',
+            specific_part, request.user.username,
+        )
+        return Response({'detail': '无权访问该专有部分'}, status=status.HTTP_403_FORBIDDEN)
+
+    # ── 查询过滤 ──────────────────────────────────────────────────────────────
+    qs = CondensationWarningEvent.objects.all()
+    qs = _apply_specific_part_segment_filter(qs, specific_part, field='specific_part')
+
+    # is_active 过滤
+    is_active_param = request.GET.get('is_active', '').strip()
+    if is_active_param.lower() == 'true':
+        qs = qs.filter(is_active=True)
+    elif is_active_param.lower() == 'false':
+        qs = qs.filter(is_active=False)
+
+    # 默认最近 7 天
+    from django.utils import timezone as _tz
+    from datetime import timedelta as _td
+    default_after = _tz.now() - _td(days=7)
+    qs = qs.filter(first_seen_at__gte=default_after)
+    qs = qs.order_by('-first_seen_at')
+
+    # ── 分页 ──────────────────────────────────────────────────────────────────
+    paginator = CondensationWarningPagination()
+    page = paginator.paginate_queryset(qs, request)
+    serializer = CondensationWarningEventSerializer(page, many=True)
+
+    # 注入 is_screen_online（复用 ADR-CW-05）
+    from .views_condensation import _inject_screen_online
+    data = list(serializer.data)
+    data = _inject_screen_online(data)
+    return paginator.get_paginated_response(data)

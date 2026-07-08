@@ -52,6 +52,14 @@
       }
     },
     {
+      "path": "pages/privacy/index",
+      "style": {
+        "navigationBarTitleText": "隐私政策",
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f"
+      }
+    },
+    {
       "path": "pages/register/index",
       "style": {
         "navigationStyle": "custom",

@@ -126,6 +126,18 @@ export const api = {
   getOwnerConnectivity: (specificPart) =>
     http.get('/api/miniapp/owner/connectivity/', { specific_part: specificPart }),
 
+  // v1.12.x 业主专属故障事件查询（IsOwnerUser + 归属过滤）
+  //   GET /api/miniapp/owner/fault-events/?specific_part={sp}&is_active=true&page_size=200
+  //   → DRF 分页 {count, results:[FaultEvent...]}
+  getOwnerFaultEvents: (params) =>
+    http.get('/api/miniapp/owner/fault-events/', params),
+
+  // v1.12.x 业主专属结露预警查询（IsOwnerUser + 归属过滤）
+  //   GET /api/miniapp/owner/condensation-events/?specific_part={sp}&is_active=true&page_size=100
+  //   → DRF 分页 {count, results:[CondensationWarningEvent...]}
+  getOwnerCondensationWarnings: (params) =>
+    http.get('/api/miniapp/owner/condensation-events/', params),
+
   // v1.11.1 业主设备树结构骨架端点（MOD-1111-FE-02）
   // IFC-1111-FE-02-1: getOwnerStructure
   //   GET /api/miniapp/owner/structure/?specific_part={sp}
