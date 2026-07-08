@@ -69,4 +69,10 @@ urlpatterns = [
     # v1.12.0 语音识别（IsOwnerUser）：上传 WAV → Sherpa-ONNX SenseVoiceSmall 离线 ASR
     path('voice/recognize/', views_miniapp.miniapp_voice_recognize,
          name='miniapp-voice-recognize'),
+
+    # v1.11.3 座舱连通性（IsOwnerUser + 归属过滤）：返回指定 specific_part 的
+    #   PLC 状态（online/offline/unknown）+ 大屏心跳状态（online/offline/unknown）
+    #   用于舰桥仪表盘的接驳方舟神经网络 / 链接座舱双指示器（REQ-BD-CONN-001）
+    path('owner/connectivity/', views_ds.miniapp_owner_connectivity,
+         name='miniapp-owner-connectivity'),
 ]

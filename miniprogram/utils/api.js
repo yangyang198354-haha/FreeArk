@@ -118,6 +118,14 @@ export const api = {
   ownerOndemandRefresh: (specificPart) =>
     http.post('/api/miniapp/owner/ondemand-refresh/', { specific_part: specificPart }),
 
+  // v1.11.3 座舱连通性（舰桥仪表盘 PLC + 大屏双指示器）
+  //   GET /api/miniapp/owner/connectivity/?specific_part={sp}
+  //   → 200: { success, specific_part, plc_status, screen_status,
+  //            plc_last_online_time, screen_last_seen_at }
+  //   → 400/403: 错误响应
+  getOwnerConnectivity: (specificPart) =>
+    http.get('/api/miniapp/owner/connectivity/', { specific_part: specificPart }),
+
   // v1.11.1 业主设备树结构骨架端点（MOD-1111-FE-02）
   // IFC-1111-FE-02-1: getOwnerStructure
   //   GET /api/miniapp/owner/structure/?specific_part={sp}

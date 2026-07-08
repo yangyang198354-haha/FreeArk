@@ -341,6 +341,12 @@ export function useBridgeDashboard() {
     /** IFC-BD-002-11: Total PLC count. */
     plcTotal: 0,
 
+    /** IFC-BD-002-11a: PLC connectivity status for current cockpit (online/offline/unknown). */
+    plcCockpitStatus: 'unknown',
+
+    /** IFC-BD-002-11b: Screen (大屏) connectivity status for current cockpit. */
+    screenCockpitStatus: 'unknown',
+
     /** IFC-BD-002-12: Active condensation warning count. */
     condensationCount: 0,
 
@@ -397,6 +403,8 @@ export function useBridgeDashboard() {
       api.getBindStatus(),
       // 6: realtime params (for drawer device detail)
       api.getOwnerRealtimeParams(sp),
+      // 7: cockpit connectivity (PLC + screen status for bridge indicators)
+      api.getOwnerConnectivity(sp),
     ])
 
     // Bindings
@@ -408,6 +416,13 @@ export function useBridgeDashboard() {
     // Realtime params (for drawer device detail)
     if (results[6].status === 'fulfilled' && results[6].value?.success !== false) {
       _realtimeParamsCache = results[6].value?.data || results[6].value || null
+    }
+
+    // Cockpit connectivity (PLC + screen status)
+    if (results[7].status === 'fulfilled' && results[7].value?.success) {
+      const conn = results[7].value
+      state.plcCockpitStatus = conn.plc_status || 'unknown'
+      state.screenCockpitStatus = conn.screen_status || 'unknown'
     }
 
     // Structure

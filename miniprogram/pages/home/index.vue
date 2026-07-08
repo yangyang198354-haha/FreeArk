@@ -2,17 +2,17 @@
   @module MOD-BD-001 (was MOD-PAGE-HOME)
   @implements IFC-BD-001-01 through IFC-BD-001-10
   @depends MOD-BD-002 (useBridgeDashboard), MOD-BD-003 (useAnimationControl),
-    MOD-BD-004~010 (ShipHull, SubsystemCompartment, RoomCompartment, FaultDrawer,
-    HealthIndicator, PlcIndicator, CabinSwitcher), ArkTabBar, MetricCard, authStore
+    MOD-BD-005~007 (SubsystemCompartment, RoomCompartment, FaultDrawer),
+    ArkTabBar, MetricCard, authStore
   @author sub_agent_software_developer
   @description Bridge dashboard page — role-based routing:
-    - role=user (owner): Cyberpunk ship cross-section dashboard (v1.11.0 rewrite)
-      showing fault/warning status only. No running parameters.
+    - role=user (owner): Cyberpunk HOLO-HUD dashboard (v1.11.3)
+      showing fault/warning status + connectivity indicators. No running parameters.
     - admin/operator: Material Design dashboard (PRESERVED AS-IS from original).
 -->
 <template>
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- OWNER PATH — v1.11.2 Bridge Dashboard (HOLO-HUD card layout)    -->
+  <!-- OWNER PATH — v1.11.3 Bridge Dashboard (HOLO-HUD card layout)    -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <view v-if="isOwner" class="owner-page" :class="{ 'animations-paused': animationsPaused }">
     <!-- Background layers (consistent with 指挥/param-settings) -->
@@ -30,23 +30,23 @@
       <view class="header-spacer" />
     </view>
 
-    <!-- Top status bar: fault count | condensation | health LED | PLC -->
-    <view class="top-status-bar">
-      <view class="ts-item" :class="faultPillClass" @tap="onFaultPillTap">
-        <text class="ts-num">{{ faultTotal }}</text>
-        <text class="ts-label">故障</text>
+    <!-- Top connectivity bar: PLC neural link + Cockpit screen link -->
+    <view class="top-conn-bar">
+      <!-- PLC: 接驳方舟神经网络 -->
+      <view class="conn-item" :class="connPlcClass">
+        <view class="conn-led" :class="connPlcLedClass" />
+        <view class="conn-body">
+          <text class="conn-label">接驳方舟神经网络</text>
+          <text class="conn-status">{{ connPlcLabel }}</text>
+        </view>
       </view>
-      <view class="ts-item" :class="condensationPillClass" @tap="onCondensationTap">
-        <text class="ts-num">{{ dash.state.condensationCount }}</text>
-        <text class="ts-label">结露</text>
-      </view>
-      <view class="ts-item ts-health" :class="healthPillClass">
-        <view class="ts-led" />
-        <text class="ts-label">{{ dash.state.overallStatus.text }}</text>
-      </view>
-      <view class="ts-item ts-plc" :class="plcPillClass">
-        <text class="ts-num">{{ dash.state.plcOnline }}/{{ dash.state.plcTotal }}</text>
-        <text class="ts-label">在线</text>
+      <!-- Screen: 链接座舱 -->
+      <view class="conn-item" :class="connScreenClass">
+        <view class="conn-led" :class="connScreenLedClass" />
+        <view class="conn-body">
+          <text class="conn-label">链接座舱</text>
+          <text class="conn-status">{{ connScreenLabel }}</text>
+        </view>
       </view>
     </view>
 
@@ -72,9 +72,10 @@
       <view v-else class="dashboard">
         <!-- ── Section: 子系统状态 ── -->
         <view class="dash-section">
-          <view class="section-head">
-            <view class="section-bar" />
-            <text class="section-label">SYS STATUS</text>
+          <view class="section-head" :class="sysSectionGlowClass">
+            <view class="section-bar" :class="sysBarClass" />
+            <text class="section-label" :class="sysLabelClass">SYS STATUS</text>
+            <view class="section-scan-line" />
           </view>
           <view class="subsystem-grid">
             <SubsystemCompartment
@@ -87,11 +88,51 @@
           </view>
         </view>
 
+        <!-- ── Section: 威胁仪表 (fault + condensation gauges) ── -->
+        <view class="dash-section gauge-section">
+          <view class="section-head">
+            <view class="section-bar gauge-bar" />
+            <text class="section-label gauge-label">THREAT BOARD</text>
+            <view class="section-scan-line" />
+          </view>
+          <view class="gauge-row">
+            <!-- Fault gauge -->
+            <view class="gauge-card" :class="faultGaugeClass" @tap="onFaultGaugeTap">
+              <view class="gauge-ring">
+                <view class="gauge-ring-inner">
+                  <text class="gauge-num">{{ faultTotal }}</text>
+                </view>
+                <view class="gauge-ring-arc" :class="faultGaugeArcClass" />
+              </view>
+              <text class="gauge-label-text">系统故障</text>
+              <view v-if="faultTotal > 0" class="gauge-sparks">
+                <view class="gauge-spark gs1" />
+                <view class="gauge-spark gs2" />
+              </view>
+            </view>
+            <!-- Condensation gauge -->
+            <view class="gauge-card" :class="condGaugeClass" @tap="onCondGaugeTap">
+              <view class="gauge-ring">
+                <view class="gauge-ring-inner">
+                  <text class="gauge-num">{{ dash.state.condensationCount }}</text>
+                </view>
+                <view class="gauge-ring-arc" :class="condGaugeArcClass" />
+              </view>
+              <text class="gauge-label-text">结露预警</text>
+              <view v-if="dash.state.condensationCount > 0" class="gauge-sparks">
+                <view class="gauge-spark gs1" />
+                <view class="gauge-spark gs2" />
+              </view>
+            </view>
+          </view>
+        </view>
+
         <!-- ── Section: 房间状态 ── -->
         <view class="dash-section">
-          <view class="section-head">
-            <view class="section-bar" />
-            <text class="section-label">ROOM STATUS</text>
+          <view class="section-head" :class="roomSectionGlowClass">
+            <view class="section-bar" :class="roomBarClass" />
+            <text class="section-label" :class="roomLabelClass">ROOM STATUS</text>
+            <view class="section-scan-line" />
           </view>
           <view class="room-grid">
             <RoomCompartment
@@ -130,7 +171,7 @@
   </view>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- ADMIN/OPERATOR PATH — PRESERVED EXACTLY AS-IS (lines 167-260)  -->
+  <!-- ADMIN/OPERATOR PATH — PRESERVED EXACTLY AS-IS                    -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <view v-else class="admin-page">
     <view :style="{ height: statusBarHeight + 'px' }" class="admin-status-spacer" />
@@ -266,7 +307,7 @@ if (!authStore.isLoggedIn) {
 const isOwner = computed(() => authStore.role === 'user')
 
 // ═══════════════════════════════════════════════════════════════
-// OWNER COMPOSABLES (v1.11.0 bridge dashboard)
+// OWNER COMPOSABLES (v1.11.3 bridge dashboard)
 // ═══════════════════════════════════════════════════════════════
 
 const dash = useBridgeDashboard()
@@ -286,33 +327,101 @@ const faultTotal = computed(() => {
   return total
 })
 
-/** Top status pill classes. */
-const faultPillClass = computed(() => faultTotal.value > 0 ? 'ts-fault' : 'ts-ok')
-const condensationPillClass = computed(() => dash.state.condensationCount > 0 ? 'ts-warn' : 'ts-ok')
-const healthPillClass = computed(() => `ts-${dash.state.overallStatus.level}`)
-const plcPillClass = computed(() => {
-  if (dash.state.loading) return 'ts-idle'
-  if (dash.state.plcTotal === 0) return 'ts-idle'
-  if (dash.state.plcOnline === dash.state.plcTotal) return 'ts-ok'
-  if (dash.state.plcOnline > 0) return 'ts-warn'
-  return 'ts-fault'
+// ── Connectivity indicators (v1.11.3) ──────────────────────
+
+/** PLC connectivity status → CSS class. */
+const connPlcClass = computed(() => {
+  const s = dash.state.plcCockpitStatus
+  if (s === 'online') return 'conn-online'
+  if (s === 'offline') return 'conn-offline'
+  return 'conn-unknown'
 })
+
+const connPlcLedClass = computed(() => {
+  const s = dash.state.plcCockpitStatus
+  if (s === 'online') return 'led-online'
+  if (s === 'offline') return 'led-offline'
+  return 'led-unknown'
+})
+
+const connPlcLabel = computed(() => {
+  const s = dash.state.plcCockpitStatus
+  if (s === 'online') return '已接驳'
+  if (s === 'offline') return '断开'
+  return '扫描中'
+})
+
+/** Screen connectivity status → CSS class. */
+const connScreenClass = computed(() => {
+  const s = dash.state.screenCockpitStatus
+  if (s === 'online') return 'conn-online'
+  if (s === 'offline') return 'conn-offline'
+  return 'conn-unknown'
+})
+
+const connScreenLedClass = computed(() => {
+  const s = dash.state.screenCockpitStatus
+  if (s === 'online') return 'led-online'
+  if (s === 'offline') return 'led-offline'
+  return 'led-unknown'
+})
+
+const connScreenLabel = computed(() => {
+  const s = dash.state.screenCockpitStatus
+  if (s === 'online') return '已链接'
+  if (s === 'offline') return '断链'
+  return '搜索中'
+})
+
+// ── Section title color classes (neon, status-driven) ──────
+
+function worstSectionStatus(items) {
+  let worst = 'normal'
+  let hasItems = false
+  for (const item of items) {
+    hasItems = true
+    if (item.status === 'fault') return 'fault'
+    if (item.status === 'warning') worst = 'warning'
+    else if (item.status === 'idle' && worst === 'normal') worst = 'idle'
+  }
+  if (!hasItems) return 'idle'
+  return worst
+}
+
+const sysSectionStatus = computed(() => worstSectionStatus(dash.state.subsystems))
+const roomSectionStatus = computed(() => worstSectionStatus(dash.state.rooms))
+
+const sysSectionGlowClass = computed(() => `head-${sysSectionStatus.value}`)
+const sysBarClass = computed(() => `bar-${sysSectionStatus.value}`)
+const sysLabelClass = computed(() => `label-${sysSectionStatus.value}`)
+
+const roomSectionGlowClass = computed(() => `head-${roomSectionStatus.value}`)
+const roomBarClass = computed(() => `bar-${roomSectionStatus.value}`)
+const roomLabelClass = computed(() => `label-${roomSectionStatus.value}`)
+
+// ── Gauge classes ──────────────────────────────────────────
+
+const faultGaugeClass = computed(() => faultTotal.value > 0 ? 'gauge-fault' : 'gauge-ok')
+const faultGaugeArcClass = computed(() => faultTotal.value > 0 ? 'arc-fault' : 'arc-ok')
+
+const condGaugeClass = computed(() => dash.state.condensationCount > 0 ? 'gauge-warn' : 'gauge-ok')
+const condGaugeArcClass = computed(() => dash.state.condensationCount > 0 ? 'arc-warn' : 'arc-ok')
 
 /** Compartment open event. */
 function onCompartmentOpen(compartment) {
   dash.openCompartment(compartment)
 }
 
-/** Fault pill tap → open first fault room. */
-function onFaultPillTap() {
+/** Fault gauge tap → open first fault room. */
+function onFaultGaugeTap() {
   const room = dash.state.rooms.find(r => r.faultCount > 0)
   if (room) {
     dash.openCompartment(room)
   }
 }
 
-/** Condensation tap → open first room with condensation. */
-function onCondensationTap() {
+/** Condensation gauge tap → open first room with condensation. */
+function onCondGaugeTap() {
   const room = dash.state.rooms.find(r => r.hasCondensation)
   if (room) {
     dash.openCompartment(room)
@@ -473,7 +582,7 @@ function goTo(url) {
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- STYLES: Owner (v1.11.2 HOLO-HUD card dashboard)                 -->
+<!-- STYLES: Owner (v1.11.3 HOLO-HUD card dashboard)                 -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <style scoped>
 /* ── Page base ──────────────────────────────────────────── */
@@ -540,7 +649,7 @@ function goTo(url) {
 }
 
 .header-spacer {
-  width: 180rpx; /* offset to center the title accounting for capsule buttons on right */
+  width: 180rpx;
   flex: 0 0 auto;
 }
 
@@ -554,66 +663,98 @@ function goTo(url) {
   text-shadow: 0 0 12rpx rgba(56, 230, 224, 0.50);
 }
 
-/* ── Top status bar ─────────────────────────────────────── */
-.top-status-bar {
+/* ── Top connectivity bar (v1.11.3) ──────────────────────── */
+.top-conn-bar {
   position: relative;
   z-index: 5;
   flex: 0 0 auto;
   display: flex;
-  gap: 12rpx;
-  padding: 2rpx 22rpx 14rpx;
+  gap: 16rpx;
+  padding: 4rpx 22rpx 12rpx;
 }
 
-.ts-item {
+.conn-item {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4rpx;
-  padding: 12rpx 6rpx;
-  border: 1rpx solid rgba(47, 244, 224, 0.14);
-  background: rgba(7, 15, 32, 0.60);
+  gap: 10rpx;
+  padding: 10rpx 14rpx;
+  border: 1rpx solid rgba(47, 244, 224, 0.12);
+  background: rgba(5, 10, 22, 0.70);
+  position: relative;
+  overflow: hidden;
 }
 
-.ts-num {
-  font-size: 26rpx;
-  font-weight: 800;
-  color: #eaf6ff;
+/* LED diamond */
+.conn-led {
+  width: 16rpx;
+  height: 16rpx;
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
+.led-online {
+  background: #27f5b5;
+  box-shadow: 0 0 12rpx rgba(39, 245, 181, 0.8), 0 0 28rpx rgba(39, 245, 181, 0.3);
+  animation: ledPulse 2s ease-in-out infinite;
+}
+
+.led-offline {
+  background: #ff315d;
+  box-shadow: 0 0 12rpx rgba(255, 49, 93, 0.7), 0 0 28rpx rgba(255, 49, 93, 0.2);
+}
+
+.led-unknown {
+  background: #5f7da6;
+  box-shadow: 0 0 6rpx rgba(95, 125, 166, 0.3);
+  animation: ledScan 1.5s ease-in-out infinite;
+}
+
+@keyframes ledPulse {
+  0%, 100% { box-shadow: 0 0 12rpx rgba(39, 245, 181, 0.8); }
+  50% { box-shadow: 0 0 24rpx rgba(39, 245, 181, 1.0), 0 0 40rpx rgba(39, 245, 181, 0.4); }
+}
+
+@keyframes ledScan {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.conn-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.conn-label {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #8fd9ff;
   letter-spacing: 2rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ts-label {
+.conn-status {
   font-size: 18rpx;
   color: #6f8cad;
 }
 
-.ts-led {
-  width: 14rpx;
-  height: 14rpx;
-  background: #5f7da6;
-  transform: rotate(45deg);
-  margin-bottom: 2rpx;
-}
+/* Conn status variations */
+.conn-online { border-color: rgba(39, 245, 181, 0.25); }
+.conn-online .conn-status { color: #27f5b5; }
 
-/* Status pill colors */
-.ts-ok { border-color: rgba(39, 245, 181, 0.22); }
-.ts-ok .ts-num { color: #27f5b5; }
-.ts-ok .ts-led { background: #27f5b5; box-shadow: 0 0 8rpx rgba(39, 245, 181, 0.6); }
+.conn-offline { border-color: rgba(255, 49, 93, 0.35); animation: connFaultGlow 2s ease-in-out infinite; }
+.conn-offline .conn-status { color: #ff315d; }
 
-.ts-warn { border-color: rgba(255, 212, 0, 0.36); }
-.ts-warn .ts-num { color: #ffd400; }
-.ts-warn .ts-led { background: #ffd400; box-shadow: 0 0 8rpx rgba(255, 212, 0, 0.6); }
+.conn-unknown { opacity: 0.55; }
 
-.ts-fault { border-color: rgba(255, 49, 93, 0.44); animation: pillFaultGlow 1.4s ease-in-out infinite; }
-.ts-fault .ts-num { color: #ff315d; }
-.ts-fault .ts-led { background: #ff315d; box-shadow: 0 0 10rpx rgba(255, 49, 93, 0.7); }
-
-.ts-idle { opacity: 0.45; }
-.ts-idle .ts-num { color: #5f7da6; }
-
-@keyframes pillFaultGlow {
-  0%, 100% { border-color: rgba(255, 49, 93, 0.44); }
-  50% { border-color: rgba(255, 49, 93, 0.72); }
+@keyframes connFaultGlow {
+  0%, 100% { border-color: rgba(255, 49, 93, 0.35); }
+  50% { border-color: rgba(255, 49, 93, 0.65); }
 }
 
 /* ── Content scroll ─────────────────────────────────────── */
@@ -710,28 +851,235 @@ function goTo(url) {
 }
 
 .dash-section {
-  margin-bottom: 18rpx;
+  margin-bottom: 22rpx;
 }
 
+/* ── Section heads (v1.11.3: larger, neon color-coded, animated) ── */
 .section-head {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  padding: 8rpx 4rpx 14rpx;
+  padding: 6rpx 4rpx 16rpx;
+  position: relative;
 }
 
 .section-bar {
-  width: 5rpx;
-  height: 22rpx;
-  background: linear-gradient(180deg, #2ff4e0, #7c3aed);
-  border-radius: 2rpx;
+  width: 6rpx;
+  height: 32rpx;
+  border-radius: 3rpx;
+  flex-shrink: 0;
+  transition: background 0.6s ease;
+}
+
+/* Bar colors by status */
+.bar-normal { background: linear-gradient(180deg, #27f5b5, #0f9b7a); box-shadow: 0 0 12rpx rgba(39, 245, 181, 0.5); }
+.bar-warning { background: linear-gradient(180deg, #ffd400, #b89400); box-shadow: 0 0 12rpx rgba(255, 212, 0, 0.5); }
+.bar-fault { background: linear-gradient(180deg, #ff315d, #b8002d); box-shadow: 0 0 14rpx rgba(255, 49, 93, 0.6); animation: barFaultBlink 0.8s ease-in-out infinite; }
+.bar-idle { background: linear-gradient(180deg, #5f7da6, #3a506b); box-shadow: none; opacity: 0.5; }
+
+@keyframes barFaultBlink {
+  0%, 100% { box-shadow: 0 0 14rpx rgba(255, 49, 93, 0.6); }
+  50% { box-shadow: 0 0 28rpx rgba(255, 49, 93, 1.0); }
 }
 
 .section-label {
+  font-size: 28rpx;
+  font-weight: 800;
+  letter-spacing: 6rpx;
+  transition: color 0.6s ease, text-shadow 0.6s ease;
+}
+
+/* Label colors by status */
+.label-normal { color: #27f5b5; text-shadow: 0 0 16rpx rgba(39, 245, 181, 0.6); }
+.label-warning { color: #ffd400; text-shadow: 0 0 16rpx rgba(255, 212, 0, 0.6); }
+.label-fault { color: #ff315d; text-shadow: 0 0 18rpx rgba(255, 49, 93, 0.7); animation: labelFaultBlink 1s ease-in-out infinite; }
+.label-idle { color: #5f7da6; text-shadow: none; }
+
+@keyframes labelFaultBlink {
+  0%, 100% { text-shadow: 0 0 18rpx rgba(255, 49, 93, 0.7); }
+  50% { text-shadow: 0 0 32rpx rgba(255, 49, 93, 1.0); }
+}
+
+/* Scan line animation behind section title */
+.section-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 13rpx;
+  height: 1rpx;
+  background: linear-gradient(90deg, transparent, rgba(47, 244, 224, 0.2), transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.head-fault .section-scan-line {
+  opacity: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 49, 93, 0.4), transparent);
+  animation: scanLineSweep 2s linear infinite;
+}
+
+.head-warning .section-scan-line {
+  opacity: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 212, 0, 0.3), transparent);
+}
+
+@keyframes scanLineSweep {
+  0% { transform: translateX(-100%); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+/* ── Gauge section (v1.11.3: THREAT BOARD) ──────────────── */
+.gauge-section {
+  margin: 6rpx 0 22rpx;
+}
+
+.gauge-bar {
+  background: linear-gradient(180deg, #ffd400, #ff315d) !important;
+  box-shadow: 0 0 10rpx rgba(255, 212, 0, 0.4) !important;
+}
+
+.gauge-label {
+  color: #ffd400 !important;
+  text-shadow: 0 0 12rpx rgba(255, 212, 0, 0.45) !important;
+}
+
+.gauge-row {
+  display: flex;
+  gap: 16rpx;
+}
+
+.gauge-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 24rpx 16rpx 20rpx;
+  border: 1rpx solid rgba(47, 244, 224, 0.20);
+  background: linear-gradient(180deg, rgba(9, 22, 42, 0.85), rgba(5, 12, 28, 0.80));
+  position: relative;
+  overflow: hidden;
+}
+
+/* Gauge HUD corner brackets */
+.gauge-card::before,
+.gauge-card::after {
+  content: '';
+  position: absolute;
+  width: 16rpx;
+  height: 16rpx;
+  pointer-events: none;
+  opacity: 0.30;
+}
+.gauge-card::before {
+  top: 4rpx; left: 4rpx;
+  border-top: 1rpx solid rgba(47, 244, 224, 0.5);
+  border-left: 1rpx solid rgba(47, 244, 224, 0.5);
+}
+.gauge-card::after {
+  bottom: 4rpx; right: 4rpx;
+  border-bottom: 1rpx solid rgba(47, 244, 224, 0.5);
+  border-right: 1rpx solid rgba(47, 244, 224, 0.5);
+}
+
+/* Gauge ring */
+.gauge-ring {
+  position: relative;
+  width: 100rpx;
+  height: 100rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gauge-ring-inner {
+  width: 76rpx;
+  height: 76rpx;
+  border: 2rpx solid rgba(47, 244, 224, 0.35);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gauge-num {
+  font-size: 34rpx;
+  font-weight: 900;
+  color: #eaf6ff;
+  letter-spacing: 2rpx;
+}
+
+.gauge-ring-arc {
+  position: absolute;
+  inset: -4rpx;
+  border-radius: 50%;
+  border: 3rpx solid transparent;
+}
+
+.arc-ok { border-top-color: rgba(39, 245, 181, 0.5); border-right-color: rgba(39, 245, 181, 0.3); }
+.arc-fault { border-top-color: rgba(255, 49, 93, 0.7); border-right-color: rgba(255, 49, 93, 0.5); animation: arcFaultSpin 2s linear infinite; }
+.arc-warn { border-top-color: rgba(255, 212, 0, 0.6); border-right-color: rgba(255, 212, 0, 0.3); animation: arcFaultSpin 2.5s linear infinite; }
+
+@keyframes arcFaultSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.gauge-label-text {
   font-size: 22rpx;
   font-weight: 700;
-  color: rgba(143, 217, 255, 0.58);
-  letter-spacing: 4rpx;
+  color: #8fd9ff;
+  letter-spacing: 3rpx;
+}
+
+/* Gauge status colors */
+.gauge-ok { border-color: rgba(39, 245, 181, 0.22); }
+.gauge-ok .gauge-num { color: #27f5b5; text-shadow: 0 0 10rpx rgba(39, 245, 181, 0.4); }
+.gauge-ok .gauge-ring-inner { border-color: rgba(39, 245, 181, 0.35); }
+
+.gauge-fault { border-color: rgba(255, 49, 93, 0.40); box-shadow: 0 0 24rpx rgba(255, 49, 93, 0.08); animation: gaugeFaultGlow 1.6s ease-in-out infinite; }
+.gauge-fault .gauge-num { color: #ff315d; text-shadow: 0 0 14rpx rgba(255, 49, 93, 0.6); }
+.gauge-fault .gauge-ring-inner { border-color: rgba(255, 49, 93, 0.45); }
+
+.gauge-warn { border-color: rgba(255, 212, 0, 0.38); box-shadow: 0 0 24rpx rgba(255, 212, 0, 0.06); animation: gaugeWarnGlow 2s ease-in-out infinite; }
+.gauge-warn .gauge-num { color: #ffd400; text-shadow: 0 0 12rpx rgba(255, 212, 0, 0.5); }
+.gauge-warn .gauge-ring-inner { border-color: rgba(255, 212, 0, 0.40); }
+
+@keyframes gaugeFaultGlow {
+  0%, 100% { border-color: rgba(255, 49, 93, 0.40); }
+  50% { border-color: rgba(255, 49, 93, 0.70); }
+}
+
+@keyframes gaugeWarnGlow {
+  0%, 100% { border-color: rgba(255, 212, 0, 0.38); }
+  50% { border-color: rgba(255, 212, 0, 0.60); }
+}
+
+/* Gauge sparks (when active) */
+.gauge-sparks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gauge-spark {
+  position: absolute;
+  width: 10rpx;
+  height: 3rpx;
+  background: #ff315d;
+  box-shadow: 0 0 8rpx rgba(255, 49, 93, 0.8);
+  animation: sparkBlink 0.7s ease-in-out infinite;
+}
+
+.gs1 { top: 16rpx; right: 24rpx; transform: rotate(30deg); }
+.gs2 { bottom: 22rpx; left: 20rpx; transform: rotate(-40deg); animation-delay: 0.35s; }
+
+.gauge-warn .gauge-spark { background: #ffd400; box-shadow: 0 0 8rpx rgba(255, 212, 0, 0.8); }
+
+@keyframes sparkBlink {
+  0%, 100% { opacity: 0.30; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 /* ── Subsystem grid (2x2) ───────────────────────────────── */
@@ -763,7 +1111,16 @@ function goTo(url) {
 
 /* ── Animations paused ──────────────────────────────────── */
 .animations-paused .hud-scan,
-.animations-paused .ts-fault {
+.animations-paused .bar-fault,
+.animations-paused .gauge-fault,
+.animations-paused .gauge-warn,
+.animations-paused .conn-fault,
+.animations-paused .led-online,
+.animations-paused .led-unknown,
+.animations-paused .section-scan-line,
+.animations-paused .gauge-ring-arc,
+.animations-paused .gauge-spark,
+.animations-paused .label-fault {
   animation-play-state: paused;
 }
 

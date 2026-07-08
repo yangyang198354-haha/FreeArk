@@ -628,3 +628,91 @@ def miniapp_owner_structure(request):
         len(rooms_list), len(system_devices), len(all_device_sns),
     )
     return Response(resp)
+
+
+# ===========================================================================
+# v1.11.3 座舱连通性端点（PLC + 大屏 status for bridge dashboard）
+# @module MOD-BD-CONN-01
+# @implements REQ-BD-CONN-001
+# ===========================================================================
+
+_COCKPIT_ONLINE_THRESHOLD_MINUTES = 15  # 大屏在线判定窗口（与 views.py ONLINE_THRESHOLD_MINUTES 一致）
+
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_owner_connectivity(request):
+    """座舱连通性查询（v1.11.3，MOD-BD-CONN-01）。
+
+    GET /api/miniapp/owner/connectivity/?specific_part=3-1-7-702
+
+    - 严格归属校验：specific_part 必须属于请求业主的 active 绑定。
+    - PLC 状态：查 PLCConnectionStatus.connection_status（online/offline）。
+    - 大屏状态：查 ScreenConnectivityStatus.last_seen_at，
+      距今 <= 15min → online，有记录但超时 → offline，无记录 → unknown。
+
+    Response 200:
+    {
+      "success": true,
+      "specific_part": str,
+      "plc_status": "online" | "offline" | "unknown",
+      "screen_status": "online" | "offline" | "unknown",
+      "plc_last_online_time": str | null,
+      "screen_last_seen_at": str | null
+    }
+    Response 400: {"success": false, "error": "specific_part 参数为必填项"}
+    Response 403: {"detail": "无权访问该专有部分"}
+    """
+    from django.utils import timezone as dj_timezone
+    from .models import PLCConnectionStatus, ScreenConnectivityStatus
+
+    specific_part = request.GET.get('specific_part', '').strip()
+    if not specific_part:
+        return Response(
+            {'success': False, 'error': 'specific_part 参数为必填项'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ── 归属校验 ────────────────────────────────────────────────────────────
+    allowed_parts = {
+        b.owner.specific_part
+        for b in OwnerUserBinding.objects
+        .filter(user=request.user, active=True)
+        .select_related('owner')
+    }
+    if specific_part not in allowed_parts:
+        logger.warning(
+            'miniapp_owner_connectivity: 越权访问 specific_part=%s user=%s',
+            specific_part, request.user.username,
+        )
+        return Response({'detail': '无权访问该专有部分'}, status=status.HTTP_403_FORBIDDEN)
+
+    # ── PLC 状态 ────────────────────────────────────────────────────────────
+    plc_status = 'unknown'
+    plc_last_online = None
+    try:
+        plc = PLCConnectionStatus.objects.get(specific_part=specific_part)
+        plc_status = plc.connection_status  # 'online' | 'offline'
+        plc_last_online = plc.last_online_time
+    except PLCConnectionStatus.DoesNotExist:
+        pass
+
+    # ── 大屏状态 ────────────────────────────────────────────────────────────
+    screen_status = 'unknown'
+    screen_last_seen = None
+    try:
+        scr = ScreenConnectivityStatus.objects.get(specific_part=specific_part)
+        screen_last_seen = scr.last_seen_at
+        online_cutoff = dj_timezone.now() - timedelta(minutes=_COCKPIT_ONLINE_THRESHOLD_MINUTES)
+        screen_status = 'online' if screen_last_seen >= online_cutoff else 'offline'
+    except ScreenConnectivityStatus.DoesNotExist:
+        pass
+
+    return Response({
+        'success': True,
+        'specific_part': specific_part,
+        'plc_status': plc_status,
+        'screen_status': screen_status,
+        'plc_last_online_time': plc_last_online.isoformat() if plc_last_online else None,
+        'screen_last_seen_at': screen_last_seen.isoformat() if screen_last_seen else None,
+    })
