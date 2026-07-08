@@ -75,71 +75,92 @@ function onTap() {
 </script>
 
 <style scoped>
+/* ── Card base (HOLO-HUD room card) ──────────────────────── */
 .room-compartment {
   position: relative;
   box-sizing: border-box;
-  width: calc(50% - 7rpx);
   min-height: 180rpx;
   padding: 18rpx 16rpx;
   overflow: hidden;
-  border: 1rpx solid rgba(47, 244, 224, 0.28);
-  background:
-    linear-gradient(135deg, rgba(14, 33, 54, 0.90), rgba(9, 17, 37, 0.86)),
-    linear-gradient(180deg, rgba(47, 244, 224, 0.05), transparent);
+  border: 1rpx solid rgba(47, 244, 224, 0.20);
+  background: linear-gradient(180deg, rgba(9, 22, 42, 0.88), rgba(6, 14, 30, 0.78));
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
-/* Single-room layout */
 .room-single {
-  width: 100%;
-  min-height: 260rpx;
+  min-height: 240rpx;
 }
 
-/* ── Clip-path shapes ── */
-.room-shape-0 { clip-path: polygon(0 0, 92% 0, 100% 20%, 100% 100%, 0 100%); }
-.room-shape-1 { clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%, 0 20%); }
-.room-shape-2 { clip-path: polygon(0 0, 100% 0, 100% 82%, 90% 100%, 0 100%); }
-.room-shape-3 { clip-path: polygon(0 0, 100% 0, 100% 100%, 10% 100%, 0 82%); }
+/* HUD corner brackets */
+.room-compartment::before,
+.room-compartment::after {
+  content: '';
+  position: absolute;
+  width: 14rpx;
+  height: 14rpx;
+  pointer-events: none;
+  opacity: 0.30;
+}
+.room-compartment::before {
+  top: 4rpx;
+  left: 4rpx;
+  border-top: 1rpx solid rgba(47, 244, 224, 0.45);
+  border-left: 1rpx solid rgba(47, 244, 224, 0.45);
+}
+.room-compartment::after {
+  bottom: 4rpx;
+  right: 4rpx;
+  border-bottom: 1rpx solid rgba(47, 244, 224, 0.45);
+  border-right: 1rpx solid rgba(47, 244, 224, 0.45);
+}
 
-/* ── Status border colors ── */
+/* Status variations */
 .state-warning {
-  border-color: rgba(255, 212, 0, 0.54);
+  border-color: rgba(255, 212, 0, 0.44);
+  box-shadow: 0 0 16rpx rgba(255, 212, 0, 0.08);
 }
 .state-fault {
-  border-color: rgba(255, 49, 93, 0.6);
+  border-color: rgba(255, 49, 93, 0.48);
+  box-shadow: 0 0 20rpx rgba(255, 49, 93, 0.10);
+  animation: roomFaultGlow 1.5s ease-in-out infinite;
 }
 .state-idle {
-  border-color: rgba(47, 244, 224, 0.10);
-  opacity: 0.55;
+  border-color: rgba(47, 244, 224, 0.07);
+  opacity: 0.48;
 }
 
-/* ── Decorative lines ── */
+@keyframes roomFaultGlow {
+  0%, 100% { box-shadow: 0 0 20rpx rgba(255, 49, 93, 0.10); }
+  50% { box-shadow: 0 0 34rpx rgba(255, 49, 93, 0.20); }
+}
+
+/* Decorative lines */
 .room-lines {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.42;
+  opacity: 0.30;
 }
 .room-line-a {
   position: absolute;
-  left: 14rpx;
-  right: 14rpx;
-  top: 60rpx;
+  left: 10rpx;
+  right: 10rpx;
+  top: 54rpx;
   height: 1rpx;
-  background: rgba(143, 217, 255, 0.18);
+  background: rgba(143, 217, 255, 0.14);
 }
 .room-line-b {
   position: absolute;
-  top: 14rpx;
-  bottom: 14rpx;
-  left: 58%;
+  top: 10rpx;
+  bottom: 10rpx;
+  left: 55%;
   width: 1rpx;
-  background: rgba(143, 217, 255, 0.18);
+  background: rgba(143, 217, 255, 0.14);
 }
 
-/* ── Damage marks ── */
+/* Damage marks */
 .room-damage {
   position: absolute;
   inset: 0;
@@ -147,21 +168,21 @@ function onTap() {
 }
 .damage-mark {
   position: absolute;
-  width: 28rpx;
-  height: 6rpx;
+  width: 22rpx;
+  height: 4rpx;
   background: #ffd400;
-  box-shadow: 0 0 12rpx rgba(255, 212, 0, 0.8);
-  animation: damageBlink 1.2s ease-in-out infinite;
+  box-shadow: 0 0 10rpx rgba(255, 212, 0, 0.75);
+  animation: damageBlink 1.0s ease-in-out infinite;
 }
 .state-fault .damage-mark {
   background: #ff315d;
-  box-shadow: 0 0 14rpx rgba(255, 49, 93, 0.85);
+  box-shadow: 0 0 12rpx rgba(255, 49, 93, 0.80);
 }
-.dm1 { right: 18rpx; top: 22rpx; transform: rotate(24deg); }
-.dm2 { left: 22rpx; bottom: 36rpx; transform: rotate(-30deg); animation-delay: 0.2s; }
-.dm3 { right: 36rpx; bottom: 58rpx; width: 16rpx; transform: rotate(65deg); animation-delay: 0.5s; }
+.dm1 { right: 14rpx; top: 18rpx; transform: rotate(24deg); }
+.dm2 { left: 18rpx; bottom: 30rpx; transform: rotate(-30deg); animation-delay: 0.2s; }
+.dm3 { right: 30rpx; bottom: 50rpx; width: 12rpx; transform: rotate(65deg); animation-delay: 0.5s; }
 
-/* ── Header ── */
+/* Header */
 .room-header {
   position: relative;
   z-index: 2;
@@ -176,66 +197,66 @@ function onTap() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 28rpx;
+  font-size: 26rpx;
   color: #f3fbff;
   font-weight: 700;
-  text-shadow: 0 0 8rpx rgba(47, 244, 224, 0.4);
+  text-shadow: 0 0 8rpx rgba(47, 244, 224, 0.35);
 }
 
 .room-dot {
-  width: 12rpx;
-  height: 12rpx;
-  margin-left: 10rpx;
+  width: 10rpx;
+  height: 10rpx;
+  margin-left: 8rpx;
   background: #5f7da6;
   transform: rotate(45deg);
   flex-shrink: 0;
 }
 
-.state-normal .room-dot { background: #27f5b5; box-shadow: 0 0 10rpx #27f5b5; }
-.state-warning .room-dot { background: #ffd400; box-shadow: 0 0 10rpx #ffd400; }
-.state-fault .room-dot { background: #ff315d; box-shadow: 0 0 10rpx #ff315d; }
+.state-normal .room-dot { background: #27f5b5; box-shadow: 0 0 8rpx #27f5b5; }
+.state-warning .room-dot { background: #ffd400; box-shadow: 0 0 8rpx #ffd400; }
+.state-fault .room-dot { background: #ff315d; box-shadow: 0 0 8rpx #ff315d; }
 
-/* ── Counts (NO running parameters) ── */
+/* Counts */
 .room-counts {
   position: relative;
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
-  margin-top: 10rpx;
+  gap: 6rpx;
+  margin-top: 8rpx;
 }
 
 .count-tag {
   display: inline-flex;
   align-items: center;
-  padding: 6rpx 12rpx;
+  padding: 4rpx 10rpx;
   border: 1rpx solid;
-  background: rgba(5, 12, 24, 0.62);
+  background: rgba(5, 12, 24, 0.58);
 }
 
 .count-tag text {
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 700;
 }
 
 .count-fault {
-  border-color: rgba(255, 49, 93, 0.5);
+  border-color: rgba(255, 49, 93, 0.45);
 }
 .count-fault text { color: #ff315d; }
 
 .count-warning {
-  border-color: rgba(255, 212, 0, 0.5);
+  border-color: rgba(255, 212, 0, 0.45);
 }
 .count-warning text { color: #ffd400; }
 
 .count-condensation {
-  border-color: rgba(255, 212, 0, 0.35);
+  border-color: rgba(255, 212, 0, 0.30);
 }
 .count-condensation text { color: #ffd400; font-weight: 400; }
 
-/* Keyframe */
+/* Keyframes */
 @keyframes damageBlink {
-  0%, 100% { opacity: 0.48; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.12); }
+  0%, 100% { opacity: 0.40; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 </style>

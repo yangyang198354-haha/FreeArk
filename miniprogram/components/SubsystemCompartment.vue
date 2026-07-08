@@ -116,48 +116,78 @@ function onTap() {
 </script>
 
 <style scoped>
+/* ── Card base (HOLO-HUD style, matching 指挥 page) ─────── */
 .subsystem-compartment {
   position: relative;
-  flex: 1;
-  min-width: 140rpx;
-  min-height: 136rpx; /* >=44x44 logical px */
-  padding: 14rpx 10rpx 10rpx;
-  border: 1rpx solid rgba(47, 244, 224, 0.22);
-  background: linear-gradient(180deg, rgba(8, 20, 38, 0.82), rgba(6, 12, 28, 0.72));
+  min-height: 172rpx;
+  padding: 20rpx 16rpx 16rpx;
+  border: 1rpx solid rgba(47, 244, 224, 0.18);
+  background: linear-gradient(180deg, rgba(9, 22, 42, 0.88), rgba(6, 14, 30, 0.78));
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 16rpx;
   overflow: hidden;
 }
 
-/* Status border colors */
+/* HUD corner brackets */
+.subsystem-compartment::before,
+.subsystem-compartment::after {
+  content: '';
+  position: absolute;
+  width: 18rpx;
+  height: 18rpx;
+  pointer-events: none;
+  opacity: 0.35;
+}
+.subsystem-compartment::before {
+  top: 6rpx;
+  left: 6rpx;
+  border-top: 1rpx solid rgba(47, 244, 224, 0.55);
+  border-left: 1rpx solid rgba(47, 244, 224, 0.55);
+}
+.subsystem-compartment::after {
+  bottom: 6rpx;
+  right: 6rpx;
+  border-bottom: 1rpx solid rgba(47, 244, 224, 0.55);
+  border-right: 1rpx solid rgba(47, 244, 224, 0.55);
+}
+
+/* Status border glow */
 .state-warning {
-  border-color: rgba(255, 212, 0, 0.54);
+  border-color: rgba(255, 212, 0, 0.48);
+  box-shadow: 0 0 18rpx rgba(255, 212, 0, 0.10);
 }
 .state-fault {
-  border-color: rgba(255, 49, 93, 0.6);
+  border-color: rgba(255, 49, 93, 0.52);
+  box-shadow: 0 0 22rpx rgba(255, 49, 93, 0.12);
+  animation: faultGlow 1.4s ease-in-out infinite;
 }
 .state-idle {
-  border-color: rgba(47, 244, 224, 0.10);
-  opacity: 0.55;
+  border-color: rgba(47, 244, 224, 0.08);
+  opacity: 0.50;
+}
+
+@keyframes faultGlow {
+  0%, 100% { box-shadow: 0 0 22rpx rgba(255, 49, 93, 0.12); }
+  50% { box-shadow: 0 0 36rpx rgba(255, 49, 93, 0.22); }
 }
 
 /* ── Icons ─────────── */
 .compartment-icon {
   position: relative;
-  width: 100%;
+  flex: 0 0 auto;
+  width: 74rpx;
   height: 74rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Fan icon (fresh-air) */
+/* Fan icon */
 .icon-fan {
-  width: 64rpx;
-  height: 64rpx;
-  border: 2rpx solid rgba(47, 244, 224, 0.55);
+  width: 62rpx;
+  height: 62rpx;
+  border: 2rpx solid rgba(47, 244, 224, 0.50);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -165,97 +195,90 @@ function onTap() {
 }
 .fan-ring {
   position: relative;
-  width: 46rpx;
-  height: 46rpx;
+  width: 42rpx;
+  height: 42rpx;
   border-radius: 50%;
   animation: fanSpin 3.8s linear infinite;
 }
 .fan-blade {
   position: absolute;
-  left: 20rpx;
-  top: 4rpx;
-  width: 7rpx;
-  height: 20rpx;
+  left: 18rpx;
+  top: 3rpx;
+  width: 6rpx;
+  height: 18rpx;
   border-radius: 10rpx;
-  background: rgba(47, 244, 224, 0.72);
-  transform-origin: 3rpx 19rpx;
+  background: rgba(47, 244, 224, 0.68);
+  transform-origin: 3rpx 18rpx;
 }
 .fb2 { transform: rotate(120deg); }
 .fb3 { transform: rotate(240deg); }
 
-/* Energy core icon */
+.state-fault .fan-blade { background: rgba(255, 49, 93, 0.68); }
+.state-fault .icon-fan { border-color: rgba(255, 49, 93, 0.50); }
+
+/* Energy icon */
 .icon-energy {
   position: relative;
-  width: 56rpx;
-  height: 72rpx;
+  width: 50rpx;
+  height: 64rpx;
 }
 .energy-core {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 24rpx;
-  height: 38rpx;
-  border: 2rpx solid rgba(47, 244, 224, 0.72);
-  background: rgba(47, 244, 224, 0.15);
+  width: 20rpx;
+  height: 34rpx;
+  border: 2rpx solid rgba(47, 244, 224, 0.65);
+  background: rgba(47, 244, 224, 0.12);
 }
 .energy-ring {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 50rpx;
-  height: 50rpx;
-  border: 1rpx dashed rgba(124, 58, 237, 0.45);
+  width: 46rpx;
+  height: 46rpx;
+  border: 1rpx dashed rgba(124, 58, 237, 0.40);
   border-radius: 50%;
 }
 
-/* Hydraulic module icon */
+/* Hydraulic icon */
 .icon-hydraulic {
   position: relative;
-  width: 72rpx;
-  height: 54rpx;
+  width: 64rpx;
+  height: 48rpx;
 }
 .hydraulic-block {
   position: absolute;
-  left: 10rpx;
-  top: 8rpx;
-  width: 52rpx;
-  height: 38rpx;
-  border: 2rpx solid rgba(47, 244, 224, 0.65);
-  background: rgba(47, 244, 224, 0.08);
+  left: 8rpx;
+  top: 6rpx;
+  width: 48rpx;
+  height: 36rpx;
+  border: 2rpx solid rgba(47, 244, 224, 0.58);
+  background: rgba(47, 244, 224, 0.06);
 }
 .hydraulic-pipe {
   position: absolute;
-  background: rgba(47, 244, 224, 0.55);
+  background: rgba(47, 244, 224, 0.50);
 }
-.hp1 {
-  left: 4rpx;
-  top: 20rpx;
-  width: 10rpx;
-  height: 3rpx;
-}
-.hp2 {
-  right: 4rpx;
-  top: 30rpx;
-  width: 10rpx;
-  height: 3rpx;
-}
+.hp1 { left: 2rpx; top: 18rpx; width: 8rpx; height: 2rpx; }
+.hp2 { right: 2rpx; top: 28rpx; width: 8rpx; height: 2rpx; }
 
-/* Air quality sensor icon */
+/* Air icon */
 .icon-air {
   position: relative;
-  width: 60rpx;
-  height: 60rpx;
+  width: 56rpx;
+  height: 56rpx;
 }
 .air-sensor {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 16rpx;
-  height: 16rpx;
-  background: rgba(47, 244, 224, 0.7);
+  width: 14rpx;
+  height: 14rpx;
+  background: rgba(47, 244, 224, 0.65);
   border-radius: 50%;
 }
 .air-wave {
@@ -263,19 +286,13 @@ function onTap() {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  border: 1rpx solid rgba(47, 244, 224, 0.35);
+  border: 1rpx solid rgba(47, 244, 224, 0.30);
   border-radius: 50%;
 }
-.aw1 {
-  width: 36rpx;
-  height: 36rpx;
-}
-.aw2 {
-  width: 54rpx;
-  height: 54rpx;
-}
+.aw1 { width: 32rpx; height: 32rpx; }
+.aw2 { width: 50rpx; height: 50rpx; }
 
-/* Damage overlay */
+/* Damage sparks */
 .damage-overlay {
   position: absolute;
   inset: 0;
@@ -283,28 +300,26 @@ function onTap() {
 }
 .damage-spark {
   position: absolute;
-  width: 14rpx;
-  height: 4rpx;
+  width: 12rpx;
+  height: 3rpx;
   background: #ff315d;
-  animation: damageBlink 1.1s ease-in-out infinite;
+  animation: damageBlink 0.9s ease-in-out infinite;
 }
-.ds1 { right: 12rpx; top: 14rpx; transform: rotate(28deg); }
-.ds2 { left: 14rpx; bottom: 16rpx; transform: rotate(-32deg); animation-delay: 0.3s; }
+.ds1 { right: 10rpx; top: 12rpx; transform: rotate(28deg); }
+.ds2 { left: 10rpx; bottom: 14rpx; transform: rotate(-32deg); animation-delay: 0.3s; }
 
 /* ── Info ─────────── */
 .compartment-info {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 4rpx;
-  padding: 0 4rpx;
-  box-sizing: border-box;
+  flex-direction: column;
+  gap: 8rpx;
 }
 
 .compartment-name {
-  min-width: 0;
-  font-size: 20rpx;
+  font-size: 24rpx;
+  font-weight: 700;
   color: #cde7f7;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -312,26 +327,20 @@ function onTap() {
 }
 
 .compartment-count {
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: 700;
-  flex-shrink: 0;
-  margin-left: 6rpx;
 }
 
 .state-warning .compartment-count { color: #ffd400; }
 .state-fault .compartment-count { color: #ff315d; }
 
-/* Color overrides for fault state */
-.state-fault .fan-blade { background: rgba(255, 49, 93, 0.72); }
-.state-fault .icon-fan { border-color: rgba(255, 49, 93, 0.55); }
-
-/* Keyframes (reused from existing, defined here for component isolation) */
+/* Keyframes */
 @keyframes fanSpin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
 @keyframes damageBlink {
-  0%, 100% { opacity: 0.48; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.12); }
+  0%, 100% { opacity: 0.40; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 </style>

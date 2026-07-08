@@ -12,10 +12,10 @@
 -->
 <template>
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- OWNER PATH — v1.11.0 Bridge Dashboard (cyberpunk ship)          -->
+  <!-- OWNER PATH — v1.11.1 Bridge Dashboard (HOLO-HUD card layout)    -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <view v-if="isOwner" class="owner-page" :class="{ 'animations-paused': animationsPaused }">
-    <!-- Background layers -->
+    <!-- Background layers (consistent with 指挥/param-settings) -->
     <view class="bg-base" />
     <view class="bg-grid" />
     <view class="hud-scan" />
@@ -23,12 +23,9 @@
     <!-- Status bar spacer -->
     <view :style="{ height: statusBarHeight + 'px' }" class="status-spacer" />
 
-    <!-- Header: title + health indicator -->
+    <!-- Header: clean title + health LED -->
     <view class="owner-header">
-      <view class="owner-title-box">
-        <text class="owner-title">方舟舰桥</text>
-        <text class="owner-subtitle">{{ dash.state.selectedLabel || '等待数据' }}</text>
-      </view>
+      <text class="owner-title">舰桥</text>
       <HealthIndicator
         :status="dash.state.overallStatus"
         :condensationCount="dash.state.condensationCount"
@@ -36,41 +33,32 @@
     </view>
 
     <!-- Main content area -->
-    <scroll-view scroll-y class="owner-content">
-      <!-- Cockpit switcher (shown when multiple bindings) -->
-      <CabinSwitcher
-        :bindings="dash.state.bindings"
-        :selectedIndex="dash.selectedBindingIndex.value"
-        :visible="dash.showCabinSwitcher.value"
-        @change="onCabinChange"
-      />
-
+    <scroll-view scroll-y class="owner-content" :scroll-with-animation="true">
       <!-- Loading state -->
       <view v-if="dash.state.loading && !hasInitialData" class="owner-tip">
-        <text>正在同步方舟舱图…</text>
+        <view class="sync-pulse" />
+        <text>正在同步座舱状态…</text>
       </view>
 
       <!-- Empty state: no bindings -->
       <view v-else-if="dash.hasNoBindings.value" class="owner-empty">
         <view class="empty-frame">
+          <view class="empty-glow" />
           <text class="empty-title">未链接座舱</text>
-          <text class="empty-sub">链接座舱后可查看方舟户型舱图</text>
+          <text class="empty-sub">链接座舱后可查看设备状态</text>
           <view class="empty-btn" @tap="goBind"><text>激活座舱</text></view>
         </view>
       </view>
 
-      <!-- Main dashboard: ship + compartments -->
-      <view v-else class="ark-deck">
-        <!-- Deck ribbon -->
-        <view class="deck-ribbon">
-          <text>{{ dash.state.selectedSp || '—' }}</text>
-          <text>{{ dash.state.refreshing ? 'SYNC' : 'LIVE' }}</text>
-        </view>
-
-        <!-- Ship hull container -->
-        <ShipHull :status="dash.state.overallStatus.level" :animationsPaused="animationsPaused">
-          <!-- Subsystem dock -->
-          <view class="system-dock">
+      <!-- Main dashboard -->
+      <view v-else class="dashboard">
+        <!-- ── Section: 子系统状态 ── -->
+        <view class="dash-section">
+          <view class="section-head">
+            <view class="section-bar" />
+            <text class="section-label">SYS STATUS</text>
+          </view>
+          <view class="subsystem-grid">
             <SubsystemCompartment
               v-for="sub in dash.state.subsystems"
               :key="sub.id"
@@ -79,18 +67,30 @@
               @open="onCompartmentOpen"
             />
           </view>
+        </view>
 
-          <!-- Ship spine (power flow) -->
-          <view class="ship-spine">
-            <view class="spine-line">
-              <view class="spine-flow" />
+        <!-- ── Section: 通讯 & 预警 ── -->
+        <view class="status-row">
+          <PlcIndicator
+            :onlineCount="dash.state.plcOnline"
+            :totalCount="dash.state.plcTotal"
+            :loading="dash.state.loading"
+          />
+          <view class="condensation-card" :class="condensationCardClass" @tap="onCondensationTap">
+            <view class="cc-led" />
+            <view class="cc-body">
+              <text class="cc-label">结露预警</text>
+              <text class="cc-count">{{ dash.state.condensationCount }}</text>
             </view>
-            <view class="spine-dot sd1" />
-            <view class="spine-dot sd2" />
-            <view class="spine-dot sd3" />
           </view>
+        </view>
 
-          <!-- Room grid -->
+        <!-- ── Section: 房间状态 ── -->
+        <view class="dash-section">
+          <view class="section-head">
+            <view class="section-bar" />
+            <text class="section-label">ROOM STATUS</text>
+          </view>
           <view class="room-grid">
             <RoomCompartment
               v-for="(room, index) in dash.state.rooms"
@@ -102,30 +102,26 @@
               @open="onCompartmentOpen"
             />
           </view>
-        </ShipHull>
-
-        <!-- PLC indicator (standalone, outside ship hull) -->
-        <PlcIndicator
-          :onlineCount="dash.state.plcOnline"
-          :totalCount="dash.state.plcTotal"
-          :loading="dash.state.loading"
-        />
+        </view>
 
         <!-- Error banner -->
         <view v-if="dash.state.error" class="owner-error">
           <text>{{ dash.state.error }}</text>
         </view>
+
+        <!-- Bottom spacer for tab bar -->
+        <view style="height: 120rpx;" />
       </view>
     </scroll-view>
 
-    <!-- Fault drawer (page-level, outside scroll-view for fixed positioning) -->
+    <!-- Fault drawer -->
     <FaultDrawer
       :compartment="dash.state.activeCompartment"
       :visible="!!dash.state.activeCompartment"
       @close="dash.closeCompartment()"
     />
 
-    <!-- Tab bar (existing, unchanged) -->
+    <!-- Tab bar -->
     <ArkTabBar active="home" />
   </view>
 
@@ -249,8 +245,6 @@ import ArkTabBar from '@/components/ArkTabBar.vue'
 // ── Owner component imports ────────────────────────────────
 import HealthIndicator from '@/components/HealthIndicator.vue'
 import PlcIndicator from '@/components/PlcIndicator.vue'
-import CabinSwitcher from '@/components/CabinSwitcher.vue'
-import ShipHull from '@/components/ShipHull.vue'
 import SubsystemCompartment from '@/components/SubsystemCompartment.vue'
 import RoomCompartment from '@/components/RoomCompartment.vue'
 import FaultDrawer from '@/components/FaultDrawer.vue'
@@ -282,18 +276,25 @@ const hasInitialData = computed(() =>
   dash.state.subsystems.length > 0 || dash.state.rooms.length > 0
 )
 
-/** IFC-BD-001-07/08: Compartment open event from subsystem or room. */
+/** Compartment open event from subsystem or room. */
 function onCompartmentOpen(compartment) {
   dash.openCompartment(compartment)
 }
 
-/** IFC-BD-001-10: Cockpit switch. */
-function onCabinChange(index) {
-  const sp = dash.state.bindings[index]?.specific_part
-  if (sp) {
-    dash.switchCockpit(sp)
+/** Condensation card tap → open first room with active condensation warning. */
+function onCondensationTap() {
+  const room = dash.state.rooms.find(r => r.hasCondensation)
+  if (room) {
+    dash.openCompartment(room)
   }
 }
+
+/** Condensation card visual class based on count. */
+const condensationCardClass = computed(() => {
+  const c = dash.state.condensationCount
+  if (c > 0) return 'cc-warn'
+  return 'cc-ok'
+})
 
 function goBind() {
   uni.navigateTo({ url: '/pages/bind/index' })
@@ -449,7 +450,7 @@ function goTo(url) {
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- STYLES: Owner (v1.11.0 bridge dashboard)                        -->
+<!-- STYLES: Owner (v1.11.1 HOLO-HUD card dashboard)                 -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <style scoped>
 /* ── Page base ──────────────────────────────────────────── */
@@ -462,7 +463,7 @@ function goTo(url) {
   overflow: hidden;
 }
 
-/* ── Background layers ──────────────────────────────────── */
+/* ── Background layers (consistent with 指挥 page) ──────── */
 .bg-base,
 .bg-grid,
 .hud-scan {
@@ -473,18 +474,19 @@ function goTo(url) {
 .bg-base {
   inset: 0;
   background:
-    linear-gradient(135deg, rgba(43, 21, 77, 0.8), rgba(5, 12, 24, 0.92) 44%, rgba(4, 18, 28, 0.96)),
+    radial-gradient(ellipse 70% 60% at 50% 30%, rgba(47, 100, 244, 0.08), transparent),
+    radial-gradient(ellipse 50% 40% at 80% 70%, rgba(124, 58, 237, 0.06), transparent),
     linear-gradient(180deg, #05070f, #07101c 60%, #050811);
 }
 
 .bg-grid {
   inset: 0;
   background-image:
-    linear-gradient(rgba(56, 230, 224, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 230, 224, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(56, 230, 224, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 230, 224, 0.05) 1px, transparent 1px);
   background-size: 80rpx 80rpx;
-  -webkit-mask-image: linear-gradient(180deg, #000, transparent 70%);
-  mask-image: linear-gradient(180deg, #000, transparent 70%);
+  -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 80%);
+  mask-image: linear-gradient(180deg, #000 20%, transparent 80%);
 }
 
 .hud-scan {
@@ -493,7 +495,7 @@ function goTo(url) {
   top: 0;
   height: 260rpx;
   z-index: 1;
-  background: linear-gradient(180deg, transparent, rgba(47, 244, 224, 0.10), transparent);
+  background: linear-gradient(180deg, transparent, rgba(47, 244, 224, 0.07), transparent);
   animation: ownerScan 5s linear infinite;
 }
 
@@ -504,41 +506,23 @@ function goTo(url) {
   flex: 0 0 auto;
 }
 
-/* ── Header ─────────────────────────────────────────────── */
+/* ── Header (matching 指挥 style: clean title) ──────────── */
 .owner-header {
   position: relative;
   z-index: 5;
   flex: 0 0 auto;
-  min-height: 122rpx;
-  padding: 18rpx 28rpx 10rpx;
+  padding: 14rpx 28rpx 8rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.owner-title-box {
-  min-width: 0;
-  flex: 1;
-  margin-right: 16rpx;
-}
-
 .owner-title {
-  display: block;
-  font-size: 36rpx;
+  font-size: 38rpx;
   font-weight: 800;
   color: #f4fbff;
-  text-shadow: 0 0 16rpx rgba(47, 244, 224, 0.55);
-}
-
-.owner-subtitle {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: rgba(180, 212, 238, 0.72);
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-shadow: 0 0 18rpx rgba(47, 244, 224, 0.45);
+  letter-spacing: 4rpx;
 }
 
 /* ── Content scroll ─────────────────────────────────────── */
@@ -549,22 +533,57 @@ function goTo(url) {
   min-height: 0;
 }
 
-/* ── Loading / Empty / Error states ─────────────────────── */
-.owner-tip,
-.owner-empty {
-  padding: 140rpx 36rpx;
-  text-align: center;
+/* ── Loading ────────────────────────────────────────────── */
+.owner-tip {
+  padding: 200rpx 36rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24rpx;
 }
 
 .owner-tip text {
-  font-size: 28rpx;
-  color: rgba(180, 212, 238, 0.70);
+  font-size: 26rpx;
+  color: rgba(180, 212, 238, 0.65);
+}
+
+.sync-pulse {
+  width: 48rpx;
+  height: 48rpx;
+  border: 2rpx solid rgba(47, 244, 224, 0.4);
+  border-top-color: #2ff4e0;
+  border-radius: 50%;
+  animation: spinSync 0.9s linear infinite;
+}
+
+@keyframes spinSync {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ── Empty state ────────────────────────────────────────── */
+.owner-empty {
+  padding: 180rpx 36rpx;
+  text-align: center;
 }
 
 .empty-frame {
+  position: relative;
   padding: 50rpx 34rpx;
-  border: 1rpx solid rgba(47, 244, 224, 0.25);
-  background: rgba(6, 12, 28, 0.78);
+  border: 1rpx solid rgba(47, 244, 224, 0.18);
+  background: rgba(6, 12, 28, 0.72);
+  overflow: hidden;
+}
+
+.empty-glow {
+  position: absolute;
+  top: -60rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200rpx;
+  height: 80rpx;
+  background: radial-gradient(ellipse, rgba(47, 244, 224, 0.12), transparent);
+  pointer-events: none;
 }
 
 .empty-title {
@@ -577,8 +596,8 @@ function goTo(url) {
 .empty-sub {
   display: block;
   margin-top: 14rpx;
-  font-size: 26rpx;
-  color: #8aa2c0;
+  font-size: 24rpx;
+  color: #6f8cad;
 }
 
 .empty-btn {
@@ -594,83 +613,121 @@ function goTo(url) {
   font-weight: 700;
 }
 
-/* ── Ark deck (main dashboard area) ─────────────────────── */
-.ark-deck {
-  padding: 18rpx 22rpx 26rpx;
+/* ── Dashboard ──────────────────────────────────────────── */
+.dashboard {
+  padding: 0 22rpx;
 }
 
-.deck-ribbon {
+/* ── Section header ─────────────────────────────────────── */
+.dash-section {
+  margin-bottom: 18rpx;
+}
+
+.section-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12rpx 8rpx 14rpx;
+  gap: 12rpx;
+  padding: 8rpx 4rpx 14rpx;
 }
 
-.deck-ribbon text {
-  font-size: 20rpx;
-  color: rgba(143, 217, 255, 0.64);
+.section-bar {
+  width: 5rpx;
+  height: 22rpx;
+  background: linear-gradient(180deg, #2ff4e0, #7c3aed);
+  border-radius: 2rpx;
 }
 
-/* ── System dock ────────────────────────────────────────── */
-.system-dock {
+.section-label {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: rgba(143, 217, 255, 0.58);
+  letter-spacing: 4rpx;
+}
+
+/* ── Subsystem grid (2x2) ───────────────────────────────── */
+.subsystem-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14rpx;
+}
+
+/* ── Status row (PLC + condensation) ────────────────────── */
+.status-row {
   display: flex;
-  gap: 10rpx;
-  align-items: stretch;
-  justify-content: center;
-  margin: 12rpx 16rpx 20rpx;
+  gap: 14rpx;
+  margin: 8rpx 0 22rpx;
 }
 
-/* ── Ship spine ─────────────────────────────────────────── */
-.ship-spine {
-  position: relative;
-  height: 28rpx;
-  margin: 0 54rpx;
-  overflow: hidden;
+/* ── Condensation card ──────────────────────────────────── */
+.condensation-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 20rpx 22rpx;
+  border: 1rpx solid rgba(47, 244, 224, 0.20);
+  background: rgba(7, 15, 32, 0.65);
 }
 
-.spine-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 13rpx;
-  height: 2rpx;
-  background: rgba(47, 244, 224, 0.28);
+.cc-ok {
+  border-color: rgba(47, 244, 224, 0.16);
 }
 
-.spine-flow {
-  position: absolute;
-  top: -2rpx;
-  width: 120rpx;
-  height: 6rpx;
-  background: linear-gradient(90deg, transparent, rgba(47, 244, 224, 0.9), transparent);
-  animation: powerFlow 2.8s linear infinite;
+.cc-warn {
+  border-color: rgba(255, 212, 0, 0.38);
+  animation: condPulse 2s ease-in-out infinite;
 }
 
-.spine-dot {
-  position: absolute;
-  top: 8rpx;
-  width: 12rpx;
-  height: 12rpx;
-  background: #2ff4e0;
+@keyframes condPulse {
+  0%, 100% { border-color: rgba(255, 212, 0, 0.38); }
+  50% { border-color: rgba(255, 212, 0, 0.68); }
+}
+
+.cc-led {
+  width: 14rpx;
+  height: 14rpx;
   transform: rotate(45deg);
-  animation: pulseSoft 1.8s ease-in-out infinite;
+  background: #27f5b5;
+  box-shadow: 0 0 10rpx rgba(39, 245, 181, 0.6);
+  flex: 0 0 auto;
 }
 
-.sd1 { left: 18%; }
-.sd2 { left: 50%; animation-delay: 0.4s; }
-.sd3 { left: 82%; animation-delay: 0.8s; }
+.cc-warn .cc-led {
+  background: #ffd400;
+  box-shadow: 0 0 12rpx rgba(255, 212, 0, 0.75);
+}
+
+.cc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.cc-label {
+  font-size: 20rpx;
+  color: #6f8cad;
+}
+
+.cc-count {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #eaf6ff;
+}
+
+.cc-warn .cc-count {
+  color: #ffd400;
+}
 
 /* ── Room grid ──────────────────────────────────────────── */
 .room-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 14rpx;
-  margin: 12rpx 10rpx 14rpx;
 }
 
 /* ── Error banner ───────────────────────────────────────── */
 .owner-error {
-  margin: 18rpx 10rpx 0;
+  margin: 18rpx 0 0;
   padding: 16rpx 20rpx;
   background: rgba(255, 212, 0, 0.08);
   border-left: 4rpx solid #ffd400;
@@ -681,40 +738,22 @@ function goTo(url) {
   color: #ffe28a;
 }
 
-/* ── CSS Keyframes (reused from existing, preserved) ────── */
+/* ── Animations paused state ────────────────────────────── */
+.animations-paused .hud-scan,
+.animations-paused .condensation-card.cc-warn {
+  animation-play-state: paused;
+}
+
+/* ── CSS Keyframes ──────────────────────────────────────── */
 @keyframes ownerScan {
   0% { transform: translateY(-260rpx); }
   100% { transform: translateY(1700rpx); }
 }
-
-@keyframes pulseSoft {
-  0%, 100% { opacity: 0.65; }
-  50% { opacity: 1; }
-}
-
-@keyframes powerFlow {
-  0% { transform: translateX(-120rpx); opacity: 0; }
-  20%, 80% { opacity: 1; }
-  100% { transform: translateX(520rpx); opacity: 0; }
-}
-
-@keyframes fanSpin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes damageBlink {
-  0%, 100% { opacity: 0.48; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.12); }
-}
-
-@keyframes enginePulse {
-  0%, 100% { box-shadow: 0 0 14rpx rgba(47, 244, 224, 0.45); }
-  50% { box-shadow: 0 0 30rpx rgba(47, 244, 224, 0.85); }
-}
+</style>
 
 /* ═══════════════════════════════════════════════════════════════ */
-/* STYLES: Admin/Operator (PRESERVED AS-IS from lines 1348-1451)  */
+<!-- STYLES: Admin/Operator (PRESERVED AS-IS) -->
+<style scoped>
 /* ═══════════════════════════════════════════════════════════════ */
 
 .admin-page {
