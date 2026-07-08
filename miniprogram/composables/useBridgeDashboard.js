@@ -1,15 +1,23 @@
 /**
  * @module MOD-BD-002
- * @implements IFC-BD-002-01 through IFC-BD-002-22
- * @depends api.js, ownerStore, authStore, PagePoller, arkZoneMap (worseStatus, STATUS_RANK)
+ * @implements IFC-BD-002-01 through IFC-BD-002-26
+ * @depends api.js, ownerStore, authStore, PagePoller, arkZoneMap (worseStatus, STATUS_RANK),
+ *   faultUtils (MOD-FAULT-UTILS)
  * @author sub_agent_software_developer
  * @description Bridge dashboard composable — data fetching, status aggregation,
  *   polling lifecycle, cockpit switching, compartment open/close.
  *
+ *   v1.12.0 refactor — per-座舱 PLC 参数:
+ *   - Subsystem status: from per-cockpit PLC realtime params (not global fault-summary)
+ *   - Energy module: pure PLC parameter judgment (not global PLC rate + keywords)
+ *   - Dynamic subsystem visibility: based on structure.system_devices sub_type
+ *   - Room list: structure-driven only (no orphan fault-event rooms)
+ *   - Drawer params: sub_type matching (not product_code)
+ *
  *   Data flow:
- *     start() → fetchAll() → aggregateStatus() → reactive state
- *     poller (30s) → refresh() → fetchAll() → aggregateStatus()
- *     switchCockpit(sp) → fetchAll(sp) → aggregateStatus()
+ *     start() → _doFetch() → aggregateStatus() → reactive state
+ *     poller (30s) → refresh() → _doFetch() → aggregateStatus()
+ *     switchCockpit(sp) → _doFetch(sp) → aggregateStatus()
  */
 
 import { reactive, computed } from 'vue'
@@ -17,23 +25,18 @@ import { api } from '@/utils/api'
 import { useOwnerStore } from '@/store/owner'
 import { PagePoller } from '@/utils/poller'
 import { worseStatus, STATUS_RANK } from '@/subpackages/game/arkZoneMap'
+import {
+  computeFaultCount,
+  expandFreshAirFaultBits,
+  isFaultValueForDisplay,
+  SYSTEM_SUB_KEYS,
+  SUB_TYPE_TO_ID,
+  ID_TO_SUB_TYPE,
+} from '@/utils/faultUtils'
 
 // ── Constants ──────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 30000
-
-// Energy-related keywords for filtering fault events (ADR-BD-06)
-const ENERGY_KEYWORDS = [
-  '能效', '能量', '电度', '电表', '功耗', '用电', '计量',
-  '能源', 'energy', 'meter', 'power', 'energ',
-]
-
-// Product codes for subsystem → device-fault-summary mapping
-const PRODUCT_MAP = {
-  'fresh-air': 130004,
-  'hydraulic': 270001,
-  'air-quality': 100007,
-}
 
 // Default display names for subsystem compartments
 const SUBSYSTEM_NAMES = {
@@ -43,7 +46,7 @@ const SUBSYSTEM_NAMES = {
   'air-quality': '空气品质',
 }
 
-// ── Internal Pure Functions (Aggregation Pipeline, ADR-BD-02) ──
+// ── Internal Pure Functions (Aggregation Pipeline) ────────────
 
 /**
  * Map FaultEvent.severity to internal status.
@@ -54,16 +57,6 @@ function severityToStatus(severity) {
   if (severity === 'warning') return 'warning'
   if (severity === 'condensation') return 'warning'
   return 'normal'
-}
-
-/**
- * Check if a FaultEvent is related to energy devices.
- * Matches device_type_label and device_name against energy keywords.
- */
-function isEnergyRelated(event) {
-  const label = (event.device_type_label || '').toLowerCase()
-  const name = (event.device_name || '').toLowerCase()
-  return ENERGY_KEYWORDS.some((kw) => label.includes(kw) || name.includes(kw))
 }
 
 /**
@@ -80,126 +73,103 @@ function groupFaultEventsByRoom(faultEvents) {
   return map
 }
 
-/**
- * Derive energy subsystem status (ADR-BD-06, OQ-01 Option A).
- * @param {object} plcRate — { online_count, total_count }
- * @param {Array} faultEvents — all active fault events
- * @returns {SubsystemState}
- */
-function deriveEnergyStatus(plcRate, faultEvents, cockpitPlcStatus) {
-  const plcOnline = plcRate?.online_count ?? 0
-  const plcTotal = plcRate?.total_count ?? 0
-
-  // PLC status from fleet-wide aggregate (blocked for owners → cockpit fallback)
-  let plcStatus = 'idle'
-  if (plcTotal > 0) {
-    if (plcOnline === plcTotal) plcStatus = 'normal'
-    else if (plcOnline > 0) plcStatus = 'warning'
-    else plcStatus = 'fault'
-  } else if (cockpitPlcStatus === 'online') {
-    // Fallback: use cockpit-level PLC status from /api/miniapp/owner/connectivity/
-    plcStatus = 'normal'
-  } else if (cockpitPlcStatus === 'offline') {
-    plcStatus = 'warning'
-  }
-
-  // Filter energy-related fault events
-  const energyFaults = (faultEvents || []).filter(isEnergyRelated)
-  let eventStatus = 'normal'
-  let faultCount = 0
-  let warningCount = 0
-  for (const ev of energyFaults) {
-    const s = severityToStatus(ev.severity)
-    if (s === 'fault') faultCount++
-    else if (s === 'warning') warningCount++
-    eventStatus = worseStatus(eventStatus, s)
-  }
-
-  // Derive final status: energy is a derived aggregate without a discrete product code.
-  // When no fleet PLC data AND no energy faults → 'normal' (no news = good news),
-  // not 'idle' which implies a problem.
-  let status
-  if (plcTotal > 0) {
-    status = worseStatus(plcStatus, eventStatus)
-  } else if (cockpitPlcStatus) {
-    status = worseStatus(plcStatus, eventStatus)
-  } else if (energyFaults.length > 0) {
-    status = eventStatus
-  } else {
-    status = 'normal'
-  }
-
-  const dataSource = plcTotal > 0
-    ? 'PLC在线率'
-    : (cockpitPlcStatus ? '座舱PLC' : 'FaultEvent')
-
-  return {
-    id: 'energy',
-    name: SUBSYSTEM_NAMES['energy'],
-    status,
-    faultCount,
-    warningCount,
-    productCode: null,
-    dataSource,
-  }
-}
+// ── Subsystem Status Aggregation (v1.12.0: per-座舱 PLC params) ──
 
 /**
- * Aggregate subsystem status from device-fault-summary API response.
- * @param {object} faultSummary — response from getDashboardDeviceFaultSummary
- * @param {object} plcRate — PLC online rate response
- * @param {Array} faultEvents — all active fault events
+ * IFC-BD-002-23: Aggregate subsystem status from per-cockpit PLC realtime params.
+ *
+ * Replaces old aggregateSubsystemStatus(faultSummary, plcRate, faultEvents, cockpitPlcStatus).
+ * New signature: (structure, realtimeParams).
+ *
+ * Algorithm:
+ *   1. Extract sub_types from structure.system_devices
+ *   2. Intersect with SYSTEM_SUB_KEYS → determine which subsystems this cockpit has
+ *   3. For each subsystem:
+ *      a. Find all devices of that sub_type
+ *      b. Collect their PLC params from realtimeParams
+ *      c. Call computeFaultCount(params) → fault count
+ *      d. faultCount > 0 → 'fault', faultCount === 0 → 'normal'
+ *      e. If realtimeParams unavailable → 'idle'
+ *   4. Return only subsystems this cockpit actually has
+ *
+ * REQ-NFUNC-004 fallback:
+ *   - structure.system_devices empty/missing → show all 4 subsystems (SYSTEM_SUB_KEYS)
+ *   - realtimeParams empty/missing → show all present subsystems with 'idle' status
+ *
+ * @param {object} structure — getOwnerStructure() response
+ * @param {object} realtimeParams — getOwnerRealtimeParams() response, keyed by device_sn
  * @returns {Array<SubsystemState>}
  */
-function aggregateSubsystemStatus(faultSummary, plcRate, faultEvents, cockpitPlcStatus) {
-  const data = faultSummary?.data || faultSummary || {}
-  const freshAir = data.fresh_air_unit || {}
-  const hydraulic = data.hydraulic_module || {}
-  const airQuality = data.air_quality_sensor || {}
+function aggregateSubsystemStatus(structure, realtimeParams) {
+  const realtime = realtimeParams || {}
+  const systemDevices = structure?.system_devices || []
+
+  // Determine which subsystems to show
+  const structureAvailable = systemDevices.length > 0
+  let subTypesToShow
+
+  if (structureAvailable) {
+    const availableSubTypes = new Set(systemDevices.map((d) => d.sub_type).filter(Boolean))
+    subTypesToShow = SYSTEM_SUB_KEYS.filter((st) => availableSubTypes.has(st))
+  } else {
+    // REQ-NFUNC-004 fallback: structure unavailable → show all 4
+    subTypesToShow = [...SYSTEM_SUB_KEYS]
+  }
+
+  const realtimeAvailable = realtime && Object.keys(realtime).length > 0
 
   const subsystems = []
+  for (const subType of subTypesToShow) {
+    const id = SUB_TYPE_TO_ID[subType] || subType
+    const name = SUBSYSTEM_NAMES[id] || subType
 
-  // Fresh-air
-  subsystems.push({
-    id: 'fresh-air',
-    name: SUBSYSTEM_NAMES['fresh-air'],
-    status: (freshAir.fault_count || 0) > 0 ? 'fault' : 'normal',
-    faultCount: freshAir.fault_count || 0,
-    warningCount: 0,
-    productCode: PRODUCT_MAP['fresh-air'],
-    dataSource: 'device-fault-summary',
-  })
+    let faultCount = 0
+    let status = 'idle'
 
-  // Hydraulic
-  subsystems.push({
-    id: 'hydraulic',
-    name: SUBSYSTEM_NAMES['hydraulic'],
-    status: (hydraulic.fault_count || 0) > 0 ? 'fault' : 'normal',
-    faultCount: hydraulic.fault_count || 0,
-    warningCount: 0,
-    productCode: PRODUCT_MAP['hydraulic'],
-    dataSource: 'device-fault-summary',
-  })
+    if (realtimeAvailable && structureAvailable) {
+      // Find all devices of this sub_type
+      const devices = systemDevices.filter((d) => d.sub_type === subType)
 
-  // Air-quality
-  subsystems.push({
-    id: 'air-quality',
-    name: SUBSYSTEM_NAMES['air-quality'],
-    status: (airQuality.fault_count || 0) > 0 ? 'fault' : 'normal',
-    faultCount: airQuality.fault_count || 0,
-    warningCount: 0,
-    productCode: PRODUCT_MAP['air-quality'],
-    dataSource: 'device-fault-summary',
-  })
+      // Collect all PLC params from these devices
+      const params = []
+      for (const dev of devices) {
+        const sn = dev.device_sn || dev.sn || ''
+        const attrs = realtime[sn] || {}
+        for (const [tag, value] of Object.entries(attrs)) {
+          params.push({ paramName: tag, value })
+        }
+      }
 
-  // Energy (derived)
-  subsystems.push(deriveEnergyStatus(plcRate, faultEvents, cockpitPlcStatus))
+      // Compute fault count using fault_utils equivalent logic
+      faultCount = computeFaultCount(params)
+      status = faultCount > 0 ? 'fault' : 'normal'
+    } else if (!structureAvailable) {
+      // Structure unavailable → no device info to match params
+      // Show 'normal' as default (don't alarm without structure context)
+      status = 'normal'
+    }
+
+    subsystems.push({
+      id,
+      name,
+      status,
+      faultCount,
+      warningCount: 0,
+      dataSource: 'plc-realtime-params',
+    })
+  }
 
   return subsystems
 }
 
+// ── Room Status Aggregation ────────────────────────────────────
+
 /**
  * Aggregate room status from structure + fault events + condensation data.
+ *
+ * v1.12.0: Removed orphan room discovery (ADR-004).
+ * Room list is now strictly from structure.rooms — no fault-event-driven append.
+ *
  * @param {object} structure — getOwnerStructure() response
  * @param {Array} faultEvents — active fault events
  * @param {number} condensationCount — active condensation warning count
@@ -235,29 +205,6 @@ function aggregateRoomStatus(structure, faultEvents, condensationCount) {
     }
   })
 
-  // Also include rooms that appear in fault events but not in structure
-  const knownNames = new Set(rooms.map((r) => r.room_name || r.ori_room_name))
-  for (const [roomName, events] of eventMap) {
-    if (roomName === '__unknown__' || knownNames.has(roomName)) continue
-    let status = 'normal'
-    let faultCount = 0
-    let warningCount = 0
-    for (const ev of events) {
-      const s = severityToStatus(ev.severity)
-      if (s === 'fault') faultCount++
-      else if (s === 'warning') warningCount++
-      status = worseStatus(status, s)
-    }
-    result.push({
-      id: `room-evt-${roomName}`,
-      name: roomName,
-      status,
-      faultCount,
-      warningCount,
-      hasCondensation: false,
-    })
-  }
-
   return result
 }
 
@@ -287,26 +234,37 @@ function computeOverallStatus(subsystems, rooms) {
 
 /**
  * Filter fault events to match a specific compartment.
+ *
+ * v1.12.0: Subsystem matching changed from product_code to
+ * device_sn-based matching via structure.system_devices (sub_type).
+ * Room matching unchanged.
+ *
  * @param {Array} faultEvents — all active faults
  * @param {object} compartment — { type, id, name }
+ * @param {object} structureCache — _structureCache reference for device_sn lookup
  * @returns {Array}
  */
-function filterFaultEventsByCompartment(faultEvents, compartment) {
+function filterFaultEventsByCompartment(faultEvents, compartment, structureCache) {
   if (!compartment || !faultEvents?.length) return []
 
   if (compartment.type === 'subsystem') {
-    switch (compartment.id) {
-      case 'fresh-air':
-        return faultEvents.filter((ev) => ev.product_code === PRODUCT_MAP['fresh-air'])
-      case 'hydraulic':
-        return faultEvents.filter((ev) => ev.product_code === PRODUCT_MAP['hydraulic'])
-      case 'air-quality':
-        return faultEvents.filter((ev) => ev.product_code === PRODUCT_MAP['air-quality'])
-      case 'energy':
-        return faultEvents.filter(isEnergyRelated)
-      default:
-        return []
+    const targetSubType = ID_TO_SUB_TYPE[compartment.id]
+    if (!targetSubType) return []
+
+    // Get device_sns for this sub_type from structure cache
+    const systemDevices = structureCache?.system_devices || []
+    const matchingSns = new Set(
+      systemDevices
+        .filter((d) => d.sub_type === targetSubType)
+        .map((d) => d.device_sn || d.sn || '')
+        .filter(Boolean)
+    )
+
+    // If we have matching device_sns, filter by them; otherwise return empty
+    if (matchingSns.size > 0) {
+      return faultEvents.filter((ev) => matchingSns.has(ev.device_sn))
     }
+    return []
   }
 
   if (compartment.type === 'room') {
@@ -354,10 +312,10 @@ export function useBridgeDashboard() {
     /** IFC-BD-002-09: Room compartment states. */
     rooms: [],
 
-    /** IFC-BD-002-10: PLC online count. */
+    /** IFC-BD-002-10: PLC online count (retained for interface compat, no longer updated). */
     plcOnline: 0,
 
-    /** IFC-BD-002-11: Total PLC count. */
+    /** IFC-BD-002-11: Total PLC count (retained for interface compat, no longer updated). */
     plcTotal: 0,
 
     /** IFC-BD-002-11a: PLC connectivity status for current cockpit (online/offline/unknown). */
@@ -372,7 +330,7 @@ export function useBridgeDashboard() {
     /** IFC-BD-002-13: Currently opened compartment detail (null = closed). */
     activeCompartment: null,
 
-    /** IFC-BD-002-14: Per-subsystem error messages. */
+    /** IFC-BD-002-14: Per-subsystem error messages (v1.12.0: keys updated). */
     subsystemErrors: {},
 
     /** Device params for currently opened compartment (replicating web system panel). */
@@ -399,7 +357,7 @@ export function useBridgeDashboard() {
     }, POLL_INTERVAL_MS)
   }
 
-  // ── Core fetch logic ────────────────────────────────────
+  // ── Core fetch logic (v1.12.0: removed device-fault-summary + plc-online-rate) ──
 
   async function _doFetch(isInitialLoad = false) {
     const sp = state.selectedSp
@@ -407,44 +365,50 @@ export function useBridgeDashboard() {
 
     state.subsystemErrors = {}
 
+    // v1.12.0: Removed items [1] getDashboardDeviceFaultSummary and [2] getDashboardPlcOnlineRate.
+    // New indices: 0=structure, 1=faultEvents, 2=condensation, 3=bindings, 4=realtimeParams, 5=connectivity
     const results = await Promise.allSettled([
       // 0: structure
       api.getOwnerStructure(sp),
-      // 1: device fault summary
-      api.getDashboardDeviceFaultSummary(),
-      // 2: PLC online rate
-      api.getDashboardPlcOnlineRate(),
-      // 3: fault events
+      // 1: fault events
       api.getFaultEvents({ specific_part: sp, is_active: true, page_size: 200 }),
-      // 4: condensation count
+      // 2: condensation count
       api.getCondensationWarningCount(),
-      // 5: bindings (refresh cockpit list)
+      // 3: bindings (refresh cockpit list)
       api.getBindStatus(),
-      // 6: realtime params (for drawer device detail)
+      // 4: realtime params (for subsystem status + drawer device detail)
       api.getOwnerRealtimeParams(sp),
-      // 7: cockpit connectivity (PLC + screen status for bridge indicators)
+      // 5: cockpit connectivity (PLC + screen status for bridge indicators)
       api.getOwnerConnectivity(sp),
     ])
 
-    // Bindings
-    if (results[5].status === 'fulfilled' && results[5].value) {
-      const res = results[5].value
+    // Bindings (was index 5, now index 3)
+    if (results[3].status === 'fulfilled' && results[3].value) {
+      const res = results[3].value
       state.bindings = res?.bindings || res?.data?.bindings || []
     }
 
-    // Realtime params (for drawer device detail)
-    if (results[6].status === 'fulfilled' && results[6].value?.success !== false) {
-      _realtimeParamsCache = results[6].value?.data || results[6].value || null
+    // Realtime params (was index 6, now index 4)
+    // Per-座舱 PLC params — primary data source for subsystem status (v1.12.0)
+    if (results[4].status === 'fulfilled' && results[4].value?.success !== false) {
+      _realtimeParamsCache = results[4].value?.data || results[4].value || null
+      state.subsystemErrors['realtime-params'] = null
+    } else {
+      _realtimeParamsCache = null
+      state.subsystemErrors['realtime-params'] = '设备参数暂不可用'
     }
 
-    // Cockpit connectivity (PLC + screen status)
-    if (results[7].status === 'fulfilled' && results[7].value?.success) {
-      const conn = results[7].value
+    // Cockpit connectivity (was index 7, now index 5)
+    if (results[5].status === 'fulfilled' && results[5].value?.success) {
+      const conn = results[5].value
       state.plcCockpitStatus = conn.plc_status || 'unknown'
       state.screenCockpitStatus = conn.screen_status || 'unknown'
+      state.subsystemErrors['connectivity'] = null
+    } else {
+      state.subsystemErrors['connectivity'] = '连接状态暂不可用'
     }
 
-    // Structure
+    // Structure (index 0 — unchanged)
     let structure = null
     if (results[0].status === 'fulfilled' && results[0].value?.success !== false) {
       structure = results[0].value
@@ -454,39 +418,19 @@ export function useBridgeDashboard() {
       state.subsystemErrors['structure'] = '房间结构暂不可用'
     }
 
-    // Device fault summary
-    let faultSummary = null
-    if (results[1].status === 'fulfilled' && results[1].value) {
-      faultSummary = results[1].value
-      state.subsystemErrors['device-summary'] = null
-    } else {
-      state.subsystemErrors['device-summary'] = '设备状态暂不可用'
-    }
-
-    // PLC online rate
-    let plcRate = null
-    if (results[2].status === 'fulfilled' && results[2].value?.data) {
-      plcRate = results[2].value.data
-      state.plcOnline = plcRate.online_count || 0
-      state.plcTotal = plcRate.total_count || 0
-      state.subsystemErrors['plc'] = null
-    } else {
-      state.subsystemErrors['plc'] = 'PLC状态暂不可用'
-    }
-
-    // Fault events
+    // Fault events (was index 3, now index 1)
     let faultEvents = []
-    if (results[3].status === 'fulfilled' && results[3].value) {
-      faultEvents = results[3].value.results || results[3].value.data?.results || []
+    if (results[1].status === 'fulfilled' && results[1].value) {
+      faultEvents = results[1].value.results || results[1].value.data?.results || []
       _faultEventsCache = faultEvents
       state.subsystemErrors['fault-events'] = null
     } else {
       state.subsystemErrors['fault-events'] = '故障数据暂不可用'
     }
 
-    // Condensation count
-    if (results[4].status === 'fulfilled' && results[4].value) {
-      const d = results[4].value
+    // Condensation count (was index 4, now index 2)
+    if (results[2].status === 'fulfilled' && results[2].value) {
+      const d = results[2].value
       if (typeof d?.count === 'number') {
         state.condensationCount = d.count
       } else if (typeof d?.data?.count === 'number') {
@@ -496,18 +440,18 @@ export function useBridgeDashboard() {
       }
     }
 
-    // Aggregate
-    const hasAnyData = faultSummary || structure || faultEvents.length > 0
+    // ── v1.12.0: Aggregate with new data sources ──────────
+    // Subsystem status: per-cockpit PLC realtime params (replaces faultSummary + plcRate)
+    // Room status: structure + fault events (removes orphan room logic internally)
+    const hasAnyData = structure || faultEvents.length > 0
     if (hasAnyData) {
-      state.subsystems = aggregateSubsystemStatus(faultSummary || {}, plcRate, faultEvents, state.plcCockpitStatus)
+      state.subsystems = aggregateSubsystemStatus(structure || {}, _realtimeParamsCache)
       state.rooms = aggregateRoomStatus(structure || {}, faultEvents, state.condensationCount)
       state.overallStatus = computeOverallStatus(state.subsystems, state.rooms)
     }
 
     // Global error: all major APIs failed
-    const criticalFailures = [
-      'structure', 'device-summary', 'fault-events',
-    ].every((k) => state.subsystemErrors[k] !== undefined || state.subsystemErrors[k])
+    // v1.12.0: updated critical keys from 'device-summary' → 'realtime-params'
     const allFailed = results.every((r) => r.status === 'rejected')
     if (allFailed) {
       state.error = '数据加载失败，请下拉刷新重试'
@@ -602,7 +546,20 @@ export function useBridgeDashboard() {
     if (_poller) _poller.start()
   }
 
-  /** Build device param list from structure + realtime data for a compartment. */
+  // ── Compartment Drawer Helpers ──────────────────────────
+
+  /**
+   * IFC-BD-002-25/26: Build device param list from structure + realtime data
+   * for a given compartment.
+   *
+   * v1.12.0 changes:
+   *   - Subsystem matching uses sub_type (not product_code)
+   *   - Removed energy compensation logic (all subsystems use unified pipeline)
+   *   - Integrated expandFreshAirFaultBits for fresh_air_fault_status
+   *
+   * @param {object} compartment — { type, id, name }
+   * @returns {Array<DeviceParamBlock>}
+   */
   function _buildCompartmentParams(compartment) {
     const params = []
     const structure = _structureCache
@@ -610,61 +567,24 @@ export function useBridgeDashboard() {
 
     if (!structure) return params
 
-    // Collect devices for this compartment
     const rooms = structure.rooms || []
     const systemDevices = structure.system_devices || []
 
-    if (compartment.type === 'room' || compartment.id === compartment.name) {
+    if (compartment.type === 'room') {
       // Room: find devices in this room
-      const room = rooms.find(r => (r.name || r.room_name) === compartment.name)
+      const room = rooms.find((r) => (r.name || r.room_name) === compartment.name)
       if (room && room.devices) {
         for (const dev of room.devices) {
-          const sn = dev.device_sn || dev.sn || ''
-          const attrs = realtime[sn] || {}
-          params.push({
-            deviceSn: sn,
-            deviceName: dev.name || dev.device_name || sn,
-            productCode: dev.product_code || '',
-            deviceType: dev.device_type || dev.type_label || '',
-            attrs: Object.entries(attrs).map(([tag, val]) => ({ tag, value: val })),
-          })
+          params.push(_buildSingleDeviceParams(dev, realtime))
         }
       }
     } else if (compartment.type === 'subsystem') {
-      // Subsystem: find matching system devices
-      const productMap = { 'fresh-air': 130004, 'hydraulic': 270001, 'air-quality': 100007 }
-      const targetCode = productMap[compartment.id]
-      const candidates = targetCode
-        ? systemDevices.filter(d => d.product_code === targetCode)
-        : systemDevices
-      for (const dev of candidates) {
-        const sn = dev.device_sn || dev.sn || ''
-        const attrs = realtime[sn] || {}
-        params.push({
-          deviceSn: sn,
-          deviceName: dev.name || dev.device_name || sn,
-          productCode: dev.product_code || '',
-          deviceType: dev.device_type || dev.type_label || '',
-          attrs: Object.entries(attrs).map(([tag, val]) => ({ tag, value: val })),
-        })
-      }
-      // Energy: also include devices found via energy keywords in fault events
-      if (compartment.id === 'energy') {
-        for (const dev of systemDevices) {
-          const sn = dev.device_sn || dev.sn || ''
-          if (!params.find(p => p.deviceSn === sn)) {
-            const attrs = realtime[sn] || {}
-            const hasData = Object.keys(attrs).length > 0
-            if (hasData) {
-              params.push({
-                deviceSn: sn,
-                deviceName: dev.name || dev.device_name || sn,
-                productCode: dev.product_code || '',
-                deviceType: dev.device_type || dev.type_label || '',
-                attrs: Object.entries(attrs).map(([tag, val]) => ({ tag, value: val })),
-              })
-            }
-          }
+      // v1.12.0: Subsystem matching by sub_type (not product_code)
+      const targetSubType = ID_TO_SUB_TYPE[compartment.id]
+      if (targetSubType) {
+        const matchedDevices = systemDevices.filter((d) => d.sub_type === targetSubType)
+        for (const dev of matchedDevices) {
+          params.push(_buildSingleDeviceParams(dev, realtime))
         }
       }
     }
@@ -672,13 +592,56 @@ export function useBridgeDashboard() {
     return params
   }
 
+  /**
+   * Build a single device's param block for drawer display.
+   *
+   * v1.12.0: Integrates expandFreshAirFaultBits for fresh_air_fault_status
+   * and isFaultValueForDisplay for fault highlighting.
+   *
+   * @param {object} dev — device entry from structure
+   * @param {object} realtime — realtime params cache
+   * @returns {DeviceParamBlock}
+   */
+  function _buildSingleDeviceParams(dev, realtime) {
+    const sn = dev.device_sn || dev.sn || ''
+    const attrs = realtime[sn] || {}
+
+    const block = {
+      deviceSn: sn,
+      deviceName: dev.name || dev.device_name || sn,
+      subType: dev.sub_type || '',
+      attrs: [],
+    }
+
+    for (const [tag, value] of Object.entries(attrs)) {
+      const attr = {
+        tag,
+        displayName: tag,
+        value,
+        isFault: isFaultValueForDisplay(tag, value),
+      }
+
+      // v1.12.0: Expand fresh_air_fault_status bit field (ADR-007)
+      if (tag === 'fresh_air_fault_status') {
+        attr.expandedBits = expandFreshAirFaultBits(value)
+      }
+
+      block.attrs.push(attr)
+    }
+
+    return block
+  }
+
   /** IFC-BD-002-19: Open compartment drawer. */
   function openCompartment(compartment) {
-    const events = filterFaultEventsByCompartment(_faultEventsCache, compartment)
+    // v1.12.0: filterFaultEventsByCompartment now accepts structureCache for sub_type→device_sn mapping
+    const events = filterFaultEventsByCompartment(_faultEventsCache, compartment, _structureCache)
     const params = _buildCompartmentParams(compartment)
 
+    // v1.12.0: type detection — SubsystemState no longer has productCode.
+    // Use ID_TO_SUB_TYPE mapping to detect subsystem compartments by id.
     state.activeCompartment = {
-      type: compartment.type || (compartment.productCode !== undefined ? 'subsystem' : 'room'),
+      type: compartment.type || (ID_TO_SUB_TYPE[compartment.id] ? 'subsystem' : 'room'),
       id: compartment.id,
       name: compartment.name,
       status: compartment.status,
