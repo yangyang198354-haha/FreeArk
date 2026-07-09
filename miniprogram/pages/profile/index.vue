@@ -21,34 +21,34 @@
       <text class="header-title">舰长休息室</text>
     </view>
 
+    <!-- v1.13.0: 头像卡片移出 scroll-view，避免 tap 被拦截 -->
+    <view class="card profile-card">
+      <view class="corner tl" /><view class="corner tr" />
+      <view class="corner bl" /><view class="corner br" />
+      <view class="pc-row">
+        <view class="avatar-wrap" @tap="onEditAvatar">
+          <!-- v1.12.0: 有头像显示图片，无头像或加载失败显示文字降级 -->
+          <image v-if="authStore.avatarUrl && !imgError"
+                 :src="authStore.avatarUrl"
+                 class="avatar-img"
+                 mode="aspectFill"
+                 @error="imgError = true" />
+          <view v-else class="avatar"><text>{{ avatarText }}</text></view>
+        </view>
+        <view class="pc-info">
+          <view class="pc-name-row">
+            <text class="pc-name" @tap="onEditNickname">{{ nickname }}</text>
+            <text class="badge-ok">{{ roleBadge }}</text>
+          </view>
+          <text class="pc-id">ID · {{ userId }}</text>
+          <text v-if="subLine" class="pc-sub">{{ subLine }}</text>
+        </view>
+        <view class="edit-btn ico-pencil" @tap="goEdit" />
+      </view>
+    </view>
+
     <!-- body -->
     <scroll-view scroll-y class="body">
-      <!-- profile card -->
-      <view class="card profile-card">
-        <view class="corner tl" /><view class="corner tr" />
-        <view class="corner bl" /><view class="corner br" />
-        <view class="pc-row">
-          <view class="avatar-wrap" @tap="onEditAvatar">
-            <view class="avatar-ring" />
-            <!-- v1.12.0: 有头像显示图片，无头像或加载失败显示文字降级 -->
-            <image v-if="authStore.avatarUrl && !imgError"
-                   :src="authStore.avatarUrl"
-                   class="avatar-img"
-                   mode="aspectFill"
-                   @error="imgError = true" />
-            <view v-else class="avatar"><text>{{ avatarText }}</text></view>
-          </view>
-          <view class="pc-info">
-            <view class="pc-name-row">
-              <text class="pc-name" @tap="onEditNickname">{{ nickname }}</text>
-              <text class="badge-ok">{{ roleBadge }}</text>
-            </view>
-            <text class="pc-id">ID · {{ userId }}</text>
-            <text v-if="subLine" class="pc-sub">{{ subLine }}</text>
-          </view>
-          <view class="edit-btn ico-pencil" @tap="goEdit" />
-        </view>
-      </view>
 
       <!-- section label -->
       <view class="section-label">
@@ -289,6 +289,7 @@ function onLogout() {
   background: linear-gradient(180deg, rgba(14,22,42,0.75), rgba(8,14,28,0.8));
   box-shadow: inset 0 0 26px rgba(20,40,80,0.35);
   margin-bottom: 32rpx;
+  position: relative; z-index: 5;
 }
 .corner { position: absolute; width: 44rpx; height: 44rpx; }
 .corner.tl { left: -1px; top: -1px; border-left: 2px solid #2ff4e0; border-top: 2px solid #2ff4e0; border-radius: 8rpx 0 0 0; }
@@ -297,8 +298,12 @@ function onLogout() {
 .corner.br { right: -1px; bottom: -1px; border-right: 2px solid #2ff4e0; border-bottom: 2px solid #2ff4e0; border-radius: 0 0 8rpx 0; }
 
 .pc-row { display: flex; align-items: center; gap: 30rpx; }
-.avatar-wrap { position: relative; width: 128rpx; height: 128rpx; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
-.avatar-ring { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgba(56,230,224,0.5); }
+.avatar-wrap {
+  position: relative; width: 128rpx; height: 128rpx; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px dashed rgba(56,230,224,0.5);
+}
 .avatar {
   width: 108rpx; height: 108rpx; border-radius: 50%;
   background: linear-gradient(150deg, rgba(47,244,224,0.25), rgba(139,92,246,0.25));

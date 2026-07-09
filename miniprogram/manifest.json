@@ -11,7 +11,6 @@
       "urlCheck": false
     },
     "usingComponents": true,
-    "__usePrivacyCheck__": true,
     "permission": {
       "scope.record": {
         "desc": "用于语音输入转文字，方便您快速提问"
