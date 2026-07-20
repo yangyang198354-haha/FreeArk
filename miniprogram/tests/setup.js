@@ -20,6 +20,7 @@ globalThis.uni = {
   navigateBack: vi.fn(),
   switchTab: vi.fn(),
   setNavigationBarTitle: vi.fn(),
+  hideKeyboard: vi.fn(),
   // 网络（测试内覆盖 implementation）
   request: vi.fn(),
   connectSocket: vi.fn(),

@@ -14,6 +14,11 @@ export default defineConfig({
     setupFiles: ['./tests/setup.js'],
     // 只跑纯逻辑单测（utils/store/api）；.vue 组件与 e2e 不在此层
     include: ['tests/**/*.spec.js'],
-    exclude: ['tests/chat-input-bar.spec.js', 'tests/chat-input-e2e.spec.js'],
+    // 组件层测试需 jsdom + @vitejs/plugin-vue，统一走 vitest.component.config.mjs
+    exclude: [
+      'tests/chat-input-bar.spec.js',
+      'tests/chat-input-e2e.spec.js',
+      'tests/chat-input-modes.spec.js',
+    ],
   },
 })

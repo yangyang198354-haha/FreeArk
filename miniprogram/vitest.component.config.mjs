@@ -13,6 +13,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.js'],
-    include: ['tests/chat-input-bar.spec.js', 'tests/chat-input-e2e.spec.js'],
+    include: [
+      'tests/chat-input-bar.spec.js',
+      'tests/chat-input-e2e.spec.js',
+      'tests/chat-input-modes.spec.js',
+    ],
   },
 })
