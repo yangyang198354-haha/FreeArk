@@ -244,7 +244,7 @@ function handleVoiceMove(e) {
 }
 </script>
 
-<style>
+<style scoped>
 /* =========================================================================
    纪律 D2：以下是**唯一**允许声明 display 的规则集合（均为不带 `--` 的布局基类）。
    任何修饰类都不得声明 display，全文件不得出现 display:none。
@@ -284,9 +284,6 @@ function handleVoiceMove(e) {
 }
 .cib-text--light { background: #f5f5f5; border: 1px solid #e3e5e8; color: #333; }
 .cib-text--dark { background: rgba(4,10,22,0.7); border: 1px solid rgba(56,230,224,0.25); color: #eaf6ff; }
-/* 规格 1：空输入时的灰色占位提示 */
-.cib-ph--light { color: #9aa0a6; font-size: 28rpx; }
-.cib-ph--dark { color: #5f7f8c; font-size: 28rpx; }
 
 /* ---- 录音浮层 ---- */
 .cib-rec-tip--normal { background: rgba(47,244,224,0.12); border: 1px solid rgba(56,230,224,0.4); }
@@ -378,4 +375,18 @@ function handleVoiceMove(e) {
 .cib-ico-kbd--dark {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cpath d='M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8'/%3E%3C/svg%3E");
 }
+</style>
+
+<!--
+  非 scoped 样式块：仅 placeholder-class 引用的两个类。
+  微信小程序 <textarea placeholder-class="..."> 作用于 textarea 内部的占位符伪节点，
+  该节点不在组件自身的渲染树中，编译器不会为其类名附加 scoped 的 data-v-* 哈希，
+  因此这两个类必须保持全局（非 scoped），否则编译后的 `.cib-ph--*.data-v-xxx` 选择器
+  永远匹配不到真实的占位符 DOM 节点，样式会静默失效。除这两个类外，其余规则一律
+  放在上面的 <style scoped> 中。
+-->
+<style>
+/* 规格 1：空输入时的灰色占位提示 */
+.cib-ph--light { color: #9aa0a6; font-size: 28rpx; }
+.cib-ph--dark { color: #5f7f8c; font-size: 28rpx; }
 </style>

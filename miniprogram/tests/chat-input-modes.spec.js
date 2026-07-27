@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 vi.mock('@/utils/permission', () => ({ requestPermission: vi.fn() }))
@@ -306,13 +306,49 @@ describe('dark 主题 — 生产主路径专项（此前零覆盖，两轮 bug �
 // "The URL must be of scheme file"，故改用 cwd（vitest root = miniprogram/）拼路径。
 const SFC_PATH = resolve(process.cwd(), 'components/ChatInputBar.vue')
 
-function styleBlock() {
-  const src = readFileSync(SFC_PATH, 'utf8')
-  const m = src.match(/<style>([\s\S]*?)<\/style>/)
-  if (!m) throw new Error('ChatInputBar.vue 未找到 <style> 块')
+// v1.13.2 真机修复：ChatInputBar.vue 由单一 <style> 拆成两块——
+//   <style scoped> 承载几乎所有规则（D1/D2/D3 纪律相关的全部规则都在这里）；
+//   末尾裸 <style>（无 scoped）只承载 .cib-ph--light / .cib-ph--dark 两条 placeholder 规则
+//   （微信 <textarea placeholder-class> 命中的是不受 scoped 影响的伪节点，必须保持全局）。
+// 旧版 styleBlock() 用 /<style>([\s\S]*?)<\/style>/ 硬编码字面量 `<style>`，
+// 该正则不匹配 `<style scoped>`，于是在文件拆分后会误配到末尾那个只有 2 行的 placeholder 块，
+// 导致下面几乎所有 D1/D2/D3 静态守卫全部对着错误的（几乎为空的）样式片段做断言。
+function readSFCSource() {
+  return readFileSync(SFC_PATH, 'utf8')
+}
+
+// 结构级判断（数多少个 <style> 标签、是否 scoped）必须先剥离 HTML 注释——
+// 本文件顶部与 <style> 之间的说明性注释里就字面提到过「<style scoped>」这几个字，
+// 若不剥离会把注释里的文字误当成真实标签，数出多余的一个块。
+function stripHtmlComments(src) {
+  return src.replace(/<!--[\s\S]*?-->/g, '')
+}
+
+function scopedStyleBlock() {
+  const src = stripHtmlComments(readSFCSource())
+  const m = src.match(/<style\s+scoped\s*>([\s\S]*?)<\/style>/)
+  if (!m) throw new Error('ChatInputBar.vue 未找到 <style scoped> 块')
   // 剥离 CSS 注释：注释里会讨论 display:none 等反面教材，不能参与断言
   return m[1].replace(/\/\*[\s\S]*?\*\//g, '')
 }
+
+function plainStyleBlock() {
+  const src = stripHtmlComments(readSFCSource())
+  const all = [...src.matchAll(/<style(\s[^>]*)?>([\s\S]*?)<\/style>/g)]
+  const plain = all.filter(m => !(m[1] && /\bscoped\b/.test(m[1])))
+  if (plain.length !== 1) {
+    throw new Error(`ChatInputBar.vue 期望恰好 1 个非 scoped <style> 块，实际找到 ${plain.length} 个`)
+  }
+  return plain[0][2].replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+// 保留 styleBlock() 名称供既有用例调用：D1/D2/D3 纪律相关的规则现在全部位于 scoped 块中，
+// 因此原有断言（cib-hidden 缺失、display:none 缺失、D2 扫描、图标色、SVG 转义）
+// 只需把取材源头改为 scoped 块，断言逻辑本身不变。
+function styleBlock() {
+  return scopedStyleBlock()
+}
+
 function ruleBody(css, selector) {
   const re = new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^{}]*)\\}')
   const m = css.match(re)
@@ -370,5 +406,81 @@ describe('CSS 层叠守卫 — 防 v1.13.1 事故复发', () => {
     const uris = css.match(/url\("data:image\/svg\+xml,[^"]*"\)/g) || []
     expect(uris.length).toBeGreaterThan(0)
     for (const u of uris) expect(u).not.toMatch(/#/)
+  })
+})
+
+/* =============== 结构守卫：<style scoped> / <style> 拆分本身不得回归 =============== */
+// 本轮回归的真正标的：真机事故的根因是「非 scoped 样式在小程序端丢了 data-v-* 哈希、
+// 与其他自定义组件的同名类冲突」。修复方案是拆成两块，但拆分本身也有两种反向回归风险：
+//   ① 又合回一个不带 scoped 的 <style> —— 真机事故原样复发；
+//   ② 干脆把 placeholder 类也塞进 scoped 里 —— placeholder-class 在小程序端会静默失效。
+// 以下用例专门锁死这两种回归路径。
+describe('结构守卫 — style 块拆分不得回归（v1.13.2 真机修复）', () => {
+  it('SFC 中恰好一个 <style scoped> 块 和 恰好一个非 scoped <style> 块', () => {
+    const src = stripHtmlComments(readSFCSource())
+    const allStyleTags = src.match(/<style(\s[^>]*)?>/g) || []
+    const scopedTags = allStyleTags.filter(t => /\bscoped\b/.test(t))
+    const plainTags = allStyleTags.filter(t => !/\bscoped\b/.test(t))
+    expect(scopedTags.length).toBe(1)
+    expect(plainTags.length).toBe(1)
+    expect(allStyleTags.length).toBe(2)
+  })
+
+  it('非 scoped <style> 块只含 .cib-ph--light 与 .cib-ph--dark 两条规则，不得混入其他规则', () => {
+    const css = plainStyleBlock().replace(/\s+/g, ' ').trim()
+    const selectors = []
+    const ruleRe = /([^{}]+)\{([^{}]*)\}/g
+    let m
+    while ((m = ruleRe.exec(css)) !== null) selectors.push(m[1].trim())
+    expect(selectors.length).toBeGreaterThan(0)
+    for (const sel of selectors) {
+      expect(['.cib-ph--light', '.cib-ph--dark']).toContain(sel)
+    }
+  })
+
+  it('scoped <style> 块中不得重复出现 .cib-ph--light / .cib-ph--dark（避免被误 scope）', () => {
+    const css = scopedStyleBlock()
+    expect(css).not.toContain('.cib-ph--light')
+    expect(css).not.toContain('.cib-ph--dark')
+  })
+})
+
+/* =============== 编译产物守卫：真机证据链（无构建产物时自动跳过，不阻塞 npm test） =============== */
+// 源码层面的断言只能证明「我们写对了 scoped/非 scoped」，无法证明「微信小程序编译器
+// 真的按预期加了/没加 data-v-* 哈希」。本组用例直接读 dist/build/mp-weixin 编译产物做核验，
+// 这是本项目约定中"只改样式"类任务需要产物级验证、而非仅源码级验证的落地。
+// 编译产物不提交仓库、且并非所有贡献者都会跑 `npm run build:mp-weixin` 再跑单测，
+// 因此产物不存在时必须优雅跳过，不能让 `npm test` 因为没构建过而失败。
+const WXSS_PATH = resolve(process.cwd(), 'dist/build/mp-weixin/components/ChatInputBar.wxss')
+const WXML_PATH = resolve(process.cwd(), 'dist/build/mp-weixin/components/ChatInputBar.wxml')
+const hasCompiledArtifacts = existsSync(WXSS_PATH) && existsSync(WXML_PATH)
+
+if (!hasCompiledArtifacts) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[chat-input-modes.spec.js] 跳过「编译产物守卫」：未找到 dist/build/mp-weixin/components/ChatInputBar.wxss|wxml，' +
+    '请先运行 `npm run build:mp-weixin` 再执行本套用例以获得真机级别的验证证据。'
+  )
+}
+
+const compiledIt = hasCompiledArtifacts ? it : it.skip
+
+describe('编译产物守卫 — dist/build/mp-weixin（真机证据链，无产物时自动跳过）', () => {
+  compiledIt('编译后 WXSS：.cib-btn 等 scoped 规则带 data-v-* 哈希后缀（哈希值本身不做硬编码断言）', () => {
+    const wxss = readFileSync(WXSS_PATH, 'utf8')
+    expect(wxss).toMatch(/\.cib-btn\.data-v-[0-9a-f]+\{/)
+  })
+
+  compiledIt('编译后 WXSS：.cib-ph--light / .cib-ph--dark 仍是裸选择器，不带 data-v-* 哈希', () => {
+    const wxss = readFileSync(WXSS_PATH, 'utf8')
+    expect(wxss).toMatch(/\.cib-ph--light\{/)
+    expect(wxss).not.toMatch(/\.cib-ph--light\.data-v-[0-9a-f]+/)
+    expect(wxss).toMatch(/\.cib-ph--dark\{/)
+    expect(wxss).not.toMatch(/\.cib-ph--dark\.data-v-[0-9a-f]+/)
+  })
+
+  compiledIt('编译后 WXML：按钮元素 class 数组中至少一处含 data-v-* 哈希 token', () => {
+    const wxml = readFileSync(WXML_PATH, 'utf8')
+    expect(wxml).toMatch(/data-v-[0-9a-f]+/)
   })
 })
