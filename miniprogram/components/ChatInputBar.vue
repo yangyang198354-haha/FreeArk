@@ -48,13 +48,14 @@
       <textarea
         v-if="isTextMode"
         :class="['cib-text', isDark ? 'cib-text--dark' : 'cib-text--light']"
-        v-model="inputText"
+        :value="inputText"
         :placeholder="textPlaceholder"
         :placeholder-class="isDark ? 'cib-ph--dark' : 'cib-ph--light'"
         :focus="textFocus"
         auto-height
         :max-height="200"
         @confirm="handleSend"
+        @input="handleInput"
       />
 
       <!-- voice 模式的录音控件，承载既有契约 data-testid="voice-btn" -->
@@ -174,6 +175,10 @@ const toggleIcoClass = computed(() => {
 })
 
 // ---- 行为 ----
+function handleInput(e) {
+  inputText.value = e.detail.value
+}
+
 function handleSend() {
   if (!canSend.value) return
   const text = inputText.value.trim()
@@ -249,7 +254,7 @@ function handleVoiceMove(e) {
    纪律 D2：以下是**唯一**允许声明 display 的规则集合（均为不带 `--` 的布局基类）。
    任何修饰类都不得声明 display，全文件不得出现 display:none。
    ========================================================================= */
-.cib-root { flex-shrink: 0; }
+.cib-root { flex-shrink: 0; position: relative; z-index: 10; }
 .cib-row { display: flex; align-items: flex-end; padding: 16rpx 24rpx; gap: 12rpx; }
 .cib-rec-tip {
   display: flex; align-items: center; justify-content: center;
@@ -274,37 +279,37 @@ function handleVoiceMove(e) {
 
 /* ---- 根容器配色（修饰类只写配色）---- */
 .cib-root--light { background: #fff; border-top: 1rpx solid #eee; }
-.cib-root--dark { background: rgba(8,14,28,0.7); border-top: 1px solid rgba(56,230,224,0.12); }
+.cib-root--dark { background: rgba(8,14,28,0.85); border-top: 1px solid rgba(0,240,255,0.15); }
 
 /* ---- textarea：基类只写布局，修饰类只写配色 ---- */
 .cib-text {
-  flex: 1; min-height: 44rpx; max-height: 180rpx;
-  border-radius: 12rpx; padding: 10rpx 16rpx; font-size: 28rpx;
+  flex: 1; min-height: 64rpx; max-height: 200rpx;
+  border-radius: 12rpx; padding: 12rpx 18rpx; font-size: 30rpx;
   line-height: 1.5; box-sizing: border-box;
 }
 .cib-text--light { background: #f5f5f5; border: 1px solid #e3e5e8; color: #333; }
-.cib-text--dark { background: rgba(4,10,22,0.7); border: 1px solid rgba(56,230,224,0.25); color: #eaf6ff; }
+.cib-text--dark { background: rgba(4,10,22,0.8); border: 1px solid rgba(0,240,255,0.4); color: #d0faff; box-shadow: inset 0 0 12px rgba(0,240,255,0.06); }
 
 /* ---- 录音浮层 ---- */
-.cib-rec-tip--normal { background: rgba(47,244,224,0.12); border: 1px solid rgba(56,230,224,0.4); }
-.cib-rec-tip--cancel { background: rgba(255,77,79,0.16); border: 1px solid rgba(255,77,79,0.55); }
+.cib-rec-tip--normal { background: rgba(0,240,255,0.1); border: 1px solid rgba(0,240,255,0.4); }
+.cib-rec-tip--cancel { background: rgba(255,45,117,0.16); border: 1px solid rgba(255,45,117,0.55); }
 .cib-rec-txt { font-size: 24rpx; letter-spacing: 1rpx; }
-.cib-rec-txt--normal { color: #9fe9e0; }
-.cib-rec-txt--cancel { color: #ff9a9c; }
+.cib-rec-txt--normal { color: #00f0ff; }
+.cib-rec-txt--cancel { color: #ff5e8a; }
 
 /* ---- 「按住 说话」横条：idle / recording / cancel / disabled 四态 × 主题 ----
    每个状态由 JS 计算出**唯一一个**修饰类，互不叠加，故无层叠竞争。 */
 .cib-hold--idle-light { background: #f1f3f5; border: 1px solid #dcdfe3; }
-.cib-hold--idle-dark { background: rgba(56,230,224,0.10); border: 1px solid rgba(56,230,224,0.45); }
+.cib-hold--idle-dark { background: rgba(0,240,255,0.08); border: 1px solid rgba(0,240,255,0.5); }
 .cib-hold--recording {
-  background: linear-gradient(135deg, #22e6da, #3a8bff);
-  border: 1px solid rgba(47,244,224,0.9);
-  box-shadow: 0 0 20px rgba(47,244,224,0.55);
+  background: linear-gradient(135deg, #00f0ff, #0080ff);
+  border: 1px solid rgba(0,240,255,0.9);
+  box-shadow: 0 0 20px rgba(0,240,255,0.55);
   animation: cib-pulse 1.2s ease-in-out infinite;
 }
 .cib-hold--cancel {
-  background: #ff4d4f; border: 1px solid rgba(255,77,79,0.9);
-  box-shadow: 0 0 20px rgba(255,77,79,0.5);
+  background: #ff2d75; border: 1px solid rgba(255,45,117,0.9);
+  box-shadow: 0 0 20px rgba(255,45,117,0.5);
 }
 /* 禁用态：不用 opacity（会被误读成「消失」），改用实心灰底 + 虚线边 + 可读灰字 */
 .cib-hold--off-light { background: #eceef0; border: 1px dashed #c2c7cd; }
@@ -312,9 +317,9 @@ function handleVoiceMove(e) {
 
 .cib-hold-txt { font-size: 28rpx; letter-spacing: 2rpx; }
 .cib-hold-txt--idle-light { color: #4a5560; }
-.cib-hold-txt--idle-dark { color: #9fe9e0; }
-.cib-hold-txt--recording { color: #041018; }   /* 深墨字压青蓝渐变亮底 */
-.cib-hold-txt--cancel { color: #ffffff; }      /* 白字压 #ff4d4f 红底 */
+.cib-hold-txt--idle-dark { color: #00f0ff; }
+.cib-hold-txt--recording { color: #041018; }   /* 深墨字压霓虹渐变亮底 */
+.cib-hold-txt--cancel { color: #ffffff; }      /* 白字压 #ff2d75 红底 */
 .cib-hold-txt--off-light { color: #8b939c; }
 .cib-hold-txt--off-dark { color: #93a7b4; }
 
@@ -323,9 +328,9 @@ function handleVoiceMove(e) {
 /* 禁用但仍渲染：灰底 + 实边 + 深灰图标，明确「不可用」而不是「消失」 */
 .cib-send--disabled { background-color: #e6e8eb; border: 1px solid #d3d7dc; }
 .cib-send--dark-active {
-  background: linear-gradient(135deg, #22e6da, #3a8bff);
-  border: 1px solid rgba(47,244,224,0.9);
-  box-shadow: 0 0 20px rgba(47,244,224,0.55);
+  background: linear-gradient(135deg, #00f0ff, #0080ff);
+  border: 1px solid rgba(0,240,255,0.8);
+  box-shadow: 0 0 16px rgba(0,240,255,0.5);
 }
 .cib-send--dark-disabled {
   background-color: rgba(120,140,160,0.16); border: 1px solid rgba(150,175,190,0.45);
@@ -333,11 +338,15 @@ function handleVoiceMove(e) {
 
 /* ---- 模式切换按钮配色 ---- */
 .cib-toggle--light { background-color: #f1f3f5; border: 1px solid #dcdfe3; }
-.cib-toggle--dark { background-color: rgba(56,230,224,0.14); border: 1px solid rgba(56,230,224,0.45); }
+.cib-toggle--dark {
+  background-color: rgba(0,240,255,0.12);
+  border: 1px solid rgba(0,240,255,0.6);
+  box-shadow: 0 0 10px rgba(0,240,255,0.2);
+}
 
 @keyframes cib-pulse {
-  0%, 100% { box-shadow: 0 0 16px rgba(47,244,224,0.45); }
-  50%      { box-shadow: 0 0 30px rgba(47,244,224,0.85); }
+  0%, 100% { box-shadow: 0 0 16px rgba(0,240,255,0.4); }
+  50%      { box-shadow: 0 0 30px rgba(0,240,255,0.8); }
 }
 
 /* =========================================================================
@@ -351,7 +360,7 @@ function handleVoiceMove(e) {
 .cib-ico-send--disabled {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236b7280'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E");
 }
-/* 深墨箭头 压 青→蓝渐变亮底（v1.13.0 事故修复：严禁在此用青色 %232ff4e0）*/
+/* 深墨箭头 压 霓虹青蓝渐变亮底（赛博朋克高对比度）*/
 .cib-ico-send--dark-active {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23041018'%3E%3Cpath d='M3 11l18-8-8 18-2-7-8-3z'/%3E%3C/svg%3E");
 }
@@ -361,19 +370,19 @@ function handleVoiceMove(e) {
 }
 /* 麦克风：深灰描边 压 #f1f3f5 浅底 */
 .cib-ico-mic--light {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5560' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5560' stroke-width='2' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E");
 }
-/* 麦克风：青描边 压 rgba(56,230,224,.14) 深底（暗色主题底为 #05070f 系）*/
+/* 麦克风：霓虹青描边 压 半透明暗底（赛博朋克霓虹风格）*/
 .cib-ico-mic--dark {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300f0ff' stroke-width='2.2' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0'/%3E%3Cpath d='M12 18v3'/%3E%3C/svg%3E");
 }
 /* 键盘：深灰描边 压 #f1f3f5 浅底 */
 .cib-ico-kbd--light {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5560' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cpath d='M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5560' stroke-width='2' stroke-linecap='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cpath d='M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8'/%3E%3C/svg%3E");
 }
-/* 键盘：青描边 压 rgba(56,230,224,.14) 深底 */
+/* 键盘：霓虹青描边 压 半透明暗底（赛博朋克霓虹风格）*/
 .cib-ico-kbd--dark {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cpath d='M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300f0ff' stroke-width='2.2' stroke-linecap='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cpath d='M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8'/%3E%3C/svg%3E");
 }
 </style>
 
@@ -387,6 +396,6 @@ function handleVoiceMove(e) {
 -->
 <style>
 /* 规格 1：空输入时的灰色占位提示 */
-.cib-ph--light { color: #9aa0a6; font-size: 28rpx; }
-.cib-ph--dark { color: #5f7f8c; font-size: 28rpx; }
+.cib-ph--light { color: #9aa0a6; font-size: 30rpx; }
+.cib-ph--dark { color: rgba(0,240,255,0.35); font-size: 30rpx; }
 </style>
