@@ -139,6 +139,13 @@
           <text class="remember-label">记住我（7 天内免登录）</text>
         </view>
 
+        <!-- 隐私政策同意 -->
+        <view class="privacy-row" @tap="agreedPrivacy = !agreedPrivacy">
+          <checkbox :checked="agreedPrivacy" class="remember-checkbox" color="#2ff4e0" />
+          <text class="privacy-label">已阅读并同意</text>
+          <text class="privacy-link" @tap.stop="goPrivacy">《隐私政策》</text>
+        </view>
+
         <!-- 微信一键登录 -->
         <button
           class="wechat-btn"
@@ -174,6 +181,7 @@ const showPwd = ref(false)
 const focusField = ref('')
 const fxOn = ref(true)
 const rememberMe = ref(false)  // v1.12.0: 记住我 checkbox，默认 false
+const agreedPrivacy = ref(false)
 
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
@@ -183,6 +191,10 @@ if (authStore.isLoggedIn) {
 }
 
 async function handleLogin() {
+  if (!agreedPrivacy.value) {
+    uni.showToast({ title: '请先同意隐私政策', icon: 'none' })
+    return
+  }
   if (!username.value.trim() || !password.value) {
     uni.showToast({ title: '请输入账号和密码', icon: 'none' })
     return
@@ -217,6 +229,10 @@ async function handleLogin() {
 
 // v1.8.0：微信一键登录（REQ-AUTH-002）。uni.login 取临时 code → 后端 code2session 换 token。
 function handleWechatLogin() {
+  if (!agreedPrivacy.value) {
+    uni.showToast({ title: '请先同意隐私政策', icon: 'none' })
+    return
+  }
   wxLoading.value = true
   uni.login({
     provider: 'weixin',
@@ -265,6 +281,10 @@ function prefetchOwnerData(user) {
 
 function goRegister() {
   uni.navigateTo({ url: '/pages/register/index' })
+}
+
+function goPrivacy() {
+  uni.navigateTo({ url: '/pages/privacy/index' })
 }
 </script>
 
@@ -530,6 +550,18 @@ function goRegister() {
 .remember-checkbox { transform: scale(0.8); }
 .remember-label {
   font-size: 24rpx; letter-spacing: 2rpx; color: rgba(143,217,255,0.6);
+}
+
+/* ── 隐私政策同意 ──────────────────────────────────────────────────── */
+.privacy-row {
+  display: flex; align-items: center; justify-content: center; margin: 12rpx 0 0;
+  padding: 8rpx 0;
+}
+.privacy-label {
+  font-size: 24rpx; letter-spacing: 1rpx; color: rgba(143,217,255,0.6);
+}
+.privacy-link {
+  font-size: 24rpx; color: #2ff4e0; text-shadow: 0 0 12rpx rgba(47,244,224,0.5);
 }
 
 /* ── 微信一键登录：50px→100rpx ──────────────────────────────────────── */

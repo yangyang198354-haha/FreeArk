@@ -7,6 +7,7 @@
   "transformPx": false,
   "mp-weixin": {
     "appid": "wxc68346b8e889def4",
+    "__usePrivacyCheck__": true,
     "setting": {
       "urlCheck": false
     },
