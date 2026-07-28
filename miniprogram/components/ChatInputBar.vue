@@ -176,7 +176,7 @@ const toggleIcoClass = computed(() => {
 
 // ---- 行为 ----
 function handleInput(e) {
-  inputText.value = e.detail.value
+  inputText.value = e.detail?.value ?? e.target?.value ?? ''
 }
 
 function handleSend() {
