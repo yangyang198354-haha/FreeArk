@@ -136,7 +136,7 @@ class MQTTConsumer:
             PLCLatestDataHandler(),
         ]
 
-        # --- 双队列 + 专用 Worker 线程池 ---
+        # 双队列 + 专用 Worker 线程池 ---
         # energy 队列：小消息（~580B），3 个专用 worker
         # general 队列：大消息（~11KB），6 个专用 worker，避免被 energy 消息阻塞
         self._energy_queue = queue.Queue(maxsize=queue_maxsize)
@@ -153,6 +153,18 @@ class MQTTConsumer:
         # 停止信号：set() 后 worker 在队列清空时退出
         self.stop_event = threading.Event()
 
+        # --- 静默失聪 / 存活监控（2026-06 broker 闪断 RCA 后新增） ---
+        # 已知现象：paho client 在 broker 短暂断连后，TCP ESTABLISHED、on_connect rc=0、
+        # 但 broker 端已把 session+订阅清掉 → 进程"看起来在线"实际一条都收不到
+        # （静默失聪，PLCWriteRecord 永久卡 pending）。
+        # 这里在 on_message 每次入队前刷新 "last_seen_ts"，供 mqtt_consumer_service.py
+        # 的 _monitor_service 用「MONITOR_MAX_IDLE_SECONDS 没新消息就自杀」的策略
+        # 触发 systemd Restart=on-failure 重启，零人工干预。
+        self._last_seen_ts_lock = threading.Lock()
+        self._last_message_ts = None           # paho on_message 最后一次收到任何消息的 mono 时间
+        self._last_on_connect_ts = None        # 最近一次 on_connect rc=0 的 mono 时间
+        self._idle_suicide_deadline_ts = None  # 超过该 mono 时间仍无消息 → 触发自杀
+
     # MQTT topic for screen connectivity (MOD-MQTT-01)
     SCREEN_CONNECTIVITY_TOPIC = '/datacollection/screen/connectivity'
     # MQTT topic prefix for PLC write ack (FR4/FR5)
@@ -165,6 +177,11 @@ class MQTTConsumer:
         """连接到MQTT代理后的回调函数"""
         if rc == 0:
             logger.info(f"成功连接到MQTT代理: {self.mqtt_broker}:{self.mqtt_port}")
+            with self._last_seen_ts_lock:
+                self._last_on_connect_ts = time.monotonic()
+                # 刚连上时给 broker 120 秒的宽限期（因为刚启进程时第一批数据可能还没来），
+                # 之后才开始按"120s 没新消息=静默失聪"的规则判死。
+                self._idle_suicide_deadline_ts = time.monotonic() + 120.0
             # 订阅主题，使用配置的QoS
             client.subscribe(self.mqtt_topic, qos=self.qos)
             logger.info(f"已订阅主题: {self.mqtt_topic} (QoS: {self.qos})")
@@ -315,6 +332,9 @@ class MQTTConsumer:
         except queue.Full:
             logger.warning("消息队列已满(%s, maxsize=%d)，丢弃消息: topic=%s",
                            queue_name, target_queue.maxsize, msg.topic)
+        # 存活监控：任何 topic 的成功入队都算「仍有通信」
+        with self._last_seen_ts_lock:
+            self._last_message_ts = time.monotonic()
 
     # ------------------------------------------------------------------
     # 新增：_dispatch — 原 on_message 的解码+解析+分发逻辑，由 worker 调用
@@ -999,6 +1019,42 @@ class MQTTConsumer:
             logger.error(f"启动MQTT客户端时发生错误: {e}")
             return False
 
+    # MQTT 消费者健康状态快照（供 mqtt_consumer_service._monitor_service 调用）
+    # 返回 dict: is_running, client_connected, seconds_since_last_msg, seconds_since_connect,
+    #            energy_qsize, general_qsize, ondemand_qsize, max_idle_deadline_seconds
+    def health_snapshot(self) -> dict:
+        """返回 MQTT 消费者内部存活与积压状态的只读快照（线程安全）。"""
+        snap = {
+            'is_running': False,
+            'client_connected': False,
+            'seconds_since_last_msg': None,
+            'seconds_since_connect': None,
+            'seconds_until_idle_deadline': None,
+            'energy_qsize': self._energy_queue.qsize(),
+            'general_qsize': self._general_queue.qsize(),
+            'ondemand_qsize': self._ondemand_queue.qsize(),
+        }
+        try:
+            # paho client.is_connected() 是内部原子 flag，不需要额外加锁
+            snap['client_connected'] = bool(self.client.is_connected())
+        except Exception as exc:  # pragma: no cover - 异常时当未连接处理
+            logger.debug('health_snapshot client.is_connected 异常: %s', exc)
+            snap['client_connected'] = False
+
+        now = time.monotonic()
+        with self._last_seen_ts_lock:
+            started = getattr(self, '_last_on_connect_ts', None)
+            last = getattr(self, '_last_message_ts', None)
+            dline = getattr(self, '_idle_suicide_deadline_ts', None)
+        if started is not None:
+            snap['seconds_since_connect'] = max(0.0, now - started)
+            snap['is_running'] = True
+        if last is not None:
+            snap['seconds_since_last_msg'] = max(0.0, now - last)
+        if dline is not None:
+            snap['seconds_until_idle_deadline'] = dline - now
+        return snap
+
     def stop(self):
         """停止MQTT客户端（优雅关闭）。
 
@@ -1076,3 +1132,25 @@ def start_mqtt_consumer():
 def stop_mqtt_consumer():
     """停止MQTT消费者"""
     return mqtt_consumer.stop()
+
+
+def get_consumer_health_snapshot() -> dict:
+    """返回当前 MQTT 消费者的存活/积压快照（供 mqtt_consumer_service 监控）。
+
+    通过模块级单例 mqtt_consumer 访问；若进程内从未 start()，则 is_running=False。
+    """
+    try:
+        return mqtt_consumer.health_snapshot()
+    except Exception as exc:
+        logger.warning('get_consumer_health_snapshot 异常（不影响监控，按未启动处理）: %s', exc)
+        return {
+            'is_running': False,
+            'client_connected': False,
+            'seconds_since_last_msg': None,
+            'seconds_since_connect': None,
+            'seconds_until_idle_deadline': None,
+            'energy_qsize': 0,
+            'general_qsize': 0,
+            'ondemand_qsize': 0,
+            'error': str(exc),
+        }

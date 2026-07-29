@@ -39,6 +39,74 @@ def _is_writable(param_name: str) -> bool:
             any(param_name.endswith(s) for s in WRITABLE_SUFFIXES))
 
 
+def _resolve_param_name(raw_name: str, specific_part: str = '') -> str:
+    """中文 display_name / 混合描述 → 真实英文 param_name 的兜底翻译层。
+
+    背景：LLM 常把中文展示名（如"书房开关""设定温度"）或拼接描述（如"书房面板的开关"）
+    当成 param_name 直接传进来，_is_writable 会拒绝并返回 400，导致用户体验差。
+    本函数在拒绝前做一次最佳努力的匹配：
+      1) 若 raw_name 本身合法可写 → 直接返回（无变换）
+      2) 查 DeviceConfig 中 is_active=True 的全部行，按 display_name / sub_type_display
+         的子串+编辑距离找最匹配的可写 param_name
+      3) 匹配失败 → 返回原 raw_name，由上层继续走原拒绝逻辑
+    仅作兜底翻译，绝不放宽白名单安全规则。"""
+    if _is_writable(raw_name):
+        return raw_name
+
+    try:
+        from difflib import SequenceMatcher
+        # 仅在 is_active=True 且可写的 DeviceConfig 行内搜索（安全约束：绝不扩大可写范围）
+        qs = DeviceConfig.objects.filter(is_active=True)
+        writable_rows = [row for row in qs.iterator() if _is_writable(row.param_name)]
+        if not writable_rows:
+            return raw_name
+
+        # 规范化：去掉所有空白/标点/"的"字，转小写用于子串比较
+        _norm = lambda s: (
+            ''.join(c for c in (s or '') if c.isalnum() or '\u4e00' <= c <= '\u9fff')
+            .replace('的', '').replace('面板', '').lower()
+        )
+        q = _norm(raw_name)
+        if not q:
+            return raw_name
+
+        # 打分：display_name 完全命中 +8；sub_type_display/display_name 子串命中 +4；
+        #       剩余按最长公共子串 / SequenceMatcher 相似度分档。
+        best = (0.0, '')
+        for row in writable_rows:
+            dn = _norm(row.display_name)          # e.g. "开关" / "设定温度"
+            sub = _norm(row.sub_type_display)     # e.g. "书房温控面板"
+            param = _norm(row.param_name)         # e.g. "studyroomswitch"
+            score = 0.0
+            if dn and q == dn:
+                score += 8.0
+            if sub and q == sub:
+                score += 6.0
+            if dn and dn in q:
+                score += 4.0
+            if sub and sub in q:
+                score += 4.0
+            # 与 display_name + sub_type_display 拼接的相似分
+            combo = (sub or '') + (dn or '')
+            if combo:
+                score += SequenceMatcher(None, q, combo).ratio() * 3.0
+            # 同一 param_name 还按 sub_type 过滤（用户常写"书房开关"含房间词）
+            if specific_part:
+                score += 0.0  # specific_part 先作为后续信号保留，当前暂无房间号→param_name映射
+            if score > best[0]:
+                best = (score, row.param_name)
+        # 命中阈值：必须 >= display_name 完全命中的一半以上才接受，避免误匹配
+        if best[0] >= 4.0 and best[1] and _is_writable(best[1]):
+            logger.info(
+                '_resolve_param_name 翻译兜底: raw_name="%s" specific_part=%s → matched=%s (score=%.1f)',
+                raw_name, specific_part, best[1], best[0],
+            )
+            return best[1]
+    except Exception as exc:
+        logger.warning('_resolve_param_name 翻译失败（不影响主流程）: %s', exc, exc_info=True)
+    return raw_name
+
+
 def _normalize_select_values(raw_json: str) -> str:
     """规范化 select_values_json：确保返回给前端的始终是数组格式。
 
@@ -220,8 +288,23 @@ def device_settings_write(request):
     items = ser.validated_data['items']
 
     # 校验所有 item 的 param_name 可写性
-    for item in items:
+    for idx, item in enumerate(items):
+        raw_pn = item['param_name']
+        # 兜底翻译层：中文描述 / display_name 拼接 → 真实英文 param_name
+        resolved_pn = _resolve_param_name(raw_pn, specific_part)
+        if resolved_pn != raw_pn:
+            item['param_name'] = resolved_pn
+            logger.info(
+                'device_settings_write 兜底翻译: specific_part=%s idx=%d raw="%s" → resolved="%s"',
+                specific_part, idx, raw_pn, resolved_pn,
+            )
         if not _is_writable(item['param_name']):
+            logger.warning(
+                'device_settings_write 白名单拒绝: specific_part=%s user=%s '
+                'idx=%d param_name="%s" items=%s',
+                specific_part, getattr(request.user, 'username', '?'),
+                idx, item['param_name'], list(items),
+            )
             return Response(
                 {'error': f"参数 {item['param_name']} 不在可写白名单中"},
                 status=400,
@@ -337,6 +420,11 @@ class WriteRecordPagination(PageNumberPagination):
 @permission_classes([IsAuthenticated])
 def device_settings_records(request):
     qs = PLCWriteRecord.objects.all()
+
+    batch_request_id = request.query_params.get('batch_request_id')
+    if batch_request_id:
+        # 精确查单批次：走 plcwr_batch_idx 索引（v1.4 migrations 已建）
+        qs = qs.filter(batch_request_id=batch_request_id)
 
     specific_part = request.query_params.get('specific_part')
     if specific_part:
