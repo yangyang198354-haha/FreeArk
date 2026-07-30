@@ -26,6 +26,13 @@ globalThis.uni = {
   connectSocket: vi.fn(),
   uploadFile: vi.fn(),
   chooseImage: vi.fn(),
+  // 权限管理（原 wx.* 已改为 uni.* 跨端兼容）
+  getSetting: vi.fn(),
+  authorize: vi.fn(),
+  openSetting: vi.fn(),
+  getFileSystemManager: vi.fn(() => ({
+    readFileSync: vi.fn(() => ''),
+  })),
   // 图表用（组件未在此层测试，占位即可）
   getSystemInfoSync: vi.fn(() => ({ pixelRatio: 2, windowWidth: 375 })),
   createSelectorQuery: vi.fn(() => ({
@@ -33,11 +40,13 @@ globalThis.uni = {
   })),
 }
 
-// wx global mock for permission.js (uses wx.getSetting, wx.authorize, wx.openSetting)
+// wx global mock（保留兼容旧测试；新代码应使用 uni.*）
 globalThis.wx = {
-  getSetting: vi.fn(),
-  authorize: vi.fn(),
-  openSetting: vi.fn(),
+  getSetting: globalThis.uni.getSetting,
+  authorize: globalThis.uni.authorize,
+  openSetting: globalThis.uni.openSetting,
+  getFileSystemManager: globalThis.uni.getFileSystemManager,
+  getSystemInfoSync: globalThis.uni.getSystemInfoSync,
 }
 
 // 暴露给个别用例直接操作内存 storage

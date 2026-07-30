@@ -29,6 +29,7 @@
     <view class="card avatar-card">
       <view class="corner tl"></view><view class="corner tr"></view>
       <view class="corner bl"></view><view class="corner br"></view>
+      <!-- #ifdef MP-WEIXIN -->
       <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
         <view v-if="localAvatarUrl" class="avatar-preview">
           <image :src="localAvatarUrl" class="avatar-img" mode="aspectFill" />
@@ -38,6 +39,18 @@
           <text class="avatar-label">选择头像</text>
         </view>
       </button>
+      <!-- #endif -->
+      <!-- #ifdef APP-PLUS -->
+      <button class="avatar-btn" @tap="onChooseImage">
+        <view v-if="localAvatarUrl" class="avatar-preview">
+          <image :src="localAvatarUrl" class="avatar-img" mode="aspectFill" />
+        </view>
+        <view v-else class="avatar-placeholder">
+          <text class="avatar-plus">＋</text>
+          <text class="avatar-label">选择头像</text>
+        </view>
+      </button>
+      <!-- #endif -->
     </view>
 
     <scroll-view scroll-y class="body" :style="{ paddingBottom: safeBottom + 'px' }">
@@ -51,8 +64,14 @@
       <view class="card nickname-card">
         <view class="field-label"><text class="gt">&gt;</text>昵称</view>
         <view class="field">
+          <!-- #ifdef MP-WEIXIN -->
           <input class="field-input" type="nickname" v-model="nicknameValue"
                  placeholder="请输入昵称" placeholder-class="field-ph" :disabled="saving" />
+          <!-- #endif -->
+          <!-- #ifdef APP-PLUS -->
+          <input class="field-input" type="text" v-model="nicknameValue"
+                 placeholder="请输入昵称" placeholder-class="field-ph" :disabled="saving" />
+          <!-- #endif -->
         </view>
       </view>
 
@@ -98,6 +117,21 @@ function onChooseAvatar(e) {
   const url = e.detail && e.detail.avatarUrl
   if (url) localAvatarUrl.value = url
 }
+
+// #ifdef APP-PLUS
+function onChooseImage() {
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res) => {
+      const path = res.tempFilePaths && res.tempFilePaths[0]
+      if (path) localAvatarUrl.value = path
+    },
+    fail: () => { /* 用户取消，不提示 */ },
+  })
+}
+// #endif
 
 async function onSave() {
   if (saving.value) return

@@ -49,12 +49,26 @@ function _getManager() {
     if (msg.indexOf('auth') !== -1 || msg.indexOf('permission') !== -1 || msg.indexOf('deny') !== -1) {
       uni.showModal({
         title: '需要录音权限',
-        content: '请在小程序设置中开启麦克风权限，用于语音输入。',
+        content: '请在设置中开启麦克风权限，用于语音输入。',
         confirmText: '去设置',
         success: function (modalRes) {
           if (modalRes.confirm) {
             // #ifdef MP-WEIXIN
-            wx.openSetting({})
+            uni.openSetting({})
+            // #endif
+            // #ifdef APP-PLUS
+            // APP 端无 openSetting，提示用户去系统设置
+            if (plus.os && plus.os.name === 'Android') {
+              try {
+                var Intent = plus.android.importClass('android.content.Intent')
+                var Settings = plus.android.importClass('android.provider.Settings')
+                var Uri = plus.android.importClass('android.net.Uri')
+                var intent = new Intent()
+                intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                intent.setData(Uri.fromParts('package', plus.runtime.appid, null))
+                plus.android.runtimeMainActivity().startActivity(intent)
+              } catch (e) { /* ignore */ }
+            }
             // #endif
           }
         },
@@ -73,7 +87,7 @@ function _getManager() {
 function _checkPermission() {
   // #ifdef MP-WEIXIN
   return new Promise(function (resolve) {
-    wx.getSetting({
+    uni.getSetting({
       success: function (res) {
         if (res.authSetting['scope.record'] === false) {
           // 用户之前拒绝过 → 弹窗引导去设置
@@ -83,7 +97,7 @@ function _checkPermission() {
             confirmText: '去设置',
             success: function (modalRes) {
               if (modalRes.confirm) {
-                wx.openSetting({})
+                uni.openSetting({})
               }
               resolve(false)
             },
@@ -93,7 +107,7 @@ function _checkPermission() {
           resolve(true)
         } else {
           // 未请求过 → 首次申请
-          wx.authorize({
+          uni.authorize({
             scope: 'scope.record',
             success: function () { resolve(true) },
             fail: function () {
@@ -107,7 +121,34 @@ function _checkPermission() {
     })
   })
   // #endif
-  // #ifndef MP-WEIXIN
+  // #ifdef APP-PLUS
+  return new Promise(function (resolve) {
+    if (plus.os && plus.os.name === 'Android') {
+      try {
+        var main = plus.android.runtimeMainActivity()
+        var granted = plus.android.invoke(main, 'checkSelfPermission', 'android.permission.RECORD_AUDIO')
+        if (granted === 0) {
+          resolve(true)
+        } else {
+          plus.android.requestPermissions(
+            ['android.permission.RECORD_AUDIO'],
+            function (e) {
+              var result = e.granted && e.granted.length > 0
+              if (!result) {
+                uni.showToast({ title: '录音权限未开启，请在系统设置中允许', icon: 'none', duration: 2000 })
+              }
+              resolve(result)
+            },
+            function () { resolve(false) }
+          )
+        }
+      } catch (e) { resolve(false) }
+    } else {
+      resolve(true)
+    }
+  })
+  // #endif
+  // #ifndef MP-WEIXIN || APP-PLUS
   return Promise.resolve(true)
   // #endif
 }
@@ -183,7 +224,7 @@ function _uploadAndRecognize(filePath) {
 
     // 读文件 → base64 → JSON POST（绕过 uploadFile 域名白名单限制）
     // #ifdef MP-WEIXIN
-    var fs = wx.getFileSystemManager()
+    var fs = uni.getFileSystemManager()
     try {
       var base64 = fs.readFileSync(filePath, 'base64')
     } catch (e) {
@@ -192,37 +233,83 @@ function _uploadAndRecognize(filePath) {
       reject(new Error('read failed'))
       return
     }
+    _postAudioBase64(base64, resolve, reject)
+    // #endif
 
-    var token = getToken()
-    uni.request({
-      url: BASE_URL + '/api/miniapp/voice/recognize/',
-      method: 'POST',
-      header: {
-        'content-type': 'application/json',
-        'Authorization': token ? 'Token ' + token : '',
-      },
-      data: JSON.stringify({ audio_base64: base64, format: 'wav' }),
-      success: function (res) {
-        uni.hideToast()
-        var text = (res.data && res.data.text || '').trim()
-        if (text) { resolve(text) }
-        else {
-          uni.showToast({ title: '未识别到内容，请重试', icon: 'none', duration: 2000 })
-          reject(new Error('empty'))
+    // #ifdef APP-PLUS
+    // APP 端使用 plus.io 读取文件并转 base64
+    plus.io.resolveLocalFileSystemURL(filePath, function (entry) {
+      entry.file(function (file) {
+        try {
+          var reader = new plus.io.FileReader()
+          reader.onloadend = function (e) {
+            // e.target.result 形如 "data:audio/wav;base64,XXXX"，需剥离前缀
+            var dataUrl = e.target.result || ''
+            var commaIdx = dataUrl.indexOf(',')
+            var base64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : dataUrl
+            if (!base64) {
+              uni.hideToast()
+              uni.showToast({ title: '读取录音文件失败，请使用文字输入', icon: 'none', duration: 2000 })
+              reject(new Error('read empty'))
+              return
+            }
+            _postAudioBase64(base64, resolve, reject)
+          }
+          reader.onerror = function () {
+            uni.hideToast()
+            uni.showToast({ title: '读取录音文件失败，请使用文字输入', icon: 'none', duration: 2000 })
+            reject(new Error('read failed'))
+          }
+          reader.readAsDataURL(file)
+        } catch (e) {
+          uni.hideToast()
+          uni.showToast({ title: '读取录音文件失败，请使用文字输入', icon: 'none', duration: 2000 })
+          reject(new Error('read failed'))
         }
-      },
-      fail: function () {
+      }, function () {
         uni.hideToast()
-        uni.showToast({ title: '语音识别暂不可用，请使用文字输入', icon: 'none', duration: 2000 })
-        reject(new Error('request failed'))
-      },
+        uni.showToast({ title: '读取录音文件失败，请使用文字输入', icon: 'none', duration: 2000 })
+        reject(new Error('file entry failed'))
+      })
+    }, function () {
+      uni.hideToast()
+      uni.showToast({ title: '读取录音文件失败，请使用文字输入', icon: 'none', duration: 2000 })
+      reject(new Error('resolve failed'))
     })
     // #endif
 
-    // #ifndef MP-WEIXIN
+    // #ifndef MP-WEIXIN || APP-PLUS
     uni.hideToast()
     uni.showToast({ title: '语音识别暂不可用，请使用文字输入', icon: 'none', duration: 2000 })
-    reject(new Error('not wechat'))
+    reject(new Error('not supported'))
     // #endif
+  })
+}
+
+/** 将 base64 音频 POST 到后端 ASR 接口 */
+function _postAudioBase64(base64, resolve, reject) {
+  var token = getToken()
+  uni.request({
+    url: BASE_URL + '/api/miniapp/voice/recognize/',
+    method: 'POST',
+    header: {
+      'content-type': 'application/json',
+      'Authorization': token ? 'Token ' + token : '',
+    },
+    data: JSON.stringify({ audio_base64: base64, format: 'wav' }),
+    success: function (res) {
+      uni.hideToast()
+      var text = (res.data && res.data.text || '').trim()
+      if (text) { resolve(text) }
+      else {
+        uni.showToast({ title: '未识别到内容，请重试', icon: 'none', duration: 2000 })
+        reject(new Error('empty'))
+      }
+    },
+    fail: function () {
+      uni.hideToast()
+      uni.showToast({ title: '语音识别暂不可用，请使用文字输入', icon: 'none', duration: 2000 })
+      reject(new Error('request failed'))
+    },
   })
 }

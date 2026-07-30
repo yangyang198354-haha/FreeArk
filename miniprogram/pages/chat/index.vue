@@ -189,7 +189,17 @@ function initWs() {
     },
     onError(err) {
       connecting.value = false
-      uni.showToast({ title: err.message || '发生错误', icon: 'none' })
+      chatStore.setConnected(false, null, null)
+      // APP 端连接失败时给出明确原因，并提供重连入口
+      const msg = err && err.message ? err.message : '发生错误'
+      chatStore.setStatusText(msg)
+      uni.showModal({
+        title: '副官连接失败',
+        content: msg + '\n\n是否尝试重新连接？',
+        confirmText: '重新连接',
+        cancelText: '取消',
+        success: (r) => { if (r.confirm) reconnect() },
+      })
     },
     onClose(code) {
       connecting.value = false
@@ -198,6 +208,9 @@ function initWs() {
         uni.showToast({ title: '鉴权失败，请重新登录', icon: 'none' })
         authStore.logout()
         uni.reLaunch({ url: '/pages/login/index' })
+      } else if (code !== 1000) {
+        // 非正常关闭，提示用户并提供重连
+        chatStore.setStatusText('链接已断开（code: ' + code + '），可点击重连')
       }
     },
   })
@@ -210,7 +223,22 @@ function connectWs() {
   chatWs.connect(authStore.token, sessionKeyParam.value, activeSp)
 }
 
-function reconnect() { connectWs() }
+function reconnect() {
+  if (chatWs && chatWs._reconnectCount >= 5) {
+    uni.showModal({
+      title: '连接失败',
+      content: '副官多次重连失败，可能是网络问题。是否重新进入页面？',
+      confirmText: '重新进入',
+      cancelText: '关闭',
+      success: (r) => {
+        if (r.confirm) uni.reLaunch({ url: '/pages/chat/index' })
+      },
+    })
+    return
+  }
+  if (chatWs) chatWs._cancelReconnect()
+  connectWs()
+}
 
 async function loadHistory(sessionKey) {
   if (!sessionKey || messages.value.length > 0) return
