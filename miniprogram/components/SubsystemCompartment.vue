@@ -159,6 +159,7 @@ function onTap() {
   border-color: rgba(255, 45, 123, 0.45);
   box-shadow: 0 0 24rpx rgba(255, 45, 123, 0.10);
   animation: faultGlow 1.4s ease-in-out infinite;
+  opacity: 1;
 }
 .state-idle {
   border-color: rgba(0, 240, 255, 0.08);
