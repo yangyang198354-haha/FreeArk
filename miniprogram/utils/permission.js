@@ -35,7 +35,7 @@ export function requestPermission(scope, options = {}) {
 
   // #ifdef MP-WEIXIN
   return new Promise((resolve) => {
-    wx.getSetting({
+    uni.getSetting({
       success: (res) => {
         const auth = res.authSetting
 
@@ -54,7 +54,7 @@ export function requestPermission(scope, options = {}) {
             cancelText: '取消',
             success: (modalRes) => {
               if (modalRes.confirm) {
-                wx.openSetting({
+                uni.openSetting({
                   success: (settingRes) => {
                     if (settingRes.authSetting[scope] === true) {
                       resolve('authorized')
@@ -78,7 +78,7 @@ export function requestPermission(scope, options = {}) {
         }
 
         // Never asked -- request for the first time
-        wx.authorize({
+        uni.authorize({
           scope: scope,
           success: () => {
             resolve('authorized')
@@ -92,7 +92,7 @@ export function requestPermission(scope, options = {}) {
               cancelText: '取消',
               success: (modalRes) => {
                 if (modalRes.confirm) {
-                  wx.openSetting({
+                  uni.openSetting({
                     success: (settingRes) => {
                       if (settingRes.authSetting[scope] === true) {
                         resolve('authorized')
@@ -124,7 +124,54 @@ export function requestPermission(scope, options = {}) {
   })
   // #endif
 
-  // #ifndef MP-WEIXIN
+  // #ifdef APP-PLUS
+  // APP 端：使用 plus.android 权限检查（仅 Android）
+  return new Promise((resolve) => {
+    if (plus.os && plus.os.name === 'Android') {
+      const perms = {
+        'scope.record': 'android.permission.RECORD_AUDIO',
+        'scope.camera': 'android.permission.CAMERA',
+      }
+      const perm = perms[scope]
+      if (!perm) {
+        // 未知 scope，APP 端默认放行（由 uni.chooseImage 等内部 API 自行处理）
+        resolve('authorized')
+        return
+      }
+      const main = plus.android.runtimeMainActivity()
+      if (!main) { resolve('authorized'); return }
+      try {
+        // Android 6.0+ 运行时权限
+        if (plus.os.version && parseInt(plus.os.version, 10) >= 6) {
+          const granted = plus.android.invoke(main, 'checkSelfPermission', perm)
+          if (granted === 0) {
+            resolve('authorized')
+          } else {
+            // 请求权限
+            plus.android.requestPermissions(
+              [perm],
+              function (e) {
+                const result = e.granted && e.granted.length > 0
+                resolve(result ? 'authorized' : 'denied')
+              },
+              function () { resolve('denied') }
+            )
+          }
+        } else {
+          // Android 6.0 以下，安装时已授权
+          resolve('authorized')
+        }
+      } catch (e) {
+        resolve('denied')
+      }
+    } else {
+      // iOS 或其他平台，默认放行
+      resolve('authorized')
+    }
+  })
+  // #endif
+
+  // #ifndef MP-WEIXIN || APP-PLUS
   // Non-WeChat environment -- permissions not applicable, always report as authorized
   return Promise.resolve('authorized')
   // #endif

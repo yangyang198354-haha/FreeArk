@@ -1,0 +1,112 @@
+{
+  "description": "FreeArk 多端项目 - 微信小程序配置",
+  "miniVersion": "v2",
+  "name": "智能方舟座舱",
+  "version": "1.5.0",
+  "versionCode": 150,
+  "packOptions": {
+    "ignore": []
+  },
+  "miniModuleId": "__UNI__FREEARK",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "minified": true,
+    "postcss": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "newFeature": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "useIsolateContext": true,
+    "nodeModulesCompile": false,
+    "enhance": true,
+    "useMultiFrameRuntime": true,
+    "useApiHook": true,
+    "useApiHostProcess": true,
+    "showShadowRootInWxmlPanel": true,
+    "packNpmManually": false,
+    "enableEngineNative": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "showES6CompileOption": false,
+    "minifyWXML": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.0.0",
+  "appid": "wxc68346b8e889def4",
+  "projectname": "FreeArk",
+  "condition": {},
+  "mini-android": {
+    "sdkVersion": "1.7.0",
+    "package": "com.freeark.cockpit",
+    "useExtendedSdk": {
+      "media": false,
+      "bluetooth": false,
+      "network": false,
+      "scanner": true,
+      "xweb": false,
+      "open": false,
+      "nfc": false
+    },
+    "icons": {
+      "hdpi": "static/freeark_icon_192x192.png",
+      "xhdpi": "static/freeark_icon_512x512.png",
+      "xxhdpi": "static/freeark_icon_512x512.png",
+      "xxxhdpi": "static/freeark_icon_1024x1024.png"
+    },
+    "splashscreen": {
+      "hdpi": "",
+      "xhdpi": "",
+      "xxhdpi": ""
+    },
+    "enableVConsole": false,
+    "privateDescriptions": {
+      "ACCESS_COARSE_LOCATION": "用于获取位置信息",
+      "ACCESS_FINE_LOCATION": "用于获取位置信息",
+      "CAMERA": "用于拍照、扫码、头像设置",
+      "POST_NOTIFICATIONS": "用于消息推送通知",
+      "RECORD_AUDIO": "用于语音输入转文字",
+      "READ_EXTERNAL_STORAGE": "用于读取图片和文件",
+      "WRITE_EXTERNAL_STORAGE": "用于保存图片和文件",
+      "READ_MEDIA_IMAGES": "用于读取相册图片",
+      "READ_MEDIA_VIDEO": "用于读取相册视频",
+      "READ_MEDIA_AUDIO": "用于读取音频文件"
+    }
+  },
+  "mini-ios": {
+    "sdkVersion": "1.6.8",
+    "useExtendedSdk": {
+      "WeAppOpenFuns": true,
+      "WeAppNetwork": false,
+      "WeAppBluetooth": false,
+      "WeAppMedia": false,
+      "WeAppLBS": false,
+      "WeAppOthers": false,
+      "WeAppLive": true
+    },
+    "enableVConsole": false,
+    "icons": {
+      "mainIcon120": "static/freeark_icon_120x120.png",
+      "mainIcon180": "static/freeark_icon_180x180.png",
+      "spotlightIcon80": "static/freeark_icon_81x81.png",
+      "spotlightIcon120": "static/freeark_icon_120x120.png",
+      "settingsIcon58": "static/freeark_icon_81x81.png",
+      "settingsIcon87": "static/freeark_icon_120x120.png",
+      "notificationIcon40": "static/freeark_icon_81x81.png",
+      "notificationIcon60": "static/freeark_icon_120x120.png",
+      "appStore1024": "static/freeark_icon_1024x1024.png"
+    },
+    "privateDescriptions": {
+      "NSPhotoLibraryUsageDescription": "需要访问相册以选择头像和图片",
+      "NSCameraUsageDescription": "需要使用相机拍照、扫码和设置头像",
+      "NSMicrophoneUsageDescription": "需要使用麦克风进行语音输入"
+    }
+  }
+}

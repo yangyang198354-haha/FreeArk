@@ -1,5 +1,5 @@
 {
-  "name": "FreeArk",
+  "name": "智能方舟座舱",
   "appid": "__UNI__FREEARK",
   "description": "FreeArk 三恒系统移动端",
   "versionName": "1.5.0",
@@ -17,6 +17,43 @@
         "desc": "用于语音输入转文字，方便您快速提问"
       }
     }
+  },
+  "app-plus": {
+    "name": "智能方舟座舱",
+    "appid": "com.freeark.cockpit",
+    "distribute": {
+      "android": {
+        "package": "com.freeark.cockpit",
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.RECORD_AUDIO\"/>",
+          "<uses-permission android:name=\"android.permission.CAMERA\"/>",
+          "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+          "<uses-permission android:name=\"android.permission.INTERNET\"/>"
+        ]
+      },
+      "icons": {
+        "android": {
+          "hdpi": "static/freeark_icon_192x192.png",
+          "xhdpi": "static/freeark_icon_512x512.png",
+          "xxhdpi": "static/freeark_icon_512x512.png",
+          "xxxhdpi": "static/freeark_icon_1024x1024.png"
+        },
+        "ios": {
+          "app": "static/freeark_icon_1024x1024.png"
+        }
+      },
+      "splashscreen": {
+        "useOriginalMsgbox": true
+      }
+    },
+    "modules": {
+      "Camera": {},
+      "Record": {},
+      "Scanner": {}
+    },
+    "versionName": "1.5.0"
   },
   "h5": {
     "router": {

@@ -225,7 +225,47 @@ function handleScan() {
 
       doBind(code)
     },
-    fail: () => { /* 用户取消扫码，不提示 */ },
+    fail: (err) => {
+      // 区分"用户取消"和"真实错误"。APP 端可能因相机权限拒绝/不可用而失败，
+      // 原代码直接吞掉错误会让用户以为"扫码无法打开"。
+      const msg = err && err.errMsg ? err.errMsg : ''
+      console.warn('[handleScan] fail:', msg)
+      if (msg.includes('cancel') || msg.includes('cancelled')) {
+        // 用户取消，不提示
+        return
+      }
+      // 扫码失败：区分权限问题和其他错误
+      if (msg.includes('permission') || msg.includes('auth') || msg.includes('denied')) {
+        uni.showModal({
+          title: '扫码无法启动',
+          content: '可能是相机权限未授予。请前往系统设置开启相机权限后重试。',
+          confirmText: '去设置',
+          cancelText: '取消',
+          success: (r) => {
+            if (r.confirm) {
+              // 尝试跳转到应用设置页面（APP-PLUS 和多端框架都支持）
+              try {
+                // #ifdef APP-PLUS
+                var Intent = plus.android.importClass('android.content.Intent')
+                var Settings = plus.android.importClass('android.provider.Settings')
+                var Uri = plus.android.importClass('android.net.Uri')
+                var intent = new Intent()
+                intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                intent.setData(Uri.fromParts('package', plus.runtime.appid, null))
+                plus.android.runtimeMainActivity().startActivity(intent)
+                // #endif
+              } catch (e) {
+                // #ifndef APP-PLUS
+                uni.showToast({ title: '请手动前往系统设置开启相机权限', icon: 'none' })
+                // #endif
+              }
+            }
+          },
+        })
+      } else {
+        uni.showToast({ title: '扫码失败：' + (msg || '未知错误'), icon: 'none', duration: 2500 })
+      }
+    },
   })
 }
 

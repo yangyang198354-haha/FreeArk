@@ -205,6 +205,9 @@ function initWs() {
       connecting.value = false
       // 链路层异常走横幅 + 自动重连，不弹 toast：快速切页时 socket 连开连关，
       // 这里会连着弹好几个「连接异常」。服务端下发的 error 帧（业务错误）仍照旧提示。
+      // rebase 取舍（2026-08-22）：apk-test 原先弹 showModal 询问是否重连，是为了让 APK
+      // 端断连有明确反馈。该诉求已由横幅（showDiscBanner）+ 自动退避重连 + 手动重连按钮
+      // 覆盖，且弹窗在快速切页时同样会连弹多个，故统一收敛到横幅方案。
       if (err?.code === 'WS_ERROR') {
         armLinkGrace()
         scheduleRetry()
@@ -223,6 +226,9 @@ function initWs() {
         uni.showToast({ title: '鉴权失败，请重新登录', icon: 'none' })
         authStore.logout()
         uni.reLaunch({ url: '/pages/login/index' })
+      } else if (code !== 1000) {
+        // 非正常关闭，提示用户并提供重连
+        chatStore.setStatusText('链接已断开（code: ' + code + '），可点击重连')
       }
     },
   })
@@ -275,7 +281,9 @@ function connectWs() {
   chatWs.connect(authStore.token, sessionKeyParam.value, activeSp)
 }
 
-/** 手动重连：清掉退避配额，立刻收起横幅给出反馈。 */
+/** 手动重连：清掉退避配额，立刻收起横幅给出反馈。
+ *  rebase 取舍（2026-08-22）：重连由本层单一所有——它感知 onHide 挂起（suspended），
+ *  并驱动断连横幅；chat-ws.js 内部那套自动重连已移除，避免同一次断开触发两套退避。 */
 function reconnect() {
   clearLinkTimers()
   retryCount = 0
