@@ -148,7 +148,10 @@
 
         <!-- 微信一键登录（仅小程序）-->
         <!-- #ifdef MP-WEIXIN -->
+        <!-- 多端应用 APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除，
+             用运行时 isMultiTermApk 区分：APK 不显示微信登录按钮，小程序显示 -->
         <button
+          v-if="!isMultiTermApk"
           class="wechat-btn"
           :disabled="loading || wxLoading"
           @tap="handleWechatLogin"
@@ -156,10 +159,6 @@
           <view class="wechat-icon"></view>
           <text class="wechat-txt">{{ wxLoading ? '登录中…' : '微信一键登录' }}</text>
         </button>
-        <!-- #endif -->
-
-        <!-- #ifdef APP-PLUS -->
-        <view class="app-notice">测试版本，请使用账号密码登录</view>
         <!-- #endif -->
 
         <!-- 注册 -->
@@ -188,6 +187,10 @@ const focusField = ref('')
 const fxOn = ref(true)
 const rememberMe = ref(false)  // v1.12.0: 记住我 checkbox，默认 false
 const agreedPrivacy = ref(false)
+
+// 多端应用 APK 运行时判断（APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除）
+// wx.getAppAuthorizeSetting 仅在多端 APK 中存在，普通微信小程序没有此 API
+const isMultiTermApk = typeof wx !== 'undefined' && typeof wx.getAppAuthorizeSetting === 'function'
 
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
@@ -281,11 +284,6 @@ function handleWechatLogin() {
     },
   })
 }
-// #endif
-
-// #ifdef APP-PLUS
-// APP 端无微信登录，预留空函数避免模板 @tap 报错（实际按钮已通过 #ifdef 屏蔽）
-function handleWechatLogin() {}
 // #endif
 
 function prefetchOwnerData(user) {
@@ -595,17 +593,6 @@ function goPrivacy() {
 .wechat-txt {
   font-weight: 700; font-size: 32rpx; letter-spacing: 4rpx; color: #5ff0b6;
   text-shadow: 0 0 20rpx rgba(52,232,158,0.6);
-}
-
-/* ── APP 端提示（替代微信登录按钮）────────────────────────────────────── */
-.app-notice {
-  width: 100%; height: 100rpx; margin-top: 24rpx;
-  border-radius: 56rpx;
-  background: rgba(56,230,224,0.06);
-  border: 1rpx solid rgba(56,230,224,0.4);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 26rpx; letter-spacing: 2rpx; color: rgba(143,217,255,0.7);
-  box-sizing: border-box;
 }
 
 /* ── 注册 ───────────────────────────────────────────────────────────── */

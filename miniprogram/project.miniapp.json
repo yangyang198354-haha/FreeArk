@@ -47,7 +47,7 @@
     "sdkVersion": "1.7.0",
     "package": "com.freeark.cockpit",
     "useExtendedSdk": {
-      "media": false,
+      "media": true,
       "bluetooth": false,
       "network": false,
       "scanner": true,

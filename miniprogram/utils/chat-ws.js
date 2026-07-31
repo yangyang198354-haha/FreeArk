@@ -21,6 +21,17 @@ import { WS_BASE_URL } from './http'
 // 诊断开关：APP 端真机调试时输出详细日志
 const DIAG = true
 
+/**
+ * 运行时判断是否在多端应用 APK 中运行。
+ * 多端 APK 中 wx.getAppAuthorizeSetting 函数存在且可用；
+ * 普通微信小程序中该 API 不存在。
+ * 注意：多端应用 APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 分支会被剔除，
+ *       必须用运行时判断。
+ */
+function _isMultiTerminalApp() {
+  return typeof wx !== 'undefined' && typeof wx.getAppAuthorizeSetting === 'function'
+}
+
 function buildWsUrl(token, sessionKey, activeSp) {
   let url = `${WS_BASE_URL}/ws/miniapp/chat/?token=${encodeURIComponent(token)}`
   if (sessionKey) url += `&session_key=${encodeURIComponent(sessionKey)}`
@@ -58,17 +69,12 @@ export class ChatWebSocket {
     // 真机诊断：输出连接 URL 以便排查
     if (DIAG) {
       console.log('[ChatWS] connect seq=' + seq + ' url=' + url)
-      console.log('[ChatWS] platform=' + (typeof plus !== 'undefined' ? 'APP-PLUS' : 'MP-WEIXIN') +
+      console.log('[ChatWS] platform=' + (_isMultiTerminalApp() ? 'MULTI-TERM-APK' : 'MP-WEIXIN') +
         ' networkType=' + (uni.getNetworkTypeSync ? uni.getNetworkTypeSync() : 'unknown'))
     }
-    const socketTask = uni.connectSocket({
-      url,
-      // #ifdef APP-PLUS
-      // APP 端允许更宽松的 SSL 校验（自签名/不完整证书链）
-      ssl: false,
-      // #endif
-      complete: () => {}
-    })
+    // 后端使用合法 Let's Encrypt 证书，无需放宽 SSL 校验。
+    // （之前加的 ssl:false 在多端 APK 里可能有副作用，已移除）
+    const socketTask = uni.connectSocket({ url, complete: () => {} })
     this.socketTask = socketTask
 
     socketTask.onOpen(() => {
