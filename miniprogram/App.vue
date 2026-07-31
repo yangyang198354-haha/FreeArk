@@ -3,13 +3,12 @@ export default {
   onLaunch() {
     // App launch: auth check handled per-page
     // 强制关闭 vConsole（修复 APK 构建 vConsole 仍显示的问题）
+    // 多端 APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除，统一在 MP-WEIXIN 分支处理
     // #ifdef MP-WEIXIN
     try {
       wx.setEnableDebug({ enableDebug: false })
     } catch (e) { /* ignore */ }
-    // #endif
-    // #ifdef APP-PLUS
-    // APP 端如果存在 vConsole 对象，直接销毁
+    // APK 环境若存在 vConsole 对象，直接销毁
     try {
       if (typeof window !== 'undefined' && window.vConsole) {
         window.vConsole.destroy()

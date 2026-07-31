@@ -243,22 +243,16 @@ function handleScan() {
           cancelText: '取消',
           success: (r) => {
             if (r.confirm) {
-              // 尝试跳转到应用设置页面（APP-PLUS 和多端框架都支持）
-              try {
-                // #ifdef APP-PLUS
-                var Intent = plus.android.importClass('android.content.Intent')
-                var Settings = plus.android.importClass('android.provider.Settings')
-                var Uri = plus.android.importClass('android.net.Uri')
-                var intent = new Intent()
-                intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                intent.setData(Uri.fromParts('package', plus.runtime.appid, null))
-                plus.android.runtimeMainActivity().startActivity(intent)
-                // #endif
-              } catch (e) {
-                // #ifndef APP-PLUS
-                uni.showToast({ title: '请手动前往系统设置开启相机权限', icon: 'none' })
-                // #endif
+              // #ifdef MP-WEIXIN
+              // 多端 APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除，用运行时判断。
+              // - 多端 APK：wx.openAppAuthorizeSetting 跳系统权限页
+              // - 普通微信小程序：uni.openSetting 跳小程序权限页
+              if (typeof wx !== 'undefined' && typeof wx.openAppAuthorizeSetting === 'function') {
+                wx.openAppAuthorizeSetting({})
+              } else {
+                uni.openSetting({})
               }
+              // #endif
             }
           },
         })

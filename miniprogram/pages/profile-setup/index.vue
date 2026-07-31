@@ -30,7 +30,10 @@
       <view class="corner tl"></view><view class="corner tr"></view>
       <view class="corner bl"></view><view class="corner br"></view>
       <!-- #ifdef MP-WEIXIN -->
-      <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+      <!-- 多端应用 APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除。
+           APK 里 open-type="chooseAvatar" 不可用，用 isMultiTermApk 运行时区分：
+           小程序用 chooseAvatar，APK 用 @tap + uni.chooseImage -->
+      <button v-if="!isMultiTermApk" class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
         <view v-if="localAvatarUrl" class="avatar-preview">
           <image :src="localAvatarUrl" class="avatar-img" mode="aspectFill" />
         </view>
@@ -39,9 +42,7 @@
           <text class="avatar-label">选择头像</text>
         </view>
       </button>
-      <!-- #endif -->
-      <!-- #ifdef APP-PLUS -->
-      <button class="avatar-btn" @tap="onChooseImage">
+      <button v-else class="avatar-btn" @tap="onChooseImage">
         <view v-if="localAvatarUrl" class="avatar-preview">
           <image :src="localAvatarUrl" class="avatar-img" mode="aspectFill" />
         </view>
@@ -65,11 +66,9 @@
         <view class="field-label"><text class="gt">&gt;</text>昵称</view>
         <view class="field">
           <!-- #ifdef MP-WEIXIN -->
-          <input class="field-input" type="nickname" v-model="nicknameValue"
-                 placeholder="请输入昵称" placeholder-class="field-ph" :disabled="saving" />
-          <!-- #endif -->
-          <!-- #ifdef APP-PLUS -->
-          <input class="field-input" type="text" v-model="nicknameValue"
+          <!-- 多端 APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除。
+               APK 里 type="nickname" 不可用，用 isMultiTermApk 运行时区分 type -->
+          <input class="field-input" :type="isMultiTermApk ? 'text' : 'nickname'" v-model="nicknameValue"
                  placeholder="请输入昵称" placeholder-class="field-ph" :disabled="saving" />
           <!-- #endif -->
         </view>
@@ -104,6 +103,10 @@ const localAvatarUrl = ref(null)
 const nicknameValue = ref('')
 const saving = ref(false)
 
+// 多端应用 APK 运行时判断（APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除）
+// wx.getAppAuthorizeSetting 仅在多端 APK 中存在，普通微信小程序没有此 API
+const isMultiTermApk = typeof wx !== 'undefined' && typeof wx.getAppAuthorizeSetting === 'function'
+
 onLoad((options) => {
   if (options && options.mode === 'edit') {
     pageMode.value = 'edit'
@@ -118,7 +121,9 @@ function onChooseAvatar(e) {
   if (url) localAvatarUrl.value = url
 }
 
-// #ifdef APP-PLUS
+// 多端 APK 用 uni.chooseImage 选头像（APK 里 open-type="chooseAvatar" 不可用）。
+// 注意：APK 基于 MP-WEIXIN 编译，#ifdef APP-PLUS 会被剔除，故用 #ifdef MP-WEIXIN 包裹。
+// #ifdef MP-WEIXIN
 function onChooseImage() {
   uni.chooseImage({
     count: 1,
