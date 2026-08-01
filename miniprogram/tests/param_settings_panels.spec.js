@@ -40,7 +40,10 @@ const RA = {
   '2nd_outwater_temp_detect': { label: '二次出水温度', unit: '℃' },
   primary_valve_opening: { label: '一次阀开度', unit: '%' },
   fan_speed: { label: '风机转速', unit: 'rpm' },
-  pau_out_temp: { label: '送风温度', unit: '℃' },
+  newwind_inlet_temp: { label: '新风入口温度', unit: '℃' },
+  pau_through_temp: { label: '出风温度', unit: '℃' },
+  pau_out_temp: { label: '盘管出水温度', unit: '℃' },
+  pau_in_temp: { label: '盘管进水温度', unit: '℃' },
   filter_working_time: { label: '滤网已运行', unit: 'h' },
   total_cold_quantity: { label: '累计冷量' },
   total_hot_quantity: { label: '累计热量' },
@@ -355,21 +358,49 @@ describe('buildCard', () => {
   it('新风合并卡(130004+10016)：控件来自 10016（风速/加湿），小字来自 130004，无头部开关，#2 隐藏 10016 的 mode/system_switch', () => {
     const panel = { id: 'sys-130004-10016', title: '新风', devices: [panelDev(9002, '130004'), panelDev(9005, '10016')] }
     const attrs = {
-      9002: { fan_speed: '1674', pau_out_temp: '15.4', filter_working_time: '653', out_temp_set: '13.0', comm_fault_timeout: 'normal' },
+      9002: {
+        fan_speed: '1674', filter_working_time: '653', out_temp_set: '13.0', comm_fault_timeout: 'normal',
+        // 2026-08-02 标定后：pau_through=出风(空气)、pau_out=盘管出水(水)、pau_in=盘管进水(水)
+        pau_through_temp: '12.7', newwind_inlet_temp: '26.6', pau_out_temp: '15.1', pau_in_temp: '100.2',
+      },
       9005: { wind_speed: 'normal', humidification_enable: 'off', mode: 'cold', system_switch: 'on' }, // 10016 会镜像推 mode/system_switch
     }
     const card = buildCard(panel, attrs, CONFIG)
     expect(card.icon).toBe('💨')
     expect(card.switchCtl).toBeNull() // 10016 无 system_switch 控件 → 不出头部开关
     expect(card.controls.map((c) => c.w.tag)).toEqual(['wind_speed', 'humidification_enable'])
-    expect(card.small.map((m) => m.tag)).toEqual(['pau_out_temp', 'filter_working_time'])
-    expect(card.small.find((m) => m.tag === 'pau_out_temp').value).toBe('15.4℃')
+    expect(card.small.map((m) => m.tag)).toEqual(
+      ['pau_through_temp', 'newwind_inlet_temp', 'filter_working_time'])
+    expect(card.small.find((m) => m.tag === 'pau_through_temp').value).toBe('12.7℃')
     // #2：mode / system_switch（10016 镜像）不出现在任何位置
     const restTags = card.rest.map((r) => r.tag)
     expect(restTags).not.toContain('mode')
     expect(restTags).not.toContain('system_switch')
-    // out_temp_set/fan_speed 未在卡面突出 → 进查看全部
-    expect(restTags).toEqual(['out_temp_set', 'fan_speed'])
+    // 未在卡面突出的项 → 进查看全部（两个水温在此，不占首屏）
+    expect(restTags).toEqual(['out_temp_set', 'fan_speed', 'pau_out_temp', 'pau_in_temp'])
+  })
+
+  it('新风卡中央大字 = 出风温度(pau_through_temp)，不是水温；新风入口走 bar', () => {
+    const panel = { id: 'sys-130004', title: '新风', devices: [panelDev(9002, '130004')] }
+    const attrs = { 9002: {
+      pau_through_temp: '12.7', newwind_inlet_temp: '26.6',
+      filter_working_time: '653', pau_out_temp: '15.1', pau_in_temp: '100.2',
+    } }
+    const card = buildCard(panel, attrs, CONFIG)
+    // hero（左列中央大字霓虹读数）必须是出风温度
+    expect(card.hudLayout).toBe(true)
+    expect(card.metricsLeft.map((m) => m.tag)).toEqual(['pau_through_temp'])
+    expect(card.metricsLeft[0].displayType).toBe('big')
+    expect(card.metricsLeft[0].numText).toBe('12.7')
+    expect(card.metricsLeft[0].label).toBe('出风温度')
+    // 右列：新风入口(bar) + 滤网(ring)
+    expect(card.metricsRight.map((m) => m.tag)).toEqual(['newwind_inlet_temp', 'filter_working_time'])
+    expect(card.metricsRight[0].displayType).toBe('bar')
+    expect(card.metricsRight[0].progressPct).toBe(73)   // (26.6+10)/50
+    expect(card.metricsRight[1].displayType).toBe('ring')
+    // 回归护栏：两个水温绝不能回到卡面（旧版 pau_out_temp 曾被当「送风温度」放中央）
+    expect(card.small.map((m) => m.tag)).not.toContain('pau_out_temp')
+    expect(card.small.map((m) => m.tag)).not.toContain('pau_in_temp')
   })
 
   it('风速 select 控件携带 options 供分段 chips 渲染', () => {
