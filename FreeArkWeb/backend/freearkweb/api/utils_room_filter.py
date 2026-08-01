@@ -315,6 +315,12 @@ def resolve_sub_type_for_room(specific_part: str, ori_room_name: str) -> str:
 
     本函数按户型查表反解，一房一 sub_type，确定且无坍缩。
     房间名不在该户型模板内（如三房出现「书房」）时返回空字符串。
+
+    降级：户型判定失败（设备树未同步 / 面板数既非 3 也非 4）时，回退到旧的
+    关键词匹配以保持既有行为、不丢数据，但用 sorted() 取首个而非
+    next(iter(frozenset))，因此**不再依赖哈希种子**——缺陷三(b) 在降级路径上
+    同样被修掉。降级路径仍可能坍缩（缺陷三(a)），这是关键词匹配的固有局限，
+    仅在异常户上生效，正常 3/4 面板户走上面的双射查表。
     """
     if not ori_room_name:
         return ''
@@ -324,7 +330,8 @@ def resolve_sub_type_for_room(specific_part: str, ori_room_name: str) -> str:
     elif house_type == HOUSE_TYPE_FOUR:
         idx = 2
     else:
-        return ''
+        matched = _match_panel_sub_types([ori_room_name])
+        return sorted(matched)[0] if matched else ''
     for sub_type, entry in PANEL_ROOM_TABLE.items():
         room = entry[idx]
         if room and room in ori_room_name:
