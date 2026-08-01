@@ -267,7 +267,27 @@ class DegradedFallbackTests(TestCase):
             resolve_panel_display('5-1-1-101', 'panel_children_room', '主卧-温控面板'),
             '主卧-温控面板',
         )
-        self.assertEqual(resolve_sub_type_for_room('5-1-1-101', '主卧'), '')
+
+    def test_degraded_reverse_falls_back_to_keywords_deterministically(self):
+        """户型未知时逆映射回退关键词匹配（不丢数据），且必须确定、不依赖哈希。
+
+        旧实现在此路径用 next(iter(frozenset))，「主卧」同时命中 panel_bedroom
+        与 panel_children_room，取值随 hash seed 漂移。改用 sorted() 后恒定。
+        """
+        _build_owner('8-1-1-101', ['主卧'])  # 仅 1 块面板 → 户型未知
+        self.assertIsNone(get_house_type('8-1-1-101'))
+        first = resolve_sub_type_for_room('8-1-1-101', '主卧')
+        self.assertNotEqual(first, '', '降级路径不应丢失 sub_type')
+        # sorted(['panel_bedroom','panel_children_room'])[0]
+        self.assertEqual(first, 'panel_bedroom')
+        for _ in range(20):
+            invalidate_room_filter_cache()
+            self.assertEqual(
+                resolve_sub_type_for_room('8-1-1-101', '主卧'), first,
+                '降级路径的解析结果发生漂移（疑似又依赖了集合迭代序）',
+            )
+        # 完全不匹配任何关键词的房间名仍返回空
+        self.assertEqual(resolve_sub_type_for_room('8-1-1-101', '厨房'), '')
 
     def test_abnormal_panel_count_returns_none(self):
         """面板数既非 3 也非 4（如 2 块）→ 不臆测户型，回退。"""
