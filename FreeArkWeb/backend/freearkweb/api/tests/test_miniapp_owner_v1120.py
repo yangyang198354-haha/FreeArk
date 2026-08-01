@@ -23,9 +23,14 @@ from rest_framework.authtoken.models import Token
 
 from api.models import (
     CustomUser, OwnerInfo, OwnerUserBinding,
-    PLCLatestData, DeviceConfig, DeviceFloor, DeviceRoom,
+    PLCLatestData, DeviceConfig, DeviceFloor, DeviceRoom, DeviceNode,
 )
-from api.views_miniapp_device_settings import PANEL_DISPLAY_MAP
+# v1.14.0：PANEL_DISPLAY_MAP 更名为 _PANEL_DISPLAY_FALLBACK，并降级为
+# 「户型判定失败时的兜底默认值」；标签权威来源改为 utils_room_filter
+# 按户型解析 PANEL_ROOM_TABLE（生产标定实测真值）。
+from api.views_miniapp_device_settings import (
+    _PANEL_DISPLAY_FALLBACK as PANEL_DISPLAY_MAP,
+)
 from api.utils_room_filter import invalidate_room_filter_cache
 
 REALTIME_URL = '/api/miniapp/owner/realtime-params/'
@@ -74,29 +79,46 @@ def _make_plc_data(specific_part, param_name, value=100):
     )
 
 
-def _setup_three_room_floors(owner):
-    """三房户型：次卧 / 主卧 / 儿童房（无书房）。
-    触发: panel_study_room（次卧）, panel_bedroom（主卧）, panel_children_room（儿童房/主卧）
-    不触发: panel_fourth_children（需书房）
+def _make_rooms_with_panels(owner, room_names):
+    """建楼层 + 房间，且**每间挂一块温控面板 DeviceNode(120003)**。
+
+    v1.14.0：面板 DeviceNode 是 get_house_type() 的户型判据（3 块=三房 / 4 块=四房）。
+    此前本文件的 fixture 只建 DeviceRoom 不建 DeviceNode，导致户型判定恒为 None、
+    标签走降级 fallback —— 测试名义上覆盖「四房户型」，实际只覆盖降级路径。
+    补全 DeviceNode 后，本文件的 display 断言才真正覆盖生产行为。
     """
     floor = DeviceFloor.objects.create(owner=owner, floor_no=1, floor_name='一层')
-    DeviceRoom.objects.create(floor=floor, room_name='次卧', ori_room_name='次卧', room_type=1)
-    DeviceRoom.objects.create(floor=floor, room_name='主卧', ori_room_name='主卧', room_type=1)
-    DeviceRoom.objects.create(floor=floor, room_name='儿童房', ori_room_name='儿童房', room_type=1)
+    sn = 30000
+    for name in room_names:
+        room = DeviceRoom.objects.create(
+            floor=floor, room_name=name, ori_room_name=name, room_type=1,
+        )
+        sn += 1
+        DeviceNode.objects.create(
+            room=room, device_sn=sn, device_name='温控面板',
+            system_flag=1, product_code='120003', category_code=12,
+        )
     return floor
+
+
+def _setup_three_room_floors(owner):
+    """三房户型：次卧 / 主卧 / 儿童房（无书房），每间一块面板。
+
+    可见性触发: panel_study_room（次卧）, panel_bedroom（主卧）,
+                panel_children_room（儿童房/主卧）；不触发 panel_fourth_children。
+    标签（v1.14.0 生产标定实测）: children_room→儿童房 / bedroom→主卧 / study_room→次卧
+    """
+    return _make_rooms_with_panels(owner, ['次卧', '主卧', '儿童房'])
 
 
 def _setup_four_room_floors(owner):
-    """四房户型：书房 / 次卧 / 主卧 / 儿童房。
-    触发: panel_study_room（书房/次卧）, panel_bedroom（主卧）,
-          panel_children_room（儿童房/主卧）, panel_fourth_children（书房+儿童房）
+    """四房户型：书房 / 次卧 / 主卧 / 儿童房，每间一块面板。
+
+    标签（v1.14.0 生产标定实测）:
+        children_room→书房 / bedroom→次卧 / study_room→主卧 / fourth_children→儿童房
+    ⚠ 与 plc_config.json 的四房标注不同——实测证明该标注把主卧与书房标反了。
     """
-    floor = DeviceFloor.objects.create(owner=owner, floor_no=1, floor_name='一层')
-    DeviceRoom.objects.create(floor=floor, room_name='书房', ori_room_name='书房', room_type=1)
-    DeviceRoom.objects.create(floor=floor, room_name='次卧', ori_room_name='次卧', room_type=1)
-    DeviceRoom.objects.create(floor=floor, room_name='主卧', ori_room_name='主卧', room_type=1)
-    DeviceRoom.objects.create(floor=floor, room_name='儿童房', ori_room_name='儿童房', room_type=1)
-    return floor
+    return _make_rooms_with_panels(owner, ['书房', '次卧', '主卧', '儿童房'])
 
 
 def _extract_sub_display(response_data, sub_key):

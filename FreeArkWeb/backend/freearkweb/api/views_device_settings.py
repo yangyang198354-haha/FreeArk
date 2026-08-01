@@ -13,7 +13,11 @@ from rest_framework.pagination import PageNumberPagination
 from .models import DeviceConfig, DeviceAttrDef, PLCLatestData, OwnerInfo, PLCWriteRecord
 from .param_value_label import get_value_options, get_display_value
 from .serializers_device_settings import PLCWriteRecordSerializer, DeviceSettingsBatchWriteSerializer
-from .utils_room_filter import get_available_sub_types  # v0.5.7 M3: 房型过滤
+from .utils_room_filter import (  # v0.5.7 M3: 房型过滤
+    get_available_sub_types,
+    resolve_panel_display,  # v1.14.0: 面板标签按户型解析实测真值
+    get_panel_order,        # v1.14.0: 面板展示序
+)
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +248,10 @@ def device_settings_params(request, specific_part):
         if key not in groups:
             groups[key] = {
                 'sub_type': cfg.sub_type,
-                'sub_type_display': cfg.sub_type_display,
+                # v1.14.0：温控面板标签按户型解析实测真值，回退全局默认值
+                'sub_type_display': resolve_panel_display(
+                    specific_part, cfg.sub_type, cfg.sub_type_display, '-温控面板'
+                ),
                 'params': [],
             }
 
@@ -271,9 +278,16 @@ def device_settings_params(request, specific_part):
             'value_options': value_options,
         })
 
+    # v1.14.0：按户型重排面板展示序（主卧→次卧→书房→儿童房）；
+    # 非面板 sub_type 排序键相同，sorted 稳定排序保持其原相对次序。
     return Response({
         'specific_part': specific_part,
-        'groups': list(groups.values()),
+        'groups': [
+            g for _k, g in sorted(
+                groups.items(),
+                key=lambda kv: get_panel_order(specific_part, kv[0]),
+            )
+        ],
     })
 
 
