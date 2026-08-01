@@ -91,10 +91,23 @@ SCREEN_READONLY_ATTRS = {
     'primary_valve_opening': {'label': '一次阀开度', 'unit': '%'},  # 单位待核实
     # 新风 130004
     'fan_speed': {'label': '风机转速', 'unit': 'rpm'},
-    'newwind_inlet_temp': {'label': '新风进风温度', 'unit': '℃'},
-    'pau_out_temp': {'label': '送风温度', 'unit': '℃'},
-    'pau_through_temp': {'label': '盘管温度', 'unit': '℃'},
-    'pau_in_temp': {'label': '回风温度', 'unit': '℃'},  # 实测样例 101.2，疑似探头/缩放异常，待核实
+    # ── 新风 PAU 四个温度点：2026-08-02 生产实测标定，四对四无剩余 ────────────
+    # 标定方法：取 3-1-7-702 的 plc_latest_data 与该户屏端抓包做数值指纹比对——
+    #   coil_inlet_temp=1002(→100.2) 与 pau_in_temp 的 100.2 精确吻合，且 575 户中
+    #   恒等 1002 的仅此一户（探头故障，独一无二的指纹）；
+    #   coil_supply_air_temp=127(→12.7) 与 pau_through_temp 的 12.7 精确吻合。
+    # 交叉验证：机组故障位域 DBW388 只声明 进风(4)/回水(8)/进水(16)/出风(256)
+    #   四个温度传感器，与 PLC 四个寄存器一一对应，**不存在「回风」传感器**。
+    # 物理自洽：制冷时 进水 < 过盘管出风 < 出水 < 新风入口（575 户普遍成立）。
+    #
+    # ⚠ 旧标签「送风温度/回风温度/盘管温度」是当年按 attrTag 字面猜的，全部错位：
+    #   pau_out_temp 猜成送风(空气)、实为盘管出水(水)；pau_in_temp 猜成回风、实为盘管进水；
+    #   真正的送风(出风)温度是 pau_through_temp，却被降级叫成「盘管温度」。
+    #   详见 docs/analysis/ 与 PLC与MODBUS地址对照表20251217A.xlsx 序号 22-26。
+    'newwind_inlet_temp': {'label': '新风入口温度', 'unit': '℃'},   # PLC 372 fresh_air_inlet_temp
+    'pau_through_temp': {'label': '出风温度', 'unit': '℃'},         # PLC 368 coil_supply_air_temp（与 out_temp_set「出风温度设定」配对）
+    'pau_out_temp': {'label': '盘管出水温度', 'unit': '℃'},         # PLC 380 coil_outlet_temp（水温，非送风）
+    'pau_in_temp': {'label': '盘管进水温度', 'unit': '℃'},          # PLC 378 coil_inlet_temp（水温，非回风）
     'one_water_valve_opening': {'label': '水阀开度', 'unit': '%'},
     'humi_lower_limit': {'label': '加湿下限', 'unit': '%'},
     'humi_upper_limit': {'label': '加湿上限', 'unit': '%'},

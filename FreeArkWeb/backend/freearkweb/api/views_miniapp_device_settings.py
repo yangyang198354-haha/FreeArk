@@ -55,7 +55,10 @@ from .views_condensation import CondensationWarningPagination
 from .screen_param_config import get_screen_param_config, is_writable_attr
 from .utils_room_filter import (
     get_available_sub_types, get_allowed_param_names,
-    _match_panel_sub_types,  # ADR-1111-02: 面板 sub_type 推导（只读复用）
+    _match_panel_sub_types,  # ADR-1111-03: 面板房间分组判定（只读复用）
+    resolve_panel_display,      # v1.14.0: 面板标签按户型解析实测真值
+    get_panel_order,            # v1.14.0: 面板展示序
+    resolve_sub_type_for_room,  # v1.14.0: 房间→sub_type 逆映射（取代 hash 不确定的旧实现）
 )
 from .views import (
     IsOwnerUser, _ondemand_inflight, _ONDEMAND_INFLIGHT_TTL,
@@ -68,14 +71,20 @@ logger = logging.getLogger('api.views_miniapp_device_settings')
 _RESULT_TO_STATUS = {'success': 'success', 'timeout': 'timeout', 'failed': 'failed'}
 
 # 小程序端温控面板 sub_type → 纯房间名（不含"-温控面板"后缀）
-# 来源：utils_room_filter.py SUB_TYPE_TO_ROOM_KEYWORDS 注释 +
-#        Web RoomHistoryView.vue ROOM_TABS 对照（study_room→书房 / bedroom→次卧 / children_room→主卧）
-# ⚠ 注意：panel_bedroom → 次卧（非主卧），panel_children_room → 主卧（非儿童房）
-#   此反直觉映射已由业务方最终确认（REQ-FUNC-002 关键陷阱，v1.11.2 2026-06-28）
-PANEL_DISPLAY_MAP: dict[str, str] = {
+#
+# v1.14.0（2026-08-01）：本表已降级为**户型未知时的兜底默认值**。
+#   标签的权威来源改为 utils_room_filter.resolve_panel_display()，
+#   按户型查 PANEL_ROOM_TABLE（生产标定实测真值）解析。
+#
+# ⚠ 本表沿用旧的「四房」释义，而生产标定证明该释义把「主卧」与「书房」标反了
+#   （offset 1395 实为四房书房、1515 实为四房主卧，233 户实证）。
+#   保留原值仅为在户型判定失败时维持既有行为不突变，**不要**把它当真值使用。
+#   历史背景：此"反直觉映射"曾于 v1.11.2（2026-06-28）被业务方确认，
+#   但那次确认基于同样错误的 plc_config 四房标注。
+_PANEL_DISPLAY_FALLBACK: dict[str, str] = {
     'panel_study_room':      '书房',
-    'panel_bedroom':         '次卧',   # ⚠ 非"主卧"
-    'panel_children_room':   '主卧',   # ⚠ 非"儿童房"
+    'panel_bedroom':         '次卧',
+    'panel_children_room':   '主卧',
     'panel_fourth_children': '儿童房',
 }
 
@@ -281,7 +290,11 @@ def miniapp_owner_realtime_params(request):
             result[group_key] = {'display': cfg.group_display, 'sub_types': {}}
         if sub_key not in result[group_key]['sub_types']:
             result[group_key]['sub_types'][sub_key] = {
-                'display': PANEL_DISPLAY_MAP.get(sub_key, cfg.sub_type_display),
+                # v1.14.0：按户型解析实测真值；户型未知时回退旧的固定映射
+                'display': resolve_panel_display(
+                    specific_part, sub_key,
+                    _PANEL_DISPLAY_FALLBACK.get(sub_key, cfg.sub_type_display),
+                ),
                 'params': [],
             }
 
@@ -305,6 +318,13 @@ def miniapp_owner_realtime_params(request):
             del sub_types[sub_key]
         if not sub_types:
             del result[group_key]
+
+    # v1.14.0：按户型重排面板展示序（主卧→次卧→书房→儿童房），与 Web 端一致
+    for group_key in result:
+        result[group_key]['sub_types'] = dict(sorted(
+            result[group_key]['sub_types'].items(),
+            key=lambda kv: get_panel_order(specific_part, kv[0]),
+        ))
 
     # ── screen_mac（ADR-1110-02）─────────────────────────────────────────────
     owner_info = OwnerInfo.objects.filter(specific_part=specific_part).first()
@@ -474,16 +494,29 @@ _PRODUCT_CODE_TO_SUB_TYPE: dict = {
 _PANEL_PRODUCT_CODE: str = '120003'
 
 
-def _infer_sub_type(product_code: str, ori_room_name: str) -> str:
-    """推导 DeviceNode → sub_type（ADR-1111-02）。
+def _infer_sub_type(product_code: str, ori_room_name: str,
+                    specific_part: str = '') -> str:
+    """推导 DeviceNode → sub_type（ADR-1111-02；v1.14.0 重写）。
 
-    面板设备（product_code='120003'）：调用 _match_panel_sub_types([ori_room_name]) 取首个结果。
+    面板设备（product_code='120003'）：调用 resolve_sub_type_for_room()，
+        按户型查 PANEL_ROOM_TABLE 逆映射，一房一 sub_type。
     系统级设备：查 _PRODUCT_CODE_TO_SUB_TYPE 字典。
-    未知 product_code：返回空字符串（前端叠加时跳过，不影响骨架展示）。
+    未知 product_code / 无法解析：返回空字符串（前端叠加时跳过，不影响骨架展示）。
+
+    v1.14.0 修复的两个缺陷（旧实现为
+    `next(iter(_match_panel_sub_types([ori_room_name])), '')`）：
+      1. **坍缩**：关键词匹配下，四房的「书房」与「次卧」都命中 panel_study_room、
+         「主卧」与「儿童房」都命中 panel_children_room，四个房间只映射到两个
+         sub_type；panel_bedroom 与 panel_fourth_children 永远不可能被分配
+         （后者需输入列表同时含"书房"和"儿童房"，而此处每次只传一个房间名，
+         条件恒不成立）。后果：两个房间叠加到同一份实时值。
+      2. **不确定**：「主卧」同时命中 panel_bedroom 与 panel_children_room，
+         next(iter(frozenset)) 取值依赖字符串哈希，Python 默认随机化 hash seed
+         （生产 systemd 未固定 PYTHONHASHSEED），后端每次重启该房间挂的参数集
+         就可能换一套。
     """
     if product_code == _PANEL_PRODUCT_CODE:
-        matched = _match_panel_sub_types([ori_room_name])
-        return next(iter(matched), '')
+        return resolve_sub_type_for_room(specific_part, ori_room_name)
     return _PRODUCT_CODE_TO_SUB_TYPE.get(product_code, '')
 
 
@@ -566,7 +599,9 @@ def miniapp_owner_structure(request):
 
             room_devices = []
             for device in room.devices.all():
-                sub_type = _infer_sub_type(device.product_code, room.ori_room_name)
+                sub_type = _infer_sub_type(
+                    device.product_code, room.ori_room_name, specific_part
+                )
                 entry = {
                     'device_sn': device.device_sn,
                     'device_name': device.device_name,

@@ -19,6 +19,8 @@ from .utils_room_filter import (  # v0.5.7: 房型过滤工具
     get_allowed_param_names,
     invalidate_room_filter_cache,
     SYSTEM_LEVEL_SUB_TYPES,
+    resolve_panel_display,  # v1.14.0: 面板标签按户型解析实测真值
+    get_panel_order,        # v1.14.0: 面板展示序
 )
 from .serializers import (
     UserSerializer,
@@ -1869,7 +1871,11 @@ def get_device_realtime_params(request):
             }
         if sub_key not in result[group_key]['sub_types']:
             result[group_key]['sub_types'][sub_key] = {
-                'display': cfg.sub_type_display,
+                # v1.14.0：温控面板标签按户型解析实测真值，非面板/户型未知时
+                # 回退 DeviceConfig.sub_type_display 全局默认值
+                'display': resolve_panel_display(
+                    specific_part, sub_key, cfg.sub_type_display, '-温控面板'
+                ),
                 'params': [],
             }
 
@@ -1896,6 +1902,17 @@ def get_device_realtime_params(request):
             del sub_types[sub_key]
         if not sub_types:
             del result[group_key]
+
+    # v1.14.0：按户型重排面板展示序（主卧→次卧→书房→儿童房）。
+    # 原顺序来自 configs_qs.order_by('id')，即 seed 插入序，按 sub_type 名排的，
+    # 标签改为实测房间名后不再有意义。非面板 sub_type 排序键相同，保持原相对次序。
+    for group_key in result:
+        sub_types = result[group_key]['sub_types']
+        ordered = sorted(
+            sub_types.items(),
+            key=lambda kv: get_panel_order(specific_part, kv[0]),
+        )
+        result[group_key]['sub_types'] = dict(ordered)
 
     return Response({'success': True, 'specific_part': specific_part, 'data': result})
 

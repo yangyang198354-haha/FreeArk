@@ -516,7 +516,7 @@ HVAC_PARAM_CONFIGS = [
     },
     {
         'param_name': 'humidification_humidity_lower_limit',
-        'display_name': '加湿温度下限',
+        'display_name': '加湿湿度下限',
         'group': 'hvac',
         'sub_type': 'fresh_air',
         'group_display': '暖通',
@@ -524,7 +524,7 @@ HVAC_PARAM_CONFIGS = [
     },
     {
         'param_name': 'humidification_humidity_upper_limit',
-        'display_name': '加湿温度上限',
+        'display_name': '加湿湿度上限',
         'group': 'hvac',
         'sub_type': 'fresh_air',
         'group_display': '暖通',
