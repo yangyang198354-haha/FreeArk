@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: FreeArk 后端测试套件分层运行参考。当需要运行后端测试、按层级（单元/集成/端到端）跑测试、验证改动是否破坏测试、复核测试结果、或查询某测试属于哪一层时使用。覆盖 Django test runner 的 @tag 分层（unit/integration/e2e）、运行命令、卫星测试（datacollection pytest）、已知"待定"失败基线、测试清单位置。
+description: FreeArk 后端测试套件分层运行参考。当需要运行后端测试、按层级（单元/集成/端到端）跑测试、验证改动是否破坏测试、复核测试结果、判断某个失败是不是自己引入的、或查询某测试属于哪一层时使用。覆盖 Django test runner 的 @tag 分层（unit/integration/e2e）、运行命令、卫星测试（datacollection pytest）、当前基线与 3 项已知既有失败（含一个会打真实 DeepSeek 的 flaky 用例）、对照实验为何不能用 git worktree（.env 差异导致假阳性）、测试清单位置。
 ---
 
 # FreeArk 测试运行手册（分层）
@@ -9,15 +9,51 @@ description: FreeArk 后端测试套件分层运行参考。当需要运行后�
 > 完整脚本↔层级↔用例映射见 `docs/testing/test_inventory.md`（由 `scripts/gen_test_inventory.py` 自动生成）。
 
 ## 基线（用前以实跑为准）
-- 全量：**1778** 测试，**全绿**（`OK`，0 failures / 0 errors），`19 skipped` 为合理环境跳过
-  （含本地无 `python-docx` 时 `tests_rag` 的 docx 解析用例自动 skip；CI 装全量依赖后会真跑）。
-- 2026-06-20：原"6 个待定失败"已逐个核对修复（实测为 **7 个**）——5 个测试侧问题
-  （模块级缓存跨用例污染 / 写死他机绝对路径 / 用了 v0.5.7 已废 sub_type `room_panel` /
-  docx 未装无 skip 守卫）+ 1 个过时用例删除（次日预留记录守卫，已由
-  `test_daily_usage_calculator.py` 覆盖）+ 2 个分页用例改期望（device-list 上限保持 50，
-  非 2000）。`views.py` 未改行为，仅同步分页 docstring。
+
+**当前基线（2026-08-01，生产树莓派实跑）：全量 `test api` = 2137 测试 / 291s，
+3 failures / 0 errors / 46 skipped。**
+
+⚠️ **这 3 项是既有失败，与被测改动无关**，不要当成自己引入的回归。每项都已用
+「主目录临时 `git checkout <改动前提交> -- <改的文件>` → 跑 → 还原」做过受控复核：
+
+| 失败用例 | 性质 |
+|---|---|
+| `test_device_management.TC_U_003_ScreenConnectivityChecker.test_probe_single_returns_false_on_oserror` | 既有失败 |
+| `test_device_management.TC_U_003_ScreenConnectivityChecker.test_probe_single_returns_false_on_timeout` | 既有失败 |
+| `test_langgraph_phase_a.OrchestratorShortCircuitTests.test_sticky_disabled_falls_to_default` | **flaky**：会打真实 DeepSeek（单条耗时 40~80s），断言路由结果为 `freeark-expert`，实跑常返回 `inspection-expert` |
+
+### ⚠️ 对照实验的坑：不要用 `git worktree` 比基线
+
+`FreeArkWeb/backend/.env` 在仓库里有一份**已提交的 771 字节版本**（无真实
+`DEEPSEEK_API_KEY`），而生产主目录那份是 2044 字节含真实 key 的**本地修改版**。
+在 worktree 里跑，LangGraph 相关用例会因为拿不到 key 而直接短路 → 秒过；
+主目录跑则真打 LLM → 慢且结果不确定。
+
+**后果**：用 worktree 对比「改动前 vs 改动后」会得到假阳性——
+2026-08-01 实测就出现过 worktree 里 0.47s `OK`、主目录 78s `FAIL` 的假象，
+差点把一个 flaky 测试误判成新引入的回归。
+
+**正确做法**：在**同一个工作目录**里临时回退被改文件再跑，保证 `.env` 一致：
+```bash
+F="path/to/changed1.py path/to/changed2.py"
+git checkout <改动前提交> -- $F
+FREEARK_POC_MOCK=1 PYTHONUTF8=1 venv/bin/python .../manage.py test <目标用例> --settings=freearkweb.test_settings
+git checkout HEAD -- $F      # 务必还原
+```
+（清 `DEEPSEEK_API_KEY` 环境变量**没用**——key 从 `.env` 文件读，不走进程环境变量。）
+
+### 历史
+- 2026-06-20：全量 **1778** 测试全绿，`19 skipped`。原"6 个待定失败"已逐个核对修复
+  （实测为 **7 个**）——5 个测试侧问题（模块级缓存跨用例污染 / 写死他机绝对路径 /
+  用了 v0.5.7 已废 sub_type `room_panel` / docx 未装无 skip 守卫）+ 1 个过时用例删除
+  （次日预留记录守卫，已由 `test_daily_usage_calculator.py` 覆盖）+ 2 个分页用例改期望
+  （device-list 上限保持 50，非 2000）。`views.py` 未改行为，仅同步分页 docstring。
+- skipped 从 19 增至 46：含本地无 `python-docx` 时 `tests_rag` 的 docx 解析用例自动 skip
+  （CI 装全量依赖后会真跑），其余为环境相关跳过。
 - 已建 GitHub Actions CI（`.github/workflows/ci.yml`）：push main / PR 触发，三 job 并行
-  （后端整套 `test api` / datacollection pytest / 前端 vitest+build），门控以全绿为准。
+  （后端整套 `test api` / datacollection pytest / 前端 vitest+build）。
+  ⚠️ 门控写的是「以全绿为准」，但当前基线并非全绿——上述 3 项会让 CI 红。
+  修 flaky/既有失败前，别把 CI 结果当作改动质量的唯一判据。
 
 ## 运行命令
 
