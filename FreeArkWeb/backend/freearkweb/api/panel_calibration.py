@@ -56,16 +56,23 @@ PANEL_PRODUCT_CODE: str = '120003'
 # ---------------------------------------------------------------------------
 
 # PLC param 后缀 ↔ 屏端 attrTag。两侧读的是同一个物理传感器，数值应近似相等。
-#   tol       —— 判定「一致」的绝对误差容忍（屏端与 PLC 采样时刻不同，允许小幅漂移）
-#   weight    —— 该信号在总分中的权重（温度最可靠，开关是二值但极具区分度）
+#   tol       —— 判定「一致」的绝对误差容忍
+#   weight    —— 该信号在总分中的权重
 #   discrete  —— True 表示离散/二值信号，按精确相等判定，不用 tol
+#
+# ⚠ 容差必须小于「屏端上报分辨率」，否则同户各房间会互相匹配、margin 归零。
+#   2026-08-01 生产实测（panel_calib_capture 抓包）：
+#     temp / temp_set / dew_point_temp 分辨率 0.5（"24.5" "25.0" "25.5"）
+#     humidity 分辨率 1.0（"53.0" "54.0"）
+#   同一户四块面板的读数极为接近（3-1-7-702 实测：温度全为 25.0、湿度仅 53.0/54.0 之差），
+#   故容差取「半个分辨率步长」，实质等价于定标后精确匹配，区分度全靠取值随时间的漂移轨迹。
 CORRELATION_SIGNALS: tuple = (
-    # (plc_suffix,           screen_attr_tag,   tol,  weight, discrete)
-    ('_temperature',         'temp',            0.6,  3.0,    False),
-    ('_humidity',            'humidity',        3.0,  2.0,    False),
-    ('_temp_setting',        'temp_set',        0.6,  2.0,    False),
-    ('_dew_point_setting',   'dew_point_temp',  1.0,  1.0,    False),
-    ('_switch',              'switch',          0.0,  1.5,    True),
+    # (plc_suffix,           screen_attr_tag,   tol,   weight, discrete)
+    ('_temperature',         'temp',            0.25,  3.0,    False),
+    ('_humidity',            'humidity',        0.6,   2.5,    False),
+    ('_temp_setting',        'temp_set',        0.25,  2.5,    False),
+    ('_dew_point_setting',   'dew_point_temp',  0.25,  1.0,    False),
+    ('_switch',              'switch',          0.0,   1.5,    True),
 )
 
 # PLC 侧整数存储可能带 ×10 定标（BigIntegerField 存 265 表示 26.5℃）。
