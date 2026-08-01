@@ -178,7 +178,7 @@
     },
     "study_room_switch": {
       "name": "study_room_switch",
-      "description": "三房次卧四房书房开关",
+      "description": "三房次卧四房主卧开关",
       "db_num": 14,
       "offset": 1515,
       "length": 1,
@@ -186,7 +186,7 @@
     },
     "study_room_temperature": {
       "name": "study_room_temperature",
-      "description": "三房次卧四房书房实际温度",
+      "description": "三房次卧四房主卧实际温度",
       "db_num": 14,
       "offset": 1504,
       "length": 2,
@@ -194,7 +194,7 @@
     },
     "study_room_humidity": {
       "name": "study_room_humidity",
-      "description": "三房次卧四房书房相对湿度",
+      "description": "三房次卧四房主卧相对湿度",
       "db_num": 14,
       "offset": 1508,
       "length": 2,
@@ -202,7 +202,7 @@
     },
     "study_room_temp_setting": {
       "name": "study_room_temp_setting",
-      "description": "三房次卧四房书房温度设置",
+      "description": "三房次卧四房主卧温度设置",
       "db_num": 14,
       "offset": 1516,
       "length": 2,
@@ -210,7 +210,7 @@
     },
     "study_room_ntc_temperature": {
       "name": "study_room_ntc_temperature",
-      "description": "三房次卧四房书房NTC温度传感器元件温度",
+      "description": "三房次卧四房主卧NTC温度传感器元件温度",
       "db_num": 14,
       "offset": 1506,
       "length": 2,
@@ -218,7 +218,7 @@
     },
     "study_room_dew_point_setting": {
       "name": "study_room_dew_point_setting",
-      "description": "三房次卧四房书房面板露点温度设置",
+      "description": "三房次卧四房主卧面板露点温度设置",
       "db_num": 14,
       "offset": 1510,
       "length": 2,
@@ -226,7 +226,7 @@
     },
     "study_room_temp_sensor_error": {
       "name": "study_room_temp_sensor_error",
-      "description": "三房次卧四房书房面板内置温度传感器故障",
+      "description": "三房次卧四房主卧面板内置温度传感器故障",
       "db_num": 14,
       "offset": 1526,
       "length": 2,
@@ -234,7 +234,7 @@
     },
     "study_room_humidity_sensor_error": {
       "name": "study_room_humidity_sensor_error",
-      "description": "三房次卧四房书房面板湿度传感器故障",
+      "description": "三房次卧四房主卧面板湿度传感器故障",
       "db_num": 14,
       "offset": 1528,
       "length": 2,
@@ -242,7 +242,7 @@
     },
     "study_room_external_temp_sensor_error": {
       "name": "study_room_external_temp_sensor_error",
-      "description": "三房次卧四房书房面板外置温度传感器故障",
+      "description": "三房次卧四房主卧面板外置温度传感器故障",
       "db_num": 14,
       "offset": 1530,
       "length": 2,
@@ -250,7 +250,7 @@
     },
     "study_room_condensation_alert": {
       "name": "study_room_condensation_alert",
-      "description": "三房次卧四房书房面板凝露提醒",
+      "description": "三房次卧四房主卧面板凝露提醒",
       "db_num": 14,
       "offset": 1532,
       "length": 2,
@@ -258,7 +258,7 @@
     },
     "study_room_communication_error": {
       "name": "study_room_communication_error",
-      "description": "三房次卧四房书房面板通讯故障",
+      "description": "三房次卧四房主卧面板通讯故障",
       "db_num": 14,
       "offset": 1538,
       "length": 2,
@@ -266,7 +266,7 @@
     },
     "children_room_switch": {
       "name": "children_room_switch",
-      "description": "三房儿童房四房主卧开关",
+      "description": "三房儿童房四房书房开关",
       "db_num": 14,
       "offset": 1395,
       "length": 1,
@@ -274,7 +274,7 @@
     },
     "children_room_temperature": {
       "name": "children_room_temperature",
-      "description": "三房儿童房四房主卧实际温度",
+      "description": "三房儿童房四房书房实际温度",
       "db_num": 14,
       "offset": 1384,
       "length": 2,
@@ -282,7 +282,7 @@
     },
     "children_room_humidity": {
       "name": "children_room_humidity",
-      "description": "三房儿童房四房主卧相对湿度",
+      "description": "三房儿童房四房书房相对湿度",
       "db_num": 14,
       "offset": 1388,
       "length": 2,
@@ -290,7 +290,7 @@
     },
     "children_room_temp_setting": {
       "name": "children_room_temp_setting",
-      "description": "三房儿童房四房主卧温度设置",
+      "description": "三房儿童房四房书房温度设置",
       "db_num": 14,
       "offset": 1396,
       "length": 2,
@@ -298,7 +298,7 @@
     },
     "children_room_ntc_temperature": {
       "name": "children_room_ntc_temperature",
-      "description": "三房儿童房四房主卧NTC温度传感器元件温度",
+      "description": "三房儿童房四房书房NTC温度传感器元件温度",
       "db_num": 14,
       "offset": 1386,
       "length": 2,
@@ -306,7 +306,7 @@
     },
     "children_room_dew_point_setting": {
       "name": "children_room_dew_point_setting",
-      "description": "三房儿童房四房主卧面板露点温度设置",
+      "description": "三房儿童房四房书房面板露点温度设置",
       "db_num": 14,
       "offset": 1390,
       "length": 2,
@@ -594,7 +594,7 @@
     },
     "children_room_temp_sensor_error": {
       "name": "children_room_temp_sensor_error",
-      "description": "三房儿童房四房主卧面板内置温度传感器故障",
+      "description": "三房儿童房四房书房面板内置温度传感器故障",
       "db_num": 14,
       "offset": 1406,
       "length": 2,
@@ -602,7 +602,7 @@
     },
     "children_room_humidity_sensor_error": {
       "name": "children_room_humidity_sensor_error",
-      "description": "三房儿童房四房主卧面板湿度传感器故障",
+      "description": "三房儿童房四房书房面板湿度传感器故障",
       "db_num": 14,
       "offset": 1408,
       "length": 2,
@@ -610,7 +610,7 @@
     },
     "children_room_external_temp_sensor_error": {
       "name": "children_room_external_temp_sensor_error",
-      "description": "三房儿童房四房主卧面板外置温度传感器故障",
+      "description": "三房儿童房四房书房面板外置温度传感器故障",
       "db_num": 14,
       "offset": 1410,
       "length": 2,
@@ -618,7 +618,7 @@
     },
     "children_room_condensation_alert": {
       "name": "children_room_condensation_alert",
-      "description": "三房儿童房四房主卧面板凝露提醒",
+      "description": "三房儿童房四房书房面板凝露提醒",
       "db_num": 14,
       "offset": 1412,
       "length": 2,
@@ -626,7 +626,7 @@
     },
     "children_room_communication_error": {
       "name": "children_room_communication_error",
-      "description": "三房儿童房四房主卧面板通讯故障",
+      "description": "三房儿童房四房书房面板通讯故障",
       "db_num": 14,
       "offset": 1418,
       "length": 2,
@@ -714,8 +714,9 @@
     }
   },
   "config_info": {
-    "version": "1.1",
+    "version": "1.2",
     "create_time": "2024-07-11",
-    "description": "PLC数据读取配置文件"
+    "description": "PLC数据读取配置文件",
+    "room_mapping_note": "2026-08-01 生产标定更正：四房户型的 children_room_*(offset 1395) 实为书房、study_room_*(offset 1515) 实为主卧，原标注把两者标反。依据 panel_calib_capture + panel_calib_correlate 实测（399 户采集/355 户标定/253 户 high 置信度、零例外）。等价表述：云端 deviceSn 升序 ↔ PLC 偏移量升序。三房分支原标注正确未动。改此处前请重跑 panel_calib_correlate 复核，权威表见 api/utils_room_filter.py 的 PANEL_ROOM_TABLE。"
   }
 }

@@ -50,10 +50,21 @@ def _resolve_param_name(raw_name: str, specific_part: str = '') -> str:
     当成 param_name 直接传进来，_is_writable 会拒绝并返回 400，导致用户体验差。
     本函数在拒绝前做一次最佳努力的匹配：
       1) 若 raw_name 本身合法可写 → 直接返回（无变换）
-      2) 查 DeviceConfig 中 is_active=True 的全部行，按 display_name / sub_type_display
+      2) 查 DeviceConfig 中 is_active=True 的全部行，按 display_name / 房间标签
          的子串+编辑距离找最匹配的可写 param_name
       3) 匹配失败 → 返回原 raw_name，由上层继续走原拒绝逻辑
-    仅作兜底翻译，绝不放宽白名单安全规则。"""
+    仅作兜底翻译，绝不放宽白名单安全规则。
+
+    v1.14.1 修复（房间标签户型盲区）：原实现拿中文往 DeviceConfig.sub_type_display
+    这张**全局静态表**上匹配，而该表沿用被生产标定推翻的四房标注（1395 标成主卧、
+    1515 标成书房）。后果：对四房户说"把主卧调到 24 度"会被翻译成
+    children_room_temp_setting，真写进书房——展示路径 v1.14.0 已按户型修正，
+    这条逆向路径当时漏改。现改为：
+      · 房间标签走 resolve_panel_display()，按户型查 PANEL_ROOM_TABLE 实测真值；
+      · 候选行先按 get_available_sub_types() 过滤掉该户型不存在的面板，
+        既缩小搜索面，也消除三房下 panel_children_room 与 panel_fourth_children
+        双双回退为"儿童房"造成的并列歧义。
+    specific_part 为空（未知户型）时行为与旧版一致，仍回退全局静态标签。"""
     if _is_writable(raw_name):
         return raw_name
 
@@ -62,8 +73,23 @@ def _resolve_param_name(raw_name: str, specific_part: str = '') -> str:
         # 仅在 is_active=True 且可写的 DeviceConfig 行内搜索（安全约束：绝不扩大可写范围）
         qs = DeviceConfig.objects.filter(is_active=True)
         writable_rows = [row for row in qs.iterator() if _is_writable(row.param_name)]
+
+        # 户型过滤：剔除该专有部分不存在的温控面板 sub_type（与参数展示接口同一判据）
+        if specific_part:
+            available = get_available_sub_types(specific_part)
+            writable_rows = [r for r in writable_rows if r.sub_type in available]
+
         if not writable_rows:
             return raw_name
+
+        # 房间标签按户型解析实测真值；解析不出时回退 DeviceConfig 全局默认值。
+        # 每个 sub_type 只解析一次（get_house_type 内部有 300s 缓存，此处再省掉重复取锁）。
+        sub_display = {}
+        for row in writable_rows:
+            if row.sub_type not in sub_display:
+                sub_display[row.sub_type] = resolve_panel_display(
+                    specific_part, row.sub_type, row.sub_type_display, '-温控面板'
+                ) if specific_part else row.sub_type_display
 
         # 规范化：去掉所有空白/标点/"的"字，转小写用于子串比较
         _norm = lambda s: (
@@ -74,13 +100,13 @@ def _resolve_param_name(raw_name: str, specific_part: str = '') -> str:
         if not q:
             return raw_name
 
-        # 打分：display_name 完全命中 +8；sub_type_display/display_name 子串命中 +4；
+        # 打分：display_name 完全命中 +8；房间标签/display_name 子串命中 +4；
         #       剩余按最长公共子串 / SequenceMatcher 相似度分档。
         best = (0.0, '')
         for row in writable_rows:
-            dn = _norm(row.display_name)          # e.g. "开关" / "设定温度"
-            sub = _norm(row.sub_type_display)     # e.g. "书房温控面板"
-            param = _norm(row.param_name)         # e.g. "studyroomswitch"
+            dn = _norm(row.display_name)              # e.g. "开关" / "设定温度"
+            sub = _norm(sub_display[row.sub_type])    # e.g. "主卧温控"（户型解析后）
+            param = _norm(row.param_name)             # e.g. "studyroomswitch"
             score = 0.0
             if dn and q == dn:
                 score += 8.0
@@ -90,13 +116,12 @@ def _resolve_param_name(raw_name: str, specific_part: str = '') -> str:
                 score += 4.0
             if sub and sub in q:
                 score += 4.0
-            # 与 display_name + sub_type_display 拼接的相似分
+            # 与 房间标签 + display_name 拼接的相似分
             combo = (sub or '') + (dn or '')
             if combo:
                 score += SequenceMatcher(None, q, combo).ratio() * 3.0
-            # 同一 param_name 还按 sub_type 过滤（用户常写"书房开关"含房间词）
-            if specific_part:
-                score += 0.0  # specific_part 先作为后续信号保留，当前暂无房间号→param_name映射
+            # 注：specific_part 的房间信号已在上方通过 sub_display（户型解析）与
+            #     available_sub_types（户型过滤）生效，此处不再另加分。
             if score > best[0]:
                 best = (score, row.param_name)
         # 命中阈值：必须 >= display_name 完全命中的一半以上才接受，避免误匹配
