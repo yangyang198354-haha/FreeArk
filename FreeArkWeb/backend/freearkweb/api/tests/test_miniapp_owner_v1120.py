@@ -216,9 +216,12 @@ class PanelDisplayMapConstantTest(TestCase):
 @tag('integration', 'panel_display')
 class TC_INTG_001_PanelStudyRoomDisplayTest(TestCase):
     """
-    TC-INTG-001: panel_study_room → display='书房'
+    TC-INTG-001: 三房户型 panel_study_room → display='次卧'
     关联 US: US-01, US-02 / 关联 AC: AC-02-01
-    使用三房户型 data setup（次卧/主卧/儿童房），次卧关键词触发 panel_study_room。
+
+    v1.14.0 更正：原断言期望 '书房'，来自 plc_config.json 的四房标注被无差别
+    套用到三房户。生产标定（120 户三房实证）确认三房的 panel_study_room
+    是「次卧」——该户根本没有书房。详见 RCA 报告第 -1 节。
     """
 
     def setUp(self):
@@ -237,8 +240,8 @@ class TC_INTG_001_PanelStudyRoomDisplayTest(TestCase):
     def tearDown(self):
         invalidate_room_filter_cache()
 
-    def test_panel_study_room_display_is_shufang(self):
-        """panel_study_room display 应为'书房'，不含'-温控面板'后缀。
+    def test_panel_study_room_display_is_ciwo_in_three_room(self):
+        """三房户 panel_study_room display 应为'次卧'，不含'-温控面板'后缀。
         关联 AC: AC-02-01
         """
         r = _client(self.tok).get(REALTIME_URL, {'specific_part': self.sp})
@@ -248,8 +251,10 @@ class TC_INTG_001_PanelStudyRoomDisplayTest(TestCase):
         sub_display = _extract_sub_display(data, 'panel_study_room')
         self.assertIsNotNone(sub_display,
                              "panel_study_room 应出现在响应中（三房户型次卧触发）")
-        self.assertEqual(sub_display, '书房',
-                         f"panel_study_room display 期望'书房'，实际'{sub_display}'")
+        self.assertEqual(sub_display, '次卧',
+                         f"三房 panel_study_room display 期望'次卧'，实际'{sub_display}'")
+        self.assertNotEqual(sub_display, '书房',
+                            "三房户没有书房——显示'书房'是 v1.14.0 修复前的幻影房间缺陷")
         self.assertNotIn('-温控面板', sub_display,
                          "display 不得含'-温控面板'后缀（OQ-04 已确认去除后缀）")
 
@@ -277,9 +282,14 @@ class TC_INTG_002_PanelBedroomDisplayTest(TestCase):
     def tearDown(self):
         invalidate_room_filter_cache()
 
-    def test_panel_bedroom_display_is_ciwu_not_zhuwu(self):
-        """panel_bedroom display 应为'次卧'，且明确不为'主卧'（最高风险串房场景）。
+    def test_panel_bedroom_display_is_zhuwo_in_three_room(self):
+        """三房户 panel_bedroom display 应为'主卧'。
         关联 AC: AC-02-02
+
+        v1.14.0 更正：原断言期望'次卧'并把'主卧'标为 BLOCKER 串房——那是把
+        四房释义套用到三房户。生产标定确认三房 panel_bedroom(offset 1455)
+        就是「主卧」，原断言实为在捍卫缺陷。四房下才是「次卧」，
+        由 TC-INTG-007 覆盖。
         """
         r = _client(self.tok).get(REALTIME_URL, {'specific_part': self.sp})
         self.assertEqual(r.status_code, 200)
@@ -288,11 +298,8 @@ class TC_INTG_002_PanelBedroomDisplayTest(TestCase):
         sub_display = _extract_sub_display(data, 'panel_bedroom')
         self.assertIsNotNone(sub_display,
                              "panel_bedroom 应出现在响应中（三房户型主卧触发）")
-        self.assertEqual(sub_display, '次卧',
-                         f"panel_bedroom display 期望'次卧'，实际'{sub_display}'")
-        # 串房防御断言（AC-02-02 核心）
-        self.assertNotEqual(sub_display, '主卧',
-                            "BLOCKER: panel_bedroom display 不得为'主卧'（发生串房！）")
+        self.assertEqual(sub_display, '主卧',
+                         f"三房 panel_bedroom display 期望'主卧'，实际'{sub_display}'")
 
 
 @tag('integration', 'panel_display')
@@ -318,9 +325,14 @@ class TC_INTG_003_PanelChildrenRoomDisplayTest(TestCase):
     def tearDown(self):
         invalidate_room_filter_cache()
 
-    def test_panel_children_room_display_is_zhuwu_not_ertongfang(self):
-        """panel_children_room display 应为'主卧'，且明确不为'儿童房'（第二高风险串房场景）。
+    def test_panel_children_room_display_is_ertongfang_in_three_room(self):
+        """三房户 panel_children_room display 应为'儿童房'。
         关联 AC: AC-02-03
+
+        v1.14.0 更正：原断言期望'主卧'并把'儿童房'标为 BLOCKER 串房，方向恰好
+        相反——生产标定确认三房 panel_children_room(offset 1395) 就是「儿童房」，
+        原断言实为在捍卫缺陷。四房下该槽位是「书房」（非「主卧」，plc_config
+        标注在此处也是错的），由 TC-INTG-007 覆盖。
         """
         r = _client(self.tok).get(REALTIME_URL, {'specific_part': self.sp})
         self.assertEqual(r.status_code, 200)
@@ -329,11 +341,8 @@ class TC_INTG_003_PanelChildrenRoomDisplayTest(TestCase):
         sub_display = _extract_sub_display(data, 'panel_children_room')
         self.assertIsNotNone(sub_display,
                              "panel_children_room 应出现在响应中（三房户型儿童房/主卧触发）")
-        self.assertEqual(sub_display, '主卧',
-                         f"panel_children_room display 期望'主卧'，实际'{sub_display}'")
-        # 串房防御断言（AC-02-03 核心）
-        self.assertNotEqual(sub_display, '儿童房',
-                            "BLOCKER: panel_children_room display 不得为'儿童房'（发生串房！）")
+        self.assertEqual(sub_display, '儿童房',
+                         f"三房 panel_children_room display 期望'儿童房'，实际'{sub_display}'")
 
 
 @tag('integration', 'panel_display')
@@ -508,15 +517,17 @@ class TC_INTG_007_FourRoomAllPanelsDisplayTest(TestCase):
         self.assertIn('panel_fourth_children', displays,
                       "四房户型应含 panel_fourth_children")
 
-        # 验证各 display 值正确
-        self.assertEqual(displays['panel_study_room'], '书房',
-                         f"panel_study_room display 期望'书房'，实际'{displays.get('panel_study_room')}'")
+        # 验证各 display 值正确（v1.14.0 生产标定实测真值，233 户四房实证）
+        # ⚠ study_room=主卧 / children_room=书房 —— 与 plc_config.json 的四房标注
+        #   相反，该标注把这两间标反了，是 3-1-702 用户报障的直接成因。
+        self.assertEqual(displays['panel_study_room'], '主卧',
+                         f"四房 panel_study_room display 期望'主卧'，实际'{displays.get('panel_study_room')}'")
         self.assertEqual(displays['panel_bedroom'], '次卧',
-                         f"panel_bedroom display 期望'次卧'，实际'{displays.get('panel_bedroom')}'")
-        self.assertEqual(displays['panel_children_room'], '主卧',
-                         f"panel_children_room display 期望'主卧'，实际'{displays.get('panel_children_room')}'")
+                         f"四房 panel_bedroom display 期望'次卧'，实际'{displays.get('panel_bedroom')}'")
+        self.assertEqual(displays['panel_children_room'], '书房',
+                         f"四房 panel_children_room display 期望'书房'，实际'{displays.get('panel_children_room')}'")
         self.assertEqual(displays['panel_fourth_children'], '儿童房',
-                         f"panel_fourth_children display 期望'儿童房'，实际'{displays.get('panel_fourth_children')}'")
+                         f"四房 panel_fourth_children display 期望'儿童房'，实际'{displays.get('panel_fourth_children')}'")
 
         # 完整防串房验证：4 个 display 值互不相同
         all_displays = list(displays.values())
@@ -579,9 +590,13 @@ class TC_INTG_008_ThreeRoomNoPanelFourthChildrenTest(TestCase):
             'panel_bedroom': _extract_sub_display(data, 'panel_bedroom'),
             'panel_children_room': _extract_sub_display(data, 'panel_children_room'),
         }
-        self.assertEqual(displays['panel_study_room'], '书房',
-                         f"panel_study_room display 期望'书房'，实际'{displays['panel_study_room']}'")
-        self.assertEqual(displays['panel_bedroom'], '次卧',
-                         f"panel_bedroom display 期望'次卧'，实际'{displays['panel_bedroom']}'")
-        self.assertEqual(displays['panel_children_room'], '主卧',
-                         f"panel_children_room display 期望'主卧'，实际'{displays['panel_children_room']}'")
+        # v1.14.0 生产标定实测真值（120 户三房实证）：三房分支与 plc_config 一致
+        self.assertEqual(displays['panel_study_room'], '次卧',
+                         f"三房 panel_study_room display 期望'次卧'，实际'{displays['panel_study_room']}'")
+        self.assertEqual(displays['panel_bedroom'], '主卧',
+                         f"三房 panel_bedroom display 期望'主卧'，实际'{displays['panel_bedroom']}'")
+        self.assertEqual(displays['panel_children_room'], '儿童房',
+                         f"三房 panel_children_room display 期望'儿童房'，实际'{displays['panel_children_room']}'")
+        # 三房户不得出现「书房」——修复前三个标签全错并凭空多出一个书房
+        self.assertNotIn('书房', displays.values(),
+                         "三房户没有书房，出现'书房'即为 v1.14.0 修复前的幻影房间缺陷")
