@@ -270,7 +270,11 @@ def miniapp_owner_realtime_params(request):
     # ── 核心分组逻辑（复用 get_device_realtime_params，ADR-1110-01）─────────────
     available_sub_types = get_available_sub_types(specific_part)
 
-    latest_data_qs = PLCLatestData.objects.filter(specific_part=specific_part)
+    # 段数匹配过滤：前端传 4 段格式（栋-单元-楼层-房号），
+    # PLCLatestData 可能存 3 段格式（栋-单元-房号），需兼容两种格式。
+    latest_data_qs = _apply_specific_part_segment_filter(
+        PLCLatestData.objects.all(), specific_part, field='specific_part',
+    )
     latest_by_param = {record.param_name: record for record in latest_data_qs}
 
     configs_qs = DeviceConfig.objects.filter(is_active=True).order_by('id')
@@ -327,13 +331,17 @@ def miniapp_owner_realtime_params(request):
         ))
 
     # ── screen_mac（ADR-1110-02）─────────────────────────────────────────────
-    owner_info = OwnerInfo.objects.filter(specific_part=specific_part).first()
+    owner_info = _apply_specific_part_segment_filter(
+        OwnerInfo.objects.all(), specific_part, field='specific_part',
+    ).first()
     screen_mac = (owner_info.unique_id or '') if owner_info else ''
 
     # ── device_sns（ADR-1110-02，D-02）──────────────────────────────────────
     device_sns = list(
-        DeviceNode.objects
-        .filter(room__floor__owner__specific_part=specific_part)
+        _apply_specific_part_segment_filter(
+            DeviceNode.objects.all(), specific_part,
+            field='room__floor__owner__specific_part',
+        )
         .values_list('device_sn', flat=True)
         .distinct()
     )
@@ -574,8 +582,10 @@ def miniapp_owner_structure(request):
 
     # ── 设备树遍历（prefetch_related，一次批量查询）────────────────────────────
     floors = list(
-        DeviceFloor.objects
-        .filter(owner__specific_part=specific_part)
+        _apply_specific_part_segment_filter(
+            DeviceFloor.objects.all(), specific_part,
+            field='owner__specific_part',
+        )
         .prefetch_related('rooms__devices')
         .select_related('owner')
     )
@@ -731,21 +741,27 @@ def miniapp_owner_connectivity(request):
     plc_status = 'unknown'
     plc_last_online = None
     try:
-        plc = PLCConnectionStatus.objects.get(specific_part=specific_part)
-        plc_status = plc.connection_status  # 'online' | 'offline'
-        plc_last_online = plc.last_online_time
-    except PLCConnectionStatus.DoesNotExist:
+        plc = _apply_specific_part_segment_filter(
+            PLCConnectionStatus.objects.all(), specific_part,
+        ).first()
+        if plc:
+            plc_status = plc.connection_status  # 'online' | 'offline'
+            plc_last_online = plc.last_online_time
+    except Exception:
         pass
 
     # ── 大屏状态 ────────────────────────────────────────────────────────────
     screen_status = 'unknown'
     screen_last_seen = None
     try:
-        scr = ScreenConnectivityStatus.objects.get(specific_part=specific_part)
-        screen_last_seen = scr.last_seen_at
-        online_cutoff = dj_timezone.now() - timedelta(minutes=_COCKPIT_ONLINE_THRESHOLD_MINUTES)
-        screen_status = 'online' if screen_last_seen >= online_cutoff else 'offline'
-    except ScreenConnectivityStatus.DoesNotExist:
+        scr = _apply_specific_part_segment_filter(
+            ScreenConnectivityStatus.objects.all(), specific_part,
+        ).first()
+        if scr:
+            screen_last_seen = scr.last_seen_at
+            online_cutoff = dj_timezone.now() - timedelta(minutes=_COCKPIT_ONLINE_THRESHOLD_MINUTES)
+            screen_status = 'online' if screen_last_seen >= online_cutoff else 'offline'
+    except Exception:
         pass
 
     return Response({
