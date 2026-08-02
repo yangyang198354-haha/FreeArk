@@ -92,9 +92,8 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
-import { requestPermission } from '@/utils/permission'
-import { startRecording, stopAndRecognize } from '@/utils/voice-input'
+import { ref, computed, nextTick, onMounted } from 'vue'
+import { startRecording, stopAndRecognize, setStateChangeCallback } from '@/utils/voice-input'
 
 const props = defineProps({
   wsConnected: { type: Boolean, required: true },
@@ -110,6 +109,17 @@ const isRecording = ref(false)
 const isCancelling = ref(false)
 const textFocus = ref(false)
 let _touchStartY = 0
+
+// 标记 startRecording 是否正在进行中（权限检查等异步操作）
+let _startInProgress = false
+
+// 监听 voice-input.js 状态变化，同步更新 UI 状态
+onMounted(() => {
+  setStateChangeCallback((state) => {
+    // recording 状态表示录音真正启动，isRecording 才设为 true
+    isRecording.value = state === 'recording'
+  })
+})
 
 const isDark = computed(() => props.theme === 'dark')
 const isTextMode = computed(() => inputMode.value === 'text')
@@ -203,7 +213,7 @@ function handleToggleMode() {
 
 async function handleVoiceStart(e) {
   if (isVoiceDisabled.value) return
-  if (isRecording.value) return
+  if (isRecording.value || _startInProgress) return
 
   // 必须在 await 之前同步读取 touch 坐标：微信小程序事件对象在异步边界后可能已被回收，
   // 原实现在权限弹窗 await 之后再读 e.touches，真机上拿到空值 → _touchStartY=0 →
@@ -211,38 +221,51 @@ async function handleVoiceStart(e) {
   const touch = e && e.touches && e.touches[0]
   _touchStartY = touch ? touch.pageY : 0
 
-  isRecording.value = true
+  _startInProgress = true
   isCancelling.value = false
 
-  const permResult = await requestPermission('scope.record', { name: '录音' })
-  if (permResult !== 'authorized') {
+  try {
+    // startRecording() 内部已处理权限检查，ChatInputBar 不再重复请求权限，
+    // 避免双重异步权限检查导致 _recording 与 isRecording 状态不同步。
+    // isRecording 由 setStateChangeCallback 在状态变为 'recording' 时自动设置
+    await startRecording()
+  } catch (err) {
     isRecording.value = false
-    if (permResult === 'denied') emit('error', { code: 'PERMISSION_DENIED', message: '录音权限未开启' })
-    return
+    emit('error', { code: 'RECORD_START_FAILED', message: (err && err.message) || '录音启动失败' })
+  } finally {
+    _startInProgress = false
   }
-
-  // 快速点击（touchend 早于权限返回）时 handleVoiceEnd 已把 isRecording 置回 false，
-  // 此时不能再启动录音，否则录音开始后没有对应的 stop → 录音卡死、提示 toast 常驻。
-  // （v1.13.1 回归修复，不得删除）
-  if (!isRecording.value) return
-
-  try { await startRecording() }
-  catch (err) { isRecording.value = false; emit('error', { code: 'RECORD_START_FAILED', message: '录音启动失败' }) }
 }
 
 async function handleVoiceEnd() {
-  if (!isRecording.value) return
-  isRecording.value = false
-  if (isCancelling.value) { isCancelling.value = false; try { stopAndRecognize() } catch (_) {}; return }
+  // 处理两种情况：
+  // 1. isRecording 为 true：录音正在进行中（状态为 'recording'）
+  // 2. _startInProgress 为 true：startRecording 仍在进行中（状态为 'starting'）
+  if (!isRecording.value && !_startInProgress) return
+
+  // isRecording 由 setStateChangeCallback 管理，这里不需要手动设置
+  // 但如果 startRecording 仍在进行中，需要立即标记 isRecording 为 false 来防止误操作
+  if (_startInProgress) {
+    isRecording.value = false
+  }
+
+  if (isCancelling.value) {
+    isCancelling.value = false
+    // 上滑取消：直接取消录音，不发送
+    try { await stopAndRecognize() } catch (_) {}
+    return
+  }
   try {
     const result = await stopAndRecognize()
-    if (result && typeof result === 'string') emit('send', { text: result, media: [] })
-    else if (result && result.text) emit('send', { text: result.text, media: [] })
+    // stopAndRecognize 返回 Promise<string|null>，不会返回对象
+    if (result && typeof result === 'string') {
+      emit('send', { text: result, media: [] })
+    }
   } catch (err) { emit('error', { code: 'RECORD_STOP_FAILED', message: '语音识别失败' }) }
 }
 
 function handleVoiceMove(e) {
-  if (!isRecording.value) return
+  if (!isRecording.value && !_startInProgress) return
   const touch = e.touches && e.touches[0]
   if (!touch) return
   isCancelling.value = (_touchStartY - touch.pageY) > 60
