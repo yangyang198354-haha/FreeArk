@@ -246,9 +246,10 @@ export const CARD_LAYOUT = {
   // 新风卡中央大字 = pau_through_temp（真·出风温度，与「出风温度设定」配对）。
   //   2026-08-02 生产标定前，中央大字挂的是 pau_out_temp 并标作「送风温度」——
   //   实测证明那是**盘管出水温度（水温）**，业主首屏看到的是个水温。已换正。
-  //   右列补 newwind_inlet_temp（新风入口温度），业主判断换气效果比水温有用得多。
+  //   newwind_inlet_temp（新风入口温度）不上卡面：单独一条 bar 太突兀（用户反馈），
+  //   落到「查看全部」折叠区即可。
   '130004': { icon: '💨', switchTag: null, primaryTags: [],
-    smallTags: ['pau_through_temp', 'newwind_inlet_temp', 'filter_working_time'], hideTags: [] },
+    smallTags: ['pau_through_temp', 'filter_working_time'], hideTags: [] },
   '10016':  { icon: '💨', switchTag: 'system_switch', primaryTags: ['wind_speed', 'humidification_enable'],
     smallTags: [], hideTags: ['mode', 'system_switch'] },  // #2：新风卡不显示 mode / system_switch
   '260001': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
@@ -307,10 +308,6 @@ function metricOf(tag, sn, attrsBySn, config) {
   } else if (tag === 'pau_through_temp') {
     // 新风出风温度：范围宽（制冷 10℃ 出头、制热 30℃ 以上），ring 的固定刻度不合适 → 大字
     displayType = 'big'; unitText = '°C'
-  } else if (tag === 'newwind_inlet_temp' && numOk) {
-    // 新风入口（室外）温度：-10~40℃ 映射 0~1，超出裁剪
-    displayType = 'bar'
-    progress = (rawNum + 10) / 50
   }
   progress = Math.min(Math.max(progress, 0), 1)
   const progressPct = Math.round(progress * 100)
@@ -375,7 +372,7 @@ export function buildCard(panel, attrsBySn, config) {
 
   // HUD 指标分栏（模板零计算）。规则对齐设计稿：
   //   左列 = 主视觉（有 big 大字优先放 big，否则放第一个 ring），右列 = 其余全部。
-  //   · 新风：big(出风温度) 左 + bar(新风入口)/ring(滤网) 右；· 客厅：ring(当前温度) 左 + bars 右。
+  //   · 新风：big(出风温度) 左 + ring(滤网) 右；· 客厅：ring(当前温度) 左 + bars 右。
   //   左右列都能渲染任意 displayType（模板分支统一），故摆放只决定归属、不决定样式。
   //   hudLayout=有任意非 text 指标时启用左右分栏，否则回退纯文字 chip 网格。
   const hero = small.find((m) => m.displayType === 'big') || small.find((m) => m.displayType === 'ring') || null
