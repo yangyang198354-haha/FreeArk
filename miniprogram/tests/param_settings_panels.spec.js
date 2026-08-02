@@ -369,18 +369,17 @@ describe('buildCard', () => {
     expect(card.icon).toBe('💨')
     expect(card.switchCtl).toBeNull() // 10016 无 system_switch 控件 → 不出头部开关
     expect(card.controls.map((c) => c.w.tag)).toEqual(['wind_speed', 'humidification_enable'])
-    expect(card.small.map((m) => m.tag)).toEqual(
-      ['pau_through_temp', 'newwind_inlet_temp', 'filter_working_time'])
+    expect(card.small.map((m) => m.tag)).toEqual(['pau_through_temp', 'filter_working_time'])
     expect(card.small.find((m) => m.tag === 'pau_through_temp').value).toBe('12.7℃')
     // #2：mode / system_switch（10016 镜像）不出现在任何位置
     const restTags = card.rest.map((r) => r.tag)
     expect(restTags).not.toContain('mode')
     expect(restTags).not.toContain('system_switch')
-    // 未在卡面突出的项 → 进查看全部（两个水温在此，不占首屏）
-    expect(restTags).toEqual(['out_temp_set', 'fan_speed', 'pau_out_temp', 'pau_in_temp'])
+    // 未在卡面突出的项 → 进查看全部（两个水温 + 新风入口温度在此，不占首屏）
+    expect(restTags).toEqual(['out_temp_set', 'fan_speed', 'newwind_inlet_temp', 'pau_out_temp', 'pau_in_temp'])
   })
 
-  it('新风卡中央大字 = 出风温度(pau_through_temp)，不是水温；新风入口走 bar', () => {
+  it('新风卡中央大字 = 出风温度(pau_through_temp)，不是水温；新风入口温度收进「查看全部」折叠区', () => {
     const panel = { id: 'sys-130004', title: '新风', devices: [panelDev(9002, '130004')] }
     const attrs = { 9002: {
       pau_through_temp: '12.7', newwind_inlet_temp: '26.6',
@@ -393,11 +392,11 @@ describe('buildCard', () => {
     expect(card.metricsLeft[0].displayType).toBe('big')
     expect(card.metricsLeft[0].numText).toBe('12.7')
     expect(card.metricsLeft[0].label).toBe('出风温度')
-    // 右列：新风入口(bar) + 滤网(ring)
-    expect(card.metricsRight.map((m) => m.tag)).toEqual(['newwind_inlet_temp', 'filter_working_time'])
-    expect(card.metricsRight[0].displayType).toBe('bar')
-    expect(card.metricsRight[0].progressPct).toBe(73)   // (26.6+10)/50
-    expect(card.metricsRight[1].displayType).toBe('ring')
+    // 右列只剩滤网(ring)：新风入口温度那条 bar 太突兀（用户反馈），已收进折叠区
+    expect(card.metricsRight.map((m) => m.tag)).toEqual(['filter_working_time'])
+    expect(card.metricsRight[0].displayType).toBe('ring')
+    expect(card.small.map((m) => m.tag)).not.toContain('newwind_inlet_temp')
+    expect(card.rest.map((r) => r.tag)).toContain('newwind_inlet_temp')
     // 回归护栏：两个水温绝不能回到卡面（旧版 pau_out_temp 曾被当「送风温度」放中央）
     expect(card.small.map((m) => m.tag)).not.toContain('pau_out_temp')
     expect(card.small.map((m) => m.tag)).not.toContain('pau_in_temp')
