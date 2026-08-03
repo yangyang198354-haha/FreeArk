@@ -54,7 +54,7 @@
     {
       "path": "pages/privacy/index",
       "style": {
-        "navigationBarTitleText": "隐私政策",
+        "navigationBarTitleText": "隐私保护指引",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f"
       }

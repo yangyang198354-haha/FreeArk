@@ -95,7 +95,7 @@
       <!-- privacy -->
       <view class="settings-row" style="margin-top: 20rpx;" @tap="goPrivacy">
         <view class="settings-ico ico-shield" />
-        <text class="settings-label">隐私政策</text>
+        <text class="settings-label">隐私保护指引</text>
         <text class="settings-arrow">›</text>
       </view>
     </scroll-view>
@@ -116,9 +116,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { useShare } from '@/composables/useShare'
 import { useAuthStore } from '@/store/auth'
 import { useOwnerStore } from '@/store/owner'
 import ArkTabBar from '@/components/ArkTabBar.vue'
+
+// 点亮右上角「…」→「转发」。落地路径固定为首页，不带个人信息。
+useShare()
 
 const authStore = useAuthStore()
 const ownerStore = useOwnerStore()

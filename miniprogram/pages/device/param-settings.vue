@@ -87,6 +87,7 @@
             :key="card.id"
             class="dev-card"
             :class="{ alt: ci % 2 === 1 }"
+            :style="{ animationDelay: cardInDelay(ci) }"
           >
             <!-- 四角 HUD 括号 -->
             <view class="bk bk-tl"></view>
@@ -290,6 +291,7 @@
  */
 import { ref, computed, reactive } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { useShare } from '@/composables/useShare'
 import { useAuthStore } from '@/store/auth'
 import { useOwnerStore } from '@/store/owner'
 import { api } from '@/utils/api'
@@ -299,6 +301,9 @@ import { buildPanels, buildCard } from '@/utils/paramPanels'
 import RingGauge from '@/components/RingGauge.vue'
 import WaveScope from '@/components/WaveScope.vue'
 import ArkTabBar from '@/components/ArkTabBar.vue'
+
+// 点亮右上角「…」→「转发」。落地路径固定为首页，不带 specific_part。
+useShare()
 
 const authStore = useAuthStore()
 const ownerStore = useOwnerStore()
@@ -411,6 +416,16 @@ const CARD_META = {
 function cardMeta(card) { return (card && CARD_META[card.title]) || { en: 'ROOM', mono: 'RM' } }
 function cardEnLabel(card) { return cardMeta(card).en }
 function cardIcon(card) { return cardMeta(card).mono }
+
+// 卡片入场错峰延迟。两个值分别对应 .dev-card 上的 cardSlideIn 与 hueFloat：
+// 只写一个值时 CSS 会把它循环套用到列表里每个动画，连呼吸辉光一起延后、相位被打散，
+// 所以第二个显式给 0s。封顶到 CARD_IN_MAX_STEP：大卡纵向流一屏只露 1~2 张，
+// 再往后的卡都在视口外播完，继续递增只会拖长首屏稳定时间而没人看得到。
+const CARD_IN_STEP = 0.06
+const CARD_IN_MAX_STEP = 3
+function cardInDelay(ci) {
+  return `${Math.min(ci, CARD_IN_MAX_STEP) * CARD_IN_STEP}s, 0s`
+}
 
 // ── ucharts 画布辅助（环形 gauge / 运行波形）──────────────────────────────────
 // canvas-id 须页面内唯一且合法（mp-weixin 仅允许 字母/数字/-/_）。card.id 唯一 → 稳定不撞。
@@ -861,6 +876,11 @@ onUnload(() => {
   50% { box-shadow: 0 0 36rpx rgba(124, 58, 237, 0.22), inset 0 1rpx 0 rgba(255, 255, 255, 0.05); }
 }
 @keyframes eqBar { 0%, 100% { transform: scaleY(0.28); } 50% { transform: scaleY(1); } }
+/* 卡片入场：与舰桥 RoomCompartment / SubsystemCompartment 的 cardSlideIn 保持一致。*/
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: translateY(16rpx) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 /* 状态栏占位 + 头 */
 .status-spacer { position: relative; z-index: 5; flex: 0 0 auto; }
@@ -917,7 +937,12 @@ onUnload(() => {
   position: relative; margin: 16rpx 24rpx; border-radius: 24rpx; padding: 30rpx 30rpx 16rpx;
   background: linear-gradient(160deg, rgba(20, 30, 56, 0.74), rgba(10, 16, 33, 0.84));
   border: 1rpx solid rgba(0, 229, 255, 0.22);
-  animation: hueFloat 7s ease-in-out infinite;
+  /* cardSlideIn 一次性入场（forwards 停在终态），hueFloat 常驻呼吸辉光。
+     必须写成逗号列表：animation 是简写，单独再写一条会把 hueFloat 顶掉。
+     错峰延迟由模板 inline 的 cardInDelay(ci) 提供。 */
+  opacity: 0;
+  animation: cardSlideIn 0.5s ease-out forwards,
+             hueFloat 7s ease-in-out infinite;
   overflow: hidden;
 }
 /* 交替紫色卡（节奏感）*/

@@ -284,7 +284,11 @@
 // ── Core imports ────────────────────────────────────────────
 import { ref, computed } from 'vue'
 import { onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app'
+import { useShare } from '@/composables/useShare'
 import { useAuthStore } from '@/store/auth'
+
+// 点亮右上角「…」→「转发」（未注册 onShareAppMessage 的页面该项恒为灰）
+useShare()
 
 // ── Owner (role=user) imports ──────────────────────────────
 import { useBridgeDashboard } from '@/composables/useBridgeDashboard'

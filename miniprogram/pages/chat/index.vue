@@ -33,8 +33,8 @@
       </view>
     </view>
 
-    <!-- 断连横幅 -->
-    <view v-if="!wsConnected && !connecting" class="disc-banner">
+    <!-- 断连横幅：仅在「真断线」时显示，切页挂起与宽限期内的重连都不提示 -->
+    <view v-if="showDiscBanner" class="disc-banner">
       <text>连接已断开，</text><text class="relink" @tap="reconnect">点击重连</text>
     </view>
 
@@ -118,6 +118,7 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { useShare } from '@/composables/useShare'
 import { useAuthStore } from '@/store/auth'
 import { useChatStore } from '@/store/chat'
 import { useOwnerStore } from '@/store/owner'
@@ -126,6 +127,9 @@ import { api } from '@/utils/api'
 import ArkTabBar from '@/components/ArkTabBar.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ChatInputBar from '@/components/ChatInputBar.vue'
+
+// 点亮右上角「…」→「转发」。落地路径固定为首页，不带 session_key。
+useShare()
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
@@ -137,6 +141,11 @@ const statusBarHeight = sysInfo.statusBarHeight || 20
 const scrollTopDyn = ref(0)
 const bottomAnchor = ref('anchor-a')
 const connecting = ref(false)
+// 链路提示状态机。onHide 主动 close() 不等于断线，直接据此挂横幅会在每次切回本页时
+// 闪一下黄条（隐藏期间横幅已渲染进视图层，onShow 要等一轮 setData 才撤掉）。
+// suspended：页面被切走，期间一律不提示；linkLost：断开已超过宽限期，才算真断线。
+const suspended = ref(false)
+const linkLost = ref(false)
 const sessionKeyParam = ref(null)
 const shouldLoadHistoryOnConnect = ref(false)
 const canGoBack = ref(false)
@@ -153,6 +162,7 @@ const quickChips = ['客厅主机不制冷？', '如何开启离家节能', '新
 
 const messages = computed(() => chatStore.messages)
 const wsConnected = computed(() => chatStore.wsConnected)
+const showDiscBanner = computed(() => linkLost.value && !suspended.value && !wsConnected.value)
 const isStreaming = computed(() => {
   const last = messages.value[messages.value.length - 1]
   return !!(last?.streaming)
@@ -174,6 +184,7 @@ function initWs() {
       chatStore.setConnected(true, sessionKey, sessionId, persona, cabinStatus)
       sessionKeyParam.value = sessionKey || sessionKeyParam.value
       connecting.value = false
+      markLinkUp()
       // 仅在「恢复既有会话」时取历史；新会话 connect 阶段尚无 DB 行，取历史必 404。
       if (shouldLoadHistoryOnConnect.value) loadHistory(sessionKey)
       shouldLoadHistoryOnConnect.value = false
@@ -189,11 +200,22 @@ function initWs() {
     },
     onError(err) {
       connecting.value = false
+      // 链路层异常走横幅 + 自动重连，不弹 toast：快速切页时 socket 连开连关，
+      // 这里会连着弹好几个「连接异常」。服务端下发的 error 帧（业务错误）仍照旧提示。
+      if (err?.code === 'WS_ERROR') {
+        armLinkGrace()
+        scheduleRetry()
+        return
+      }
       uni.showToast({ title: err.message || '发生错误', icon: 'none' })
     },
     onClose(code) {
       connecting.value = false
       chatStore.setConnected(false, null, null)
+      if (code !== 4001) {
+        armLinkGrace()
+        scheduleRetry()
+      }
       if (code === 4001) {
         uni.showToast({ title: '鉴权失败，请重新登录', icon: 'none' })
         authStore.logout()
@@ -203,14 +225,60 @@ function initWs() {
   })
 }
 
+// 断开后多久才承认是"真断线"。需覆盖：切页往返 + 一次握手/鉴权往返。
+const LINK_GRACE_MS = 1200
+// 自动重连退避。用尽后停手，交给横幅上的手动「点击重连」。
+const RETRY_DELAYS = [400, 1200, 3000]
+let graceTimer = null
+let retryTimer = null
+let retryCount = 0
+
+function clearLinkTimers() {
+  if (graceTimer) { clearTimeout(graceTimer); graceTimer = null }
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+}
+
+/** 起宽限计时：到点仍未连上且页面在前台，才把横幅放出来。 */
+function armLinkGrace() {
+  if (graceTimer || linkLost.value) return
+  graceTimer = setTimeout(() => {
+    graceTimer = null
+    if (!wsConnected.value && !suspended.value) linkLost.value = true
+  }, LINK_GRACE_MS)
+}
+
+/** 连上了：撤横幅、清计时、重置退避。 */
+function markLinkUp() {
+  clearLinkTimers()
+  retryCount = 0
+  linkLost.value = false
+}
+
+function scheduleRetry() {
+  if (suspended.value || retryTimer) return
+  if (retryCount >= RETRY_DELAYS.length) return
+  const delay = RETRY_DELAYS[retryCount++]
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    if (!suspended.value && !wsConnected.value) connectWs()
+  }, delay)
+}
+
 function connectWs() {
-  if (!authStore.token) return
+  if (!authStore.token || suspended.value) return
   connecting.value = true
+  armLinkGrace()
   const activeSp = ownerStore.activeSpecificPart || ''
   chatWs.connect(authStore.token, sessionKeyParam.value, activeSp)
 }
 
-function reconnect() { connectWs() }
+/** 手动重连：清掉退避配额，立刻收起横幅给出反馈。 */
+function reconnect() {
+  clearLinkTimers()
+  retryCount = 0
+  linkLost.value = false
+  connectWs()
+}
 
 async function loadHistory(sessionKey) {
   if (!sessionKey || messages.value.length > 0) return
@@ -362,15 +430,26 @@ onLoad((options) => {
 onShow(() => {
   // 隐藏原生 tabBar，避免与自绘 4-Tab 底栏重叠
   uni.hideTabBar({ animation: false, fail: () => {} })
+  suspended.value = false
+  retryCount = 0
   if (chatWs && !wsConnected.value && !connecting.value) connectWs()
 })
 
 onHide(() => {
+  // 主动挂起：先立旗再关，避免 close() 的回调链把横幅点亮。
+  suspended.value = true
+  linkLost.value = false
+  clearLinkTimers()
+  // 必须重置：close() 会自增 seq 使在途连接的回调全部失效，connecting 若停在 true
+  // 就再也回不到 false，onShow 的重连门槛被永久卡死（页面看似正常但发不出消息）。
+  connecting.value = false
   if (chatWs) chatWs.close()
   chatStore.setConnected(false, null, null)
 })
 
 onUnload(() => {
+  suspended.value = true
+  clearLinkTimers()
   if (chatWs) chatWs.close()
   // #ifdef MP-WEIXIN
   wx.offKeyboardHeightChange(keyboardListener)
