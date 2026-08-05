@@ -245,14 +245,6 @@
               <text class="shortcut-icon">AI</text>
               <text class="shortcut-label">方舟智能体</text>
             </view>
-            <view class="shortcut-tile" @tap="goTo('/subpackages/game/pages/ark-poc')">
-              <text class="shortcut-icon">⬢</text>
-              <text class="shortcut-label">方舟座舱</text>
-            </view>
-            <view class="shortcut-tile" @tap="goTo('/subpackages/game/pages/agent-scene')">
-              <text class="shortcut-icon">⊙</text>
-              <text class="shortcut-label">智能体座舱</text>
-            </view>
             <view class="shortcut-tile" @tap="goTo('/subpackages/monitor/pages/index')">
               <text class="shortcut-icon">M</text>
               <text class="shortcut-label">设备监控</text>
@@ -576,8 +568,6 @@ const NAV_ROUTES = [
   '/subpackages/ops/pages/condensation',
   '/subpackages/ops/pages/workorders',
   '/pages/device/param-settings',
-  '/subpackages/game/pages/ark-poc',
-  '/subpackages/game/pages/agent-scene',
   '/pages/profile/index',
 ]
 
