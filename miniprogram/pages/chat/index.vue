@@ -435,6 +435,20 @@ onShow(() => {
   uni.hideTabBar({ animation: false, fail: () => {} })
   suspended.value = false
   retryCount = 0
+
+  // v1.13.0：刚在设置页改过人格 → 强制重连。后端的 self.persona 是 connect 时
+  // 读的库快照，不重连的话本连接后续回复与开场问候语仍用旧称呼。
+  if (chatStore.personaStale) {
+    chatStore.clearPersonaStale()
+    if (chatWs) {
+      chatWs.close()
+      chatStore.setConnected(false)
+      connecting.value = false
+      connectWs()
+      return
+    }
+  }
+
   if (chatWs && !wsConnected.value && !connecting.value) connectWs()
 })
 

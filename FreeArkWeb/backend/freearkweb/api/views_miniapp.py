@@ -575,8 +575,11 @@ def miniapp_persona_get(request):
 def miniapp_persona_update(request):
     """更新当前用户的人格偏好。
 
-    Request body (JSON): {identity?: str, address?: str, tone?: str}
-        至少一个非空，max 50 chars each。
+    Request body (JSON): {identity?, address?, tone?, reset?: bool}
+        - 键存在且非空 → 设置该字段（max 50 chars）
+        - 键存在但为空串/null → **清空**该字段（回落默认）
+        - 键缺席 → 保留原值
+        - reset=true → 整体恢复默认人格（等价于对话里说"恢复默认"）
         历史键 greeting_style / tone_style 仍接受（→ identity / address）。
     Response 200: {identity: str|null, address: str|null, tone: str|null}
     Response 400: {detail: "..."} 参数校验失败
@@ -594,10 +597,19 @@ def miniapp_persona_update(request):
 
     user = request.user
     validated = serializer.validated_data
-    # 先把入参（含历史键）归一到规范三键，再合并进现有偏好
-    incoming = normalize_persona(validated)
-    current = normalize_persona(user.persona)
-    current.update(incoming)  # 只覆盖本次传入的键，未传入的保留原值
+
+    if validated.get('reset'):
+        current = {}
+    else:
+        current = normalize_persona(user.persona)
+        # 非空键 → 设置（normalize 顺带做历史键映射与截断）
+        current.update(normalize_persona(validated))
+        # 键存在但为空 → 清空该字段（normalize 会丢弃空值，故单独处理）
+        for key, canon in (('identity', 'identity'), ('address', 'address'),
+                           ('tone', 'tone'), ('greeting_style', 'identity'),
+                           ('tone_style', 'address')):
+            if key in validated and not (validated[key] or '').strip():
+                current.pop(canon, None)
 
     user.persona = current
     user.save(update_fields=['persona', 'updated_at'])

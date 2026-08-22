@@ -412,3 +412,47 @@ class PersonaRestTests(TestCase):
     def test_empty_payload_rejected(self):
         r = self.c.put('/api/miniapp/persona/update/', {}, format='json')
         self.assertEqual(r.status_code, 400)
+
+    # ── v1.13.0 第4步：设置页需要「整体恢复默认」与「单独清空某字段」 ──────
+    # 合并式更新（只覆盖非空键）做不到这两件事，故区分三态：
+    #   键非空=设置 / 键为空串=清空该字段 / 键缺席=保留原值 / reset=true=全清
+
+    def test_reset_clears_everything(self):
+        self.user.persona = {'identity': '管家', 'address': '老板', 'tone': '随意'}
+        self.user.save(update_fields=['persona'])
+        r = self.c.put('/api/miniapp/persona/update/',
+                       {'reset': True}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, {'identity': None, 'address': None, 'tone': None})
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.persona, {})
+
+    def test_blank_value_clears_only_that_field(self):
+        """设置页的核心诉求：只清语气、保留称呼——对话里的"恢复默认"做不到。"""
+        self.user.persona = {'identity': '管家', 'address': '老板', 'tone': '随意'}
+        self.user.save(update_fields=['persona'])
+        r = self.c.put('/api/miniapp/persona/update/',
+                       {'tone': ''}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.data['tone'])
+        self.assertEqual(r.data['address'], '老板')
+        self.assertEqual(r.data['identity'], '管家')
+
+    def test_absent_key_still_preserved_not_cleared(self):
+        """缺席 ≠ 空串：设置页全量提交才清，部分提交不得误删。"""
+        self.user.persona = {'identity': '管家', 'address': '老板'}
+        self.user.save(update_fields=['persona'])
+        r = self.c.put('/api/miniapp/persona/update/',
+                       {'address': '胖子熊大人'}, format='json')
+        self.assertEqual(r.data['identity'], '管家')
+
+    def test_full_form_submit_sets_and_clears_in_one_call(self):
+        """设置页实际的提交形态：三字段全量，空的即清。"""
+        self.user.persona = {'identity': '管家', 'address': '老板', 'tone': '随意'}
+        self.user.save(update_fields=['persona'])
+        r = self.c.put('/api/miniapp/persona/update/',
+                       {'identity': '', 'address': '胖子熊大人', 'tone': ''},
+                       format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data,
+                         {'identity': None, 'address': '胖子熊大人', 'tone': None})

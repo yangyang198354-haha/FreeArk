@@ -52,6 +52,14 @@
       }
     },
     {
+      "path": "pages/persona/index",
+      "style": {
+        "navigationBarTitleText": "副官人格",
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f"
+      }
+    },
+    {
       "path": "pages/privacy/index",
       "style": {
         "navigationBarTitleText": "隐私保护指引",

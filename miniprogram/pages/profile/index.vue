@@ -92,6 +92,13 @@
         <text class="settings-arrow">›</text>
       </view>
 
+      <!-- v1.13.0 副官人格：对话里也能改，这里是确定性入口 -->
+      <view class="settings-row" style="margin-top: 20rpx;" @tap="goPersona">
+        <view class="settings-ico ico-persona" />
+        <text class="settings-label">副官人格</text>
+        <text class="settings-arrow">›</text>
+      </view>
+
       <!-- privacy -->
       <view class="settings-row" style="margin-top: 20rpx;" @tap="goPrivacy">
         <view class="settings-ico ico-shield" />
@@ -200,6 +207,9 @@ function goBind() {
 }
 function goParamSettings() {
   uni.switchTab({ url: '/pages/device/param-settings' })
+}
+function goPersona() {
+  uni.navigateTo({ url: '/pages/persona/index' })
 }
 function goPrivacy() {
   uni.navigateTo({ url: '/pages/privacy/index' })
@@ -390,6 +400,7 @@ function onLogout() {
 .ico-house-cyan { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 21V9l8-5 8 5v12'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E"); }
 .ico-house-purple { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4a6ff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 21V9l8-5 8 5v12'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E"); }
 .ico-gear { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2'/%3E%3C/svg%3E"); }
+.ico-persona { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 7.7l5.4-.8z'/%3E%3Cpath d='M8 21h8'/%3E%3C/svg%3E"); }
 .ico-shield { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E"); }
 .ico-power { width: 34rpx; height: 34rpx; background-repeat: no-repeat; background-position: center; background-size: 34rpx 34rpx; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff7ab5' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3v9'/%3E%3Cpath d='M6.5 6a8 8 0 1 0 11 0'/%3E%3C/svg%3E"); }
 

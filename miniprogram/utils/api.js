@@ -157,6 +157,17 @@ export const api = {
 
   // v1.12.0: 上传头像 + 保存昵称（MOD-V1120-FE-05, IFC-V1120-FE-05-01）
   //   有头像文件：使用 uni.uploadFile（multipart/form-data），filePath+name 语法
+  // ── v1.13.0 副官人格偏好（舰长休息室 → 副官人格设置页）────────────────
+  //   读 miniapp_persona_get：GET /api/miniapp/persona/
+  //     → {identity, address, tone}，未设置的字段为 null
+  //   写 miniapp_persona_update：PUT /api/miniapp/persona/update/
+  //     入参 {identity?, address?, tone?}，至少一个非空，各 ≤50 字
+  //     只覆盖传入的键，未传入的保留原值 → 想清空单个字段用 resetPersona 后重设
+  //   键语义：identity=副官自称 / address=如何称呼用户 / tone=语气
+  //     （v1.12.0 的 greeting_style/tone_style 语义混淆，已废弃，详见后端 api/persona.py）
+  getPersona: () => http.get('/api/miniapp/persona/'),
+  updatePersona: (data) => http.put('/api/miniapp/persona/update/', data),
+
   //     （微信小程序不支持 files[] 数组 / uri 字段，那是 App 端专用）
   //   仅昵称：使用 uni.request（JSON body），无需 multipart
   //   @param {String|null} nickname - 用户昵称（可选）
