@@ -15,7 +15,7 @@ export const useChatStore = defineStore('chat', {
     sessionList: [],
     currentSessionId: null,
     // v1.12.0: 人格偏好 + 座舱绑定状态（来自 WS connected 帧）
-    persona: null,       // {greeting_style, tone_style} | null
+    persona: null,       // v1.13.0: {identity, address, tone} | null（旧键 greeting_style/tone_style 已废）
     cabinStatus: { is_bound: false, rooms: [], active_room: null },
   }),
   actions: {

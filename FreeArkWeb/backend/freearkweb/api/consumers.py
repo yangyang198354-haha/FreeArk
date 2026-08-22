@@ -56,6 +56,10 @@ from django.db import IntegrityError
 from api.chat_exceptions import OpenClawUnavailableError
 from api.chat_backend import get_chat_adapter
 from api import chat_memory
+# v1.13.0 人格偏好：规范化 + 对话内变更意图抽取
+from api.persona import effective_persona, has_user_set_address, persona_payload
+from api.persona_intent import (apply_persona_change, detect_persona_change,
+                                looks_like_persona_change)
 # v1.5.0 多模态提问（MOD-MQ-04）：VLM 异常类型
 from api.vision_service import ImageExpiredError, ImageAccessDeniedError, VisionServiceError
 
@@ -779,10 +783,7 @@ class MiniAppChatConsumer(ChatConsumer):
             'type': 'connected',
             'session_id': self.session_key,
             'session_key': self.session_key,
-            'persona': {
-                'greeting_style': self.persona.get('greeting_style') if self.persona else None,
-                'tone_style': self.persona.get('tone_style') if self.persona else None,
-            } if self.persona else None,
+            'persona': persona_payload(self.persona) if self.persona else None,
             'cabin_status': {
                 'is_bound': len(_parts) > 0,
                 'rooms': _parts,
@@ -813,6 +814,16 @@ class MiniAppChatConsumer(ChatConsumer):
         upload_ids=None/user_id=None；签名形参 upload_ids 仅用于与父类 receive() 的调用约定
         对齐（v1.9.0 多图后父类以 upload_ids= 关键字调用），以备未来扩展。
         """
+        # ── v1.13.0（US-003）：先处理"改称呼/改语气"意图，再进编排 ──────────
+        # 必须放在 stream_chat 之前：这样本轮回复就用新称呼，而不是下一轮才生效。
+        # 内部 fail-open，任何异常都不影响正常聊天。
+        await self._maybe_update_persona(user_message)
+
+        # ── v1.13.0（US-001 AC-001-02）：是否要求副官在本轮末尾询问称呼偏好 ──
+        # 判据：用户从未显式设过称呼，且此前从未发过任何消息（首次对话）。
+        # 判定须在 append_message(user) 之前做，否则本条消息会把自己算进去。
+        _ask_pref = await self._should_ask_persona_preference()
+
         # 确保会话已创建（须先于历史加载：load_history_by_session 需 ChatSession 对象，
         # 且恢复已有会话时 _ensure_session_created 会查询并复用，填充 self.chat_session）。
         await self._ensure_session_created(user_message)
@@ -829,12 +840,8 @@ class MiniAppChatConsumer(ChatConsumer):
                     lambda: _CM.objects.filter(session=self.chat_session).count()
                 )()
                 if _existing_count == 0:
-                    _greeting = (
-                        self.persona.get('greeting_style') if self.persona else None
-                    ) or '智能方舟的副官'
-                    _tone = (
-                        self.persona.get('tone_style') if self.persona else None
-                    ) or '尊敬的舰长大人'
+                    _eff = effective_persona(self.persona)
+                    _greeting, _tone = _eff['identity'], _eff['address']
                     _greeting_text = (
                         f"{_tone}，我是{_greeting}。"
                         "可以帮您控制设备、排查故障，也能解答空调与新风知识。"
@@ -893,6 +900,7 @@ class MiniAppChatConsumer(ChatConsumer):
                     user_scope=self.user_scope,           # v1.8.0 新增
                     persona=self.persona,                 # v1.12.0 新增（MOD-P1203）
                     active_specific_part=self.active_specific_part,  # v1.12.0 新增（MOD-P1204）
+                    persona_ask_preference=_ask_pref,     # v1.13.0（US-001 AC-001-02）
                 ))
 
             if status == 'confirm':
@@ -954,3 +962,70 @@ class MiniAppChatConsumer(ChatConsumer):
                 'code': 'INTERNAL_ERROR',
                 'message': '服务出现内部错误，请稍后重试',
             }))
+
+    # ── v1.13.0 人格偏好：对话内修改 + 首次询问 ──────────────────────────────
+
+    async def _should_ask_persona_preference(self) -> bool:
+        """本轮是否要求副官在回复末尾询问称呼偏好（US-001 AC-001-02）。
+
+        判据：用户从未显式设过称呼 **且** 此前从未发过任何消息（真·首次对话）。
+        每连接只问一次，避免用户不理会时每轮都被追问。
+        """
+        if getattr(self, '_persona_pref_asked', False):
+            return False
+        if has_user_set_address(self.persona):
+            return False
+        try:
+            from .models import ChatMessage as _CM
+            sent_before = await sync_to_async(
+                lambda: _CM.objects.filter(
+                    session__user=self.user, role='user').exists()
+            )()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('MiniAppChatConsumer: 首次对话判定失败，按非首次处理: %s', exc)
+            return False
+        if sent_before:
+            return False
+        self._persona_pref_asked = True
+        return True
+
+    async def _maybe_update_persona(self, user_message: str) -> None:
+        """识别"改称呼/改语气"意图并落库（US-003 AC-003-01/02）。
+
+        全程 fail-open：预筛未命中零开销，抽取/落库任何异常都只记日志，
+        绝不影响本轮正常聊天。
+
+        成功变更后：
+          1. 刷新 self.persona → 本轮 stream_chat 立即用新称呼（不必等下一轮）
+          2. 推 persona_updated 帧 → 前端更新 chatStore.persona，
+             否则新会话的开场问候语仍是旧称呼
+        """
+        try:
+            if not looks_like_persona_change(user_message):
+                return
+
+            from .langgraph_chat.orchestrator import _make_llm, _make_router_llm
+            llm = _make_router_llm(_make_llm(), None)
+            change = await detect_persona_change(user_message, llm)
+            if not change:
+                return
+
+            new_persona = apply_persona_change(self.persona, change)
+
+            def _save():
+                self.user.persona = new_persona
+                self.user.save(update_fields=['persona', 'updated_at'])
+
+            await sync_to_async(_save)()
+            self.persona = new_persona or None
+
+            await self.send(json.dumps({
+                'type': 'persona_updated',
+                'persona': persona_payload(new_persona),
+            }))
+            logger.info(
+                'MiniAppChatConsumer: 人格已更新 user=%s action=%s persona=%r',
+                getattr(self.user, 'username', '?'), change.get('action'), new_persona,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('MiniAppChatConsumer: 人格变更处理失败（按无变更继续）: %s', exc)

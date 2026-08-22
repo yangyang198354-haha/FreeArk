@@ -31,6 +31,7 @@ export class ChatWebSocket {
     this._connSeq = 0
     // callbacks: {
     //   onConnected(sessionKey, sessionId, persona, cabinStatus),
+    //   onPersonaUpdated(persona),   // v1.13.0 对话内改称呼后服务端主动推送
     //   onStatusUpdate(message),
     //   onReasoningToken(token),
     //   onReasoningEnd(),
@@ -68,6 +69,11 @@ export class ChatWebSocket {
             msg.persona || null,
             msg.cabin_status || { is_bound: false, rooms: [], active_room: null },
           )
+          break
+        // v1.13.0：用户在对话里改了称呼/语气，服务端落库后主动推此帧。
+        // 不更新本地 persona 的话，新会话的开场问候语还会用旧称呼。
+        case 'persona_updated':
+          this.callbacks.onPersonaUpdated?.(msg.persona || null)
           break
         case 'status_update':
           this.callbacks.onStatusUpdate?.(msg.message)

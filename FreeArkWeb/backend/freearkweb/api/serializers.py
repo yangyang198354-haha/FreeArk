@@ -172,11 +172,22 @@ class DeviceParamHistorySerializer(serializers.ModelSerializer):
 
 
 class PersonaSerializer(serializers.Serializer):
-    """人格偏好序列化器（v1.12.0 方舟副官人格）"""
+    """人格偏好序列化器（v1.13.0 三键规范形态）
+
+    规范键：identity(副官自称) / address(如何称呼用户) / tone(语气)。
+    历史键 greeting_style / tone_style 仍接受（→ identity / address），
+    但响应一律回规范键。语义拆分的原因见 api/persona.py 模块文档。
+    """
+    identity = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    address = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    tone = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    # 历史键（只读兼容，v1.12.0 客户端）
     greeting_style = serializers.CharField(max_length=50, required=False, allow_blank=True)
     tone_style = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
     def validate(self, data):
-        if not data.get('greeting_style') and not data.get('tone_style'):
-            raise serializers.ValidationError("至少需要设置 greeting_style 或 tone_style 之一")
+        if not any(data.get(k) for k in
+                   ('identity', 'address', 'tone', 'greeting_style', 'tone_style')):
+            raise serializers.ValidationError(
+                "至少需要设置 identity / address / tone 之一")
         return data

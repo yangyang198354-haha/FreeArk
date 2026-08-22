@@ -562,15 +562,12 @@ def miniapp_profile_update(request):
 def miniapp_persona_get(request):
     """读取当前用户的人格偏好。
 
-    Response 200: {greeting_style: str|null, tone_style: str|null}
-        未设置时两个字段均为 null（前端据此判断是否展示首次设置引导）。
+    Response 200: {identity: str|null, address: str|null, tone: str|null}
+        未设置的字段为 null（前端据此判断是否展示首次设置引导）。
+        v1.13.0 起返回规范三键；旧键 greeting_style/tone_style 已不再返回。
     """
-    user = request.user
-    persona = user.persona if isinstance(user.persona, dict) else {}
-    return Response({
-        'greeting_style': persona.get('greeting_style') or None,
-        'tone_style': persona.get('tone_style') or None,
-    })
+    from .persona import persona_payload
+    return Response(persona_payload(request.user.persona))
 
 
 @api_view(['PUT'])
@@ -578,9 +575,10 @@ def miniapp_persona_get(request):
 def miniapp_persona_update(request):
     """更新当前用户的人格偏好。
 
-    Request body (JSON): {greeting_style?: str, tone_style?: str}
+    Request body (JSON): {identity?: str, address?: str, tone?: str}
         至少一个非空，max 50 chars each。
-    Response 200: {greeting_style: str|null, tone_style: str|null}
+        历史键 greeting_style / tone_style 仍接受（→ identity / address）。
+    Response 200: {identity: str|null, address: str|null, tone: str|null}
     Response 400: {detail: "..."} 参数校验失败
     """
     serializer = PersonaSerializer(data=request.data)
@@ -592,23 +590,19 @@ def miniapp_persona_update(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    from .persona import normalize_persona, persona_payload
+
     user = request.user
     validated = serializer.validated_data
-    current = user.persona if isinstance(user.persona, dict) else {}
-
-    # 只更新传入的非空字段，未传入的保留原值
-    if 'greeting_style' in validated and validated['greeting_style']:
-        current['greeting_style'] = validated['greeting_style']
-    if 'tone_style' in validated and validated['tone_style']:
-        current['tone_style'] = validated['tone_style']
+    # 先把入参（含历史键）归一到规范三键，再合并进现有偏好
+    incoming = normalize_persona(validated)
+    current = normalize_persona(user.persona)
+    current.update(incoming)  # 只覆盖本次传入的键，未传入的保留原值
 
     user.persona = current
     user.save(update_fields=['persona', 'updated_at'])
 
-    return Response({
-        'greeting_style': current.get('greeting_style') or None,
-        'tone_style': current.get('tone_style') or None,
-    })
+    return Response(persona_payload(current))
 
 
 # ── v1.12.0 语音识别 ──────────────────────────────────────────────────────────

@@ -170,10 +170,12 @@ const isStreaming = computed(() => {
 
 // v1.12.0: 人格感知问候语
 const personaGreeting = computed(() => {
+  // v1.13.0: 三键规范形态 identity(自称)/address(称呼用户)/tone(语气)。
+  // 旧键 greeting_style/tone_style 语义混淆已废弃，详见 api/persona.py。
   const p = chatStore.persona
-  const greeting = p?.greeting_style || '智能方舟的副官'
-  const tone = p?.tone_style || '尊敬的舰长大人'
-  return `${tone}，我是${greeting}。可以帮您控制设备、排查故障，也能解答空调与新风知识。`
+  const identity = p?.identity || '智能方舟的副官'
+  const address = p?.address || '尊敬的舰长大人'
+  return `${address}，我是${identity}。可以帮您控制设备、排查故障，也能解答空调与新风知识。`
 })
 
 let chatWs = null
@@ -189,6 +191,7 @@ function initWs() {
       if (shouldLoadHistoryOnConnect.value) loadHistory(sessionKey)
       shouldLoadHistoryOnConnect.value = false
     },
+    onPersonaUpdated(persona) { chatStore.setPersona(persona) },
     onStatusUpdate(msg) { chatStore.setStatusText(msg) },
     onReasoningToken(token) { chatStore.appendReasoningToken(token) },
     onReasoningEnd() {},
