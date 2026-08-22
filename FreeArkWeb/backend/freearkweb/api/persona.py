@@ -98,3 +98,47 @@ def persona_payload(raw: Optional[dict]) -> dict:
 def has_user_set_address(raw: Optional[dict]) -> bool:
     """用户是否显式设置过称呼——US-001 首次询问偏好的判据之一。"""
     return bool(normalize_persona(raw).get('address'))
+
+
+def build_persona_instruction(
+    persona: Optional[dict] = None,
+    ask_preference: bool = False,
+) -> str:
+    """构造喂给 LLM 的人格指令文本（纯字符串，不依赖 langchain）。
+
+    2026-08-22 从 langgraph_chat.orchestrator 迁入——反转依赖方向。此前编排层
+    `from api.persona import effective_persona`，是编排层对宿主 App 的唯一一条
+    反向依赖；人格属于领域策略，不该由通用编排骨架来懂。现在改为：**调用方**
+    （consumers）构造好指令文本，经 adapter 透传进 State，编排层只负责把它包成
+    SystemMessage 注入，对人格的 schema 与默认值一无所知。
+
+    三条约束（对应 2026-08-22 生产实测的三层缺陷）：
+
+    1. **字段语义单一**。identity(自称) / address(称呼用户) / tone(语气) 各司其职。
+       旧版 tone_style 在默认分支当"称呼"、自定义分支拼成"以X风格交流"，实测把它
+       设成"胖子熊大人"后模型答"我是胖子熊大人"，把用户的称呼当成了自己的名字。
+    2. **身份与称呼分层**。旧版一句"保持该角色定位贯穿整个对话"把两者一起锁死，
+       导致用户说"以后叫我胖子熊大人"时副官答"我必须遵循守则"。现在身份不可变、
+       称呼与语气可由用户改。
+    3. **首次询问偏好**（ask_preference，US-001 AC-001-02）：要求把询问放在正常
+       回答之后，不得打断。
+    """
+    eff = effective_persona(persona)
+    parts = [
+        f"你的身份是「{eff['identity']}」，请始终以该身份自居，不得自称其它名字。",
+        f"请称呼当前用户为「{eff['address']}」。",
+    ]
+    if eff['tone']:
+        parts.append(f"请以「{eff['tone']}」的语气与用户交流。")
+    parts.append(
+        "身份设定贯穿整个对话、不可更改；但称呼与语气属于用户偏好——"
+        "若用户要求换一个称呼或调整语气，不要以「守则」「设定」为由拒绝，"
+        "直接接受并从本次回复起改用新称呼。"
+    )
+    if ask_preference:
+        parts.append(
+            "另外，该用户尚未设置过称呼偏好且这是其首次对话："
+            "请在本次回复的末尾用一句话自然地询问他希望被如何称呼。"
+            "该询问必须放在正常回答之后，不得打断或替代对用户当前问题的回答。"
+        )
+    return "".join(parts)

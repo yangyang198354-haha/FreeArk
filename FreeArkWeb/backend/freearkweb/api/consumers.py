@@ -57,7 +57,8 @@ from api.chat_exceptions import OpenClawUnavailableError
 from api.chat_backend import get_chat_adapter
 from api import chat_memory
 # v1.13.0 人格偏好：规范化 + 对话内变更意图抽取
-from api.persona import effective_persona, has_user_set_address, persona_payload
+from api.persona import (build_persona_instruction, effective_persona,
+                        has_user_set_address, persona_payload)
 from api.persona_intent import (apply_persona_change, detect_persona_change,
                                 looks_like_persona_change)
 # v1.5.0 多模态提问（MOD-MQ-04）：VLM 异常类型
@@ -419,6 +420,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     session_key=self.session_key,
                     upload_ids=upload_ids,
                     user_id=self.user.id if upload_ids else None,
+                    # v1.13.0 依赖反转：人格文案改由调用方构造（原先编排层在 persona=None
+                    # 时自己兜默认值）。这里显式传默认人格，与反转前行为逐字一致。
+                    # ⚠️ 已知不一致：Web 端 UI 通篇写「方舟智能体」，但这里注入的是默认
+                    # 副官人格，故 Web 聊天实际自称「智能方舟的副官」。该错配自 v1.12.0
+                    # 引入默认人格起就存在，本次反转只是把它显式化，未改变行为。
+                    persona_prompt=build_persona_instruction(),
                 ))
 
             # 阶段 E：遇 Tier-2 写确认门 → 已发 confirm_required，暂停等前端 confirm_response
@@ -898,9 +905,9 @@ class MiniAppChatConsumer(ChatConsumer):
                     upload_id=None,           # 小程序暂不支持图文混合（v1.8.0）
                     user_id=None,
                     user_scope=self.user_scope,           # v1.8.0 新增
-                    persona=self.persona,                 # v1.12.0 新增（MOD-P1203）
                     active_specific_part=self.active_specific_part,  # v1.12.0 新增（MOD-P1204）
-                    persona_ask_preference=_ask_pref,     # v1.13.0（US-001 AC-001-02）
+                    # v1.13.0：人格文案在本层构造后透传，编排层不碰 persona schema
+                    persona_prompt=build_persona_instruction(self.persona, _ask_pref),
                 ))
 
             if status == 'confirm':
