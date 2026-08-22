@@ -2,8 +2,8 @@
   "description": "FreeArk 多端项目 - 微信小程序配置",
   "miniVersion": "v2",
   "name": "智能方舟座舱",
-  "version": "1.5.0",
-  "versionCode": 150,
+  "version": "1.0.2",
+  "versionCode": 10002,
   "packOptions": {
     "ignore": []
   },
