@@ -72,12 +72,16 @@ MAX_EXPERT_STEPS = 8  # 单专家 ReAct + 委托链步数上限（防失控循�
 
 # P1-2：域外/闲聊通用应答节点的系统提示。用于路由判定「不属任何专家」的寒暄/自我介绍/
 # 跑题问题——友好简短回应并引导到能力范围，绝不假装查数据/调工具，绝不暴露内部分工。
+# 身份中立：此处不再写死自称，身份一律由 build_persona_message() 追加的人格块决定
+# （原先写死「你就是方舟智能体本人」，与 v1.12.0 副官人格打架——见 _general 注释）。
 GENERAL_PROMPT = (
-    "你就是方舟智能体本人，一个面向三恒（恒温/恒湿/恒氧）住宅系统的智能助手。\n"
+    "你是一个面向三恒（恒温/恒湿/恒氧）住宅系统的智能助手。你的身份与自称以随后的人格"
+    "设定为准，不得自称其它名字。\n"
     "用户这条消息是日常寒暄、自我介绍询问，或与你的专业领域无关的闲聊（不涉及具体的能耗用电、"
     "设备故障巡检、三恒系统知识查询）。请用简洁、友好的中文自然回应：\n"
-    "- 若是打招呼或问「你是谁/你能做什么」：一两句话说明你能帮忙查能耗用电与看板、排查设备"
-    "故障与 PLC 巡检、解答三恒系统原理与设备说明书知识，并邀请对方提出具体问题。\n"
+    "- 若是打招呼或问「你是谁/你能做什么」：先按人格设定表明身份，再用一两句话说明你能帮忙查"
+    "能耗用电与看板、排查设备故障与 PLC 巡检、解答三恒系统原理与设备说明书知识，并邀请对方"
+    "提出具体问题。\n"
     "- 若是感谢/告别：礼貌简短回应即可。\n"
     "- 若是其它跑题闲聊：友好回应一句，并温和地把话题引回你能帮上忙的方向。\n"
     "严禁编造任何设备/能耗/故障数据，严禁假装调用工具或查询，严禁提及「专家/路由/转交」等内部分工。"
@@ -762,13 +766,17 @@ class Orchestrator:
         else:
             # 去掉 [expert-id] 标签：避免融合模型在输出中暴露内部分工/路由（对用户透明）。
             digest = "\n".join(r["answer"] for r in results)
+            # 人格注入（修复 2026-08-21）：融合提示原先写死「你就是方舟智能体本人」且不注入
+            # persona——各专家已按副官人格作答，融合这一步又把身份改回旧称。身份改由人格块决定。
+            _persona = build_persona_message(state.get("persona"))
             ai = await self.llm.ainvoke([
                 SystemMessage(content=(
-                    "你就是方舟智能体本人，以第一人称统一作答。"
+                    "以第一人称统一作答，身份与自称以随后的人格设定为准。"
                     "将下列各段结论融合成一段连贯回复，重复内容合并为一次表述、不要重复。"
                     "严格禁止提及「专家」「转交」「咨询」「路由」或任何内部分工、多智能体编排细节；"
                     "禁止出现「根据各专家」「某专家认为」「巡检专家」「能耗专家」等措辞。"
                 )),
+            ] + ([_persona] if _persona else []) + [
                 HumanMessage(content=f"以下是需要整合的结论：\n{digest}\n\n请综合为一段回复。"),
             ])
             final = ai.content
@@ -796,10 +804,17 @@ class Orchestrator:
 
         纯 LLM 自然语言（不 bind 任何工具），token 经 adapter._drive 直接流给用户
         （node=='general' 标记为 user-stream）。结果写入 expert_results，由 aggregate
-        统一打包进 messages（单结果直接取用，无二次 LLM 调用、不重复流）。"""
+        统一打包进 messages（单结果直接取用，无二次 LLM 调用、不重复流）。
+
+        人格注入（修复 2026-08-21）：此前只有 _expert 注入 build_persona_message()，
+        general 分支拿到了 state["persona"] 却从不消费，且 GENERAL_PROMPT 写死「你就是
+        方舟智能体本人」——而"你是谁"恰恰最容易被路由判为域外落到本节点，导致同一问题
+        在 expert 分支自称「副官」、在本分支自称「方舟智能体」，与小程序副官入口表述不一致。"""
         query = _current_query(state.get("query", ""))  # 剥历史/标签，只留当前问题
+        _persona = build_persona_message(state.get("persona"))
         msgs: List[BaseMessage] = [
             SystemMessage(content=GENERAL_PROMPT + _date_hint()),
+        ] + ([_persona] if _persona else []) + [
             HumanMessage(content=query),
         ]
         ai = await self.llm.ainvoke(msgs)
