@@ -1,0 +1,37 @@
+[Unit]
+Description=FreeArk plc-write-timeout Service
+Documentation=https://github.com/your-repo/freeark
+After=network.target
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=30
+
+# 环境变量（与其他 backend 服务一致）
+Environment=PYTHONPATH=/home/yangyang/Freeark/FreeArk
+Environment=PYTHONUNBUFFERED=1
+
+# 工作目录
+WorkingDirectory=/home/yangyang/Freeark/FreeArk/
+
+# 启动命令：常驻 schedule 模式
+# --interval-seconds 60：每 60 秒扫一次 pending 队列
+# --ttl-seconds 90：pending 存在 > 90s 判定超时（写操作默认 SLA ≤30s，留 3x 余量）
+ExecStart=/home/yangyang/Freeark/FreeArk/venv/bin/python \
+  /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py \
+  plc_write_timeout_service \
+  --interval-seconds 60 --ttl-seconds 90 --batch-size 500
+
+# 停止命令
+ExecStop=/bin/kill -s SIGINT $MAINPID
+
+User=yangyang
+
+# 日志输出到 journal（和 backend/mqtt-consumer 一致）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freeark-plc-write-timeout
+
+[Install]
+WantedBy=multi-user.target

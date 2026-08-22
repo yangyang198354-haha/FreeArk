@@ -327,8 +327,23 @@ def device_settings_write(request):
     items = ser.validated_data['items']
 
     # 校验所有 item 的 param_name 可写性
-    for item in items:
+    for idx, item in enumerate(items):
+        raw_pn = item['param_name']
+        # 兜底翻译层：中文描述 / display_name 拼接 → 真实英文 param_name
+        resolved_pn = _resolve_param_name(raw_pn, specific_part)
+        if resolved_pn != raw_pn:
+            item['param_name'] = resolved_pn
+            logger.info(
+                'device_settings_write 兜底翻译: specific_part=%s idx=%d raw="%s" → resolved="%s"',
+                specific_part, idx, raw_pn, resolved_pn,
+            )
         if not _is_writable(item['param_name']):
+            logger.warning(
+                'device_settings_write 白名单拒绝: specific_part=%s user=%s '
+                'idx=%d param_name="%s" items=%s',
+                specific_part, getattr(request.user, 'username', '?'),
+                idx, item['param_name'], list(items),
+            )
             return Response(
                 {'error': f"参数 {item['param_name']} 不在可写白名单中"},
                 status=400,
@@ -444,6 +459,11 @@ class WriteRecordPagination(PageNumberPagination):
 @permission_classes([IsAuthenticated])
 def device_settings_records(request):
     qs = PLCWriteRecord.objects.all()
+
+    batch_request_id = request.query_params.get('batch_request_id')
+    if batch_request_id:
+        # 精确查单批次：走 plcwr_batch_idx 索引（v1.4 migrations 已建）
+        qs = qs.filter(batch_request_id=batch_request_id)
 
     specific_part = request.query_params.get('specific_part')
     if specific_part:

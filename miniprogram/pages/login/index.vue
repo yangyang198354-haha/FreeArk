@@ -139,11 +139,11 @@
           <text class="remember-label">记住我（7 天内免登录）</text>
         </view>
 
-        <!-- 隐私政策同意 -->
+        <!-- 隐私保护指引同意 -->
         <view class="privacy-row" @tap="agreedPrivacy = !agreedPrivacy">
           <checkbox :checked="agreedPrivacy" class="remember-checkbox" color="#2ff4e0" />
           <text class="privacy-label">已阅读并同意</text>
-          <text class="privacy-link" @tap.stop="goPrivacy">《隐私政策》</text>
+          <text class="privacy-link" @tap.stop="goPrivacy">《隐私保护指引》</text>
         </view>
 
         <!-- 微信一键登录（仅小程序）-->
@@ -201,7 +201,7 @@ if (authStore.isLoggedIn) {
 
 async function handleLogin() {
   if (!agreedPrivacy.value) {
-    uni.showToast({ title: '请先同意隐私政策', icon: 'none' })
+    uni.showToast({ title: '请先同意隐私保护指引', icon: 'none' })
     return
   }
   if (!username.value.trim() || !password.value) {
@@ -240,7 +240,7 @@ async function handleLogin() {
 // #ifdef MP-WEIXIN
 function handleWechatLogin() {
   if (!agreedPrivacy.value) {
-    uni.showToast({ title: '请先同意隐私政策', icon: 'none' })
+    uni.showToast({ title: '请先同意隐私保护指引', icon: 'none' })
     return
   }
   wxLoading.value = true
@@ -563,7 +563,7 @@ function goPrivacy() {
   font-size: 24rpx; letter-spacing: 2rpx; color: rgba(143,217,255,0.6);
 }
 
-/* ── 隐私政策同意 ──────────────────────────────────────────────────── */
+/* ── 隐私保护指引同意 ──────────────────────────────────────────────────── */
 .privacy-row {
   display: flex; align-items: center; justify-content: center; margin: 12rpx 0 0;
   padding: 8rpx 0;

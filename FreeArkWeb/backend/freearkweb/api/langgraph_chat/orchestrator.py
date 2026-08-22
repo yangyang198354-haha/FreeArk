@@ -72,12 +72,16 @@ MAX_EXPERT_STEPS = 8  # 单专家 ReAct + 委托链步数上限（防失控循�
 
 # P1-2：域外/闲聊通用应答节点的系统提示。用于路由判定「不属任何专家」的寒暄/自我介绍/
 # 跑题问题——友好简短回应并引导到能力范围，绝不假装查数据/调工具，绝不暴露内部分工。
+# 身份中立：此处不再写死自称，身份一律由 build_persona_message() 追加的人格块决定
+# （原先写死「你就是方舟智能体本人」，与 v1.12.0 副官人格打架——见 _general 注释）。
 GENERAL_PROMPT = (
-    "你就是方舟智能体本人，一个面向三恒（恒温/恒湿/恒氧）住宅系统的智能助手。\n"
+    "你是一个面向三恒（恒温/恒湿/恒氧）住宅系统的智能助手。你的身份与自称以随后的人格"
+    "设定为准，不得自称其它名字。\n"
     "用户这条消息是日常寒暄、自我介绍询问，或与你的专业领域无关的闲聊（不涉及具体的能耗用电、"
     "设备故障巡检、三恒系统知识查询）。请用简洁、友好的中文自然回应：\n"
-    "- 若是打招呼或问「你是谁/你能做什么」：一两句话说明你能帮忙查能耗用电与看板、排查设备"
-    "故障与 PLC 巡检、解答三恒系统原理与设备说明书知识，并邀请对方提出具体问题。\n"
+    "- 若是打招呼或问「你是谁/你能做什么」：先按人格设定表明身份，再用一两句话说明你能帮忙查"
+    "能耗用电与看板、排查设备故障与 PLC 巡检、解答三恒系统原理与设备说明书知识，并邀请对方"
+    "提出具体问题。\n"
     "- 若是感谢/告别：礼貌简短回应即可。\n"
     "- 若是其它跑题闲聊：友好回应一句，并温和地把话题引回你能帮上忙的方向。\n"
     "严禁编造任何设备/能耗/故障数据，严禁假装调用工具或查询，严禁提及「专家/路由/转交」等内部分工。"
@@ -135,8 +139,11 @@ class State(TypedDict, total=False):
     # MiniAppChatConsumer 经 adapter 注入；None=无限制（admin/operator 路径直通）
     user_scope: Optional[object]  # UserScope instance or None
     # ── v1.12.0 新增（MOD-P1203/04）：人格偏好 + 活跃房间
-    persona: Optional[dict]  # {"greeting_style": "...", "tone_style": "..."} or None
+    persona: Optional[dict]  # {"identity","address","tone"}（兼容旧键）or None
     active_specific_part: Optional[str]  # 前端首页选中的房间号（如 "3-1-7-702"），None=未选择
+    # v1.13.0（US-001 AC-001-02）：本轮是否要求副官在回复末尾询问称呼偏好。
+    # 由 MiniAppChatConsumer 判定（用户从未设过称呼 + 首次对话），随 persona 同路透传。
+    persona_ask_preference: Optional[bool]
 
 
 # 从消息里提取 ChatConsumer 注入的 [__freeark_user__:<name>] 前缀，构造 operator 追溯。
@@ -156,37 +163,47 @@ def _operator_from_state(state: State) -> str:
 
 # ── v1.12.0 人格与座舱上下文注入（MOD-P1203/04）────────────────────────────────
 
-def build_persona_message(persona: Optional[dict]) -> Optional[SystemMessage]:
+def build_persona_message(
+    persona: Optional[dict],
+    ask_preference: bool = False,
+) -> Optional[SystemMessage]:
     """将人格偏好构造成独立的 SystemMessage 块。
 
-    若 persona 为空或 None：返回默认人格（智能方舟副官 + 尊敬的舰长大人）。
-    否则按用户自定义的 greeting_style / tone_style 动态构造。
-    """
-    greeting = (persona or {}).get('greeting_style') or None
-    tone = (persona or {}).get('tone_style') or None
+    v1.13.0 重写（三处修复，对应 2026-08-22 的生产实测）：
 
-    if greeting and tone:
-        content = (
-            f"你的身份是'{greeting}'。请以'{tone}'风格与当前用户交流。"
-            "保持该角色定位贯穿整个对话。"
+    1. **字段语义拆清**。旧版只有 greeting_style/tone_style 两个键且语义是混的——
+       tone_style 在默认分支当"称呼"用、在自定义分支被拼成"以'X'风格交流"。实测把
+       tone_style 设成"胖子熊大人"，模型答"我是胖子熊大人，智能方舟的副官"，
+       把用户的称呼当成了自己的名字。现改由 api.persona 归一为
+       identity(自称) / address(称呼用户) / tone(语气) 三个语义单一的键。
+    2. **身份与称呼分层**。旧版一句"保持该角色定位贯穿整个对话"把身份和称呼一起
+       锁死，导致用户说"以后叫我胖子熊大人"时副官答"我必须遵循守则，仍以'尊敬的
+       舰长大人'称呼您"——把用户偏好当成了不可违抗的规则。现在身份不可变、
+       称呼与语气可由用户改。
+    3. **首次询问偏好**（ask_preference，US-001 AC-001-02）：用户从未设过称呼且是
+       首次对话时，要求在回复末尾自然地问一句，且不得打断对当前问题的正常回答。
+    """
+    from api.persona import effective_persona
+
+    eff = effective_persona(persona)
+    parts = [
+        f"你的身份是「{eff['identity']}」，请始终以该身份自居，不得自称其它名字。",
+        f"请称呼当前用户为「{eff['address']}」。",
+    ]
+    if eff['tone']:
+        parts.append(f"请以「{eff['tone']}」的语气与用户交流。")
+    parts.append(
+        "身份设定贯穿整个对话、不可更改；但称呼与语气属于用户偏好——"
+        "若用户要求换一个称呼或调整语气，不要以「守则」「设定」为由拒绝，"
+        "直接接受并从本次回复起改用新称呼。"
+    )
+    if ask_preference:
+        parts.append(
+            "另外，该用户尚未设置过称呼偏好且这是其首次对话："
+            "请在本次回复的末尾用一句话自然地询问他希望被如何称呼。"
+            "该询问必须放在正常回答之后，不得打断或替代对用户当前问题的回答。"
         )
-    elif greeting:
-        content = (
-            f"你的身份是'{greeting}'。请以'尊敬的舰长大人'称呼当前用户。"
-            "保持该角色定位贯穿整个对话。"
-        )
-    elif tone:
-        content = (
-            f"你是智能方舟的副官。请以'{tone}'风格与当前用户交流。"
-            "保持该角色定位贯穿整个对话。"
-        )
-    else:
-        # 默认人格
-        content = (
-            "你是智能方舟的副官，请以'尊敬的舰长大人'称呼当前用户。"
-            "保持该角色定位贯穿整个对话。"
-        )
-    return SystemMessage(content=content)
+    return SystemMessage(content="".join(parts))
 
 
 def build_cabin_context_message(
@@ -530,12 +547,14 @@ class Orchestrator:
                 "query": state.get("route_text", ""), "messages": [],
                 "user_scope": state.get("user_scope"),
                 "persona": state.get("persona"),
+                "persona_ask_preference": state.get("persona_ask_preference"),
                 "active_specific_part": state.get("active_specific_part"),
             })]
         return [Send("expert", {
             "name": name, "query": q, "messages": [],
             "user_scope": state.get("user_scope"),
             "persona": state.get("persona"),
+            "persona_ask_preference": state.get("persona_ask_preference"),
             "active_specific_part": state.get("active_specific_part"),
         }) for name, q in plan]
 
@@ -550,7 +569,8 @@ class Orchestrator:
         llm = self.llm.bind_tools(bound) if bound else self.llm
 
         # v1.12.0：人格 + 座舱上下文注入（MOD-P1203/04）
-        _persona = build_persona_message(state.get("persona"))
+        _persona = build_persona_message(
+            state.get("persona"), bool(state.get("persona_ask_preference")))
         _cabin = build_cabin_context_message(
             state.get("user_scope"), state.get("active_specific_part"))
         msgs: List[BaseMessage] = [
@@ -762,13 +782,19 @@ class Orchestrator:
         else:
             # 去掉 [expert-id] 标签：避免融合模型在输出中暴露内部分工/路由（对用户透明）。
             digest = "\n".join(r["answer"] for r in results)
+            # 人格注入（修复 2026-08-21）：融合提示原先写死「你就是方舟智能体本人」且不注入
+            # persona——各专家已按副官人格作答，融合这一步又把身份改回旧称。身份改由人格块决定。
+            # 注意：融合阶段恒不询问偏好——各分支已在自己的回复里问过一次，
+            # 这里再问会让最终回复出现两遍相同的询问。
+            _persona = build_persona_message(state.get("persona"))
             ai = await self.llm.ainvoke([
                 SystemMessage(content=(
-                    "你就是方舟智能体本人，以第一人称统一作答。"
+                    "以第一人称统一作答，身份与自称以随后的人格设定为准。"
                     "将下列各段结论融合成一段连贯回复，重复内容合并为一次表述、不要重复。"
                     "严格禁止提及「专家」「转交」「咨询」「路由」或任何内部分工、多智能体编排细节；"
                     "禁止出现「根据各专家」「某专家认为」「巡检专家」「能耗专家」等措辞。"
                 )),
+            ] + ([_persona] if _persona else []) + [
                 HumanMessage(content=f"以下是需要整合的结论：\n{digest}\n\n请综合为一段回复。"),
             ])
             final = ai.content
@@ -796,10 +822,18 @@ class Orchestrator:
 
         纯 LLM 自然语言（不 bind 任何工具），token 经 adapter._drive 直接流给用户
         （node=='general' 标记为 user-stream）。结果写入 expert_results，由 aggregate
-        统一打包进 messages（单结果直接取用，无二次 LLM 调用、不重复流）。"""
+        统一打包进 messages（单结果直接取用，无二次 LLM 调用、不重复流）。
+
+        人格注入（修复 2026-08-21）：此前只有 _expert 注入 build_persona_message()，
+        general 分支拿到了 state["persona"] 却从不消费，且 GENERAL_PROMPT 写死「你就是
+        方舟智能体本人」——而"你是谁"恰恰最容易被路由判为域外落到本节点，导致同一问题
+        在 expert 分支自称「副官」、在本分支自称「方舟智能体」，与小程序副官入口表述不一致。"""
         query = _current_query(state.get("query", ""))  # 剥历史/标签，只留当前问题
+        _persona = build_persona_message(
+            state.get("persona"), bool(state.get("persona_ask_preference")))
         msgs: List[BaseMessage] = [
             SystemMessage(content=GENERAL_PROMPT + _date_hint()),
+        ] + ([_persona] if _persona else []) + [
             HumanMessage(content=query),
         ]
         ai = await self.llm.ainvoke(msgs)

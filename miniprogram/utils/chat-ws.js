@@ -46,11 +46,12 @@ export class ChatWebSocket {
     this.callbacks = callbacks
     this._connSeq = 0
     this._heartbeatTimer = null
-    this._reconnectTimer = null
-    this._reconnectCount = 0
+    // _manualClose 仅用于诊断日志区分「主动关闭」与「异常断开」；
+    // 重连由页面层负责，本层不再持有重连状态。
     this._manualClose = false
     // callbacks: {
     //   onConnected(sessionKey, sessionId, persona, cabinStatus),
+    //   onPersonaUpdated(persona),   // v1.13.0 对话内改称呼后服务端主动推送
     //   onStatusUpdate(message),
     //   onReasoningToken(token),
     //   onReasoningEnd(),
@@ -94,15 +95,19 @@ export class ChatWebSocket {
 
       switch (msg.type) {
         case 'connected':
-          this.connected = true
-          this._reconnectCount = 0
-          this._startHeartbeat()
+            this.connected = true
+            this._startHeartbeat()
           if (DIAG) console.log('[ChatWS] onMessage connected session_key=' + msg.session_key)
           this.callbacks.onConnected?.(
             msg.session_key, msg.session_id,
             msg.persona || null,
             msg.cabin_status || { is_bound: false, rooms: [], active_room: null },
           )
+          break
+        // v1.13.0：用户在对话里改了称呼/语气，服务端落库后主动推此帧。
+        // 不更新本地 persona 的话，新会话的开场问候语还会用旧称呼。
+        case 'persona_updated':
+          this.callbacks.onPersonaUpdated?.(msg.persona || null)
           break
         case 'status_update':
           this.callbacks.onStatusUpdate?.(msg.message)
@@ -144,10 +149,9 @@ export class ChatWebSocket {
       this.connected = false
       this._stopHeartbeat()
       if (DIAG) console.warn('[ChatWS] onClose code=' + code + ' reason=' + reason + ' manualClose=' + this._manualClose)
-      // 非正常关闭且非手动关闭时，自动重连
-      if (!this._manualClose && code !== 1000 && code !== 4001) {
-        this._scheduleReconnect(token, sessionKey, activeSp)
-      }
+      // 重连不在本层做（2026-08-22 rebase 取舍）：页面层 chat/index.vue 已有一套退避重连，
+      // 且它感知 onHide 挂起（suspended）、驱动断连横幅、提供手动重连按钮。两层各自退避会
+      // 对同一次断开触发两轮连接（靠 _connSeq 才没产生重复 socket），故本层只上报，不重连。
       this.callbacks.onClose?.(code)
     })
 
@@ -211,10 +215,9 @@ export class ChatWebSocket {
   }
 
   close() {
-    this._manualClose = true
-    this._stopHeartbeat()
-    this._cancelReconnect()
-    if (this.socketTask) {
+      this._manualClose = true
+      this._stopHeartbeat()
+      if (this.socketTask) {
       const closingTask = this.socketTask
       this._connSeq++
       this.socketTask = null
@@ -238,25 +241,6 @@ export class ChatWebSocket {
     if (this._heartbeatTimer) {
       clearInterval(this._heartbeatTimer)
       this._heartbeatTimer = null
-    }
-  }
-
-  _scheduleReconnect(token, sessionKey, activeSp) {
-    this._cancelReconnect()
-    if (this._reconnectCount >= 5) return
-    const delay = Math.min(1000 * Math.pow(2, this._reconnectCount), 10000)
-    this._reconnectCount++
-    if (DIAG) console.warn('[ChatWS] 自动重连 #' + this._reconnectCount + '，延迟 ' + delay + 'ms')
-    this._reconnectTimer = setTimeout(() => {
-      this._manualClose = false
-      this.connect(token, sessionKey, activeSp)
-    }, delay)
-  }
-
-  _cancelReconnect() {
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer)
-      this._reconnectTimer = null
     }
   }
 }

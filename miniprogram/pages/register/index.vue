@@ -125,11 +125,11 @@
           <view class="eye" :class="showPwd2 ? 'eye-on' : 'eye-off'" @tap="showPwd2 = !showPwd2"></view>
         </view>
 
-        <!-- 隐私政策同意 -->
+        <!-- 隐私保护指引同意 -->
         <view class="privacy-row" @tap="agreedPrivacy = !agreedPrivacy">
           <checkbox :checked="agreedPrivacy" class="privacy-checkbox" color="#2ff4e0" />
           <text class="privacy-label">已阅读并同意</text>
-          <text class="privacy-link" @tap.stop="goPrivacy">《隐私政策》</text>
+          <text class="privacy-link" @tap.stop="goPrivacy">《隐私保护指引》</text>
         </view>
 
         <!-- 注册按钮 -->
@@ -176,7 +176,7 @@ const statusBarHeight = sysInfo.statusBarHeight || 20
 
 async function handleRegister() {
   if (!agreedPrivacy.value) {
-    uni.showToast({ title: '请先同意隐私政策', icon: 'none' })
+    uni.showToast({ title: '请先同意隐私保护指引', icon: 'none' })
     return
   }
   if (!username.value.trim()) {
@@ -412,7 +412,7 @@ function goPrivacy() {
 .eye-on { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIj48cGF0aCBkPSJNMiAxMnM0LTcgMTAtNyAxMCA3IDEwIDctNCA3LTEwIDctMTAtNy0xMC03WiIgc3Ryb2tlPSIjMmZmNGUwIiBzdHJva2Utd2lkdGg9IjEuNiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiIHN0cm9rZT0iIzJmZjRlMCIgc3Ryb2tlLXdpZHRoPSIxLjYiLz48L3N2Zz4K"); }
 .eye-off { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIj48cGF0aCBkPSJNMiAxMnM0LTcgMTAtNyAxMCA3IDEwIDctNCA3LTEwIDctMTAtNy0xMC03WiIgc3Ryb2tlPSIjOGZiM2Q5IiBzdHJva2Utd2lkdGg9IjEuNiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiIHN0cm9rZT0iIzhmYjNkOSIgc3Ryb2tlLXdpZHRoPSIxLjYiLz48cGF0aCBkPSJNMyAzbDE4IDE4IiBzdHJva2U9IiM4ZmMzZmYiIHN0cm9rZS13aWR0aD0iMS42IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4K"); }
 
-/* ── 隐私政策同意 ────────────────────────────────────────────────────── */
+/* ── 隐私保护指引同意 ────────────────────────────────────────────────────── */
 .privacy-row {
   display: flex; align-items: center; justify-content: center; margin: 24rpx 0 0;
   padding: 8rpx 0;

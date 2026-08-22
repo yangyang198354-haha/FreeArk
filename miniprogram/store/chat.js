@@ -15,8 +15,11 @@ export const useChatStore = defineStore('chat', {
     sessionList: [],
     currentSessionId: null,
     // v1.12.0: 人格偏好 + 座舱绑定状态（来自 WS connected 帧）
-    persona: null,       // {greeting_style, tone_style} | null
+    persona: null,       // v1.13.0: {identity, address, tone} | null（旧键 greeting_style/tone_style 已废）
     cabinStatus: { is_bound: false, rooms: [], active_room: null },
+    // v1.13.0: 设置页改过人格后置真。当前 WS 连接持的是 connect 时读的 persona
+    // 快照，不重连的话副官页开场问候语还是旧称呼。聊天页据此决定是否重连。
+    personaStale: false,
   }),
   actions: {
     addMessage(msg) {
@@ -49,6 +52,13 @@ export const useChatStore = defineStore('chat', {
     },
     setPersona(persona) {
       this.persona = persona
+    },
+    // 设置页保存后调用；聊天页 onShow 消费并重连，随后清标记
+    markPersonaStale() {
+      this.personaStale = true
+    },
+    clearPersonaStale() {
+      this.personaStale = false
     },
     setCabinStatus(cabinStatus) {
       this.cabinStatus = cabinStatus

@@ -31,8 +31,9 @@ import contextvars
 import logging
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_core.tools import tool
 
@@ -282,26 +283,269 @@ _MOCK_WRITE_PAYLOADS = {
 
 def execute_write(tool_name: str, args: dict, operator_override: str) -> dict:
     """gate 节点批准后真执行写操作：注入 operator_override，调 TIER2_HANDLERS（恒走 HTTP）。
-    mock 模式返回 canned 数据。未知工具/handler 返回失败信封。"""
+    mock 模式返回 canned 数据。未知工具/handler 返回失败信封。
+
+    2026-06 UX 回显增强：
+      - 若 handler 返回 success=True 且 data 含 batch_request_id，
+        自动轮询「/api/device-settings/records/?batch_request_id=…」
+        30 秒（3 秒 × 10 轮），取得终态（success/failed/timeout）后直接塞进 summary，
+        让用户一眼看到是否真的写成功，而不是只显示「pending 等 10-30 秒」。
+      - 若 30 秒内仍是 pending，就把「到目前为止仍 pending」+ 建议（稍后用
+        get_write_status 再查）写进 summary，不吞掉用户的等待感。
+    """
     handler_name = _WRITE_TOOL_TO_HANDLER.get(tool_name)
     if handler_name is None:
         return {"success": False, "error": f"未知写工具: {tool_name}"}
     params = dict(args or {})
     params["operator_override"] = operator_override
     if _MOCK:
-        return _MOCK_WRITE_PAYLOADS.get(
+        canned = _MOCK_WRITE_PAYLOADS.get(
             handler_name, {"success": True, "summary": f"{handler_name}(mock)", "data": {}})
+        # mock 模式就不做轮询了（避免误调真实接口）
+        return dict(canned)
     handler = TIER2_HANDLERS.get(handler_name)
     if handler is None:
         return {"success": False, "error": f"写 handler 不可用: {handler_name}"}
-    return handler(params)
+    raw = handler(params)
+    if not isinstance(raw, dict):
+        return {"success": False, "error": f"写 handler 返回非 dict: {type(raw).__name__}"}
+    out = dict(raw)  # 复制一份，防就地改 caller 数据
+
+    # --- 自动轮询 UX 回显 ---
+    try:
+        data = out.get("data") or {}
+        batch_id = (data if isinstance(data, dict) else {}).get("batch_request_id")
+        if out.get("success") and batch_id and tool_name == "set_device_params":
+            polled = _poll_write_status_until_final(batch_id, total_seconds=30, step_seconds=3)
+            # 把轮询结果塞回 envelope，给 LLM 直接读
+            out["write_status"] = polled
+            final_status = polled.get("final_status") or "unknown"
+            # 覆写/补充 summary，终态优先级高
+            old_summary = out.get("summary") or ""
+            extra = _summarize_polled_status(polled, batch_id=batch_id)
+            if polled.get("still_pending"):
+                # 还没拿到终态：保留原 summary 再加提示
+                out["summary"] = (old_summary + "\n" + extra) if old_summary else extra
+            else:
+                # 拿到终态：优先展示
+                out["summary"] = extra if not old_summary else (extra + "\n(原文：" + old_summary + ")")
+    except Exception as exc:
+        # 轮询异常不影响写操作本身的返回（写已经下发了），只 warning 一下
+        logger.warning("execute_write 自动轮询 write_status 异常（不影响已下发写操作）: %s", exc)
+    return out
+
+
+# write_status 轮询默认参数（可通过环境变量改，便于调优/离线测试）
+_POLL_TOTAL_SECONDS_DEFAULT = int(os.environ.get('FREAARK_WRITE_POLL_TOTAL_SECONDS', '30'))
+_POLL_STEP_SECONDS_DEFAULT = int(os.environ.get('FREAARK_WRITE_POLL_STEP_SECONDS', '3'))
+_TERMINAL_WRITE_STATUSES = frozenset({'success', 'failed', 'timeout'})
+
+
+def _poll_write_status_until_final(
+    batch_request_id: str,
+    *,
+    total_seconds: int = _POLL_TOTAL_SECONDS_DEFAULT,
+    step_seconds: int = _POLL_STEP_SECONDS_DEFAULT,
+) -> dict:
+    """轮询 PLCWriteRecord 直到该批次所有行都非 pending 或总等待时长耗尽。
+
+    返回 dict:
+      {
+        "final_status": "success" | "failed" | "timeout" | "mixed" | "pending",
+        "still_pending": bool,       # 是否还有 pending 行（总时耗尽仍 pending 则 True）
+        "polled_rounds": int,        # 实际轮询了几次 HTTP
+        "records_total": int,
+        "records_success": int,
+        "records_failed": int,
+        "records_timeout": int,
+        "records_pending": int,
+        "last_records": [ {...} ],   # 最近一次取到的该批次记录（简化 serializer 字段）
+      }
+    """
+    # 轮询实现：直接走 Django ORM 更省（不走 FreeArkClient HTTP 再绕一圈），
+    # 且在没有 tier2_write（FREEARK_POC_MOCK=1 或单测）时也能工作。
+    # 单测路径下 PLCWriteRecord 表存在即可；若真的找不到（如离线环境），fallback 为空态。
+    # 注意：这里不能在 import-time 引入 models，避免被离线测试路径跳过。
+    max_rounds = max(1, total_seconds // max(1, step_seconds))
+    stats: dict[str, Any] = {
+        "batch_request_id": batch_request_id,
+        "final_status": "pending",
+        "still_pending": True,
+        "polled_rounds": 0,
+        "records_total": 0,
+        "records_success": 0,
+        "records_failed": 0,
+        "records_timeout": 0,
+        "records_pending": 0,
+        "last_records": [],
+    }
+    for i in range(max_rounds):
+        stats["polled_rounds"] = i + 1
+        recs = _query_batch_records_safe(batch_request_id)
+        stats["records_total"] = len(recs)
+        stats["records_success"] = sum(1 for r in recs if (r.get('status') == 'success'))
+        stats["records_failed"] = sum(1 for r in recs if (r.get('status') == 'failed'))
+        stats["records_timeout"] = sum(1 for r in recs if (r.get('status') == 'timeout'))
+        stats["records_pending"] = sum(1 for r in recs if (r.get('status') == 'pending'))
+        stats["last_records"] = [
+            {"id": r.get('id'), "specific_part": r.get('specific_part'),
+             "param_name": r.get('param_name'), "status": r.get('status'),
+             "error_message": r.get('error_message'), "created_at": r.get('created_at'),
+             "updated_at": r.get('updated_at')}
+            for r in recs
+        ]
+        # 判定终态：还有 pending → 继续等；否则按 majority 定 final_status
+        if stats["records_pending"] == 0 and stats["records_total"] > 0:
+            stats["still_pending"] = False
+            succ = stats["records_success"]
+            fail = stats["records_failed"] + stats["records_timeout"]
+            if succ > 0 and fail == 0:
+                stats["final_status"] = "success"
+            elif fail > 0 and succ == 0:
+                stats["final_status"] = (
+                    "timeout" if stats["records_timeout"] > stats["records_failed"] else "failed"
+                )
+            else:
+                stats["final_status"] = "mixed"
+            return stats
+        # 不是最后一轮 → 再等 step_seconds
+        if i < max_rounds - 1:
+            time.sleep(max(1, step_seconds))
+    # 超时耗尽（仍有 pending）
+    stats["still_pending"] = stats["records_pending"] > 0
+    if stats["still_pending"]:
+        stats["final_status"] = "pending"
+    else:
+        # 总时耗尽但也没 pending：跟上面逻辑一样
+        succ = stats["records_success"]
+        fail = stats["records_failed"] + stats["records_timeout"]
+        if stats["records_total"] == 0:
+            stats["final_status"] = "pending"
+        elif succ > 0 and fail == 0:
+            stats["final_status"] = "success"
+        elif fail > 0 and succ == 0:
+            stats["final_status"] = (
+                "timeout" if stats["records_timeout"] > stats["records_failed"] else "failed"
+            )
+        else:
+            stats["final_status"] = "mixed"
+    return stats
+
+
+def _query_batch_records_safe(batch_request_id: str) -> list[dict]:
+    """安全查 PLCWriteRecord 某批次：import/model 缺失时返回 []，不打断主流程。
+
+    实际表结构（models.py v1.10 后）：
+      request_id (PK), batch_request_id, specific_part, param_name, old_value, new_value,
+      operator, status, channel, error_message, created_at, acked_at.
+    没有 updated_at / ack_payload（这两是我之前猜的字段），在 .values() 里写了会抛
+    FieldDoesNotExist，导致返回 []（fallback 但记录是存在的）——所以这里严格按
+    真实字段取。"""
+    try:
+        from django.apps import apps
+        if not apps.ready:
+            return []
+        try:
+            from api.models import PLCWriteRecord
+        except Exception:
+            # 离线/import 路径异常：再走 get_model 兜底
+            PLCWriteRecord = apps.get_model('api', 'PLCWriteRecord')  # type: ignore
+        # 先探一下 PLCWriteRecord 有哪些字段：避免不同版本字段不同时 FieldError 直接全返回空
+        field_names = {f.name for f in PLCWriteRecord._meta.get_fields()}
+        wanted = [
+            'id', 'specific_part', 'param_name', 'new_value', 'old_value',
+            'status', 'error_message', 'created_at', 'acked_at', 'operator',
+        ]
+        actual = [w for w in wanted if w in field_names]
+        if 'id' not in actual:
+            actual = ['*']  # pragma: no cover
+        qs = PLCWriteRecord.objects.filter(batch_request_id=batch_request_id).order_by('id')
+        if actual == ['*']:  # pragma: no cover
+            rows = [
+                {
+                    k: getattr(obj, k, None)
+                    for k in ['id', 'specific_part', 'param_name', 'new_value', 'status',
+                              'error_message', 'created_at', 'acked_at']
+                    if k in field_names
+                }
+                for obj in qs
+            ]
+        else:
+            rows = list(qs.values(*actual))
+        # 「归一化」：对外返回统一的字段名（updated_at/ack_payload 给历史兼容用）
+        for r in rows:
+            if 'acked_at' in r and 'updated_at' not in r:
+                r['updated_at'] = r.get('acked_at') or r.get('created_at')
+            if 'ack_payload' not in r:
+                r['ack_payload'] = ''
+        return rows
+    except Exception as exc:
+        logger.debug('_query_batch_records_safe 异常（不影响写操作主流程）: %s', exc)
+        return []
+
+
+def _summarize_polled_status(polled: dict, *, batch_id: str) -> str:
+    """把 _poll_write_status_until_final 的输出翻译成用户可读中文。"""
+    total = polled.get('records_total', 0) or 0
+    succ = polled.get('records_success', 0) or 0
+    fail = polled.get('records_failed', 0) or 0
+    to = polled.get('records_timeout', 0) or 0
+    pend = polled.get('records_pending', 0) or 0
+    rounds = polled.get('polled_rounds', 0) or 0
+    final = polled.get('final_status') or 'unknown'
+
+    status_label = {
+        'success': '✅ 全部写成功 (PLC 已回执 success)',
+        'failed': '❌ 全部写失败 (PLC 回执失败)',
+        'timeout': '⏰ 全部超时 (超过 90s 未收到 ack，已由 mark_write_timeout 标 timeout)',
+        'mixed': '⚠️ 部分成功/部分失败',
+        'pending': '⏳ 仍在等待 PLC 回执 (pending)',
+    }.get(final, f'? 状态 {final}')
+
+    base = (
+        f"写入回执状态（{batch_id}，已等 {rounds} 轮）：{status_label}。"
+        f" 共 {total} 项：success={succ}，failed={fail}，timeout={to}，pending={pend}。"
+    )
+    if not polled.get('still_pending'):
+        # 已拿到终态：把失败项的 error_message 简单拼几个
+        fails = [r for r in (polled.get('last_records') or [])
+                 if r.get('status') in ('failed', 'timeout')]
+        if fails:
+            lines = []
+            for r in fails[:3]:
+                pn = r.get('param_name') or '?'
+                st = r.get('status') or '?'
+                em = r.get('error_message') or ''
+                if em:
+                    em = (' — ' + (str(em)[:120]))
+                lines.append(f"  · {pn}: {st}{em}")
+            if len(fails) > 3:
+                lines.append(f"  · 另有 {len(fails) - 3} 项失败，详见 records 接口。")
+            base += "\n" + "\n".join(lines)
+    else:
+        base += (
+            " 超过最大等待时间仍未收到 PLC 回执。如果是真实下发请稍后再用 "
+            "get_write_status(batch_request_id=…) 再查，或让用户直接去 Web 端写记录页查看。"
+        )
+    return base
 
 
 @tool
 def set_device_params(specific_part: str, items: list) -> dict:
     """[写操作·需用户确认] 修改三恒设备参数（如温度设定值下发到 PLC）。
-    specific_part 形如 '3-1-7-702'；items 形如 [{"param_name":"设定温度","new_value":"24"}]。
-    用户请求控制/设定类操作时调用本工具发起请求；系统会拦截进入用户确认门，确认后才真执行。"""
+
+    ⚠️ 【调用前必须先查真实参数名】首次写任意设备前必须先调用
+    get_realtime_params(specific_part) 或 freeark_get_device_params(specific_part)
+    取得该设备的「可写参数列表」，从返回的 param_name（英文蛇形命名字段，
+    如 study_room_switch、living_room_temp_setting、operation_mode）中选取
+    填到 items[].param_name。绝对禁止用中文 display_name（如"设定温度""书房开关"）
+    直接拼接，否则后端白名单校验会直接拒绝。
+
+    specific_part 形如 '3-1-7-702'；items 形如
+    [{"param_name":"study_room_switch","new_value":"1"}] 或
+    [{"param_name":"study_room_temp_setting","new_value":"24"}]。
+    用户请求控制/设定类操作时调用本工具发起请求；系统会拦截进入用户确认门，
+    确认后才真执行。"""
     return execute_write("set_device_params",
                          {"specific_part": specific_part, "items": items}, "")
 
@@ -313,10 +557,32 @@ def trigger_refresh(specific_part: str) -> dict:
     return execute_write("trigger_refresh", {"specific_part": specific_part}, "")
 
 
+@tool
+def get_write_status(batch_request_id: str) -> dict:
+    """查询一次「设备参数写操作」的回执/进度（无需用户确认）。
+    当 set_device_params 返回的 summary 显示「仍在等待 PLC 回执 (pending)」
+    或用户主动追问「刚才写成功了吗？」「开关打开了吗？」时调用本工具，
+    直接读取真实 DB 中的 PLCWriteRecord 状态（不会重复下发，不会触发新的写操作）。
+
+    参数：batch_request_id 必须是 set_device_params 返回的那个字符串
+    （形如 UUID，如 "d98f1c42-…-702"），或者用户/LLM 不要自己拼接）。"""
+    batch_request_id = str(batch_request_id or "").strip()
+    if not batch_request_id:
+        return {"success": False, "error": "缺少 batch_request_id 参数"}
+    polled = _poll_write_status_until_final(
+        batch_request_id, total_seconds=3, step_seconds=1)
+    # 主动查询只等一轮，不阻塞 LLM 轮询；若还是 pending，提示用户可再查
+    return {
+        "success": True,
+        "summary": _summarize_polled_status(polled, batch_id=batch_request_id),
+        "data": polled,
+    }
+
+
 # ── 按专家分组的工具表（供 orchestrator 绑定到各 agent 节点）────────────
 # 能耗专家=「操控和查询」：读工具 + Tier-2 写工具（写经 gate 确认门）。
 ENERGY_TOOLS = [get_dashboard_summary, get_usage_daily, get_realtime_params,
-                set_device_params, trigger_refresh]
+                get_write_status, set_device_params, trigger_refresh]
 INSPECTION_TOOLS = [get_plc_status, get_fault_summary, get_realtime_params]
 
 

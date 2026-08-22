@@ -130,6 +130,16 @@ jobs:
         working-directory: miniprogram
         run: npm run test
 
+      # 必须在「组件/E2E」之前：chat-input-modes.spec.js 末尾的「编译产物守卫」
+      # 直接读 dist/build/mp-weixin/components/ChatInputBar.wxss|wxml，验证微信编译器
+      # 确实给 scoped 规则加了 data-v-* 哈希、且没给 placeholder-class 引用的两个类加
+      # （加了会静默失效，v1.13.2 真机事故的根因）。dist/ 不进仓库，产物缺失时那 3 个
+      # 用例会 it.skip 静默跳过——本步骤缺席时，这道唯一能发现"编译器行为变了"的防线
+      # 在 CI 上等于常关。顺带兼作小程序编译检查（与 Web 前端 job 的 compile check 对齐）。
+      - name: Build mp-weixin (compile check + 为编译产物守卫供料)
+        working-directory: miniprogram
+        run: npm run build:mp-weixin
+
       - name: Run Vitest (组件/E2E)
         working-directory: miniprogram
         run: npx vitest run --config vitest.component.config.mjs
