@@ -810,6 +810,9 @@ onLoad(() => {
 
 onShow(() => {
   if (!authStore.isLoggedIn) { uni.reLaunch({ url: '/pages/login/index' }); return }
+  // iOS 兜底：每次 onShow 都隐藏原生 tabBar，确保不与页内 ArkTabBar 重叠
+  uni.hideTabBar({ animation: false, fail: () => {} })
+  setTimeout(() => uni.hideTabBar({ animation: false, fail: () => {} }), 100)
   if (rooms.value.length === 0) loadConfig()
 })
 
@@ -842,6 +845,9 @@ onUnload(() => {
   flex-direction: column;
   background: #05070f;
   overflow: hidden;
+  /* ArkTabBar 已改为 position:fixed，给页面留出底部占位，避免最下方内容被遮挡 */
+  padding-bottom: calc(100rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 /* 赛博朋克背景（与 profile/chat 一致：紫/青径向渐变 + 深空底）*/

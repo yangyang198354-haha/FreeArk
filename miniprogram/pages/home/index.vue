@@ -530,13 +530,14 @@ onShow(() => {
     uni.reLaunch({ url: '/pages/login/index' })
     return
   }
+  // iOS 兜底：每次 onShow 都隐藏原生 tabBar，确保不与页内 ArkTabBar 重叠
+  uni.hideTabBar({ animation: false, fail: () => {} })
+  setTimeout(() => uni.hideTabBar({ animation: false, fail: () => {} }), 100)
 
   if (authStore.role === 'user') {
-    uni.hideTabBar({ animation: false, fail: () => {} })
     dash.start()
     anim.onShow()
   } else {
-    uni.showTabBar({ animation: false, fail: () => {} })
     try { uni.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#1a73e8' }) } catch (e) {}
     adminPoller.stop()
     adminPoller.start()
@@ -596,6 +597,9 @@ function goTo(url) {
   flex-direction: column;
   background: #0a0a0f;
   overflow: hidden;
+  /* ArkTabBar 已改为 position:fixed，给页面留出底部占位，避免最下方内容被遮挡 */
+  padding-bottom: calc(100rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 /* ── 字体栈（系统字体近似参考设计）─────────────────────── */

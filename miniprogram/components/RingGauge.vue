@@ -86,10 +86,12 @@ function render() {
             backgroundColor: props.alt ? 'rgba(124,58,237,0.15)' : 'rgba(0,229,255,0.12)',
             startAngle: 0.75,                           // 缺口在底部（270° 弧，cw）
             endAngle: 0.25,
-            gap: 2,
-            lineCap: 'round',
-            linearType: 'custom',
-            customColor: props.alt ? ['#c4a6ff', '#7c3aed'] : ['#7df9ff', '#7c3aed'],
+            gap: 0,
+            lineCap: 'round',                           // 圆头还原设计稿，单色无渐变不会有端点杂色
+            // uCharts arcbar 的 linearType:'custom' 是水平渐变（左→右），
+            // 不是沿弧切线方向，会导致环右半部分渲染成渐变末端的紫色。
+            // 真机 canvas 2d 渲染精度高，色差明显，开发者工具看不出。
+            // 解决方案：去掉渐变，用单色 color。
           },
         },
       })
