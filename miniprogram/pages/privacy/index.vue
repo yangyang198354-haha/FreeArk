@@ -16,7 +16,7 @@
     <!-- header -->
     <view class="header">
       <text class="back-btn" @tap="goBack">‹ 返回</text>
-      <text class="header-title">隐私保护指引</text>
+      <text class="header-title">隐私保护</text>
       <view class="header-spacer" />
     </view>
 

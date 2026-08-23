@@ -102,18 +102,24 @@
       <!-- privacy -->
       <view class="settings-row" style="margin-top: 20rpx;" @tap="goPrivacy">
         <view class="settings-ico ico-shield" />
-        <text class="settings-label">隐私保护指引</text>
+        <text class="settings-label">隐私保护</text>
         <text class="settings-arrow">›</text>
       </view>
-    </scroll-view>
 
-    <!-- logout（固定在底栏之上）-->
-    <view class="logout-bar">
-      <view class="logout-btn" @tap="onLogout">
-        <view class="ico-power" />
-        <text>退出登录</text>
+      <!-- logout（放在 scroll-view 内部，和上面的行一起滚动。
+           左右缩进不重复加：.body 已有 36rpx padding，所以 .logout-bar 自身只给上下 padding，
+           保证退出登录按钮宽度与 settings-row、bind-new 等严格对齐。
+           小屏下滚到底时，下面的 bottom-tabbar-spacer 会把它顶到 tabbar 上方完整显示。 -->
+      <view class="logout-bar">
+        <view class="logout-btn" @tap="onLogout">
+          <view class="ico-power" />
+          <text>退出登录</text>
+        </view>
       </view>
-    </view>
+
+      <!-- scroll-view 底部占位：滚到最后能看到退出登录按钮完整显示在 tabbar 上方，不被遮挡 -->
+      <view class="bottom-tabbar-spacer" />
+    </scroll-view>
 
     <!-- 底栏 -->
     <ArkTabBar active="profile" />
@@ -174,6 +180,9 @@ onShow(() => {
     uni.reLaunch({ url: '/pages/login/index' })
     return
   }
+  // iOS 兜底：每次 onShow 都隐藏原生 tabBar，确保不与页内 ArkTabBar 重叠
+  uni.hideTabBar({ animation: false, fail: () => {} })
+  setTimeout(() => uni.hideTabBar({ animation: false, fail: () => {} }), 100)
   loadBindings()
 })
 
@@ -243,7 +252,11 @@ function onLogout() {
   display: flex;
   flex-direction: column;
   background: #05070f;
-  overflow: hidden;
+  /* ArkTabBar 已改为 position:fixed 钉在屏幕底部。
+     给滚动内容区留出 tabbar 高度，避免最底部内容（设置项/退出登录）被遮挡。
+     注意：这里 padding-bottom 要加给整个页面的 flex 容器，而不是 overflow:hidden 的外层。 */
+  padding-bottom: calc(100rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 /* ── 背景 ─────────────────────────────────────────── */
@@ -291,7 +304,7 @@ function onLogout() {
 }
 
 /* ── body ─────────────────────────────────────────── */
-.body { position: relative; z-index: 4; flex: 1 1 auto; padding: 20rpx 36rpx; }
+.body { position: relative; z-index: 4; flex: 1 1 auto; min-height: 0; padding: 20rpx 36rpx; }
 
 /* profile card */
 .card {
@@ -386,14 +399,17 @@ function onLogout() {
 .settings-label { flex: 1; font-size: 28rpx; color: #dbeeff; }
 .settings-arrow { font-size: 30rpx; color: rgba(143,217,255,0.5); }
 
-/* logout */
-.logout-bar { position: relative; z-index: 5; flex: 0 0 auto; padding: 20rpx 36rpx 28rpx; }
+/* logout（放在 scroll-view 内部：左右缩进靠外层 .body 的 36rpx，自身不再重复加左右 padding，
+   保证按钮宽度和参数设置/隐私保护那行严格对齐一致）*/
+.logout-bar { position: relative; z-index: 5; padding: 20rpx 0 28rpx; }
 .logout-btn {
   display: flex; align-items: center; justify-content: center; gap: 16rpx; height: 100rpx;
   border-radius: 50rpx; border: 1px solid rgba(255,61,166,0.5); background: rgba(255,61,166,0.06);
   color: #ff7ab5; font-weight: 700; font-size: 30rpx; letter-spacing: 4rpx;
   box-shadow: 0 0 16px rgba(255,61,166,0.18);
 }
+/* scroll-view 底部占位：滚到最后能看到退出登录按钮完整显示在 tabbar 上方，不被遮挡 */
+.bottom-tabbar-spacer { height: calc(100rpx + env(safe-area-inset-bottom)); }
 
 /* ── 图标（SVG data-URI）─────────────────────────── */
 .ico-pencil { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4l10-10-4-4L4 16z'/%3E%3C/svg%3E"); }

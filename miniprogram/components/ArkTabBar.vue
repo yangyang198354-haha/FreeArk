@@ -1,12 +1,12 @@
 <!--
   @module MOD-COMP-ARK-TABBAR
-  @description 赛博朋克风格 4-Tab 底栏（页内自绘，非原生 tabBar）。
+  @description 赛博朋克风格 4-Tab 底栏（自绘，作为 custom-tab-bar 或页内组件）。
     设计交付「方舟座舱」共享底栏：舰桥 / 指挥 / 副官 / 舰长休息室。
     v1.13.0: 1:1 还原 cyberpunk-smart-home 参考设计。
-    - 首页、指挥、副官、舰长休息室 现在是 tabBar 页 → switchTab。
+    v1.14.0: 启用 pages.json tabBar.custom:true，由 custom-tab-bar/index.vue 统一渲染，
+             不再需要各页手动 hideTabBar/showTabBar。
     图标用 SVG data-URI 背景实现（微信小程序 WXML 不渲染 inline SVG）。
     用法：作为页面 flex 列布局的最后一个 flex-shrink:0 子节点。
-    在 AI问答/首页(原生 tab 页) 使用时，宿主页需 hideTabBar/showTabBar 避免与原生底栏重叠。
 -->
 <template>
   <view class="ark-tabbar">
@@ -59,12 +59,26 @@ function go(key) {
 
 <style scoped>
 .ark-tabbar {
-  position: relative;
-  flex: 0 0 auto;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
   display: flex;
   align-items: stretch;
-  background: rgba(10, 10, 15, 0.92);
+  background: rgba(10, 10, 15, 0.95);
   border-top: 1px solid rgba(0, 240, 255, 0.15);
+  /* 实际总高 = 100rpx（内区）+ env(safe-area-inset-bottom)（底部安全区），
+     box-sizing: content-box 下 height 只写 100rpx，由 padding-bottom 追加 safe-area，
+     保证总高精确 = calc(100rpx + env(safe-area-inset-bottom))，
+     与 4 个 tab 页外层 padding-bottom 完全相等，避免 iPhone 刘海屏输入框/退出按钮
+     差 1 个 safe-area 高度（约 68rpx）被 tabbar 遮。
+     之前的错误：height 里已 calc(100rpx + safe-area)，再加 padding-bottom:safe-area，
+     导致实际高 = 100rpx + 2×safe-area，多了一倍安全区。 */
+  height: 100rpx;
+  min-height: 100rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: content-box;
 }
 
 /* 顶部分隔渐变动画线（cyberpunk-smart-home 参考） */

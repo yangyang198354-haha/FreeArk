@@ -62,7 +62,7 @@
     {
       "path": "pages/privacy/index",
       "style": {
-        "navigationBarTitleText": "隐私保护指引",
+        "navigationBarTitleText": "隐私保护",
         "navigationStyle": "custom",
         "backgroundColor": "#05070f"
       }
@@ -204,10 +204,10 @@
     }
   },
   "tabBar": {
-    "color": "#64748b",
-    "selectedColor": "#2ff4e0",
-    "borderStyle": "white",
-    "backgroundColor": "#0a0f1a",
+    "color": "#05070f",
+    "selectedColor": "#05070f",
+    "borderStyle": "black",
+    "backgroundColor": "#05070f",
     "list": [
       {
         "pagePath": "pages/home/index",

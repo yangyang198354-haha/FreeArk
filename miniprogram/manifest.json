@@ -2,8 +2,8 @@
   "name": "FreeArk",
   "appid": "__UNI__FREEARK",
   "description": "FreeArk 三恒系统移动端",
-  "versionName": "1.0.2",
-  "versionCode": "102",
+  "versionName": "1.0.3",
+  "versionCode": "103",
   "transformPx": false,
   "mp-weixin": {
     "appid": "wxc68346b8e889def4",

@@ -6,11 +6,11 @@
       顶部子栏『＋新建会话 / 历史会话▾』；空会话显示问候 + 快捷提问 chips。
     WS 协议严格复刻：token 走 query、connected 帧才算连上、stream_token 流式、
       confirm_required 写确认门、onHide 必须 close()。历史会话下拉复用 api.getSessionList/getSessionHistory。
-    本页是原生 tabBar 页：onShow 调 uni.hideTabBar() 隐藏原生底栏，避免与自绘 4-Tab 重叠（首页 onShow 复原）。
+    v1.14.0: 启用 custom tabBar，由 custom-tab-bar/index.vue 统一渲染底栏。
     图标为 SVG data-URI 背景（微信小程序不渲染 inline SVG）；字体不远程加载（规避 OTS 崩溃）。
 -->
 <template>
-  <view class="ai-page" :style="{ paddingBottom: keyboardHeight + 'px' }">
+  <view class="ai-page" :style="{ paddingBottom: `calc(${keyboardHeight}px + 100rpx + env(safe-area-inset-bottom))` }">
     <!-- 背景装饰 -->
     <view class="bg-base" />
     <view class="bg-grid" />
@@ -431,8 +431,9 @@ onLoad((options) => {
 })
 
 onShow(() => {
-  // 隐藏原生 tabBar，避免与自绘 4-Tab 底栏重叠
+  // iOS 兜底：每次 onShow 都隐藏原生 tabBar，确保不与页内 ArkTabBar 重叠
   uni.hideTabBar({ animation: false, fail: () => {} })
+  setTimeout(() => uni.hideTabBar({ animation: false, fail: () => {} }), 100)
   suspended.value = false
   retryCount = 0
 
@@ -475,7 +476,20 @@ onUnload(() => {
 </script>
 
 <style scoped>
-.ai-page { position: relative; height: 100vh; display: flex; flex-direction: column; background: #05070f; overflow: hidden; }
+.ai-page {
+  position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #05070f;
+  overflow: hidden;
+  /* padding-bottom 由模板 inline style 动态决定：
+     `calc(keyboardHeight px + 100rpx + env(safe-area-inset-bottom))`。
+     keyboardHeight 保证输入法弹起时 ChatInputBar 不被键盘遮；
+     100rpx + safe-area 保证 input bar 不被 position:fixed 的 ArkTabBar 遮住。
+     这里不再重复写 static padding-bottom，以免和 inline style 混淆。 */
+  box-sizing: border-box;
+}
 
 /* 背景 */
 .bg-base, .bg-grid, .bg-blob { position: absolute; pointer-events: none; }

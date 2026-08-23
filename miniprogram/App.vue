@@ -1,7 +1,14 @@
 <script>
 export default {
   onLaunch() {
-    // App launch: auth check handled per-page
+    // 启动即隐藏原生 tabBar。真正的底栏由各 tab 页内的 <ArkTabBar> 自绘。
+    // iOS 原生 tabBar 渲染时机晚于 onLaunch，需多级延迟重试确保生效。
+    const hide = () => uni.hideTabBar({ animation: false, fail: () => {} })
+    hide()
+    setTimeout(hide, 50)
+    setTimeout(hide, 150)
+    setTimeout(hide, 300)
+    setTimeout(hide, 600)
   },
   onShow() {},
   onHide() {}
