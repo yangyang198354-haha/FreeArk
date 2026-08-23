@@ -188,6 +188,8 @@ function formatAttr(value, def, tag) {
     const o = def.options.find((opt) => String(opt.value) === String(value))
     if (o) return o.label
   }
+  // 一次阀开度：后端 spec 的 unit 为 '%'，但业务上只需显示裸数字（0.3 而非 0.3%）
+  if (tag === 'primary_valve_opening') return String(value)
   if (def && def.unit) return `${value}${def.unit}`
   return String(value)
 }
@@ -253,7 +255,7 @@ export const CARD_LAYOUT = {
   '10016':  { icon: '💨', switchTag: 'system_switch', primaryTags: ['wind_speed', 'humidification_enable'],
     smallTags: [], hideTags: ['mode', 'system_switch'] },  // #2：新风卡不显示 mode / system_switch
   '260001': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
-    smallTags: ['temp', 'humidity', 'dew_point_temp'], hideTags: [] },
+    smallTags: ['temp', 'humidity', 'dew_point_temp'], hideTags: ['system_switch'] },  // #客厅不重复展示主机的 system_switch
   '120003': { icon: '🌡', switchTag: 'switch', primaryTags: ['temp_set'],
     smallTags: ['temp', 'humidity', 'dew_point_temp'], hideTags: [] },
   '250001': { icon: '📊', switchTag: null, primaryTags: [],

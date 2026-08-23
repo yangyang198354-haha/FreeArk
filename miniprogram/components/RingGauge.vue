@@ -58,16 +58,20 @@ function render() {
       const ctx = canvas.getContext('2d')
       const w = info.width
       const h = info.height
-      canvas.width = w * dpr
-      canvas.height = h * dpr
+      const pw = Math.round(w * dpr)
+      const ph = Math.round(h * dpr)
+      canvas.width = pw
+      canvas.height = ph
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
       const frac = Math.min(Math.max(Number(props.progress) || 0, 0), 100) / 100
       chart = new uCharts({
         type: 'arcbar',
         context: ctx,
         canvas2d: true,
         pixelRatio: dpr,
-        width: w * dpr,
-        height: h * dpr,
+        width: pw,
+        height: ph,
         background: 'rgba(0,0,0,0)',
         animation: true,
         timing: 'easeOut',
@@ -86,7 +90,7 @@ function render() {
             backgroundColor: props.alt ? 'rgba(124,58,237,0.15)' : 'rgba(0,229,255,0.12)',
             startAngle: 0.75,                           // 缺口在底部（270° 弧，cw）
             endAngle: 0.25,
-            gap: 2,
+            gap: 0,                                    // 圆头弧无间隙，避免 canvas 2d 圆头抗锯齿溢出产生杂色
             lineCap: 'round',
             linearType: 'custom',
             customColor: props.alt ? ['#c4a6ff', '#7c3aed'] : ['#7df9ff', '#7c3aed'],

@@ -550,20 +550,25 @@ onUnload(() => {
 /* feed：mp-weixin scroll-view 在 flex 列内必须 flex-basis:0 + min-height:0 才能真正滚动；
    之前 `flex: 1 1 auto` 会让 scroll-view 高度被内容撑破，超出屏幕外的消息就看不到（用户 bug#4）。 */
 .feed { position: relative; z-index: 4; flex: 1 1 0; min-height: 0; padding: 12rpx 28rpx 16rpx; }
-.row { display: flex; margin-bottom: 26rpx; }
-.row-user { justify-content: flex-end; }
-.row-ai { justify-content: flex-start; align-items: flex-start; }
+
+/* 消息行：用 block + text-align 代替 flex，避免 iOS flex item min-width:auto 把中文气泡压到单字宽度。
+   .row 只负责水平对齐；头像 + 气泡通过 inline-block + 父级 text-align 横向排列。 */
+.row { display: block; margin-bottom: 26rpx; }
+.row-user { text-align: right; }
+.row-ai { text-align: left; }
 
 .avatar-ark {
-  flex: 0 0 auto; width: 68rpx; height: 68rpx; border-radius: 18rpx; margin-right: 20rpx;
+  display: inline-block; width: 68rpx; height: 68rpx; border-radius: 18rpx; margin-right: 20rpx;
   background: linear-gradient(150deg, rgba(47,244,224,0.18), rgba(139,92,246,0.18));
   border: 1px solid rgba(56,230,224,0.45);
-  display: flex; align-items: center; justify-content: center;
+  text-align: center; line-height: 68rpx;
+  vertical-align: top;
   box-shadow: 0 0 12px rgba(47,244,224,0.25);
 }
-.avatar-ark text { font-size: 22rpx; font-weight: 900; letter-spacing: 1rpx; color: #aef9f2; }
+.avatar-ark text { font-size: 22rpx; font-weight: 900; letter-spacing: 1rpx; color: #aef9f2; display: inline-block; }
 
-.bubble { max-width: 78%; padding: 22rpx 26rpx; }
+/* 问候语气泡（直接写在 index.vue 中，不用 ChatBubble 组件）*/
+.bubble { display: inline-block; max-width: 78%; padding: 22rpx 26rpx; vertical-align: top; }
 .bubble-ai { background: rgba(14,22,42,0.85); border: 1px solid rgba(56,230,224,0.2); border-radius: 10rpx 28rpx 28rpx 28rpx; }
 .btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; overflow-wrap: break-word; word-wrap: break-word; }
 

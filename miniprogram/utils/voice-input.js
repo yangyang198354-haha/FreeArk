@@ -15,20 +15,38 @@ import { BASE_URL } from './http'
 import { getToken } from './auth'
 
 var _manager = null
-var _recording = false
+// 状态机：idle → starting → recording → stopping → idle
+// - starting：manager.start() 已调用，等待 onStart 回调确认原生层真正开始录音
+// - stopping：manager.stop() 已调用，等待 onStop 回调返回录音文件
+// iOS 上 start()/stop() 的 onStart/onStop 回调延迟明显（WKWebView 音频会话初始化慢），
+// 没有 starting/stopping 中间态会导致：
+//   - starting 期间松手调 stop() → "recorder not start"
+//   - stopping 期间再次 start() → "is recording or paused"
+var _state = 'idle'
 
 /** 获取或创建 RecorderManager（单例）。 */
 function _getManager() {
   if (_manager) return _manager
   _manager = uni.getRecorderManager()
 
+  _manager.onStart(function () {
+    if (_state === 'starting') {
+      _state = 'recording'
+    }
+  })
+
   _manager.onError(function (res) {
     console.warn('[voice-input] 录音错误:', JSON.stringify(res))
     var msg = (res && (res.errMsg || res.message)) || '录音失败'
 
-    // "stop record fail" 是 startRecording() 中清理残留录音的预期行为，
-    // 此时录音尚未开始或已正常停止，不应重置 _recording 标志。
-    if (msg.indexOf('stop record fail') !== -1) {
+    // 以下三类都是状态机要静默处理的边界情况，不弹 toast 干扰用户：
+    // - "recorder not start"：iOS 上 start() 的 onStart 未回调时就 stop()
+    // - "is recording or paused"：上次 onStop 未回调时就 start()
+    // - "stop record fail"：startRecording() 中清理残留录音的预期行为
+    if (msg.indexOf('recorder not start') !== -1 ||
+        msg.indexOf('is recording or paused') !== -1 ||
+        msg.indexOf('stop record fail') !== -1) {
+      _state = 'idle'
       uni.hideToast()
       return
     }
@@ -36,14 +54,14 @@ function _getManager() {
     // "audio is recording, don't start again" 表示上一次录音的原生层 stop
     // 尚未完成。主动停止残留录音机，提示用户重试。
     if (msg.indexOf("don't start") !== -1 || msg.indexOf('already') !== -1) {
-      _recording = false
+      _state = 'idle'
       uni.hideToast()
       uni.showToast({ title: '录音繁忙，请稍后重试', icon: 'none', duration: 2000 })
       try { _manager.stop() } catch (_) { /* ignore */ }
       return
     }
 
-    _recording = false
+    _state = 'idle'
     uni.hideToast()
     // 权限错误：引导用户去设置页打开
     if (msg.indexOf('auth') !== -1 || msg.indexOf('permission') !== -1 || msg.indexOf('deny') !== -1) {
@@ -116,25 +134,32 @@ function _checkPermission() {
  * 长按开始录音。
  */
 export async function startRecording() {
-  if (_recording) return
+  // stopping 态：上次 onStop 未回调，拒绝并提示稍后重试
+  if (_state === 'stopping') {
+    uni.showToast({ title: '录音正在停止，请稍后', icon: 'none', duration: 1500 })
+    return
+  }
+  // starting / recording 态：已经在录音或正在启动，拒绝重复 start
+  if (_state !== 'idle') return
 
-  // ⚠️  Set _recording BEFORE await to close the double-tap race window.
-  //     If permission check fails we reset it below.
-  _recording = true
+  _state = 'starting'
 
   var ok = await _checkPermission()
-  if (!ok) { _recording = false; return }
+  if (!ok) { _state = 'idle'; return }
+
+  // 快速点击（touchend 早于权限返回）时，handleVoiceEnd 可能已把状态置回 idle，
+  // 此时不应继续启动录音（启动后没有对应的 stop → 录音卡死）。
+  if (_state !== 'starting') { _state = 'idle'; return }
 
   var manager = _getManager()
-  if (!manager) { _recording = false; return }
+  if (!manager) { _state = 'idle'; return }
 
   uni.showToast({ title: '正在聆听…', icon: 'none', duration: 60000 })
 
-  // Ensure any stale recording is stopped before starting a new one.
-  // Previous onStop callback may not have fired yet, leaving the native
-  // recorder in "recording" state → start() would throw.
-  try { manager.stop() } catch (_) { /* ignore */ }
-
+  // ⚠️ 不再无条件 manager.stop() 清理残留：
+  // 状态机已防止重复 start（stopping 态拒绝，idle 态无残留录音）。
+  // 原 L136 的清理 stop() 在 iOS 上会触发 "recorder not start" 错误，
+  // 且其 onError 回调是异步的，不会被 catch 捕获。
   try {
     manager.start({
       format: 'wav',
@@ -145,7 +170,7 @@ export async function startRecording() {
     })
   } catch (e) {
     uni.hideToast()
-    _recording = false
+    _state = 'idle'
     throw e
   }
 }
@@ -155,13 +180,28 @@ export async function startRecording() {
  */
 export function stopAndRecognize() {
   return new Promise(function (resolve) {
-    if (!_recording) { resolve(null); return }
-    _recording = false
+    // starting 态：onStart 还没回调，原生层尚未真正开始录音。
+    // iOS 上此时调用 manager.stop() 会报 "recorder not start"。
+    // 取消本次录音，直接返回 null。
+    if (_state === 'starting') {
+      _state = 'idle'
+      uni.hideToast()
+      resolve(null)
+      return
+    }
+    // idle / stopping 态：没有正在录音，或上次 stop 尚未回调，直接返回
+    if (_state !== 'recording') {
+      uni.hideToast()
+      resolve(null)
+      return
+    }
 
+    _state = 'stopping'
     var manager = _getManager()
-    if (!manager) { uni.hideToast(); resolve(null); return }
+    if (!manager) { _state = 'idle'; uni.hideToast(); resolve(null); return }
 
     manager.onStop(function (res) {
+      _state = 'idle'
       uni.hideToast()
       var tempFilePath = res && res.tempFilePath
       if (!tempFilePath) {

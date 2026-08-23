@@ -54,6 +54,7 @@
         :focus="textFocus"
         auto-height
         :max-height="200"
+        :disable-default-padding="true"
         @confirm="handleSend"
         @input="handleInput"
       />
@@ -281,11 +282,16 @@ function handleVoiceMove(e) {
 .cib-root--light { background: #fff; border-top: 1rpx solid #eee; }
 .cib-root--dark { background: rgba(8,14,28,0.85); border-top: 1px solid rgba(0,240,255,0.15); }
 
-/* ---- textarea：基类只写布局，修饰类只写配色 ---- */
+/* ---- textarea：基类只写布局，修饰类只写配色 ----
+   iOS 兼容（WKWebView UITextView）：
+   - line-height 1.3 替代 1.5，抵消 iOS 系统字体 lineHeight 偏大导致的额外高度
+   - padding 6rpx 替代 12rpx，让 CSS padding + iOS 原生 textContainerInset(≈8rpx) 后总内边距与安卓一致
+   - disable-default-padding 移除微信小程序 textarea 默认内边距，CSS padding 独占控制
+   安卓不受影响（无原生 inset，box-sizing: border-box 严格约束 min-height） */
 .cib-text {
-  flex: 1; min-height: 64rpx; max-height: 200rpx;
-  border-radius: 12rpx; padding: 12rpx 18rpx; font-size: 30rpx;
-  line-height: 1.5; box-sizing: border-box;
+  flex: 1; width: 100%; min-height: 64rpx; max-height: 200rpx;
+  border-radius: 12rpx; padding: 6rpx 18rpx; font-size: 30rpx;
+  line-height: 1.3; box-sizing: border-box;
 }
 .cib-text--light { background: #f5f5f5; border: 1px solid #e3e5e8; color: #333; }
 .cib-text--dark { background: rgba(4,10,22,0.8); border: 1px solid rgba(0,240,255,0.4); color: #d0faff; box-shadow: inset 0 0 12px rgba(0,240,255,0.06); }

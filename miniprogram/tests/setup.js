@@ -14,6 +14,7 @@ globalThis.uni = {
   removeStorageSync: (k) => { storage.delete(k) },
   // 交互/导航（占位，可断言被调用）
   showToast: vi.fn(),
+  hideToast: vi.fn(),
   showModal: vi.fn(),
   reLaunch: vi.fn(),
   navigateTo: vi.fn(),

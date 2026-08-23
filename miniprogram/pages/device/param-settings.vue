@@ -397,7 +397,7 @@ const CARD_META = {
   '客厅':   { en: 'LIVING-ROOM',    mono: 'LR' },
   '主卧':   { en: 'MASTER-BEDROOM', mono: 'MB' },
   '次卧':   { en: '2ND-BEDROOM',    mono: 'BR' },
-  '书房':   { en: 'STUDY',          mono: 'ST' },
+  '书房':   { en: 'STUDY-ROOM',      mono: 'ST' },
   '儿童房': { en: 'KIDS-ROOM',      mono: 'KR' },
   '能耗表': { en: 'ENERGY',         mono: 'EN' },
   '空气质量': { en: 'AIR-QUALITY',  mono: 'AQ' },
