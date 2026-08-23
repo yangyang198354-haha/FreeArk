@@ -78,7 +78,9 @@
     {
       "path": "pages/bind/index",
       "style": {
-        "navigationBarTitleText": "绑定座舱"
+        "navigationBarTitleText": "绑定座舱",
+        "navigationStyle": "custom",
+        "backgroundColor": "#05070f"
       }
     },
     {

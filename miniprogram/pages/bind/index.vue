@@ -43,6 +43,12 @@
     <!-- 状态栏占位（custom 导航） -->
     <view :style="{ height: statusBarHeight + 'px' }" class="status-spacer"></view>
 
+    <!-- header -->
+    <view class="bind-header">
+      <view class="back-btn ico-back" @tap="goBack" />
+      <text class="header-title">绑定座舱</text>
+    </view>
+
     <!-- ===== 前景内容列 ===== -->
     <scroll-view scroll-y class="content" :enhanced="true" :show-scrollbar="false">
 
@@ -185,6 +191,10 @@ async function loadStatus(force = false) {
   }
 }
 
+function goBack() {
+  uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/home/index' }) })
+}
+
 function handleScan() {
   uni.scanCode({
     success: (res) => {
@@ -318,6 +328,25 @@ function handleUnbind(b) {
 }
 
 .status-spacer { position: relative; z-index: 5; flex: 0 0 auto; }
+
+/* ── 自定义 header ───────────────────────────────────────────────────── */
+.bind-header {
+  position: relative; z-index: 6;
+  height: 92rpx; display: flex; align-items: center; justify-content: center;
+  border-bottom: 1rpx solid rgba(56,230,224,0.10);
+}
+.bind-header .back-btn {
+  position: absolute; left: 24rpx;
+  width: 56rpx; height: 56rpx;
+  background-repeat: no-repeat; background-position: center; background-size: 36rpx 36rpx;
+}
+.bind-header .ico-back {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232ff4e0' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E");
+}
+.bind-header .header-title {
+  font-size: 34rpx; font-weight: 700; letter-spacing: 8rpx; color: #f4fbff;
+  text-shadow: 0 0 12rpx rgba(56,230,224,0.5);
+}
 
 /* ── 光晕团 ───────────────────────────────────────────────────────────── */
 .blob { position: absolute; border-radius: 50%; filter: blur(16rpx); z-index: 0; pointer-events: none; }
