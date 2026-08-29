@@ -69,6 +69,7 @@
       >
         <view v-if="m.role !== 'user'" class="avatar-ark"><text>ARK</text></view>
         <ChatBubble
+          class="chat-bubble-comp"
           :role="m.role"
           :content="m.content"
           :streaming="m.streaming"
@@ -92,9 +93,6 @@
       @error="onInputError"
     />
 
-    <!-- 底栏 -->
-    <ArkTabBar class="ark-tabbar-comp" active="chat" />
-
     <!-- 历史会话下拉 -->
     <view v-if="showHistory" class="hist-mask" @tap="toggleHistory" />
     <view v-if="showHistory" class="hist-panel">
@@ -116,10 +114,16 @@
     </block>
 
     <view v-else class="adjutant-away">
-      <image class="adjutant-away-image" :src="'/assets/adjutant-away.png'" mode="aspectFit" />
-      <text class="adjutant-away-title">副官外出中</text>
-      <text class="adjutant-away-text">正在执行一项神秘任务，稍后就回来。</text>
+      <image class="adjutant-away-image" :src="'/static/adjutant-away.png'" mode="aspectFill" />
+      <view class="adjutant-away-shade" />
+      <view class="adjutant-away-copy">
+        <text class="adjutant-away-title">副官外出中</text>
+        <text class="adjutant-away-text">正在执行一项神秘任务，稍后就回来。</text>
+      </view>
     </view>
+
+    <!-- 无论副官是否可用，均保留页面导航入口。 -->
+    <ArkTabBar class="ark-tabbar-comp" active="chat" />
   </view>
 </template>
 
@@ -598,22 +602,29 @@ onUnload(() => {
 .feed { position: relative; z-index: 4; flex: 1 1 0; min-height: 0; padding: 12rpx 28rpx 16rpx; }
 
 .adjutant-away {
-  position: relative; z-index: 4; flex: 1 1 0; min-height: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 40rpx 56rpx 180rpx; text-align: center;
+  position: relative; z-index: 4; flex: 1 1 0; min-height: 0; overflow: hidden;
+  background: #06101b;
 }
-.adjutant-away-image { width: 360rpx; height: 360rpx; margin-bottom: 28rpx; }
-.adjutant-away-title { color: #b8fbff; font-size: 40rpx; font-weight: 700; letter-spacing: 4rpx; }
-.adjutant-away-text { margin-top: 18rpx; color: rgba(219,238,255,0.68); font-size: 27rpx; line-height: 1.7; }
+.adjutant-away-image { position: absolute; inset: 0; width: 100%; height: 100%; }
+.adjutant-away-shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(4, 10, 22, 0.08) 25%, rgba(4, 10, 22, 0.15) 50%, rgba(4, 8, 19, 0.82) 100%);
+}
+.adjutant-away-copy {
+  position: absolute; z-index: 1; left: 40rpx; right: 40rpx; bottom: 88rpx;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.adjutant-away-title { color: #d4fdff; font-size: 40rpx; font-weight: 700; letter-spacing: 4rpx; text-shadow: 0 0 16rpx rgba(0, 240, 255, 0.6); }
+.adjutant-away-text { margin-top: 18rpx; color: rgba(226, 244, 255, 0.86); font-size: 27rpx; line-height: 1.7; text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.9); }
 
-/* 消息行：用 block + text-align 代替 flex，避免 iOS flex item min-width:auto 把中文气泡压到单字宽度。
-   .row 只负责水平对齐；头像 + 气泡通过 inline-block + 父级 text-align 横向排列。 */
+/* 用户消息保持右对齐；副官消息将头像置于气泡上方，让正式回复使用整行宽度。 */
 .row { display: block; margin-bottom: 26rpx; }
 .row-user { text-align: right; }
-.row-ai { text-align: left; }
+.row-ai { display: block; text-align: left; }
+.row-ai .chat-bubble-comp { display: block; width: 100%; min-width: 0; }
 
 .avatar-ark {
-  display: inline-block; width: 68rpx; height: 68rpx; border-radius: 18rpx; margin-right: 20rpx;
+  display: block; width: 68rpx; height: 68rpx; border-radius: 18rpx; margin: 0 0 14rpx;
   background: linear-gradient(150deg, rgba(47,244,224,0.18), rgba(139,92,246,0.18));
   border: 1px solid rgba(56,230,224,0.45);
   text-align: center; line-height: 68rpx;
@@ -623,7 +634,7 @@ onUnload(() => {
 .avatar-ark text { font-size: 22rpx; font-weight: 900; letter-spacing: 1rpx; color: #aef9f2; display: inline-block; }
 
 /* 问候语气泡（直接写在 index.vue 中，不用 ChatBubble 组件）*/
-.bubble { display: inline-block; max-width: 78%; padding: 22rpx 26rpx; vertical-align: top; }
+.bubble { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 22rpx 26rpx; vertical-align: top; }
 .bubble-ai { background: rgba(14,22,42,0.85); border: 1px solid rgba(56,230,224,0.2); border-radius: 10rpx 28rpx 28rpx 28rpx; }
 .btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; overflow-wrap: break-word; word-wrap: break-word; }
 
