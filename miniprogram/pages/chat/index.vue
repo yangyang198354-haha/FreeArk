@@ -114,7 +114,7 @@
     </block>
 
     <view v-else class="adjutant-away">
-      <image class="adjutant-away-image" :src="'/static/adjutant-away.png'" mode="aspectFill" />
+      <image class="adjutant-away-image" :src="'/static/adjutant-away.jpg'" mode="aspectFill" />
       <view class="adjutant-away-shade" />
       <view class="adjutant-away-copy">
         <text class="adjutant-away-title">副官外出中</text>
