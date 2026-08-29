@@ -114,7 +114,7 @@
     </block>
 
     <view v-else class="adjutant-away">
-      <image class="adjutant-away-image" :src="'/static/adjutant-away.jpg'" mode="aspectFill" />
+      <image class="adjutant-away-image" :src="adjutantAwaySrc" mode="aspectFill" />
       <view class="adjutant-away-shade" />
       <view class="adjutant-away-copy">
         <text class="adjutant-away-title">副官外出中</text>
@@ -146,6 +146,12 @@ useShare()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const ownerStore = useOwnerStore()
+
+// ⚠️ 字符串拼接而不是字面量 '/static/adjutant-away.jpg'。
+// uni-app 微信小程序编译器会把模板里出现的"字面量静态路径"转成 Vite asset import，
+// 结果指向 /assets/xxx.hash.jpg —— 但小程序平台下那个文件不会被实际拷贝，渲染层
+// 报 Failed to load image。用 JS 变量 + 拼接形式，模板编译器无法识别为静态路径。
+const adjutantAwaySrc = '/static/' + 'adjutant-away.jpg'
 
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20

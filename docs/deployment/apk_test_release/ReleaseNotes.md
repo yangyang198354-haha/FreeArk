@@ -1,4 +1,4 @@
-# FreeArk 座舱 APK 测试版发布说明
+# 智能方舟座舱 测试版发布说明
 
 > 本文档用于记录所有测试版本的发布信息。版本按**倒序**排列（最新版本在前）。
 > 每次发布新版本时，请在表格顶部新增一行，并在下方对应版本补充详细变更说明。
@@ -9,7 +9,7 @@
 
 | 版本号 | 发布日期 | 发布说明链接 | APK 下载链接 |
 | :----: | :------: | :----------: | :----------: |
-|        |          |              |              |
+| v1.0.3 | 2026-08-29 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1AwnJghE08O0nT5DIt03Q_Q?pwd=8qsj) 提取码: 8qsj |
 | v1.0.2 | 2026-08-22 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1pkFqpoUGQUNjlSmKKQmgeQ?pwd=awzd) 提取码: awzd |
 | v1.0.1 | 2026-08-03 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1UhZTQ0vrf3rB5bgmj3Iw1A?pwd=7xn9) 提取码: 7xn9 |
 | v1.0.0 | 2026-07-31 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1cC1xA26b1quZbju3vM3RoQ?pwd=frpe) 提取码: frpe |
@@ -21,6 +21,79 @@
 <!-- ==================================================================
      新版本发布时：在此上方插入新版本详情块（复制下方模板填写即可）
      ================================================================== -->
+
+<!-- ==================================================================
+     v1.0.3
+     ================================================================== -->
+
+### v1.0.3 — 2026-08-29
+
+**发布类型**：内测
+
+**版本号**：versionName `1.0.3` / versionCode `10003`
+
+> versionCode 延续 `major*10000 + minor*100 + patch` 规则（1.0.3 → 10003），
+> 与微信小程序端的 versionCode `103` 永不撞号。
+
+**APK 下载链接**：
+- [百度网盘](https://pan.baidu.com/s/1AwnJghE08O0nT5DIt03Q_Q?pwd=8qsj) 提取码: 8qsj
+
+**关键变更**：
+- **副官功能开关**：后端新增副官配置接口（`adjutant_config` 模块），管理端可全局
+  开启/关闭副官功能。关闭后副官页面展示「副官外出中」占位插画，不再建立 WebSocket
+  会话。API 迁移 `0048` 对应数据库表结构。
+- **副官体验优化**：对话气泡由 `flex` 改 `inline-block + vertical-align`，修复 iOS 下
+  中文气泡高度异常、文字溢出问题。头像布局从 `flex:0 0 auto` 改为 `display:block`，
+  消除 iOS Safari flex 基线计算偏差。
+- **副官占位插画优化**：原图 `adjutant-away.png`（2.4MB）替换为 `adjutant-away.jpg`
+  （70KB），加载速度提升 97%。新增 `vite.config.js` 的 `copyStaticPlugin` 插件，
+  构建后自动同步 `static/` 目录到产物，彻底解决静态资源不被打包的问题。
+
+**修复的问题**：
+- **iOS 原生 tabBar 闪烁**：启动时原生底栏先渲染再被 `hideTabBar` 隐藏，产生
+  1~2 帧闪烁。根因是 JS 不可能比 native 渲染更早。修复：将 tabBar 的
+  `color`/`selectedColor`/`backgroundColor`/`borderStyle` 全部设为页面背景色
+  `#05070f`（隐形配色），即使原生底栏画出来用户也看不到，配合 `hideTabBar`
+  后隐藏，视觉上无跳变。
+- **iOS 两套 tabBar 叠显**：`onLaunch` 中 5 级 `hideTabBar` 重试（0/50/150/300/600ms）
+  + 4 个 tab 页 `onShow` 双次兜底，确保任何时机初始化的原生 tabBar 都被隐藏。
+- **iOS 舰长休息室 tabBar 消失**：`ArkTabBar` 从 `position:relative`（参与 flex 高度
+  计算）改为 `position:fixed; bottom:0; z-index:999`，永远钉在屏幕底部，页面内容
+  再长也不会把底栏挤出视口。4 个 tab 页外层容器统一加
+  `padding-bottom: calc(100rpx + env(safe-area-inset-bottom))` 占位。
+- **ArkTabBar 实际高度多算一倍安全区**：`content-box` 下 `height` 不含 `padding`，
+  原写法 `height: calc(100rpx + safe-area)` + `padding-bottom: safe-area` 实际总高
+  = `100rpx + 2×safe-area`，比占位多 68rpx（iPhone 刘海屏），导致输入框/退出按钮
+  恰好被遮住下半截。修复：`height: 100rpx`，`padding-bottom: env(safe-area)`，
+  实际总高精确等于占位值。
+- **副官页输入框被 tabBar 遮挡**：`.ai-page` 的 inline `padding-bottom` 原先只写
+  `keyboardHeight px`，覆盖了 CSS 里的 tabBar 占位。修复：改为
+  `calc(${keyboardHeight}px + 100rpx + env(safe-area-inset-bottom))`，键盘避让与
+  tabBar 避让同时生效。
+- **舰长休息室退出登录被遮 + 对齐错位**：`logout-bar` 移入 `scroll-view` 内部
+  使其可滚动，左右 `padding` 置零靠外层 `.body` 的 36rpx 统一缩进；底部新增
+  `bottom-tabbar-spacer` 保证滚到底时按钮完整出现在 fixed tabBar 上方。
+- **绑定座舱页无返回按钮**：新增自定义 header 含返回箭头，用户可点击返回
+  而非只能右滑手势退出。
+- **隐私保护指引标签过长**：「隐私保护指引」改为「隐私保护」，内容不变。
+- **RingGauge 右侧深紫杂色**：uCharts `linearType:custom` 的水平渐变在小程序
+  真机右半弧产生明显色差。改为 `gap:0` + 单色绘制，消除杂色。
+
+**APK 专项**：
+- Cherry-pick 主分支 4 个 commit（副官功能开关 + 体验优化 + 图片优化），
+  冲突解决时统一取 main 的 `block` 布局版本（iOS/安卓通用写法），不影响
+  apk-test 的多端改造（20s 心跳、`wx.getAppAuthorizeSetting` 多端判断等）。
+
+**已知问题 / 注意事项**：
+- 微信开发者工具中 `adjutant-away.jpg` 路径需用 JS 变量拼接
+  （`'/static/' + 'adjutant-away.jpg'`），不能用模板字面量——uni-app 模板编译器
+  会把字面量静态路径自动转为 Vite asset import，但小程序平台下实际文件不会被复制。
+
+**本次发布包含的 Commit**：
+- `dd1d94f` — fix: optimize miniapp adjutant image
+- `9090c30` — feat: refine miniapp adjutant experience
+- `d222fac` — feat: add miniapp adjutant feature switch
+- `430da60` — fix(mp-weixin): iOS tabBar 闪烁/叠显/消失 + 输入框与退出登录被遮修复，版本升 1.0.3
 
 <!--
 ### vX.X.X — YYYY-MM-DD
