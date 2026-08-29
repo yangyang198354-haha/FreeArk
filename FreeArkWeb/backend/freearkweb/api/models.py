@@ -1159,3 +1159,18 @@ class OwnerUserBinding(models.Model):
     def __str__(self):
         status = 'ACTIVE' if self.active else 'UNBOUND'
         return f"{self.user.username} → {self.owner.specific_part} [{status}]"
+
+
+class AppFeatureConfig(models.Model):
+    """全局功能开关配置（固定使用主键 1 的单例记录）。"""
+
+    adjutant_enabled = models.BooleanField(default=False, verbose_name='启用小程序副官')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'app_feature_config'
+        verbose_name = '应用功能配置'
+        verbose_name_plural = '应用功能配置'
+
+    def __str__(self):
+        return f"应用功能配置（副官：{'启用' if self.adjutant_enabled else '关闭'}）"

@@ -1,4 +1,6 @@
 <script>
+import { useAuthStore } from '@/store/auth'
+
 export default {
   onLaunch() {
     // 启动即隐藏原生 tabBar。真正的底栏由各 tab 页内的 <ArkTabBar> 自绘。
@@ -9,6 +11,8 @@ export default {
     setTimeout(hide, 150)
     setTimeout(hide, 300)
     setTimeout(hide, 600)
+    const authStore = useAuthStore()
+    if (authStore.isLoggedIn) authStore.refreshAdjutantStatus()
   },
   onShow() {},
   onHide() {}

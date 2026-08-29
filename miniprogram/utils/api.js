@@ -98,6 +98,7 @@ export const api = {
   reportDeviceSettingsAudit: (data) => http.post('/api/miniapp/device-settings/audit/', data),
 
   // Chat sessions
+  getAdjutantStatus: () => http.get('/api/miniapp/adjutant/status/'),
   getSessionList: (params) => http.get('/api/memory/me/', params),
   getSessionHistory: (sessionKey) => http.get(`/api/memory/session/${sessionKey}/history/`),
   deleteSession: (sessionKey) => http.del(`/api/memory/session/${sessionKey}/`),

@@ -208,7 +208,7 @@ async function handleLogin() {
     })
     if (res.success && res.token) {
       // Backend returns res.user (NOT res.user_info) — contains id, username, email, role, first_name, last_name
-      authStore.login(res.token, res.user)
+      await authStore.login(res.token, res.user)
       prefetchOwnerData(res.user)
       uni.reLaunch({ url: '/pages/home/index' })
     } else {
@@ -246,7 +246,7 @@ function handleWechatLogin() {
       try {
         const res = await api.miniappWechatLogin({ code, remember_me: rememberMe.value })
         if (res && res.token) {
-          authStore.login(res.token, res.user)
+          await authStore.login(res.token, res.user)
           prefetchOwnerData(res.user)
           // v1.12.0: 新用户引导设置头像昵称，老用户直接进首页（REQ-PROFILE-001, OQ-01=A）
           if (res.is_new) {

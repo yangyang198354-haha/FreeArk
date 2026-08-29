@@ -17,7 +17,7 @@
       </el-button>
     </div>
 
-    <!-- Tab 切换：服务列表 / 心跳中间件配置 (OQ-003 方案 A) -->
+    <!-- Tab 切换：服务列表 / 配置 -->
     <el-tabs v-model="activeTab" class="services-tabs">
       <!-- ===== Tab 1: 服务列表 ===== -->
       <el-tab-pane label="服务列表" name="services">
@@ -268,6 +268,29 @@
           </template>
         </el-dialog>
       </el-tab-pane>
+
+      <!-- ===== Tab 3: 小程序副官开关 ===== -->
+      <el-tab-pane label="小程序副官" name="adjutant-config">
+        <div class="adjutant-config">
+          <el-alert
+            title="审核期开关"
+            description="关闭后，小程序副官页不会建立 AI 对话连接，也不会展示历史会话或输入入口。"
+            type="warning"
+            :closable="false"
+            show-icon
+          />
+          <div v-if="adjutantLoading" class="detail-loading">
+            <el-icon class="is-loading"><Loading /></el-icon><span>加载中...</span>
+          </div>
+          <div v-else class="adjutant-switch-row">
+            <div>
+              <div class="adjutant-label">启用小程序副官</div>
+              <div class="adjutant-hint">{{ adjutantEnabled ? '副官对话功能当前可用' : '副官当前显示为“外出，稍后回来”' }}</div>
+            </div>
+            <el-switch v-model="adjutantEnabled" :loading="adjutantSaving" @change="saveAdjutantConfig" />
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -517,11 +540,46 @@ export default {
       }
     }
 
+    // ================================================================
+    // Tab 3: 小程序副官开关
+    // ================================================================
+    const adjutantLoading = ref(false)
+    const adjutantSaving = ref(false)
+    const adjutantEnabled = ref(false)
+
+    const fetchAdjutantConfig = async () => {
+      adjutantLoading.value = true
+      try {
+        const resp = await api.get('/api/adjutant-config/')
+        if (resp?.success) adjutantEnabled.value = resp.data?.enabled === true
+        else ElMessage.error(resp?.error || '获取副官配置失败')
+      } catch (err) {
+        ElMessage.error('获取副官配置失败：' + (err.message || '网络错误'))
+      } finally {
+        adjutantLoading.value = false
+      }
+    }
+
+    const saveAdjutantConfig = async (enabled) => {
+      adjutantSaving.value = true
+      try {
+        const resp = await api.put('/api/adjutant-config/update/', { enabled })
+        if (resp?.success) ElMessage.success(enabled ? '小程序副官已启用' : '小程序副官已关闭')
+        else throw new Error(resp?.error || '保存失败')
+      } catch (err) {
+        adjutantEnabled.value = !enabled
+        ElMessage.error('保存失败：' + (err.message || '网络错误'))
+      } finally {
+        adjutantSaving.value = false
+      }
+    }
+
     // 切换到心跳配置 Tab 时自动加载
     watch(activeTab, (tab) => {
       if (tab === 'heartbeat-config' && !hbcForm.host) {
         fetchHbcConfig()
       }
+      if (tab === 'adjutant-config') fetchAdjutantConfig()
     })
 
     onMounted(() => {
@@ -561,6 +619,11 @@ export default {
       hbcRules,
       handleHbcSave,
       executeHbcSave,
+      // Tab 3
+      adjutantLoading,
+      adjutantSaving,
+      adjutantEnabled,
+      saveAdjutantConfig,
     }
   },
 }
@@ -650,4 +713,9 @@ export default {
 .hbc-form {
   max-width: 600px;
 }
+
+.adjutant-config { margin-top: 16px; max-width: 680px; }
+.adjutant-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px 18px; }
+.adjutant-label { color: var(--ink-0); font-size: 15px; font-weight: 600; }
+.adjutant-hint { margin-top: 6px; color: var(--ink-2); font-size: 13px; }
 </style>

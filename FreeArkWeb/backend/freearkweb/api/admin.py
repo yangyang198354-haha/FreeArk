@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import OwnerInfo, WorkOrder
+from .models import AppFeatureConfig, OwnerInfo, WorkOrder
 
 
 @admin.register(OwnerInfo)
@@ -28,3 +28,9 @@ class WorkOrderAdmin(admin.ModelAdmin):
         ('处置', {'fields': ['resolved_at', 'resolved_by']}),
         ('时间', {'fields': ['created_at', 'updated_at']}),
     ]
+
+
+@admin.register(AppFeatureConfig)
+class AppFeatureConfigAdmin(admin.ModelAdmin):
+    list_display = ['adjutant_enabled', 'updated_at']
+    readonly_fields = ['updated_at']

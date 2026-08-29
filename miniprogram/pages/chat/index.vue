@@ -25,6 +25,7 @@
       <text class="header-title">副官</text>
     </view>
 
+    <block v-if="adjutantEnabled">
     <!-- subbar -->
     <view class="subbar">
       <view class="new-pill" @tap="newSession"><text>＋ 新建会话</text></view>
@@ -112,11 +113,18 @@
         </view>
       </scroll-view>
     </view>
+    </block>
+
+    <view v-else class="adjutant-away">
+      <image class="adjutant-away-image" :src="'/assets/adjutant-away.png'" mode="aspectFit" />
+      <text class="adjutant-away-title">副官外出中</text>
+      <text class="adjutant-away-text">正在执行一项神秘任务，稍后就回来。</text>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useShare } from '@/composables/useShare'
 import { useAuthStore } from '@/store/auth'
@@ -149,6 +157,7 @@ const linkLost = ref(false)
 const sessionKeyParam = ref(null)
 const shouldLoadHistoryOnConnect = ref(false)
 const canGoBack = ref(false)
+let chatInitialized = false
 
 // 键盘高度（用于将输入栏顶到键盘上方）
 const keyboardHeight = ref(0)
@@ -162,6 +171,7 @@ const quickChips = ['客厅主机不制冷？', '如何开启离家节能', '新
 
 const messages = computed(() => chatStore.messages)
 const wsConnected = computed(() => chatStore.wsConnected)
+const adjutantEnabled = computed(() => authStore.adjutantEnabled)
 const showDiscBanner = computed(() => linkLost.value && !suspended.value && !wsConnected.value)
 const isStreaming = computed(() => {
   const last = messages.value[messages.value.length - 1]
@@ -179,6 +189,28 @@ const personaGreeting = computed(() => {
 })
 
 let chatWs = null
+
+function stopChat() {
+  suspended.value = true
+  clearLinkTimers()
+  if (chatWs) chatWs.close()
+  chatStore.setConnected(false, null, null)
+  chatInitialized = false
+}
+
+function startChat() {
+  if (chatInitialized || !authStore.token) return
+  suspended.value = false
+  initWs()
+  chatInitialized = true
+  connectWs()
+  loadHistList()
+}
+
+watch(adjutantEnabled, (enabled) => {
+  if (enabled) startChat()
+  else stopChat()
+})
 
 function initWs() {
   chatWs = new ChatWebSocket({
@@ -420,10 +452,7 @@ onLoad((options) => {
   shouldLoadHistoryOnConnect.value = !!sessionKeyParam.value
   chatStore.resetSession()
   if (sessionKeyParam.value) chatStore.sessionKey = sessionKeyParam.value
-  initWs()
-  connectWs()
-  // Preload history list in background so it's ready when the user opens the panel
-  loadHistList()
+  if (adjutantEnabled.value) startChat()
   // 监听键盘高度变化，动态顶起输入栏
   // #ifdef MP-WEIXIN
   wx.onKeyboardHeightChange(keyboardListener)
@@ -436,6 +465,9 @@ onShow(() => {
   setTimeout(() => uni.hideTabBar({ animation: false, fail: () => {} }), 100)
   suspended.value = false
   retryCount = 0
+
+  authStore.refreshAdjutantStatus()
+  if (!adjutantEnabled.value) return
 
   // v1.13.0：刚在设置页改过人格 → 强制重连。后端的 self.persona 是 connect 时
   // 读的库快照，不重连的话本连接后续回复与开场问候语仍用旧称呼。
@@ -564,6 +596,15 @@ onUnload(() => {
 /* feed：mp-weixin scroll-view 在 flex 列内必须 flex-basis:0 + min-height:0 才能真正滚动；
    之前 `flex: 1 1 auto` 会让 scroll-view 高度被内容撑破，超出屏幕外的消息就看不到（用户 bug#4）。 */
 .feed { position: relative; z-index: 4; flex: 1 1 0; min-height: 0; padding: 12rpx 28rpx 16rpx; }
+
+.adjutant-away {
+  position: relative; z-index: 4; flex: 1 1 0; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40rpx 56rpx 180rpx; text-align: center;
+}
+.adjutant-away-image { width: 360rpx; height: 360rpx; margin-bottom: 28rpx; }
+.adjutant-away-title { color: #b8fbff; font-size: 40rpx; font-weight: 700; letter-spacing: 4rpx; }
+.adjutant-away-text { margin-top: 18rpx; color: rgba(219,238,255,0.68); font-size: 27rpx; line-height: 1.7; }
 
 /* 消息行：用 block + text-align 代替 flex，避免 iOS flex item min-width:auto 把中文气泡压到单字宽度。
    .row 只负责水平对齐；头像 + 气泡通过 inline-block + 父级 text-align 横向排列。 */
