@@ -31,10 +31,13 @@
         theme === 'cyberpunk' ? 'bubble--cyber' : ''
       ]"
     >
-      <!-- Reasoning area (shown during/after reasoning phase) -->
+      <!-- 推理期间展开；完成后折叠，用户可按需查看。 -->
       <view v-if="reasoning" class="reasoning-box" :class="theme === 'cyberpunk' ? 'reasoning-box--cyber' : ''">
-        <text class="reasoning-label" :class="theme === 'cyberpunk' ? 'reasoning-label--cyber' : ''">思考过程</text>
-        <text class="reasoning-text" :class="theme === 'cyberpunk' ? 'reasoning-text--cyber' : ''">{{ reasoning }}</text>
+        <view class="reasoning-toggle" @tap="toggleReasoning">
+          <text class="reasoning-label" :class="theme === 'cyberpunk' ? 'reasoning-label--cyber' : ''">思考过程</text>
+          <text class="reasoning-chevron" :class="theme === 'cyberpunk' ? 'reasoning-chevron--cyber' : ''">{{ reasoningExpanded ? '收起 ▴' : '查看 ▾' }}</text>
+        </view>
+        <text v-if="streaming || reasoningExpanded" class="reasoning-text" :class="theme === 'cyberpunk' ? 'reasoning-text--cyber' : ''">{{ reasoning }}</text>
       </view>
 
       <!-- Thinking placeholder: shown during streaming before any content arrives -->
@@ -69,7 +72,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { renderMarkdown } from '@/utils/miniMarkdown'
 
 const props = defineProps({
@@ -82,6 +85,19 @@ const props = defineProps({
   theme: { type: String, default: 'light' },  // 'light' | 'cyberpunk'
 })
 defineEmits(['confirm'])
+
+const reasoningExpanded = ref(false)
+watch(
+  () => [props.reasoning, props.streaming],
+  ([reasoning, streaming]) => {
+    if (reasoning) reasoningExpanded.value = streaming
+  },
+  { immediate: true },
+)
+
+function toggleReasoning() {
+  reasoningExpanded.value = !reasoningExpanded.value
+}
 
 // Markdown → HTML for rich-text. Falls back to raw text on any parse error.
 // Cyberpunk theme: wrap output in a <div> with inline dark-theme styles since
@@ -235,6 +251,8 @@ const renderedHtml = computed(() => {
 
 /* AI bubble — cyberpunk (matches .bubble-ai in index.vue) */
 .bubble--ai.bubble--cyber {
+  max-width: 100%;
+  box-sizing: border-box;
   background: rgba(14,22,42,0.85);
   border: 1px solid rgba(56,230,224,0.2);
   border-radius: 10rpx 28rpx 28rpx 28rpx;
@@ -295,9 +313,26 @@ const renderedHtml = computed(() => {
   font-size: 22rpx;
   color: #7df9ff;
   display: block;
-  margin-bottom: 6rpx;
+}
+.reasoning-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32rpx;
+}
+.reasoning-chevron {
+  color: #888;
+  font-size: 21rpx;
+}
+.reasoning-chevron--cyber {
+  color: rgba(125,249,255,0.72);
+}
+.reasoning-toggle:active {
+  opacity: 0.7;
 }
 .reasoning-text--cyber {
+  display: block;
+  margin-top: 10rpx;
   font-size: 24rpx;
   color: rgba(143,217,255,0.7);
 }
