@@ -43,8 +43,16 @@ from rest_framework.authtoken.models import Token
 from .models import OwnerInfo, OwnerUserBinding, WechatBinding
 from .serializers import UserRegistrationSerializer, PersonaSerializer
 from .views import IsOwnerUser, IsOperatorOrAbove
+from .adjutant_config import read_adjutant_config
 
 logger = logging.getLogger('api.views_miniapp')
+
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_adjutant_status(request):
+    """返回副官是否可用；配置异常时由读取函数安全降级为关闭。"""
+    return Response(read_adjutant_config())
 
 
 # ── 内部工具函数 ──────────────────────────────────────────────────────────────

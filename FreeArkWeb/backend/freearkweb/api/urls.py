@@ -9,6 +9,7 @@ from . import views_condensation
 from . import views_inspection
 from . import views_workorder
 from . import views_rag
+from . import views_adjutant_config
 
 # RAG 知识库路由（v1.4.0_sanheng_rag）
 _rag_router = DefaultRouter()
@@ -121,6 +122,10 @@ urlpatterns = [
     # 心跳 Broker 配置接口（v0.5.9, REQ-FUNC-002）
     path('heartbeat-broker-config/', views_heartbeat_config.heartbeat_broker_config_get, name='heartbeat-broker-config-get'),
     path('heartbeat-broker-config/update/', views_heartbeat_config.heartbeat_broker_config_put, name='heartbeat-broker-config-put'),
+
+    # 小程序副官开关（Web 管理员配置）
+    path('adjutant-config/', views_adjutant_config.adjutant_config_get, name='adjutant-config-get'),
+    path('adjutant-config/update/', views_adjutant_config.adjutant_config_put, name='adjutant-config-put'),
 
     # 记忆隔离接口（freeark_lobster_memory_isolation，REQ-FUNC-017）
     path('memory/me/', memory_views.MyMemoryView.as_view(), name='memory-me'),

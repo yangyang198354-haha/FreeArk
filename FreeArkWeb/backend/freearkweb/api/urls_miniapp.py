@@ -28,6 +28,10 @@ urlpatterns = [
     # 绑定状态查询（IsOwnerUser）
     path('bind/status/', views_miniapp.miniapp_bind_status, name='miniapp-bind-status'),
 
+    # 副官开关（IsOwnerUser）：小程序进入副官页前读取，关闭时不建立聊天连接。
+    path('adjutant/status/', views_miniapp.miniapp_adjutant_status,
+         name='miniapp-adjutant-status'),
+
     # 业主管理页账号绑定列（IsOperatorOrAbove）：web 端 admin/operator 专用
     path('admin/owner-bindings/', views_miniapp.owner_binding_list,
          name='miniapp-owner-binding-list'),

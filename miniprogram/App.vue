@@ -1,4 +1,6 @@
 <script>
+import { useAuthStore } from '@/store/auth'
+
 export default {
   onLaunch() {
     // App launch: auth check handled per-page
@@ -12,6 +14,8 @@ export default {
     setTimeout(hide, 150)
     setTimeout(hide, 300)
     setTimeout(hide, 600)
+    const authStore = useAuthStore()
+    if (authStore.isLoggedIn) authStore.refreshAdjutantStatus()
   },
   onShow() {},
   onHide() {}
