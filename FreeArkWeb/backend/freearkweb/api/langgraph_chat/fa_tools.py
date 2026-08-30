@@ -430,6 +430,8 @@ def execute_write(
 # write_status 轮询默认参数（可通过环境变量改，便于调优/离线测试）
 _POLL_TOTAL_SECONDS_DEFAULT = int(os.environ.get('FREAARK_WRITE_POLL_TOTAL_SECONDS', '30'))
 _POLL_STEP_SECONDS_DEFAULT = int(os.environ.get('FREAARK_WRITE_POLL_STEP_SECONDS', '3'))
+# get_write_status 主动查询模式：只等一轮，不阻塞 LLM 轮询
+_GET_WRITE_STATUS_POLL_SECONDS = int(os.environ.get('FREEARK_GET_WRITE_STATUS_POLL_SECONDS', '3'))
 _TERMINAL_WRITE_STATUSES = frozenset({'success', 'failed', 'timeout'})
 
 
@@ -534,7 +536,7 @@ def _poll_write_status_until_final(
             stats["final_status"] = "mixed"
     elif stats["records_total"] == 0:
         # bound 过滤后没命中（不是自己家的 batch_id）或批次本身真的空
-        stats["final_status"] = "pending"
+        stats["final_status"] = "not_found" if bound_set is not None else "pending"
     return stats
 
 
@@ -546,18 +548,20 @@ def _extract_write_records_from_handler(raw: Any) -> list[dict]:
       { "records": [ {...}, ... ], "total": N, "page": 1, "page_size": 20, "has_more": False }
     若 handler 返回非信封/异常，安全 fallback 返回空列表。"""
     if not isinstance(raw, dict) or not raw.get("success"):
+        logger.warning("_extract_write_records: handler 返回非成功信封: %s", type(raw).__name__)
         return []
     data = raw.get("data") or {}
     if isinstance(data, dict):
         recs = data.get("records")
         if isinstance(recs, list):
             return recs
-        # 部分历史版本 handler 直接把 data 当 records list
+        logger.warning("_extract_write_records: data.records 非 list (got %s)", type(recs).__name__)
     if isinstance(data, list):
         return data
     # 兜底：顶层直接挂 "records" 也收
     if isinstance(raw.get("records"), list):
         return raw["records"]  # type: ignore
+    logger.warning("_extract_write_records: 无法从信封中提取 records, keys=%s", list(raw.keys()))
     return []
 
 
@@ -577,6 +581,7 @@ def _summarize_polled_status(polled: dict, *, batch_id: str) -> str:
         'timeout': '⏰ 全部超时 (超过 90s 未收到 ack，已由 mark_write_timeout 标 timeout)',
         'mixed': '⚠️ 部分成功/部分失败',
         'pending': '⏳ 仍在等待 PLC 回执 (pending)',
+        'not_found': '🔍 未找到属于您的该批次写记录',
     }.get(final, f'? 状态 {final}')
 
     base = (
@@ -674,7 +679,7 @@ def get_write_status(batch_request_id: str, _bound_specific_parts: list = None,
         return {"success": False, "error": "缺少 batch_request_id 参数"}
     polled = _poll_write_status_until_final(
         batch_request_id,
-        total_seconds=3,
+        total_seconds=_GET_WRITE_STATUS_POLL_SECONDS,
         step_seconds=1,
         bound_specific_parts=_bound_specific_parts,
     )
@@ -694,14 +699,20 @@ def get_write_status(batch_request_id: str, _bound_specific_parts: list = None,
 # 工具函数做规范形态与长度上限校验（MAX_FIELD_LEN=50）。
 
 def _get_user_by_id(user_id: int):
-    """按 id 取 CustomUser 对象，找不到返回 None。延迟 import 防 AppRegistry。"""
+    """按 id 取 CustomUser 对象，找不到返回 None。延迟 import 防 AppRegistry。
+
+    DB 连接异常（OperationalError/InterfaceError）重新抛出——避免把「数据库挂了」
+    吞成「账号不存在」误导用户。其他异常（import/AppRegistry）安全返回 None。"""
     try:
         from django.apps import apps
         from django.contrib.auth import get_user_model
+        from django.db import OperationalError, InterfaceError
         User = get_user_model()
         if not apps.ready:  # pragma: no cover
             return None
         return User.objects.filter(pk=user_id).first()
+    except (OperationalError, InterfaceError):
+        raise  # DB 连接/事务异常：不吞，让上层报「服务暂时不可用」
     except Exception as exc:  # pragma: no cover
         logger.debug("get_persona/set_persona _get_user_by_id 异常: %s", exc)
         return None
@@ -762,6 +773,7 @@ def set_persona(identity: Optional[str] = None,
     try:
         from api.persona import (
             MAX_FIELD_LEN, CANONICAL_KEYS, normalize_persona, persona_payload,
+            sanitize_persona_value, PersonaInjectionError,
         )
     except Exception:  # pragma: no cover
         return {"success": False, "error": "persona 模块未就绪"}
@@ -773,7 +785,12 @@ def set_persona(identity: Optional[str] = None,
     for k in CANONICAL_KEYS:
         val = locals().get(k)  # identity / address / tone
         if isinstance(val, str) and val.strip():
-            updates[k] = val.strip()[:MAX_FIELD_LEN]
+            try:
+                sanitized = sanitize_persona_value(val)
+            except PersonaInjectionError as pie:
+                return {"success": False, "error": str(pie)}
+            if sanitized:
+                updates[k] = sanitized
     if not updates:
         return {"success": True,
                 "summary": "未提供任何需要修改的设置项（identity/address/tone 均为空或未传）。",
@@ -788,12 +805,16 @@ def set_persona(identity: Optional[str] = None,
         user.persona = merged  # type: ignore[attr-defined]
         user.save(update_fields=['persona', 'updated_at'] if hasattr(user, 'updated_at') else ['persona'])
     except Exception as exc:
-        # updated_at 字段不存在的老库：回退只存 persona
-        try:
-            user.persona = merged  # type: ignore[attr-defined]
-            user.save(update_fields=['persona'])
-        except Exception as exc2:
-            logger.warning("set_persona 保存 user.persona 失败: %s / %s", exc, exc2)
+        # 仅对字段不存在（老库无 updated_at）做一次 fallback；DB 连接等异常直接报错
+        from django.core.exceptions import FieldError
+        if isinstance(exc, FieldError):
+            try:
+                user.save(update_fields=['persona'])
+            except Exception as exc2:
+                logger.warning("set_persona 保存 user.persona 失败(fallback): %s", exc2)
+                return {"success": False, "error": "保存失败，请稍后再试。"}
+        else:
+            logger.warning("set_persona 保存 user.persona 失败: %s", exc)
             return {"success": False, "error": "保存失败，请稍后再试。"}
 
     new_payload = persona_payload(merged)
@@ -813,12 +834,14 @@ def set_persona(identity: Optional[str] = None,
 
 # ── 按专家分组的工具表（供 orchestrator 绑定到各 agent 节点）────────────
 # 能耗专家=「操控和查询」：读工具 + Tier-2 写工具（写经 gate 确认门）。
-# v1.13.0 新增 get_device_params（P0-2b）、get_persona/set_persona（P0-3）。
+# v1.13.0 新增 get_device_params（P0-2b）。
 ENERGY_TOOLS = [get_dashboard_summary, get_usage_daily, get_realtime_params,
                 get_device_params, get_write_status,
-                set_device_params, trigger_refresh,
-                get_persona, set_persona]
+                set_device_params, trigger_refresh]
 INSPECTION_TOOLS = [get_plc_status, get_fault_summary, get_realtime_params]
+
+# 个人设置工具组（P1-2：从 ENERGY_TOOLS 拆出，避免能耗专家 schema 被无关工具污染）
+PERSONA_TOOLS = [get_persona, set_persona]
 
 
 # ── 三恒知识专家 RAG 工具（v1.4.1_rag_image_citation）─────────────────────
@@ -875,9 +898,10 @@ SANHENG_TOOLS: list = [search_sanheng_knowledge]  # v1.4.0: RAG 检索工具
 
 # freeark-expert（系统管家）= 全部工具的并集（去重），体现全系统掌控权
 # StructuredTool 不可哈希，不能直接用 dict.fromkeys；按 tool.name 手动去重保序。
+# v1.13.1：PERSONA_TOOLS 从 ENERGY_TOOLS 拆出但仍纳入 freeark-expert 管控范围。
 _seen_tool_names: set = set()
 _FREARK_EXPERT_TOOLS: list = []
-for _t in ENERGY_TOOLS + INSPECTION_TOOLS + SANHENG_TOOLS:
+for _t in ENERGY_TOOLS + INSPECTION_TOOLS + SANHENG_TOOLS + PERSONA_TOOLS:
     if _t.name not in _seen_tool_names:
         _seen_tool_names.add(_t.name)
         _FREARK_EXPERT_TOOLS.append(_t)
@@ -887,6 +911,9 @@ TOOLS_BY_EXPERT = {
     "inspection-expert": INSPECTION_TOOLS,
     "sanheng-knowledge": SANHENG_TOOLS,
 }
+# P1-2：PERSONA_TOOLS 不单独注册为专家（无对应路由专家），
+# 而是通过 _FREARK_EXPERT_TOOLS 并集纳入 freeark-expert 管控范围。
+# PERSONA_TOOLS 变量本身保留，供路由/能力摘要等按需引用。
 
 
 # ── 只读冒烟自检：`python -m api.langgraph_chat.fa_tools` ────────────────

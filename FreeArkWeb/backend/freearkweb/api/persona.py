@@ -31,6 +31,7 @@ v1.12.0 的 persona 只有两个键，语义是混的：
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 DEFAULT_IDENTITY = '智能方舟的副官'
@@ -47,6 +48,42 @@ _LEGACY_KEY_MAP = {
 
 #: 单字段长度上限（与 PersonaSerializer 保持一致）
 MAX_FIELD_LEN = 50
+
+#: 提示注入风险模式——命中则拒绝写入
+_INJECTION_PATTERNS = re.compile(
+    r'(?:忽略|无视|ignore|disregard|system\s*prompt|系统提示|'
+    r'你现在是|you\s+are\s+now|角色扮演|role.?play|'
+    r'输出以上|reveal.*(?:system|prompt|instruction)|'
+    r'停止遵循|stop\s*following)',
+    re.IGNORECASE,
+)
+
+#: 控制字符（含换行/制表/零宽）——persona 值不允许包含
+_CONTROL_CHARS = re.compile(r'[\r\n\t\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u2028\u2029]')
+
+
+class PersonaInjectionError(ValueError):
+    """persona 值命中提示注入模式，拒绝写入。"""
+
+
+def sanitize_persona_value(val: str) -> str:
+    """对 persona 单字段值做安全净化。
+
+    1. 剔除控制字符与换行（防止指令分隔符注入）
+    2. 检测注入风险模式（忽略指令/角色扮演/泄露系统提示等）
+    3. 截断到 MAX_FIELD_LEN
+
+    Raises:
+        PersonaInjectionError: 值命中注入模式
+    """
+    if not isinstance(val, str):
+        return ''
+    cleaned = _CONTROL_CHARS.sub(' ', val).strip()
+    if _INJECTION_PATTERNS.search(cleaned):
+        raise PersonaInjectionError(
+            '该设置值包含不允许的内容（可能被误认为系统指令），请换一种表述。'
+        )
+    return cleaned[:MAX_FIELD_LEN]
 
 
 def normalize_persona(raw: Optional[dict]) -> dict:

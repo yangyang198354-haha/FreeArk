@@ -2,7 +2,13 @@
 测试专用 settings — 强制使用 SQLite，禁止连接生产 MySQL
 用法：python manage.py test api --settings=freearkweb.test_settings
 """
+import os
+
 from .settings import *  # noqa: F401, F403
+
+# P2-9：mock 模式从测试模块级 os.environ.setdefault 迁移到 settings 统一管理，
+# 避免跨模块 import 副作用。setdefault 不覆盖已有值，生产/显式设置不受影响。
+os.environ.setdefault("FREEARK_POC_MOCK", "1")
 
 # 强制测试使用 SQLite，不连接生产数据库
 DATABASES = {

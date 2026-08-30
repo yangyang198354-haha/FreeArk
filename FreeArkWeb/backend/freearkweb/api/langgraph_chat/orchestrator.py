@@ -163,7 +163,7 @@ def _operator_from_state(state: State) -> str:
     return f"energy-agent::{user}"
 
 
-_INTERNAL_CONTEXT_TOOLS = frozenset({'get_write_status', 'get_persona'})
+from .scope_enforcer import UNDERSCORE_PARAM_TOOLS as _INTERNAL_CONTEXT_TOOLS
 
 
 async def _ainvoke_tool_with_scope(tool, tool_name: str, args: dict):

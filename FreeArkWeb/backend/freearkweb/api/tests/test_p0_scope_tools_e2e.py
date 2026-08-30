@@ -38,8 +38,6 @@ from unittest import mock
 
 from asgiref.sync import async_to_sync
 
-os.environ.setdefault("FREEARK_POC_MOCK", "1")
-
 from django.test import TestCase, SimpleTestCase, tag
 
 from api.models import CustomUser, OwnerUserBinding, PLCWriteRecord  # noqa: F401
