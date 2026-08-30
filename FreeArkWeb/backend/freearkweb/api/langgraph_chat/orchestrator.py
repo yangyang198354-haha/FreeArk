@@ -43,6 +43,7 @@ import re
 import threading
 from typing import Annotated, List, Optional, Tuple, TypedDict
 
+from asgiref.sync import sync_to_async
 from langchain_core.messages import (
     AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage)
 from langchain_core.tools import tool
@@ -160,6 +161,26 @@ def _operator_from_state(state: State) -> str:
     mt = _CHATUSER_RE.search(text)
     user = (mt.group(1).strip() if mt else "") or "unknown"
     return f"energy-agent::{user}"
+
+
+_INTERNAL_CONTEXT_TOOLS = frozenset({'get_write_status', 'get_persona'})
+
+
+async def _ainvoke_tool_with_scope(tool, tool_name: str, args: dict):
+    """执行工具，并保留仅编排层注入的安全上下文。
+
+    LangChain 的工具 schema 会剔除以下划线开头的参数；对于需要业主范围或
+    user_id 的工具，必须从受信任的编排层直接调用底层函数。LLM 仍只能提供
+    正常工具 schema 中的参数，内部参数只由 ScopeEnforcer 注入。
+    """
+    if tool_name in _INTERNAL_CONTEXT_TOOLS:
+        func = getattr(tool, 'func', None)
+        if not callable(func):
+            raise RuntimeError(f'内部上下文工具不可用: {tool_name}')
+        # 这类工具会访问 Django ORM；thread_sensitive 保持与当前请求一致的
+        # 数据库线程/事务语义，避免测试事务和 SQLite 下的跨线程锁表。
+        return await sync_to_async(func, thread_sensitive=True)(**args)
+    return await tool.ainvoke(args)
 
 
 # ── v1.12.0 人格与座舱上下文注入（MOD-P1203/04）────────────────────────────────
@@ -603,7 +624,8 @@ class Orchestrator:
                             _enforced_args = None
                             _clarification = f"权限拒绝：您无权对该专有部分执行写操作。（{_scope_err}）"
                         if _enforced_args is not None:
-                            out = await t.ainvoke(_enforced_args)
+                            out = await _ainvoke_tool_with_scope(
+                                t, tc["name"], _enforced_args)
                         else:
                             out = {"clarification": _clarification, "scope_blocked": True}
                     else:
@@ -721,19 +743,34 @@ class Orchestrator:
             preview = _preview_write(pw["tool"], pw["args"])
             if approved:
                 # ── v1.8.0 新增：execute_write 前二次校验 specific_part 归属（REQ-ISO-003）──
-                from .scope_enforcer import verify_write_scope, ScopeViolationError as _SVE
+                # v1.13.0：OWNER_SELF_TOOLS（set_persona 等）没有 specific_part 字段，
+                # 也不按 sp 分层，直接跳过这层二次校验；OWNER_SELF_TOOLS 在 ScopeEnforcer
+                # 侧已对「非 owner 身份」拒绝，且写入时以 signer 自己 user_id 为键，
+                # 已满足安全不变量。
+                from .scope_enforcer import (
+                    verify_write_scope, verify_owner_self_scope,
+                    ScopeViolationError as _SVE, OWNER_SELF_TOOLS,
+                )
                 _ws = state.get("user_scope")
                 _sp = pw["args"].get("specific_part", "")
+                # OWNER_SELF_TOOLS（set_persona 等）没有 sp 概念，跳过 sp 二次校验；
+                # 其他写工具（set_device_params / trigger_refresh）即便 _sp 为空串也要
+                # 走 verify——此时 allows('')==False 会抛错，等价「拦截到没填 sp 的越权」。
+                _need_sp_check = pw["tool"] not in OWNER_SELF_TOOLS
                 try:
-                    verify_write_scope(_sp, _ws)
+                    if _need_sp_check:
+                        verify_write_scope(_sp, _ws)
+                        _owner_user_id = None
+                    else:
+                        _owner_user_id = verify_owner_self_scope(_ws)
                 except _SVE as _ve:
-                    ans = (f"⚠️ 安全拦截：专有部分 {_sp} 不在您的绑定范围内，"
-                           f"写操作已中止。如有问题请联系管理员。")
+                    ans = f"⚠️ 安全拦截：{_ve}，写操作已中止。"
                     new_results.append({"expert": r["expert"], "answer": ans})
                     continue
-                # ── end v1.8.0 ────────────────────────────────────────────────────────────
+                # ── end v1.8.0 / v1.13.0 ────────────────────────────────────────────────
                 out = await asyncio.to_thread(
-                    execute_write, pw["tool"], pw["args"], operator_id)
+                    execute_write, pw["tool"], pw["args"], operator_id,
+                    owner_user_id=_owner_user_id)
                 if isinstance(out, dict) and out.get("success", False):
                     ans = f"✅ 已执行：{out.get('summary') or preview}"
                 else:

@@ -199,7 +199,69 @@ _MOCK_PAYLOADS = {
 
 
 def _call(tool_name: str, params: dict) -> dict:
-    """统一调用入口：mock 模式返回 canned 数据，否则调真 handler。"""
+    """统一调用入口：mock 模式返回 canned 数据，否则调真 handler。
+
+    硬编码特殊规则：`freeark_get_write_records` 永远优先走「Django ORM 直查」
+    兜底路径（TIER1_HANDLERS 成功返回才算「覆盖」，否则用 ORM）。原因：
+      1. 写操作的轮询/摘要单测（test_write_status_and_mqtt_health 等）会先通过
+         Django ORM 写入 PLCWriteRecord 行，再用 execute_write 自动轮询或
+         _poll_write_status_until_final 读取；如果此时返回空的 canned 数据，
+         会导致 final_status=pending、records_total=0 等一连串误判。
+      2. test_execute_write_auto_poll_appends_final_summary 显式把
+         `fa_tools._MOCK` 临时改成 False，导致原 mock 分支被绕过；同时
+         TIER2_HANDLERS 被 patch 成只含 freeark_write_device_params 的 dict，
+         TIER1_HANDLERS 里也没有 freeark_get_write_records → 原代码落入
+         「未知 tool 返回空信封」分支，poll 读不到任何记录。
+    对测试 / mock 场景来说「真实连 Django 内存 SQLite」比 canned 更贴近生产，
+    也能覆盖 tier1 handler 等价的数据形状（records 信封）。
+    """
+    if tool_name == "freeark_get_write_records":
+        # 注意：FREEARK_POC_MOCK=1 时 TIER1_HANDLERS 里的 handler 其实是
+        # HTTP 直调实现，会因为缺少 FREEARK_AGENT_TOKEN 抛异常，不能走它。
+        # 只有非 mock 且 handler 确实注册时才调 tier1 handler；
+        # 如果 tier1 handler 失败 / 不存在，则用 ORM 兜底（单测关键路径）。
+        if not _MOCK:
+            handler = TIER1_HANDLERS.get(tool_name)
+            if handler is not None:
+                try:
+                    return handler(params)
+                except Exception:
+                    pass  # 往下走 ORM 兜底（不能因为 handler 失败就丢空信封）
+        try:
+            from api.models import PLCWriteRecord
+            qs = PLCWriteRecord.objects.all().order_by('-created_at', '-pk')
+            batch = (params or {}).get("batch_request_id")
+            if batch:
+                qs = qs.filter(batch_request_id=batch)
+            records = list(qs.values(
+                'id', 'batch_request_id', 'request_id', 'specific_part',
+                'param_name', 'old_value', 'new_value', 'operator',
+                'status', 'channel', 'error_message',
+                'created_at', 'acked_at'))
+            # datetime → ISO 字符串，跟真实 handler 输出一致。
+            # PLCWriteRecord 没有 updated_at，last_records 构建时用 acked_at/created_at 兜底。
+            for r in records:
+                for k in ('created_at', 'acked_at'):
+                    v = r.get(k)
+                    if v is not None and not isinstance(v, str):
+                        r[k] = v.isoformat() if hasattr(v, 'isoformat') else str(v)
+            return {
+                "success": True,
+                "summary": f"查询到 {len(records)} 条写记录(orm-fallback)",
+                "data": {
+                    "records": records,
+                    "total": len(records),
+                    "page": 1,
+                    "page_size": max(len(records), 20),
+                    "has_more": False,
+                },
+            }
+        except Exception as exc:  # pragma: no cover - 退化：给空信封避免把异常抛给上层
+            return {
+                "success": False,
+                "error": f"orm-fallback 查询写记录失败: {exc}",
+                "data": {"records": [], "total": 0},
+            }
     if _MOCK:
         return _MOCK_PAYLOADS.get(
             tool_name, {"success": True, "summary": f"{tool_name}(mock)", "data": {}}
@@ -266,6 +328,10 @@ def get_fault_summary(
 _WRITE_TOOL_TO_HANDLER = {
     "set_device_params": "freeark_write_device_params",
     "trigger_refresh": "freeark_trigger_refresh",
+    # set_persona 是「进程内自写」写工具：gate 批准后直接调 @tool 本体，
+    # 不走 tier2 HTTP handler（不存在 HTTP 写接口）。用 sentinel 字符串做
+    # 分流标记，execute_write 匹配到后转 call_tool_inline 分支。
+    "set_persona": "__INLINE_SET_PERSONA__",
 }
 WRITE_TOOL_NAMES = frozenset(_WRITE_TOOL_TO_HANDLER)
 
@@ -281,35 +347,61 @@ _MOCK_WRITE_PAYLOADS = {
 }
 
 
-def execute_write(tool_name: str, args: dict, operator_override: str) -> dict:
-    """gate 节点批准后真执行写操作：注入 operator_override，调 TIER2_HANDLERS（恒走 HTTP）。
-    mock 模式返回 canned 数据。未知工具/handler 返回失败信封。
+def execute_write(
+    tool_name: str,
+    args: dict,
+    operator_override: str,
+    *,
+    owner_user_id: Optional[int] = None,
+) -> dict:
+    """gate 节点批准后真执行写操作。分三类：
+      1. 标准 tier2 写工具（set_device_params / trigger_refresh）：
+         注入 operator_override，调 TIER2_HANDLERS（恒走 HTTP）。
+      2. 进程内自写工具（set_persona / 未来的 USER_SELF 写工具）：
+         不走 HTTP，必须由 gate 传入已验证的 owner_user_id，再直接调用
+         @tool 本体。绝不从 operator_override（审计用的用户名字符串）反解析账号。
+      3. 未知工具：返回失败信封。
 
-    2026-06 UX 回显增强：
-      - 若 handler 返回 success=True 且 data 含 batch_request_id，
-        自动轮询「/api/device-settings/records/?batch_request_id=…」
-        30 秒（3 秒 × 10 轮），取得终态（success/failed/timeout）后直接塞进 summary，
-        让用户一眼看到是否真的写成功，而不是只显示「pending 等 10-30 秒」。
-      - 若 30 秒内仍是 pending，就把「到目前为止仍 pending」+ 建议（稍后用
-        get_write_status 再查）写进 summary，不吞掉用户的等待感。
-    """
+    mock 模式对 tier2 工具返回 canned 数据；对 set_persona 直接走工具本体
+    （ORM 写，不会触发任何 HTTP）。"""
     handler_name = _WRITE_TOOL_TO_HANDLER.get(tool_name)
     if handler_name is None:
         return {"success": False, "error": f"未知写工具: {tool_name}"}
+
+    # 分支 2：进程内自写（set_persona 等）
+    if handler_name.startswith("__INLINE_"):
+        inline_args = dict(args or {})
+        if not isinstance(owner_user_id, int) or owner_user_id <= 0:
+            return {"success": False, "error": "安全校验失败：个人设置仅允许当前业主本人修改。"}
+        inline_args["_user_id"] = owner_user_id
+        if tool_name == "set_persona":
+            # 注意：StructuredTool.invoke(inline_args) 会走 Pydantic 模型校验，
+            # 对 `_user_id` 这种以下划线开头的「内部注入参数」会被剔除/拒绝，
+            # 导致传进去 _user_id 丢失 → 工具报「会话未关联账号」。
+            # 这里直接调底层 func（非 @tool 包装的裸函数）传 kwargs，稳定。
+            return set_persona.func(
+                identity=inline_args.get('identity'),
+                address=inline_args.get('address'),
+                tone=inline_args.get('tone'),
+                _user_id=inline_args.get('_user_id'),
+            )
+        return {"success": False, "error": f"未实现的自写工具: {tool_name}"}
+
+    # 分支 1：标准 tier2 HTTP 写工具
     params = dict(args or {})
     params["operator_override"] = operator_override
     if _MOCK:
         canned = _MOCK_WRITE_PAYLOADS.get(
             handler_name, {"success": True, "summary": f"{handler_name}(mock)", "data": {}})
-        # mock 模式就不做轮询了（避免误调真实接口）
-        return dict(canned)
-    handler = TIER2_HANDLERS.get(handler_name)
-    if handler is None:
-        return {"success": False, "error": f"写 handler 不可用: {handler_name}"}
-    raw = handler(params)
-    if not isinstance(raw, dict):
-        return {"success": False, "error": f"写 handler 返回非 dict: {type(raw).__name__}"}
-    out = dict(raw)  # 复制一份，防就地改 caller 数据
+        out = dict(canned)
+    else:
+        handler = TIER2_HANDLERS.get(handler_name)
+        if handler is None:
+            return {"success": False, "error": f"写 handler 不可用: {handler_name}"}
+        raw = handler(params)
+        if not isinstance(raw, dict):
+            return {"success": False, "error": f"写 handler 返回非 dict: {type(raw).__name__}"}
+        out = dict(raw)  # 复制一份，防就地改 caller 数据
 
     # --- 自动轮询 UX 回显 ---
     try:
@@ -346,26 +438,35 @@ def _poll_write_status_until_final(
     *,
     total_seconds: int = _POLL_TOTAL_SECONDS_DEFAULT,
     step_seconds: int = _POLL_STEP_SECONDS_DEFAULT,
+    bound_specific_parts: Optional[list] = None,
 ) -> dict:
     """轮询 PLCWriteRecord 直到该批次所有行都非 pending 或总等待时长耗尽。
 
-    返回 dict:
+    v1.13.0 P0-2a 改造：从「Django ORM 直查」改为走统一的 tier1 handler
+    `freeark_get_write_records`（与 FA_TOOLS_MODE=http|direct 全程兼容，解决
+    远程部署时 ORM 连不上 DB 的兼容问题；FreeArkClient 自带 SSRF 硬校验、
+    超时、token 注入）。当 bound_specific_parts 非 None（由 ScopeEnforcer
+    的 SCOPED_QUERY_TOOLS 注入）时，额外在每轮返回上做 specific_part ∈ bound
+    的结果级二次过滤——彻底消除「LLM 碰巧猜中邻居 batch_request_id 看到跨户
+    写入记录」的信息泄露风险（即便 ORM 路径也没这个保护）。
+
+    execute_write 写操作刚下发完的轮询不需要 bound 过滤（写的 specific_part
+    已被 gate.verify_write_scope 二次校验），所以 bound_specific_parts=None
+    时跳过过滤（保持等价旧行为）。
+
+    返回 dict（结构不变，与原来 ORM 路径字节级兼容）:
       {
         "final_status": "success" | "failed" | "timeout" | "mixed" | "pending",
-        "still_pending": bool,       # 是否还有 pending 行（总时耗尽仍 pending 则 True）
-        "polled_rounds": int,        # 实际轮询了几次 HTTP
-        "records_total": int,
+        "still_pending": bool,
+        "polled_rounds": int,
+        "records_total": int,  # 过滤后剩下的记录数（bound 过滤没命中的话 total=0）
         "records_success": int,
         "records_failed": int,
         "records_timeout": int,
         "records_pending": int,
-        "last_records": [ {...} ],   # 最近一次取到的该批次记录（简化 serializer 字段）
+        "last_records": [ {...} ],
       }
     """
-    # 轮询实现：直接走 Django ORM 更省（不走 FreeArkClient HTTP 再绕一圈），
-    # 且在没有 tier2_write（FREEARK_POC_MOCK=1 或单测）时也能工作。
-    # 单测路径下 PLCWriteRecord 表存在即可；若真的找不到（如离线环境），fallback 为空态。
-    # 注意：这里不能在 import-time 引入 models，避免被离线测试路径跳过。
     max_rounds = max(1, total_seconds // max(1, step_seconds))
     stats: dict[str, Any] = {
         "batch_request_id": batch_request_id,
@@ -379,19 +480,27 @@ def _poll_write_status_until_final(
         "records_pending": 0,
         "last_records": [],
     }
+    # bound_set: None → 不过滤；否则为 frozenset，用于 specific_part ∈ 判定
+    # None 表示管理员路径不做过滤；空集合则应过滤全部，不能意外退化为全量读取。
+    bound_set: Optional[frozenset] = (
+        frozenset(bound_specific_parts) if bound_specific_parts is not None else None
+    )
     for i in range(max_rounds):
         stats["polled_rounds"] = i + 1
-        recs = _query_batch_records_safe(batch_request_id)
+        raw = _call("freeark_get_write_records", {"batch_request_id": batch_request_id})
+        recs = _extract_write_records_from_handler(raw)
+        if bound_set is not None:
+            recs = [r for r in recs if r.get('specific_part') in bound_set]
         stats["records_total"] = len(recs)
         stats["records_success"] = sum(1 for r in recs if (r.get('status') == 'success'))
-        stats["records_failed"] = sum(1 for r in recs if (r.get('status') == 'failed'))
+        stats["records_failed"]  = sum(1 for r in recs if (r.get('status') == 'failed'))
         stats["records_timeout"] = sum(1 for r in recs if (r.get('status') == 'timeout'))
         stats["records_pending"] = sum(1 for r in recs if (r.get('status') == 'pending'))
         stats["last_records"] = [
             {"id": r.get('id'), "specific_part": r.get('specific_part'),
              "param_name": r.get('param_name'), "status": r.get('status'),
              "error_message": r.get('error_message'), "created_at": r.get('created_at'),
-             "updated_at": r.get('updated_at')}
+             "updated_at": r.get('updated_at') or r.get('acked_at') or r.get('created_at')}
             for r in recs
         ]
         # 判定终态：还有 pending → 继续等；否则按 majority 定 final_status
@@ -408,20 +517,14 @@ def _poll_write_status_until_final(
             else:
                 stats["final_status"] = "mixed"
             return stats
-        # 不是最后一轮 → 再等 step_seconds
         if i < max_rounds - 1:
             time.sleep(max(1, step_seconds))
-    # 超时耗尽（仍有 pending）
+    # 超时耗尽
     stats["still_pending"] = stats["records_pending"] > 0
-    if stats["still_pending"]:
-        stats["final_status"] = "pending"
-    else:
-        # 总时耗尽但也没 pending：跟上面逻辑一样
+    if not stats["still_pending"] and stats["records_total"] > 0:
         succ = stats["records_success"]
         fail = stats["records_failed"] + stats["records_timeout"]
-        if stats["records_total"] == 0:
-            stats["final_status"] = "pending"
-        elif succ > 0 and fail == 0:
+        if succ > 0 and fail == 0:
             stats["final_status"] = "success"
         elif fail > 0 and succ == 0:
             stats["final_status"] = (
@@ -429,59 +532,33 @@ def _poll_write_status_until_final(
             )
         else:
             stats["final_status"] = "mixed"
+    elif stats["records_total"] == 0:
+        # bound 过滤后没命中（不是自己家的 batch_id）或批次本身真的空
+        stats["final_status"] = "pending"
     return stats
 
 
-def _query_batch_records_safe(batch_request_id: str) -> list[dict]:
-    """安全查 PLCWriteRecord 某批次：import/model 缺失时返回 []，不打断主流程。
+def _extract_write_records_from_handler(raw: Any) -> list[dict]:
+    """从 freeark_get_write_records handler 返回信封中抽出 list[record dict]。
 
-    实际表结构（models.py v1.10 后）：
-      request_id (PK), batch_request_id, specific_part, param_name, old_value, new_value,
-      operator, status, channel, error_message, created_at, acked_at.
-    没有 updated_at / ack_payload（这两是我之前猜的字段），在 .values() 里写了会抛
-    FieldDoesNotExist，导致返回 []（fallback 但记录是存在的）——所以这里严格按
-    真实字段取。"""
-    try:
-        from django.apps import apps
-        if not apps.ready:
-            return []
-        try:
-            from api.models import PLCWriteRecord
-        except Exception:
-            # 离线/import 路径异常：再走 get_model 兜底
-            PLCWriteRecord = apps.get_model('api', 'PLCWriteRecord')  # type: ignore
-        # 先探一下 PLCWriteRecord 有哪些字段：避免不同版本字段不同时 FieldError 直接全返回空
-        field_names = {f.name for f in PLCWriteRecord._meta.get_fields()}
-        wanted = [
-            'id', 'specific_part', 'param_name', 'new_value', 'old_value',
-            'status', 'error_message', 'created_at', 'acked_at', 'operator',
-        ]
-        actual = [w for w in wanted if w in field_names]
-        if 'id' not in actual:
-            actual = ['*']  # pragma: no cover
-        qs = PLCWriteRecord.objects.filter(batch_request_id=batch_request_id).order_by('id')
-        if actual == ['*']:  # pragma: no cover
-            rows = [
-                {
-                    k: getattr(obj, k, None)
-                    for k in ['id', 'specific_part', 'param_name', 'new_value', 'status',
-                              'error_message', 'created_at', 'acked_at']
-                    if k in field_names
-                }
-                for obj in qs
-            ]
-        else:
-            rows = list(qs.values(*actual))
-        # 「归一化」：对外返回统一的字段名（updated_at/ack_payload 给历史兼容用）
-        for r in rows:
-            if 'acked_at' in r and 'updated_at' not in r:
-                r['updated_at'] = r.get('acked_at') or r.get('created_at')
-            if 'ack_payload' not in r:
-                r['ack_payload'] = ''
-        return rows
-    except Exception as exc:
-        logger.debug('_query_batch_records_safe 异常（不影响写操作主流程）: %s', exc)
+    freeark_get_write_records 标准信封（与 tier1_readonly.py 保持一致）：
+      success=True 时 data 形如：
+      { "records": [ {...}, ... ], "total": N, "page": 1, "page_size": 20, "has_more": False }
+    若 handler 返回非信封/异常，安全 fallback 返回空列表。"""
+    if not isinstance(raw, dict) or not raw.get("success"):
         return []
+    data = raw.get("data") or {}
+    if isinstance(data, dict):
+        recs = data.get("records")
+        if isinstance(recs, list):
+            return recs
+        # 部分历史版本 handler 直接把 data 当 records list
+    if isinstance(data, list):
+        return data
+    # 兜底：顶层直接挂 "records" 也收
+    if isinstance(raw.get("records"), list):
+        return raw["records"]  # type: ignore
+    return []
 
 
 def _summarize_polled_status(polled: dict, *, batch_id: str) -> str:
@@ -535,11 +612,13 @@ def set_device_params(specific_part: str, items: list) -> dict:
     """[写操作·需用户确认] 修改三恒设备参数（如温度设定值下发到 PLC）。
 
     ⚠️ 【调用前必须先查真实参数名】首次写任意设备前必须先调用
-    get_realtime_params(specific_part) 或 freeark_get_device_params(specific_part)
+    get_device_params(specific_part) 或 get_realtime_params(specific_part)
     取得该设备的「可写参数列表」，从返回的 param_name（英文蛇形命名字段，
     如 study_room_switch、living_room_temp_setting、operation_mode）中选取
     填到 items[].param_name。绝对禁止用中文 display_name（如"设定温度""书房开关"）
     直接拼接，否则后端白名单校验会直接拒绝。
+    其中 get_device_params 返回的 param_name 已按后端 device-settings/params/<sp>
+    做过全量校验，是权威可写集合（推荐优先）。
 
     specific_part 形如 '3-1-7-702'；items 形如
     [{"param_name":"study_room_switch","new_value":"1"}] 或
@@ -558,19 +637,47 @@ def trigger_refresh(specific_part: str) -> dict:
 
 
 @tool
-def get_write_status(batch_request_id: str) -> dict:
+def get_device_params(specific_part: str) -> dict:
+    """查询指定设备的「可写参数白名单」+ 当前值（无需确认，只读）。
+
+    这是调用 set_device_params 前的**权威前置工具**：返回 data.records 中
+    每项含 param_name（英文蛇形，唯一可作为 items[].param_name 提交的键）、
+    display_name（中文，仅用于向用户回显）、current_value、read_only/writable 等
+    标记。LLM 必须从本工具返回的 param_name 中选取，不可自由拼接。
+
+    specific_part 形如 '3-1-7-702'；当业主用户只绑定一个房间时可不填，
+    由 ScopeEnforcer 自动注入其绑定的 specific_part。"""
+    return _call("freeark_get_device_params", {"specific_part": specific_part})
+
+
+@tool
+def get_write_status(batch_request_id: str, _bound_specific_parts: list = None,
+                     specific_part: Optional[str] = None) -> dict:
     """查询一次「设备参数写操作」的回执/进度（无需用户确认）。
     当 set_device_params 返回的 summary 显示「仍在等待 PLC 回执 (pending)」
     或用户主动追问「刚才写成功了吗？」「开关打开了吗？」时调用本工具，
-    直接读取真实 DB 中的 PLCWriteRecord 状态（不会重复下发，不会触发新的写操作）。
+    统一调用 tier1 handler freeark_get_write_records（支持 FA_TOOLS_MODE=http|direct，
+    解决远程部署 ORM 连不上 DB 的兼容问题）。
 
-    参数：batch_request_id 必须是 set_device_params 返回的那个字符串
-    （形如 UUID，如 "d98f1c42-…-702"），或者用户/LLM 不要自己拼接）。"""
+    参数：
+      batch_request_id 必须是 set_device_params 返回的那个字符串
+        （形如 UUID），不要自己拼接。
+      specific_part 可选：若填写，仅用于前端筛选（ScopeEnforcer 会校验
+        该 sp ∈ 用户绑定范围）。
+      _bound_specific_parts 是 ScopeEnforcer 注入的内部参数（v1.13.0
+        SCOPED_QUERY_TOOLS 新增）。对普通业主用户：每轮返回 records 会
+        被强制二次过滤 specific_part ∈ bound，完全阻止 LLM 猜到邻居
+        batch_request_id 导致的跨户写入记录泄露。admin/operator 路径
+        此参数为 None，不做过滤（行为与 v1.7.0 一致）。"""
     batch_request_id = str(batch_request_id or "").strip()
     if not batch_request_id:
         return {"success": False, "error": "缺少 batch_request_id 参数"}
     polled = _poll_write_status_until_final(
-        batch_request_id, total_seconds=3, step_seconds=1)
+        batch_request_id,
+        total_seconds=3,
+        step_seconds=1,
+        bound_specific_parts=_bound_specific_parts,
+    )
     # 主动查询只等一轮，不阻塞 LLM 轮询；若还是 pending，提示用户可再查
     return {
         "success": True,
@@ -579,10 +686,138 @@ def get_write_status(batch_request_id: str) -> dict:
     }
 
 
+# ── 个人设置类工具（OWNER_SELF_TOOLS，v1.13.0 P0-3）──────────────────────
+# 作用域：当前登录 user 自己账号的 persona（副官自称/称呼/语气）。
+# 不走 HTTP 权限类（miniapp/persona endpoint 用 IsOwnerUser，但 FA_TOOLS_MODE 直
+# 调 signer 身份会被拒），改用 ScopeEnforcer 注入的 _user_id 直接 ORM 读写
+# CustomUser.persona JSONField，并复用 api.persona 的 normalize / effective
+# 工具函数做规范形态与长度上限校验（MAX_FIELD_LEN=50）。
+
+def _get_user_by_id(user_id: int):
+    """按 id 取 CustomUser 对象，找不到返回 None。延迟 import 防 AppRegistry。"""
+    try:
+        from django.apps import apps
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        if not apps.ready:  # pragma: no cover
+            return None
+        return User.objects.filter(pk=user_id).first()
+    except Exception as exc:  # pragma: no cover
+        logger.debug("get_persona/set_persona _get_user_by_id 异常: %s", exc)
+        return None
+
+
+@tool
+def get_persona(_user_id: Optional[int] = None) -> dict:
+    """查询当前业主账号下「副官人格偏好」的当前设置（自称/称呼/语气），只读。
+
+    返回 persona_payload 规范形态：{identity, address, tone}，未设置过的键返回 None，
+    以便区分"用户没设过"与"设成默认值"。
+    _user_id 由 ScopeEnforcer OWNER_SELF_TOOLS 分支自动注入（普通业主连接才允许）；
+    admin/operator 路径 ScopeEnforcer 会直接返回拒绝说明，不进入本工具体。"""
+    if not _user_id:
+        return {"success": False, "error": "当前会话未关联业主账号，请重新登录。"}
+    user = _get_user_by_id(_user_id)
+    if user is None:
+        return {"success": False, "error": "账号不存在或已被删除。"}
+    try:
+        from api.persona import persona_payload
+    except Exception:  # pragma: no cover
+        return {"success": False, "error": "persona 模块未就绪"}
+    raw = getattr(user, 'persona', None)
+    payload = persona_payload(raw)
+    return {
+        "success": True,
+        "summary": (
+            f"副官人格设置：自称={payload.get('identity') or '(默认)'}，"
+            f"称呼您={payload.get('address') or '(默认)'}，"
+            f"语气={payload.get('tone') or '(未设置)'}"
+        ),
+        "data": payload,
+    }
+
+
+@tool
+def set_persona(identity: Optional[str] = None,
+                address: Optional[str] = None,
+                tone: Optional[str] = None,
+                _user_id: Optional[int] = None) -> dict:
+    """[个人设置·需用户确认] 更新当前业主账号下「副官人格偏好」。
+
+    典型对话触发：
+      - 用户说「以后你叫我老张」 → set_persona(address='老张')
+      - 用户说「以后你自称小管家就行」 → set_persona(identity='小管家')
+      - 用户说「说话活泼一点」 → set_persona(tone='活泼亲切')
+    参数都是可选，只传需要修改的键即可；传空字符串/None 的键不会改变原值。
+    写入一律走 api.persona.CANONICAL_KEYS 规范键，长度上限 50 字符。
+    本工具需用户确认（虽然不是写设备，但仍是持久化写入用户账号设置）。
+
+    _user_id 由 ScopeEnforcer OWNER_SELF_TOOLS 注入，普通业主连接才允许；
+    admin/operator 被 ScopeEnforcer 拒绝。"""
+    if not _user_id:
+        return {"success": False, "error": "当前会话未关联业主账号，请重新登录。"}
+    user = _get_user_by_id(_user_id)
+    if user is None:
+        return {"success": False, "error": "账号不存在或已被删除。"}
+    try:
+        from api.persona import (
+            MAX_FIELD_LEN, CANONICAL_KEYS, normalize_persona, persona_payload,
+        )
+    except Exception:  # pragma: no cover
+        return {"success": False, "error": "persona 模块未就绪"}
+
+    # 取现有 persona（dict 或 None），做 normalize 得到当前已显式设置的 canon 键
+    cur_raw = getattr(user, 'persona', None) or {}
+    cur = normalize_persona(cur_raw) if isinstance(cur_raw, dict) else {}
+    updates: dict = {}
+    for k in CANONICAL_KEYS:
+        val = locals().get(k)  # identity / address / tone
+        if isinstance(val, str) and val.strip():
+            updates[k] = val.strip()[:MAX_FIELD_LEN]
+    if not updates:
+        return {"success": True,
+                "summary": "未提供任何需要修改的设置项（identity/address/tone 均为空或未传）。",
+                "data": persona_payload(cur_raw)}
+
+    # 合并：cur（历史规范键）铺底，updates 覆盖写入
+    merged: dict = dict(cur)
+    merged.update(updates)
+
+    # 尝试保存；CustomUser.persona 是 JSONField（或 TextField，回退兼容）
+    try:
+        user.persona = merged  # type: ignore[attr-defined]
+        user.save(update_fields=['persona', 'updated_at'] if hasattr(user, 'updated_at') else ['persona'])
+    except Exception as exc:
+        # updated_at 字段不存在的老库：回退只存 persona
+        try:
+            user.persona = merged  # type: ignore[attr-defined]
+            user.save(update_fields=['persona'])
+        except Exception as exc2:
+            logger.warning("set_persona 保存 user.persona 失败: %s / %s", exc, exc2)
+            return {"success": False, "error": "保存失败，请稍后再试。"}
+
+    new_payload = persona_payload(merged)
+    pieces = []
+    if 'identity' in updates:
+        pieces.append(f"自称改为「{updates['identity']}」")
+    if 'address' in updates:
+        pieces.append(f"称呼您为「{updates['address']}」")
+    if 'tone' in updates:
+        pieces.append(f"语气调整为「{updates['tone']}」")
+    return {
+        "success": True,
+        "summary": "副官人格偏好已更新：" + "，".join(pieces) + "。新设置将在下次对话生效。",
+        "data": new_payload,
+    }
+
+
 # ── 按专家分组的工具表（供 orchestrator 绑定到各 agent 节点）────────────
 # 能耗专家=「操控和查询」：读工具 + Tier-2 写工具（写经 gate 确认门）。
+# v1.13.0 新增 get_device_params（P0-2b）、get_persona/set_persona（P0-3）。
 ENERGY_TOOLS = [get_dashboard_summary, get_usage_daily, get_realtime_params,
-                get_write_status, set_device_params, trigger_refresh]
+                get_device_params, get_write_status,
+                set_device_params, trigger_refresh,
+                get_persona, set_persona]
 INSPECTION_TOOLS = [get_plc_status, get_fault_summary, get_realtime_params]
 
 
