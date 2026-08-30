@@ -15,6 +15,17 @@ LOG_LEVELS = {
     'CRITICAL': logging.CRITICAL
 }
 
+
+def _emit_diagnostic(message):
+    """输出可选诊断信息，且绝不影响日志配置的加载结果。"""
+    try:
+        print(message, flush=True)
+    except (UnicodeEncodeError, OSError):
+        # 部分 Windows 终端无法编码中文提示。诊断信息只作辅助，不能让
+        # 已成功读取的配置被当作加载失败。
+        pass
+
+
 class LogConfigManager:
     _instance = None
     _lock = threading.Lock()
@@ -56,10 +67,8 @@ class LogConfigManager:
                 with open(self._config_path, 'r', encoding='utf-8') as f:
                     self._config = json.load(f)
                 self._last_load_time = current_time
-                print(f"[LogConfigManager] 配置已加载: {self._config_path}", flush=True)
             except Exception as e:
                 # 如果配置文件加载失败，使用默认配置
-                print(f"警告：无法加载日志配置文件 {self._config_path}，使用默认配置。错误: {str(e)}")
                 # fallback 默认：生产 ERROR，PLC 相关豁免到 WARNING（与 resource/log_config.json v2.0 对齐）
                 self._config = {
                     'log_levels': {
@@ -73,6 +82,9 @@ class LogConfigManager:
                         'plc_write_manager': {'level': 'ERROR'}
                     }
                 }
+                _emit_diagnostic(f"警告：无法加载日志配置文件 {self._config_path}，使用默认配置。错误: {str(e)}")
+            else:
+                _emit_diagnostic(f"[LogConfigManager] 配置已加载: {self._config_path}")
 
     def get_log_level(self, logger_name):
         """获取指定 logger 的日志级别。
@@ -132,7 +144,7 @@ class LogConfigManager:
                     os.makedirs(log_dir)
             except Exception:
                 # 如果都失败，至少输出到控制台，不创建文件日志
-                print(f"警告: 无法创建日志目录，仅输出到控制台。错误: {str(e)}")
+                _emit_diagnostic(f"警告: 无法创建日志目录，仅输出到控制台。错误: {str(e)}")
                 logger.addHandler(console_handler)
                 return logger
         

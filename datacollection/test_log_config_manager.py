@@ -42,6 +42,8 @@ def _reset_lcm_singleton():
     # 清除可能已添加 handler 的 logger
     for name in list(logging.Logger.manager.loggerDict.keys()):
         lgr = logging.getLogger(name)
+        for handler in lgr.handlers:
+            handler.close()
         lgr.handlers.clear()
 
 
@@ -360,6 +362,26 @@ class TestUSD_ConfigFallback(unittest.TestCase):
                          f"应有且只有一条诊断 print，实际：{diag_lines}")
         self.assertIn("log_config.json", diag_lines[0],
                       "诊断行应包含配置文件路径")
+
+    def test_D4_diagnostic_encoding_error_keeps_loaded_config(self):
+        """终端无法输出中文诊断时，已读到的有效配置不能被回退配置覆盖。"""
+        import datacollection.log_config_manager as lcm_mod
+        _reset_lcm_singleton()
+
+        res_dir = os.path.join(self.tmp_dir, "resource")
+        os.makedirs(res_dir, exist_ok=True)
+        cfg = {"log_levels": {"global": {"level": "ERROR"}}}
+        with open(os.path.join(res_dir, "log_config.json"), "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+
+        encoding_error = UnicodeEncodeError("cp1252", "配置已加载", 0, 1, "cannot encode")
+        with patch("os.getcwd", return_value=self.tmp_dir), patch(
+            "builtins.print", side_effect=encoding_error
+        ):
+            lcm_mod.LogConfigManager._instance = None
+            manager = lcm_mod.LogConfigManager()
+
+        self.assertEqual(manager.get_log_level("collector"), logging.ERROR)
 
 
 # ---------------------------------------------------------------------------
