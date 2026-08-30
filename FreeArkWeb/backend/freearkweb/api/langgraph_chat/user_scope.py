@@ -14,6 +14,7 @@ role=user 的 user_scope 在 MiniAppChatConsumer.connect() 时构造，经 adapt
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -22,11 +23,15 @@ class UserScope:
 
     Attributes:
         role: 用户角色字符串（'user' / 'operator' / 'admin'）
+        user_id: Django 用户 ID（CustomUser.pk），OWNER_SELF_TOOLS 读写
+                 user.persona / profile 等字段用。role='user' 时非 None。
         bound_specific_parts: 该用户当前 active 绑定的所有 specific_part 集合
         is_owner: role == 'user' 的快捷属性（frozen，初始化后不可变）
     """
     role: str
     bound_specific_parts: frozenset  # frozenset[str]
+    # owner 路径下由 build_user_scope 显式填；admin/operator 恒 None
+    user_id: Optional[int] = None
 
     # frozen dataclass 不能在 __init__ 后赋值，用 __post_init__ + object.__setattr__
     is_owner: bool = field(init=False, compare=False)
@@ -57,7 +62,7 @@ def build_user_scope(user) -> 'UserScope | None':
     """从 Django User 对象构造 UserScope。
 
     admin/operator 返回 None（无限制，ScopeEnforcer 对 None 全程直通）。
-    role=user 查询 OwnerUserBinding active 绑定集，构造 UserScope。
+    role=user 查询 OwnerUserBinding active 绑定集，构造 UserScope（含 user_id）。
 
     注意：此函数执行 ORM 查询（同步），在异步 Consumer 中必须用 sync_to_async 包装：
         self.user_scope = await sync_to_async(build_user_scope)(user)
@@ -71,4 +76,5 @@ def build_user_scope(user) -> 'UserScope | None':
         .select_related('owner')
         .values_list('owner__specific_part', flat=True)
     )
-    return UserScope(role='user', bound_specific_parts=frozenset(parts))
+    uid = getattr(user, 'pk', None) or getattr(user, 'id', None)
+    return UserScope(role='user', user_id=uid, bound_specific_parts=frozenset(parts))

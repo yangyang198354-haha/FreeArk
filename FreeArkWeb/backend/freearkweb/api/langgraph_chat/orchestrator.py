@@ -749,17 +749,28 @@ class Orchestrator:
             preview = _preview_write(pw["tool"], pw["args"])
             if approved:
                 # ── v1.8.0 新增：execute_write 前二次校验 specific_part 归属（REQ-ISO-003）──
-                from .scope_enforcer import verify_write_scope, ScopeViolationError as _SVE
+                # v1.13.0：OWNER_SELF_TOOLS（set_persona 等）没有 specific_part 字段，
+                # 也不按 sp 分层，直接跳过这层二次校验；OWNER_SELF_TOOLS 在 ScopeEnforcer
+                # 侧已对「非 owner 身份」拒绝，且写入时以 signer 自己 user_id 为键，
+                # 已满足安全不变量。
+                from .scope_enforcer import (
+                    verify_write_scope, ScopeViolationError as _SVE, OWNER_SELF_TOOLS,
+                )
                 _ws = state.get("user_scope")
                 _sp = pw["args"].get("specific_part", "")
+                # OWNER_SELF_TOOLS（set_persona 等）没有 sp 概念，跳过 sp 二次校验；
+                # 其他写工具（set_device_params / trigger_refresh）即便 _sp 为空串也要
+                # 走 verify——此时 allows('')==False 会抛错，等价「拦截到没填 sp 的越权」。
+                _need_sp_check = pw["tool"] not in OWNER_SELF_TOOLS
                 try:
-                    verify_write_scope(_sp, _ws)
+                    if _need_sp_check:
+                        verify_write_scope(_sp, _ws)
                 except _SVE as _ve:
                     ans = (f"⚠️ 安全拦截：专有部分 {_sp} 不在您的绑定范围内，"
                            f"写操作已中止。如有问题请联系管理员。")
                     new_results.append({"expert": r["expert"], "answer": ans})
                     continue
-                # ── end v1.8.0 ────────────────────────────────────────────────────────────
+                # ── end v1.8.0 / v1.13.0 ────────────────────────────────────────────────
                 out = await asyncio.to_thread(
                     execute_write, pw["tool"], pw["args"], operator_id)
                 if isinstance(out, dict) and out.get("success", False):
