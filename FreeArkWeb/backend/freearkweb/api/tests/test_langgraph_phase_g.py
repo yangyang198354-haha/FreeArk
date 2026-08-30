@@ -19,6 +19,7 @@ fake LLM 见 'TOOLCALL:<name>' 链按序逐个发起工具调用（含委托工�
 import json
 import os
 import unittest
+from unittest import mock
 
 os.environ.setdefault("FREEARK_POC_MOCK", "1")  # 必须在 import fa_tools 前置
 
@@ -69,6 +70,15 @@ class ReadKnowledgeDelegationTests(SimpleTestCase):
         self.assertEqual(
             [d["intent"] for d in out["delegations"]], ["knowledge_query"])
 
+    def test_delegation_capabilities_follow_least_privilege(self):
+        from api.langgraph_chat.orchestrator import DELEGATION_TOOLS_BY_EXPERT
+        self.assertEqual(
+            [tool.name for tool in DELEGATION_TOOLS_BY_EXPERT['freeark-expert']],
+            ['delegate_knowledge'])
+        self.assertEqual(
+            [tool.name for tool in DELEGATION_TOOLS_BY_EXPERT['sanheng-knowledge']],
+            ['delegate_read'])
+
     def test_subexpert_depth_limit_no_recursion(self):
         # 子专家不带委托工具：即便把委托链塞进 origin_query，被委托的 freeark-expert/sanheng
         # 也不会再触发委托（valid 集合不含 delegate_*）。run 正常返回即证明无无限递归。
@@ -77,6 +87,30 @@ class ReadKnowledgeDelegationTests(SimpleTestCase):
         self.assertEqual(
             sorted(d["intent"] for d in out["delegations"]),
             ["knowledge_query", "read_query"])
+
+    def test_delegate_read_preserves_owner_scope_for_subexpert_tool(self):
+        """P0：委托给 freeark-expert 后仍只能读取业主绑定的设备。"""
+        from api.langgraph_chat import fa_tools
+        from api.langgraph_chat.user_scope import UserScope
+        seen = {}
+
+        def call_stub(tool_name, params):
+            if tool_name == 'freeark_get_device_params':
+                seen.update(params)
+            return {'success': True, 'data': {'records': []}}
+
+        scope = UserScope(role='user', user_id=42,
+                          bound_specific_parts=frozenset({'3-1-7-702'}))
+        state = {
+            'name': 'inspection-expert',
+            'query': '巡检 TOOLCALL:delegate_read TOOLCALL:get_device_params',
+            'messages': [],
+            'user_scope': scope,
+        }
+        with mock.patch.object(fa_tools, '_call', side_effect=call_stub):
+            result = async_to_sync(self._orch()._expert)(state)
+        self.assertIn('expert_results', result)
+        self.assertEqual(seen.get('specific_part'), '3-1-7-702')
 
 
 @unittest.skipUnless(LANGGRAPH_AVAILABLE, "langgraph/langchain-core 未安装，跳过阶段 G 测试")

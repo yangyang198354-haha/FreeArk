@@ -396,7 +396,7 @@ CHAT_HISTORY_INJECT_TURNS = int(os.environ.get('CHAT_HISTORY_INJECT_TURNS', 20))
 
 # ---------------------------------------------------------------------------
 # 聊天后端选择（LangGraph 替换 OpenClaw —— 阶段 A 影子接入开关）
-# 见 agents/langgraph-poc/PHASE3_ROLLOUT.md
+# 生产聊天统一由进程内 LangGraph 编排处理。
 #   openclaw  （默认）—— 现状，经 OpenClaw Gateway WS RPC，零行为变化
 #   langgraph         —— 进程内 LangGraph 多 agent 编排（api.langgraph_chat）
 # 切换/回滚只需改本 env 并重启 worker；默认 openclaw 部署无需安装 langgraph 依赖。
@@ -445,7 +445,7 @@ LANGGRAPH_ROUTER_GUARD = os.environ.get('LANGGRAPH_ROUTER_GUARD', 'True') == 'Tr
 LANGGRAPH_SKILL_DIR = os.environ.get('LANGGRAPH_SKILL_DIR', '')
 LANGGRAPH_AGENTS_DIR = os.environ.get('LANGGRAPH_AGENTS_DIR', '')
 # 阶段 B：工具调用模式 http（默认，经自身 REST）| direct（进程内直调 view，去自打 HTTP 一跳）
-# 见 agents/langgraph-poc/PHASE3_ROLLOUT.md 阶段 B。改回 http 即回滚。
+# 直连模式避免经 HTTP 回环；改回 http 即可回滚。
 FA_TOOLS_MODE = os.environ.get('FA_TOOLS_MODE', 'http')
 
 # 移除django-crontab配置，改用命令内置的定时功能

@@ -22,7 +22,7 @@ skill 路径解析优先级（让代码在仓内 / Pi 上 /tmp 等不同位置�
 离线/单测模式（FREEARK_POC_MOCK=1）：handler 需要 FREEARK_AGENT_TOKEN + 127.0.0.1:8000，
 无后端时 mock 包装返回最小 canned 数据，保持工具表一致可跑，供离线单测使用。
 
-文档引用：agents/langgraph-poc/PHASE3_ROLLOUT.md 阶段 A/B, [[lobster-agent-architecture]]
+生产工具层由 LangGraph 编排器进程内调用。
 """
 
 from __future__ import annotations
@@ -896,24 +896,12 @@ def search_sanheng_knowledge(query: str) -> str:
 
 SANHENG_TOOLS: list = [search_sanheng_knowledge]  # v1.4.0: RAG 检索工具
 
-# freeark-expert（系统管家）= 全部工具的并集（去重），体现全系统掌控权
-# StructuredTool 不可哈希，不能直接用 dict.fromkeys；按 tool.name 手动去重保序。
-# v1.13.1：PERSONA_TOOLS 从 ENERGY_TOOLS 拆出但仍纳入 freeark-expert 管控范围。
-_seen_tool_names: set = set()
-_FREARK_EXPERT_TOOLS: list = []
-for _t in ENERGY_TOOLS + INSPECTION_TOOLS + SANHENG_TOOLS + PERSONA_TOOLS:
-    if _t.name not in _seen_tool_names:
-        _seen_tool_names.add(_t.name)
-        _FREARK_EXPERT_TOOLS.append(_t)
-
 TOOLS_BY_EXPERT = {
-    "freeark-expert": _FREARK_EXPERT_TOOLS,
+    # 系统管家负责能耗/设备查询和确认式控制；巡检、知识检索各自最小授权。
+    "freeark-expert": ENERGY_TOOLS + PERSONA_TOOLS,
     "inspection-expert": INSPECTION_TOOLS,
     "sanheng-knowledge": SANHENG_TOOLS,
 }
-# P1-2：PERSONA_TOOLS 不单独注册为专家（无对应路由专家），
-# 而是通过 _FREARK_EXPERT_TOOLS 并集纳入 freeark-expert 管控范围。
-# PERSONA_TOOLS 变量本身保留，供路由/能力摘要等按需引用。
 
 
 # ── 只读冒烟自检：`python -m api.langgraph_chat.fa_tools` ────────────────

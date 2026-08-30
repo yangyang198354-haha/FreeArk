@@ -20,7 +20,7 @@ OpenClaw 是独立子进程，patch 仅在本 Django 进程生效，不影响 li
 异步安全：tools 经 `await tool.ainvoke()` 调用，langchain 把同步 tool 放线程池执行，
 故此处同步 ORM/视图调用不阻塞 event loop。
 
-文档引用：agents/langgraph-poc/PHASE3_ROLLOUT.md 阶段 B
+生产工具层采用进程内直调，避免 HTTP 回环。
 """
 
 from __future__ import annotations

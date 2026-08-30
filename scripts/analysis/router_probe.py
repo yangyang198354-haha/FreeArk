@@ -21,10 +21,10 @@ CASES = [
     ("为什么三恒系统要控制湿度？", "sanheng-knowledge"),
     ("恒温恒湿的原理是什么", "sanheng-knowledge"),
     ("三恒里的恒温是怎么实现的", "sanheng-knowledge"),
-    ("当前系统总能耗和在线率是多少", "energy-expert"),
-    ("3-1-7-702 这台设备的实时温度湿度是多少", "energy-expert"),   # 真·传感器数据查询
+    ("当前系统总能耗和在线率是多少", "freeark-expert"),
+    ("3-1-7-702 这台设备的实时温度湿度是多少", "freeark-expert"),   # 真·传感器数据查询
     ("现在有哪些设备故障", "inspection-expert"),
-    ("对比一下能耗和PLC故障情况", "energy-expert+inspection-expert"),
+    ("对比一下能耗和PLC故障情况", "freeark-expert+inspection-expert"),
 ]
 
 

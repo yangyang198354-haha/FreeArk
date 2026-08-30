@@ -41,7 +41,7 @@ channels_redis>=4.1.0
 # 此约束同时为将来 P1 多 worker 重试扫清依赖障碍。
 redis>=5.0,<6.0
 
-# LangGraph 多 agent 编排（替换 OpenClaw —— 见 agents/langgraph-poc/PHASE3_ROLLOUT.md）
+# LangGraph 多 Agent 编排（生产聊天路径）
 # 仅当 CHAT_BACKEND=langgraph 时被 import；默认 openclaw 部署无需安装、缺失也不影响。
 # ⚠️ aarch64（树莓派）纪律：必须在 Pi 上真装真 import 真 smoke 后再启用——
 #    pydantic-core 是 Rust 扩展，确认 aarch64 wheel 可用（教训见 channels_redis 雷区）。

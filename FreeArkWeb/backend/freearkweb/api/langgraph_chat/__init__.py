@@ -5,7 +5,7 @@ api.langgraph_chat —— LangGraph 多 agent 编排（替换 OpenClaw 的生产
 生产仍走 OpenClaw。包名特意取 langgraph_chat 而非 langgraph，避免遮蔽 pip
 安装的第三方 langgraph 顶层包（import footgun）。
 
-设计与迁移计划见 agents/langgraph-poc/{README.md, PHASE3_ROLLOUT.md}。
+运行时实现由本包与专家提示词目录共同维护。
 
 本 __init__ 刻意保持轻量：不在 import 包时构造编排图/LLM/工具，
 避免 migrate / collectstatic 等管理命令误触发建连。编排器由 adapter 惰性构造，

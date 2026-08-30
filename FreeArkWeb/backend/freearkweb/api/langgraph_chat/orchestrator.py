@@ -113,6 +113,13 @@ def delegate_write(specific_part: str = "", items: Optional[list] = None,
 
 
 DELEGATION_TOOLS = [delegate_knowledge, delegate_read, delegate_write]
+# 最小权限：系统管家只可委托知识检索；知识专家仅可按需取实时数据；
+# 只有巡检专家可以提出写处置。这样既消除系统管家的自委托，也避免知识问答产生写提案。
+DELEGATION_TOOLS_BY_EXPERT = {
+    "freeark-expert": [delegate_knowledge],
+    "inspection-expert": DELEGATION_TOOLS,
+    "sanheng-knowledge": [delegate_read],
+}
 DELEGATION_TOOL_NAMES = {t.name for t in DELEGATION_TOOLS}
 READ_DELEGATION_NAMES = {"delegate_knowledge", "delegate_read"}
 
@@ -559,7 +566,8 @@ class Orchestrator:
         allow_deleg = name in self.delegating_experts
         base_tools = TOOLS_BY_EXPERT.get(name, [])
         tool_map = {t.name: t for t in base_tools}
-        bound = list(base_tools) + (DELEGATION_TOOLS if allow_deleg else [])
+        bound = list(base_tools) + (
+            DELEGATION_TOOLS_BY_EXPERT.get(name, []) if allow_deleg else [])
         llm = self.llm.bind_tools(bound) if bound else self.llm
 
         # v1.12.0：人格 + 座舱上下文注入（MOD-P1203/04）
@@ -604,7 +612,10 @@ class Orchestrator:
             for tc in tcs:
                 if allow_deleg and tc["name"] in READ_DELEGATION_NAMES:
                     out, log = await self._handle_read_delegation(
-                        name, tc["name"], tc.get("args", {}), query)
+                        name, tc["name"], tc.get("args", {}), query,
+                        user_scope=state.get("user_scope"),
+                        active_specific_part=state.get("active_specific_part"),
+                        persona_prompt=state.get("persona_prompt"))
                     delegations.append(log)
                 else:
                     t = tool_map.get(tc["name"])
@@ -667,13 +678,23 @@ class Orchestrator:
                 "args": {"specific_part": sp, "items": args.get("items") or []}}
 
     async def _handle_read_delegation(self, origin: str, tool_name: str,
-                                      args: dict, origin_query: str):
-        """只读委托：跑目标只读子专家，返回 (回灌结果, 审计日志)。无副作用。"""
+                                      args: dict, origin_query: str, *,
+                                      user_scope=None,
+                                      active_specific_part: Optional[str] = None,
+                                      persona_prompt: Optional[str] = None):
+        """只读委托：跑目标只读子专家，返回 (回灌结果, 审计日志)。无副作用。
+
+        业主范围是调用链安全上下文，必须随委托传给子专家；不能因为进入了
+        ``delegate_read`` 就退化为管理员的无范围工具调用。
+        """
         args = args or {}
         if tool_name == "delegate_knowledge":
             q = args.get("question") or (
                 f"（{origin} 委托）请就以下情况做三恒原理/机理分析：{origin_query}")
-            ans = (await self._run_subexpert("sanheng-knowledge", q)).get("answer", "")
+            ans = (await self._run_subexpert(
+                "sanheng-knowledge", q, user_scope=user_scope,
+                active_specific_part=active_specific_part,
+                persona_prompt=persona_prompt)).get("answer", "")
             return ({"status": "OK", "from": "sanheng-knowledge",
                      "intent": "knowledge_query", "data": ans},
                     {"target_agent": "sanheng-knowledge",
@@ -683,13 +704,18 @@ class Orchestrator:
         q = args.get("query") or origin_query
         if part:
             q = f"{q}（设备 {part}）"
-        ans = (await self._run_subexpert("freeark-expert", q)).get("answer", "")
+        ans = (await self._run_subexpert(
+            "freeark-expert", q, user_scope=user_scope,
+            active_specific_part=active_specific_part,
+            persona_prompt=persona_prompt)).get("answer", "")
         return ({"status": "OK", "from": "freeark-expert",
                  "intent": "read_query", "data": ans},
                 {"target_agent": "freeark-expert",
                  "intent": "read_query", "status": "OK"})
 
-    async def _run_subexpert(self, name: str, query: str) -> dict:
+    async def _run_subexpert(self, name: str, query: str, *, user_scope=None,
+                             active_specific_part: Optional[str] = None,
+                             persona_prompt: Optional[str] = None) -> dict:
         """跑被委托的只读子专家：过滤写工具、不带委托工具（深度限 1）→ 返回 {"answer": ...}。
 
         子专家的所有 LLM 生成均打 INTERNAL_NOSTREAM_TAG：它是委托的**内部产物**，只回灌给
@@ -701,6 +727,10 @@ class Orchestrator:
         llm = self.llm.bind_tools(tools) if tools else self.llm
         msgs: List[BaseMessage] = [
             SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
+        ]
+        _persona = build_persona_message(persona_prompt)
+        _cabin = build_cabin_context_message(user_scope, active_specific_part)
+        msgs += ([_persona] if _persona else []) + ([_cabin] if _cabin else []) + [
             HumanMessage(content=query),
         ]
         nostream = {"tags": [INTERNAL_NOSTREAM_TAG]}
@@ -711,7 +741,21 @@ class Orchestrator:
             msgs.append(ai)
             for tc in ai.tool_calls:
                 t = tool_map.get(tc["name"])
-                out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
+                if not t:
+                    out = {"error": "no tool"}
+                else:
+                    from .scope_enforcer import check_and_enforce, ScopeViolationError
+                    try:
+                        enforced_args, clarification = check_and_enforce(
+                            tc["name"], tc.get("args", {}), user_scope)
+                    except ScopeViolationError as exc:
+                        enforced_args = None
+                        clarification = f"权限拒绝：{exc}"
+                    if enforced_args is None:
+                        out = {"clarification": clarification, "scope_blocked": True}
+                    else:
+                        out = await _ainvoke_tool_with_scope(
+                            t, tc["name"], enforced_args)
                 msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
             ai = await llm.ainvoke(msgs, config=nostream)
         return {"answer": ai.content}

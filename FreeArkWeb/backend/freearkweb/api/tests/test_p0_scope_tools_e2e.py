@@ -146,6 +146,29 @@ class ScopeEnforcerCategoryTests(SimpleTestCase):
         self.assertIsNone(args_out)
         self.assertIn('无权访问', note or '')
 
+    def test_filtered_summary_tools_are_internal_context_tools(self):
+        """PLC/故障工具也必须保留 ScopeEnforcer 注入的私有过滤参数。"""
+        from api.langgraph_chat.scope_enforcer import UNDERSCORE_PARAM_TOOLS
+        self.assertTrue({'get_plc_status', 'get_fault_summary'} <= UNDERSCORE_PARAM_TOOLS)
+
+    def test_plc_status_real_invocation_preserves_owner_filter(self):
+        """真实编排调用不能让 LangChain schema 丢弃 _owner_specific_parts。"""
+        from api.langgraph_chat import fa_tools
+        from api.langgraph_chat.fa_tools import get_plc_status
+        from api.langgraph_chat.orchestrator import _ainvoke_tool_with_scope
+        received = {}
+
+        def _call_stub(tool_name, params):
+            received.update(params)
+            return {'success': True, 'data': {'records': []}}
+
+        with mock.patch.object(fa_tools, '_call', side_effect=_call_stub):
+            out = async_to_sync(_ainvoke_tool_with_scope)(
+                get_plc_status, 'get_plc_status',
+                {'_owner_specific_parts': ['3-1-7-702']})
+        self.assertTrue(out['success'])
+        self.assertEqual(received['_owner_specific_parts'], ['3-1-7-702'])
+
 
 # =========================================================================
 # S2 — UserScope 新字段 user_id / build_user_scope 行为
@@ -536,6 +559,8 @@ class ToolTableConsistencyTests(SimpleTestCase):
         for e in expected:
             self.assertIn(e, names,
                           f'freeark-expert 工具集中缺 {e}')
+        self.assertNotIn('get_plc_status', names)
+        self.assertNotIn('search_sanheng_knowledge', names)
 
 
 # =========================================================================

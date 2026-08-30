@@ -81,10 +81,13 @@ FILTERED_OWNER_WORKORDER_TOOLS: frozenset = frozenset()
 # 合并所有「走 _owner_specific_parts 注入」的分类，避免检查分支写两处
 _ALL_FILTERED_TOOLS: frozenset = FILTERED_SUMMARY_TOOLS | FILTERED_OWNER_WORKORDER_TOOLS
 
-# 所有需要编排层注入下划线前缀内部参数（_bound_specific_parts / _user_id）的工具。
+# 所有需要编排层注入下划线前缀内部参数
+# （_owner_specific_parts / _bound_specific_parts / _user_id）的工具。
 # orchestrator 据此决定是否绕过 LangChain StructuredTool schema（会剔除 _ 前缀参数）
 # 直接调 tool.func()。单一真源：新增此类工具只需在这里登记，不用改 orchestrator。
-UNDERSCORE_PARAM_TOOLS: frozenset = SCOPED_QUERY_TOOLS | OWNER_SELF_TOOLS
+UNDERSCORE_PARAM_TOOLS: frozenset = (
+    _ALL_FILTERED_TOOLS | SCOPED_QUERY_TOOLS | OWNER_SELF_TOOLS
+)
 
 
 # ── 异常 ─────────────────────────────────────────────────────────────────────
