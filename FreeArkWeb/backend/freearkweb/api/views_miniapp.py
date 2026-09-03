@@ -44,6 +44,7 @@ from .models import OwnerInfo, OwnerUserBinding, WechatBinding
 from .serializers import UserRegistrationSerializer, PersonaSerializer
 from .views import IsOwnerUser, IsOperatorOrAbove
 from .adjutant_config import read_adjutant_config
+from .adjutant_recommendations import get_adjutant_recommendations
 
 logger = logging.getLogger('api.views_miniapp')
 
@@ -53,6 +54,21 @@ logger = logging.getLogger('api.views_miniapp')
 def miniapp_adjutant_status(request):
     """返回副官是否可用；配置异常时由读取函数安全降级为关闭。"""
     return Response(read_adjutant_config())
+
+
+@api_view(['GET'])
+@permission_classes([IsOwnerUser])
+def miniapp_adjutant_recommendations(request):
+    """返回副官能力引导与经过隐私过滤的匿名热门问题。"""
+    try:
+        return Response(get_adjutant_recommendations())
+    except Exception:
+        logger.exception('miniapp_adjutant_recommendations: 生成推荐失败')
+        # 能力题库始终可用；热门问题统计异常时，安全降级为空列表。
+        return Response({
+            'capability_question': '帮我看看今天的能耗情况。',
+            'popular_questions': [],
+        })
 
 
 # ── 内部工具函数 ──────────────────────────────────────────────────────────────
