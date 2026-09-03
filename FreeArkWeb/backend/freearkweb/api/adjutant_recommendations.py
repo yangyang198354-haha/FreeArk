@@ -1,7 +1,7 @@
 """副官页动态推荐问题。
 
-能力引导来自受控题库；热门问题只从近期用户消息中做匿名聚合，绝不把原始
-对话、用户标识或个人上下文返回给其他用户。
+能力引导来自受控题库；热门问题只从近期业主消息中按意图做匿名聚合，绝不
+把原始对话、用户标识或个人上下文返回给其他用户。
 """
 
 from __future__ import annotations
@@ -28,9 +28,10 @@ CAPABILITY_QUESTIONS = (
 
 POPULAR_WINDOW_DAYS = 30
 POPULAR_SCAN_LIMIT = 1200
-POPULAR_MIN_FREQUENCY = 2
+POPULAR_MIN_FREQUENCY = 3
+POPULAR_MIN_UNIQUE_USERS = 2
 POPULAR_LIMIT = 3
-POPULAR_CACHE_KEY = "adjutant:popular-questions:v1"
+POPULAR_CACHE_KEY = "adjutant:popular-questions:v2"
 POPULAR_CACHE_TTL_SECONDS = 10 * 60
 
 # 只要命中任一模式就不参与跨用户推荐。宁可少推荐，也不能泄露个人上下文。
@@ -49,6 +50,46 @@ _PERSONAL_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 _UNSAFE_CONTROL_RE = re.compile(r"忽略.*(?:指令|提示)|系统提示|开发者消息", re.IGNORECASE)
+_NON_OWNER_USERNAME_MARKERS = ("test", "demo", "mock", "sample", "example")
+
+# 仅使用受控的本地规则归纳常见意图：不将原始问题发送给外部模型，也不依赖
+# 语义向量服务。未命中规则的问题仅按标准化后的原文计数，仍需通过隐私过滤。
+_INTENT_RULES = (
+    (
+        "如何开启或关闭设备系统？",
+        re.compile(
+            r"(?:开启|打开|启动|开机|关闭|关掉|停止|停用).{0,12}"
+            r"(?:系统|设备|空调|新风|主机)|"
+            r"(?:系统|设备|空调|新风|主机).{0,12}"
+            r"(?:开启|打开|启动|开机|关闭|关掉|停止|停用)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "空调制冷或制热效果不好怎么办？",
+        re.compile(r"(?:空调|主机).{0,12}(?:不制冷|不制热|不凉|不热)|制冷|制热", re.IGNORECASE),
+    ),
+    (
+        "设备出现故障或异常时该怎么办？",
+        re.compile(r"故障|异常|报错|告警|坏了|失灵|不工作", re.IGNORECASE),
+    ),
+    (
+        "新风滤网多久需要更换？",
+        re.compile(r"新风.{0,12}(?:滤网|滤芯).{0,12}(?:换|更换|多久)|(?:滤网|滤芯).{0,12}(?:换|更换|多久)", re.IGNORECASE),
+    ),
+    (
+        "怎样设置离家节能模式？",
+        re.compile(r"离家|节能模式|回家模式", re.IGNORECASE),
+    ),
+    (
+        "如何查看设备能耗情况？",
+        re.compile(r"能耗|耗电|用电量|耗能", re.IGNORECASE),
+    ),
+    (
+        "如何查看设备当前运行状态？",
+        re.compile(r"(?:运行|设备|系统).{0,12}(?:状态|情况)|状态.{0,12}(?:查看|查询)", re.IGNORECASE),
+    ),
+)
 
 
 def _normalise_question(content: str) -> str:
@@ -69,27 +110,52 @@ def is_safe_common_question(content: str) -> bool:
     return not any(pattern.search(question) for pattern in _SENSITIVE_PATTERNS)
 
 
+def _question_intent(question: str) -> str:
+    """返回可展示的通用意图；同义表达映射到同一个受控文案。"""
+    for label, pattern in _INTENT_RULES:
+        if pattern.search(question):
+            return label
+    return question
+
+
+def _is_real_owner_username(username: str) -> bool:
+    """排除演示、自动化测试账号，避免它们影响业主推荐。"""
+    normalized = (username or "").casefold()
+    return not any(marker in normalized for marker in _NON_OWNER_USERNAME_MARKERS)
+
+
 def _popular_questions() -> list[str]:
     cached = cache.get(POPULAR_CACHE_KEY)
     if cached is not None:
         return cached
 
     since = timezone.now() - timedelta(days=POPULAR_WINDOW_DAYS)
-    contents = ChatMessage.objects.filter(
+    messages = ChatMessage.objects.filter(
         role="user",
         created_at__gte=since,
         session__is_deleted=False,
-    ).order_by("-created_at").values_list("content", flat=True)[:POPULAR_SCAN_LIMIT]
+        session__user__role="user",
+        session__user__is_active=True,
+        session__user__is_staff=False,
+        session__user__is_superuser=False,
+    ).order_by("-created_at").values_list(
+        "content", "session__user_id", "session__user__username",
+    )[:POPULAR_SCAN_LIMIT]
 
     counts: Counter[str] = Counter()
-    for content in contents:
+    users_by_intent: dict[str, set[int]] = {}
+    for content, user_id, username in messages:
         question = _normalise_question(content)
-        if is_safe_common_question(question):
-            counts[question] += 1
+        if not is_safe_common_question(question) or not _is_real_owner_username(username):
+            continue
+        intent = _question_intent(question)
+        counts[intent] += 1
+        users_by_intent.setdefault(intent, set()).add(user_id)
 
     popular = [
-        question for question, frequency in counts.most_common()
+        intent for intent, frequency in counts.most_common()
         if frequency >= POPULAR_MIN_FREQUENCY
+        and len(users_by_intent[intent]) >= POPULAR_MIN_UNIQUE_USERS
     ][:POPULAR_LIMIT]
     cache.set(POPULAR_CACHE_KEY, popular, POPULAR_CACHE_TTL_SECONDS)
     return popular
