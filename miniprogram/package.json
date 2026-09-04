@@ -1,6 +1,6 @@
 {
   "name": "freeark-miniprogram",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "scripts": {
     "dev:mp-weixin": "cross-env UNI_INPUT_DIR=. uni -p mp-weixin",
     "build:mp-weixin": "cross-env UNI_INPUT_DIR=. uni build -p mp-weixin",

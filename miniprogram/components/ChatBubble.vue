@@ -120,22 +120,29 @@ const renderedHtml = computed(() => {
 
 <style scoped>
 /* ========== LIGHT THEME (default, session.vue) ========== */
+/* 用 display:block + text-align 代替 flex，避免 flex item 的 min-width:auto
+   在 iOS/WKWebView 中把中文气泡压缩到单字宽度。
+   wrapper 宽度 100%，让内部的 inline-block 气泡能通过 text-align 对齐。 */
 .bubble-wrapper {
-  display: flex;
+  display: block;
+  width: 100%;
   margin: 12rpx 24rpx;
+  vertical-align: top;
 }
 .bubble-wrapper--user {
-  justify-content: flex-end;
+  text-align: right;
 }
 .bubble-wrapper--ai {
-  justify-content: flex-start;
+  text-align: left;
 }
 .bubble {
+  display: inline-block;
   max-width: 75%;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
   overflow-wrap: break-word;
   word-wrap: break-word;
+  vertical-align: top;
 }
 .bubble--user {
   background: #1a73e8;
@@ -233,12 +240,14 @@ const renderedHtml = computed(() => {
 /* ========== CYBERPUNK THEME (pages/chat/index.vue) ========== */
 .bubble-wrapper--cyber {
   margin: 0;
+  width: 100%;
+  vertical-align: top;
 }
 .bubble-wrapper--ai.bubble-wrapper--cyber {
-  justify-content: flex-start;
+  text-align: left;
 }
 .bubble-wrapper--user.bubble-wrapper--cyber {
-  justify-content: flex-end;
+  text-align: right;
 }
 
 /* Cyberpunk bubble base: match index.vue .bubble styles */

@@ -199,4 +199,18 @@ class PersonaSerializer(serializers.Serializer):
         if not data.get('reset') and not any(k in data for k in self._FIELD_KEYS):
             raise serializers.ValidationError(
                 "至少需要传 identity / address / tone 之一，或 reset=true")
+        # 人格最终会进入 LLM 的 system message。所有写入口都必须在此统一拦截
+        # 注入式内容，不能只依赖 LangGraph 的 set_persona 工具路径。
+        from .persona import PersonaInjectionError, sanitize_persona_value
+        errors = {}
+        for key in self._FIELD_KEYS:
+            value = data.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            try:
+                data[key] = sanitize_persona_value(value)
+            except PersonaInjectionError as exc:
+                errors[key] = str(exc)
+        if errors:
+            raise serializers.ValidationError(errors)
         return data

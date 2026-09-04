@@ -44,6 +44,13 @@ except Exception:  # pragma: no cover
 # 旧身份字样：任何喂给模型的系统提示里都不允许再出现（身份只由人格块决定）。
 _LEGACY_IDENTITY = "方舟智能体"
 
+# 2026-08-22 依赖反转：节点不再收 persona dict，改收调用方构造好的指令文本。
+# 这里用真实构造器生成，既贴合生产形态，又不让本套件反向依赖 persona 的内部 schema。
+def _prompt(persona=None, ask=False):
+    from api.persona import build_persona_instruction
+    return build_persona_instruction(persona, ask)
+
+
 _CUSTOM_PERSONA = {"greeting_style": "方舟管家", "tone_style": "先生"}
 
 
@@ -91,24 +98,35 @@ class GeneralNodePersonaTests(SimpleTestCase):
         self.assertNotIn(_LEGACY_IDENTITY, GENERAL_PROMPT)
         self.assertIn("人格", GENERAL_PROMPT)
 
-    def test_general_injects_default_persona_when_persona_absent(self):
-        """persona 缺省（None）→ 仍注入默认副官人格块，而非退回旧身份。"""
+    def test_general_injects_default_persona_prompt(self):
+        """给默认人格文本 → general 分支照单注入，不退回旧身份。"""
         orch = self._orch()
         with _capture_llm_calls() as calls:
-            async_to_sync(orch._general)({"query": "你是谁"})
+            async_to_sync(orch._general)(
+                {"query": "你是谁", "persona_prompt": _prompt()})
         self.assertEqual(len(calls), 1)
-        sys_texts = _system_texts(calls[0])
-        joined = "\n".join(sys_texts)
+        joined = "\n".join(_system_texts(calls[0]))
         self.assertIn("智能方舟的副官", joined)
         self.assertIn("尊敬的舰长大人", joined)
         self.assertNotIn(_LEGACY_IDENTITY, joined)
+
+    def test_general_without_prompt_injects_nothing(self):
+        """契约变更守卫：缺 persona_prompt → 不注入人格块。
+
+        反转前默认值兜在编排层；现在默认值归调用方（consumers 恒传），
+        编排层退化为「有文本就包一层」。缺失时静默不注入才是正确行为。
+        """
+        orch = self._orch()
+        with _capture_llm_calls() as calls:
+            async_to_sync(orch._general)({"query": "你是谁"})
+        self.assertEqual(len(_system_texts(calls[0])), 1)   # 只有 GENERAL_PROMPT
 
     def test_general_injects_custom_persona(self):
         """用户自定义人格 → general 分支按自定义身份注入，不写死副官。"""
         orch = self._orch()
         with _capture_llm_calls() as calls:
             async_to_sync(orch._general)(
-                {"query": "你是谁", "persona": _CUSTOM_PERSONA})
+                {"query": "你是谁", "persona_prompt": _prompt(_CUSTOM_PERSONA)})
         joined = "\n".join(_system_texts(calls[0]))
         self.assertIn("方舟管家", joined)
         self.assertIn("先生", joined)
@@ -120,7 +138,8 @@ class GeneralNodePersonaTests(SimpleTestCase):
         from api.langgraph_chat.orchestrator import GENERAL_PROMPT
         orch = self._orch()
         with _capture_llm_calls() as calls:
-            async_to_sync(orch._general)({"query": "你好啊"})
+            async_to_sync(orch._general)(
+                {"query": "你好啊", "persona_prompt": _prompt()})
         sys_texts = _system_texts(calls[0])
         self.assertEqual(len(sys_texts), 2)
         self.assertTrue(sys_texts[0].startswith(GENERAL_PROMPT[:20]))
@@ -155,7 +174,8 @@ class AggregatePersonaTests(SimpleTestCase):
         """融合调用喂给模型的系统提示里不得出现「方舟智能体」。"""
         orch = self._orch()
         with _capture_llm_calls() as calls:
-            async_to_sync(orch._aggregate)({"expert_results": self._RESULTS})
+            async_to_sync(orch._aggregate)(
+                {"expert_results": self._RESULTS, "persona_prompt": _prompt()})
         self.assertEqual(len(calls), 1)
         joined = "\n".join(_system_texts(calls[0]))
         self.assertNotIn(_LEGACY_IDENTITY, joined)
@@ -164,7 +184,8 @@ class AggregatePersonaTests(SimpleTestCase):
         """persona 缺省 → 融合阶段仍以副官身份统一作答。"""
         orch = self._orch()
         with _capture_llm_calls() as calls:
-            async_to_sync(orch._aggregate)({"expert_results": self._RESULTS})
+            async_to_sync(orch._aggregate)(
+                {"expert_results": self._RESULTS, "persona_prompt": _prompt()})
         joined = "\n".join(_system_texts(calls[0]))
         self.assertIn("智能方舟的副官", joined)
 
@@ -173,7 +194,8 @@ class AggregatePersonaTests(SimpleTestCase):
         orch = self._orch()
         with _capture_llm_calls() as calls:
             async_to_sync(orch._aggregate)(
-                {"expert_results": self._RESULTS, "persona": _CUSTOM_PERSONA})
+                {"expert_results": self._RESULTS,
+                 "persona_prompt": _prompt(_CUSTOM_PERSONA)})
         joined = "\n".join(_system_texts(calls[0]))
         self.assertIn("方舟管家", joined)
         self.assertNotIn("智能方舟的副官", joined)
@@ -182,7 +204,8 @@ class AggregatePersonaTests(SimpleTestCase):
         """回归守卫：改身份措辞不得把「禁止暴露内部分工」的约束一起删掉。"""
         orch = self._orch()
         with _capture_llm_calls() as calls:
-            async_to_sync(orch._aggregate)({"expert_results": self._RESULTS})
+            async_to_sync(orch._aggregate)(
+                {"expert_results": self._RESULTS, "persona_prompt": _prompt()})
         joined = "\n".join(_system_texts(calls[0]))
         self.assertIn("严格禁止", joined)
         self.assertIn("转交", joined)
@@ -213,7 +236,7 @@ class ExpertPersonaUnchangedTests(SimpleTestCase):
         with _capture_llm_calls() as calls:
             async_to_sync(orch._expert)({
                 "name": "freeark-expert", "query": "你是谁",
-                "messages": [], "persona": _CUSTOM_PERSONA,
+                "messages": [], "persona_prompt": _prompt(_CUSTOM_PERSONA),
             })
         joined = "\n".join(_system_texts(calls[0]))
         self.assertIn("方舟管家", joined)
@@ -235,7 +258,7 @@ class IdentityConsistencyAcrossBranchesTests(SimpleTestCase):
 
     def test_same_question_same_identity_on_both_branches(self):
         orch = self._orch()
-        state = {"query": "你是谁", "persona": _CUSTOM_PERSONA}
+        state = {"query": "你是谁", "persona_prompt": _prompt(_CUSTOM_PERSONA)}
 
         with _capture_llm_calls() as calls_general:
             async_to_sync(orch._general)(dict(state))

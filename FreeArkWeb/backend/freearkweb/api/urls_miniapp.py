@@ -32,6 +32,10 @@ urlpatterns = [
     path('adjutant/status/', views_miniapp.miniapp_adjutant_status,
          name='miniapp-adjutant-status'),
 
+    # 动态推荐问题（IsOwnerUser）：能力题库随机题 + 匿名、隐私过滤后的近期热门问题。
+    path('adjutant/recommendations/', views_miniapp.miniapp_adjutant_recommendations,
+         name='miniapp-adjutant-recommendations'),
+
     # 业主管理页账号绑定列（IsOperatorOrAbove）：web 端 admin/operator 专用
     path('admin/owner-bindings/', views_miniapp.owner_binding_list,
          name='miniapp-owner-binding-list'),

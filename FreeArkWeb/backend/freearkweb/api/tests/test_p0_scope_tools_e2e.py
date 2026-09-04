@@ -36,7 +36,7 @@ import os
 import unittest
 from unittest import mock
 
-os.environ.setdefault("FREEARK_POC_MOCK", "1")
+from asgiref.sync import async_to_sync
 
 from django.test import TestCase, SimpleTestCase, tag
 
@@ -145,6 +145,29 @@ class ScopeEnforcerCategoryTests(SimpleTestCase):
             'get_device_params', {'specific_part': '3-1-7-601'}, scope)
         self.assertIsNone(args_out)
         self.assertIn('无权访问', note or '')
+
+    def test_filtered_summary_tools_are_internal_context_tools(self):
+        """PLC/故障工具也必须保留 ScopeEnforcer 注入的私有过滤参数。"""
+        from api.langgraph_chat.scope_enforcer import UNDERSCORE_PARAM_TOOLS
+        self.assertTrue({'get_plc_status', 'get_fault_summary'} <= UNDERSCORE_PARAM_TOOLS)
+
+    def test_plc_status_real_invocation_preserves_owner_filter(self):
+        """真实编排调用不能让 LangChain schema 丢弃 _owner_specific_parts。"""
+        from api.langgraph_chat import fa_tools
+        from api.langgraph_chat.fa_tools import get_plc_status
+        from api.langgraph_chat.orchestrator import _ainvoke_tool_with_scope
+        received = {}
+
+        def _call_stub(tool_name, params):
+            received.update(params)
+            return {'success': True, 'data': {'records': []}}
+
+        with mock.patch.object(fa_tools, '_call', side_effect=_call_stub):
+            out = async_to_sync(_ainvoke_tool_with_scope)(
+                get_plc_status, 'get_plc_status',
+                {'_owner_specific_parts': ['3-1-7-702']})
+        self.assertTrue(out['success'])
+        self.assertEqual(received['_owner_specific_parts'], ['3-1-7-702'])
 
 
 # =========================================================================
@@ -329,11 +352,8 @@ class WriteStatusBoundFilterTests(TestCase):
         self.assertEqual(p['records_total'], 3,
                          'admin 路径不做过滤，3 行都可见')
 
-    def test_poll_bound_empty_list_treated_as_none(self):
-        """bound_specific_parts=[] 是 falsy → 代码里 `if bound_specific_parts`
-        判定为 False，bound_set=None → 不过滤，3 条全可见。
-        （ScopeEnforcer 对 owner 注入 bound 必非空，所以 [] 只出现在外部手调，
-         此时走「admin 模式不过滤」等价语义。）"""
+    def test_poll_bound_empty_list_filters_all(self):
+        """空绑定集必须过滤全部；只有 None 代表管理员不做过滤。"""
         from api.langgraph_chat import fa_tools
         self._mk_records()
         with mock.patch.object(fa_tools, '_call',
@@ -342,22 +362,22 @@ class WriteStatusBoundFilterTests(TestCase):
             p = _poll_write_status_until_final(
                 self.BATCH, total_seconds=1, step_seconds=1,
                 bound_specific_parts=[])
-        self.assertEqual(p['records_total'], 3)
+        self.assertEqual(p['records_total'], 0)
 
     # ---- 4.2 get_write_status @tool 端到端 --------------------------------
     def test_get_write_status_tool_bound_filter_end_to_end(self):
-        """get_write_status 接收 ScopeEnforcer 注入的 bound 参数后能正确过滤。
-        注意：不能用 invoke()——LangChain StructuredTool 的 Pydantic schema 会
-        丢弃下划线前缀的私有参数 `_bound_specific_parts`。ScopeEnforcer 在
-        编排图里调 tool_node 前会直接 patch args，所以我们这里直接调底层 .func。"""
+        """生产编排调用辅助函数必须保留 ScopeEnforcer 注入的 bound 参数。"""
         from api.langgraph_chat import fa_tools
         self._mk_records()
         with mock.patch.object(fa_tools, '_call',
                                side_effect=self._build_call_mock()):
             from api.langgraph_chat.fa_tools import get_write_status
-            out = get_write_status.func(
-                batch_request_id=self.BATCH,
-                _bound_specific_parts=[self.SP_OWNER],
+            from api.langgraph_chat.orchestrator import _ainvoke_tool_with_scope
+            out = async_to_sync(_ainvoke_tool_with_scope)(
+                get_write_status, 'get_write_status', {
+                    'batch_request_id': self.BATCH,
+                    '_bound_specific_parts': [self.SP_OWNER],
+                },
             )
         self.assertTrue(out.get('success'))
         self.assertEqual(out['data']['records_total'], 2)
@@ -370,9 +390,12 @@ class WriteStatusBoundFilterTests(TestCase):
         with mock.patch.object(fa_tools, '_call',
                                side_effect=self._build_call_mock()):
             from api.langgraph_chat.fa_tools import get_write_status
-            out = get_write_status.func(
-                batch_request_id='non-existent-batch-xyz',
-                _bound_specific_parts=[self.SP_OWNER],
+            from api.langgraph_chat.orchestrator import _ainvoke_tool_with_scope
+            out = async_to_sync(_ainvoke_tool_with_scope)(
+                get_write_status, 'get_write_status', {
+                    'batch_request_id': 'non-existent-batch-xyz',
+                    '_bound_specific_parts': [self.SP_OWNER],
+                },
             )
         self.assertTrue(out.get('success'))
         self.assertEqual(out['data']['records_total'], 0)
@@ -391,13 +414,13 @@ class InlineSetPersonaExecuteWriteTests(TestCase):
             email='p0-persona@test.free-ark.local')
 
     def test_execute_write_set_persona_persists_in_db(self):
-        """INLINE_SET_PERSONA__ 分支：operator_override→user_id，
-        set_persona 被调用，DB persona JSONField 真被写入。"""
+        """INLINE_SET_PERSONA__ 只接受 gate 提供的受信任 owner_user_id。"""
         from api.langgraph_chat.fa_tools import execute_write
         out = execute_write(
             "set_persona",
             {"identity": "小管家", "address": "胖子熊", "tone": "幽默"},
-            operator_override=str(self.user.pk))
+            operator_override='energy-agent::p0-persona-tester',
+            owner_user_id=self.user.pk)
         self.assertTrue(out.get('success'), f'out={out}')
         self.assertIn('副官人格偏好已更新', out.get('summary', ''))
         self.assertIn('小管家', out['summary'])
@@ -416,7 +439,8 @@ class InlineSetPersonaExecuteWriteTests(TestCase):
         from api.langgraph_chat.fa_tools import execute_write
         out = execute_write(
             "set_persona", {"address": "老张"},
-            operator_override=str(self.user.pk))
+            operator_override='energy-agent::p0-persona-tester',
+            owner_user_id=self.user.pk)
         self.assertTrue(out.get('success'))
         self.user.refresh_from_db()
         p = self.user.persona
@@ -424,16 +448,27 @@ class InlineSetPersonaExecuteWriteTests(TestCase):
         self.assertEqual(p.get('identity'), '副官')
         self.assertEqual(p.get('tone'), '正式')
 
-    def test_execute_write_set_persona_unknown_operator_returns_rejection(self):
-        """operator_override 不是数字/空 → _user_id=None，工具返回账号未关联提示。"""
+    def test_get_persona_preserves_injected_owner_id_in_real_invocation_path(self):
+        """get_persona 通过编排辅助函数调用时必须收到受信任的 _user_id。"""
+        self.user.persona = {'identity': '小管家', 'address': '老张'}
+        self.user.save(update_fields=['persona'])
+        from api.langgraph_chat.fa_tools import get_persona
+        from api.langgraph_chat.orchestrator import _ainvoke_tool_with_scope
+        out = async_to_sync(_ainvoke_tool_with_scope)(
+            get_persona, 'get_persona', {'_user_id': self.user.pk})
+        self.assertTrue(out.get('success'), f'out={out}')
+        self.assertEqual(out['data']['identity'], '小管家')
+        self.assertEqual(out['data']['address'], '老张')
+
+    def test_execute_write_set_persona_without_verified_owner_rejects(self):
+        """审计用户名不能被反解析为身份；缺失 gate 身份则必须拒绝。"""
         from api.langgraph_chat.fa_tools import execute_write
         out = execute_write(
             "set_persona", {"identity": "XX"},
-            operator_override="not-a-user-id")
-        # 工具会先检查 _user_id 真值，然后返回 success=False / error=...
+            operator_override="energy-agent::not-a-user-id")
         self.assertFalse(out.get('success'),
                          '非数字 operator_override 不应被写入')
-        self.assertIn('业主账号', out.get('error', '') + out.get('summary', ''))
+        self.assertIn('安全校验失败', out.get('error', '') + out.get('summary', ''))
 
     def test_execute_write_std_tool_still_routes_tier2_not_inline(self):
         """确保 set_device_params 没被误判成 INLINE：仍走 TIER2_HANDLERS 路由。"""
@@ -443,8 +478,8 @@ class InlineSetPersonaExecuteWriteTests(TestCase):
         def fake(params):
             hit['called'] = True
             return {'success': True, 'summary': 'handler-ok',
-                    'data': {'batch_request_id': 'b-inline-guard',
-                             'item_count': 1, 'status': 'success'}}
+                    # 本用例只验证路由，不引入 PLC 回执轮询的 30 秒等待。
+                    'data': {'item_count': 1, 'status': 'success'}}
 
         with mock.patch.object(fa_tools, '_MOCK', False), \
              mock.patch.object(fa_tools, 'TIER2_HANDLERS',
@@ -524,6 +559,8 @@ class ToolTableConsistencyTests(SimpleTestCase):
         for e in expected:
             self.assertIn(e, names,
                           f'freeark-expert 工具集中缺 {e}')
+        self.assertNotIn('get_plc_status', names)
+        self.assertNotIn('search_sanheng_knowledge', names)
 
 
 # =========================================================================
@@ -536,8 +573,9 @@ class OrchestratorGateSpecificPartCheckTests(SimpleTestCase):
         """复刻 orchestrator gate 批准分支：OWNER_SELF_TOOLS 命中则
         _need_sp_check=False，不调 verify_write_scope。"""
         from api.langgraph_chat.scope_enforcer import (
-            OWNER_SELF_TOOLS, verify_write_scope, ScopeViolationError)
-        scope = _owner_scope(parts=('3-1-7-702',))
+            OWNER_SELF_TOOLS, verify_write_scope, verify_owner_self_scope,
+            ScopeViolationError)
+        scope = _owner_scope(user_id=77, parts=('3-1-7-702',))
 
         tool = 'set_persona'
         args = {'address': '老张'}   # 没有 specific_part
@@ -549,6 +587,13 @@ class OrchestratorGateSpecificPartCheckTests(SimpleTestCase):
                 self.fail('set_persona 不应触发 sp 校验（已被 OWNER_SELF 跳过）')
         # ↑ need=False，说明走了跳过分支
         self.assertFalse(need, 'set_persona 应跳过 sp 二次校验')
+        self.assertEqual(verify_owner_self_scope(scope), 77)
+
+    def test_set_persona_rejects_admin_at_gate(self):
+        from api.langgraph_chat.scope_enforcer import (
+            verify_owner_self_scope, ScopeViolationError)
+        with self.assertRaises(ScopeViolationError):
+            verify_owner_self_scope(None)
 
     def test_set_device_params_empty_sp_owner_still_blocked(self):
         """反例：set_device_params（非 OWNER_SELF）即使 sp 空也必须走 verify。"""

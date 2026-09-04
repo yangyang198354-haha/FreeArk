@@ -83,7 +83,6 @@ EXCLUDED = [
     ('tests/test_datacollection_refactor.py', 'unittest/pytest，重构验证'),
     ('test_plc_status_change_history.py', '仓库根孤儿调试脚本（无断言）——不属正式套件'),
     ('project_workspace/FreeArk_AsyncMQTT/test_mqtt_consumer_async.py', '临时 PoC——不属正式套件'),
-    ('agents/langgraph-poc/test_delegation.py', '孤儿验证脚本——不属正式套件'),
 ]
 
 

@@ -99,6 +99,7 @@ export const api = {
 
   // Chat sessions
   getAdjutantStatus: () => http.get('/api/miniapp/adjutant/status/'),
+  getAdjutantRecommendations: () => http.get('/api/miniapp/adjutant/recommendations/'),
   getSessionList: (params) => http.get('/api/memory/me/', params),
   getSessionHistory: (sessionKey) => http.get(`/api/memory/session/${sessionKey}/history/`),
   deleteSession: (sessionKey) => http.del(`/api/memory/session/${sessionKey}/`),

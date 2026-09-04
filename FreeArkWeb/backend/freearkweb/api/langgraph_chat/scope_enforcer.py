@@ -75,9 +75,19 @@ OWNER_SELF_TOOLS: frozenset = frozenset({
 #    只是目前还没有工具填进来，先留分类框架，避免后续工具漏分类走保守直通。
 #    与 FILTERED_SUMMARY_TOOLS 共享同一套检查分支实现。
 FILTERED_OWNER_WORKORDER_TOOLS: frozenset = frozenset()
+# TODO(v1.14): 工单/巡检/账单工具上线时填入此处，如
+#   frozenset({'get_workorders', 'get_inspection_reports', 'get_bills'})
 
 # 合并所有「走 _owner_specific_parts 注入」的分类，避免检查分支写两处
 _ALL_FILTERED_TOOLS: frozenset = FILTERED_SUMMARY_TOOLS | FILTERED_OWNER_WORKORDER_TOOLS
+
+# P1-3：所有需要编排层注入下划线前缀内部参数
+# （_owner_specific_parts / _bound_specific_parts / _user_id）的工具。
+# orchestrator 据此决定是否绕过 LangChain StructuredTool schema（会剔除 _ 前缀参数）
+# 直接调 tool.func()。单一真源：新增此类工具只需在这里登记，不用改 orchestrator。
+UNDERSCORE_PARAM_TOOLS: frozenset = (
+    _ALL_FILTERED_TOOLS | SCOPED_QUERY_TOOLS | OWNER_SELF_TOOLS
+)
 
 
 # ── 异常 ─────────────────────────────────────────────────────────────────────
@@ -107,14 +117,9 @@ def check_and_enforce(
 
     当 user_scope 为 None（admin/operator）时，所有工具直通，行为与修改前完全一致。
     """
-    # 当 user_scope 为 None（admin/operator）时，绝大多数工具直通，
-    # 但 OWNER_SELF_TOOLS / SCOPED_QUERY_TOOLS 这两类在 admin 身份下也不允许
-    # （admin 身份去读 set_persona 会改管理员自己账号 persona，语义错；
-    #  SCOPED_QUERY_TOOLS 的 batch_request_id 是 owner 维度注入 bound 才对
-    #  admin 无意义但为了安全一致也显式在 admin 模式不做限制——保留直通）。
+    # admin/operator：绝大多数工具直通；但 OWNER_SELF_TOOLS 拒绝（没有业主个人设置语义）
     if user_scope is None or not user_scope.is_owner:
         if tool_name in OWNER_SELF_TOOLS:
-            # 管理员/运维没有「业主个人设置」的语义：拒绝，不会误落到 admin 自己账号
             return None, (
                 '该功能仅对普通业主（个人中心的副官自称/称呼/语气等偏好）开放。'
                 '若您需要给业主账号进行运维调整，请通过小程序后台管理页面操作。'
@@ -125,7 +130,17 @@ def check_and_enforce(
     if tool_name in SCOPE_EXEMPT_TOOLS:
         return args, None
 
-    # 未绑定用户：提示先绑定（三恒专家外所有工具）
+    # OWNER_SELF_TOOLS：仅业主本人可调用，注入受信任 _user_id
+    # （放在 is_unbound 之前，因为个人设置与绑定房间无关）
+    if tool_name in OWNER_SELF_TOOLS:
+        args = dict(args or {})
+        uid = getattr(user_scope, 'user_id', None)
+        if not uid:
+            return None, '当前会话未关联业主账号，请重新登录。'
+        args['_user_id'] = uid
+        return args, None
+
+    # 未绑定用户：设备/房间相关工具需要先绑定；个人设置不受此限制。
     if user_scope.is_unbound():
         return None, (
             '您尚未绑定任何专有部分，无法查询设备数据。'
@@ -141,70 +156,47 @@ def check_and_enforce(
             '您可以向我询问您自己专有部分的详细数据（能耗、实时参数等）。'
         )
 
-    # OWNER_SELF_TOOLS：仅业主本人可调用，admin/operator 也不允许（避免误改管理员个人设置）
-    if tool_name in OWNER_SELF_TOOLS:
-        # user_scope 进入本分支前提是 is_owner=True（外层 if 已保障），但我们也显式断言一次
-        if not user_scope.is_owner:  # pragma: no cover
-            return None, '该功能仅对普通业主（个人设置）开放。'
-        args = dict(args or {})
-        # 注入 user_id：UserScope 新增 user_id 字段（工具实现读写 user.persona 用）
-        uid = getattr(user_scope, 'user_id', None)
-        if not uid:
-            return None, '当前会话未关联业主账号，请重新登录。'
-        args['_user_id'] = uid
-        return args, None
-
     # 带 specific_part 参数的工具（能耗/实时/设备写白名单/写操作）
     if tool_name in SCOPED_SINGLE_PART_TOOLS:
         args = dict(args or {})
         sp = args.get('specific_part', '')
 
         if sp:
-            # LLM 填了某个 specific_part：校验是否在范围内
             if sp not in bound:
                 if tool_name in WRITE_TOOLS:
                     raise ScopeViolationError(
                         f'写操作越权：{sp} 不在用户绑定范围 {sorted(bound)} 内'
                     )
-                # 只读工具：提示并拒绝
                 return None, (
                     f'您无权访问专有部分 {sp} 的数据。'
                     f'您可以查询的专有部分为：{sorted(bound)}。'
                 )
-            # sp 在范围内：直通（args 不变）
             return args, None
         else:
-            # LLM 未填 specific_part
             if len(bound) == 1:
-                # 单绑定：自动注入
                 args['specific_part'] = next(iter(bound))
                 return args, None
             else:
-                # 多绑定：需要用户澄清，不调工具
                 return None, (
                     f'您绑定了多套专有部分：{sorted(bound)}，'
                     '请告知您想查询哪一套（如"3-1-7-702"）？'
                 )
 
-    # 全局列表工具（get_fault_summary / get_plc_status 及未来工单类 FILTERED_OWNER_WORKORDER_TOOLS）：
-    # 注入 _owner_specific_parts，后端按列表白名单过滤
+    # 全局列表工具 + 未来工单类：注入 _owner_specific_parts
     if tool_name in _ALL_FILTERED_TOOLS:
         args = dict(args or {})
         args['_owner_specific_parts'] = list(bound)
         return args, None
 
-    # SCOPED_QUERY_TOOLS：查询主键可能不暴露 specific_part（如 batch_request_id UUID），
-    # 但返回记录中含 specific_part。此处注入 bound 集合，工具实现内部对结果记录做二次过滤。
+    # SCOPED_QUERY_TOOLS：注入 _bound_specific_parts 做结果级过滤；显式 sp 额外校验
     if tool_name in SCOPED_QUERY_TOOLS:
         args = dict(args or {})
-        # (a) 若用户显式填了 specific_part，要额外校验（防绕过 UUID → 指定邻居 sp + 模糊查询模式）
         explicit_sp = args.get('specific_part', '')
         if explicit_sp and explicit_sp not in bound:
             return None, (
                 f'您无权查询专有部分 {explicit_sp} 的写记录。'
                 f'可查询范围：{sorted(bound)}。'
             )
-        # (b) 注入 _bound_specific_parts，工具实现读后过滤 specific_part ∈ bound
         args['_bound_specific_parts'] = list(bound)
         return args, None
 
@@ -213,11 +205,7 @@ def check_and_enforce(
 
 
 def verify_write_scope(specific_part: str, user_scope: 'UserScope | None') -> None:
-    """_gate 节点 execute_write 前的二次校验（REQ-ISO-003）。
-
-    仅对 is_owner=True 的 user_scope 执行校验；None 或非 owner 直通。
-    越权时抛 ScopeViolationError，调用方捕获后向用户报错并 continue 跳过写操作。
-    """
+    """_gate 节点 execute_write 前的二次校验（REQ-ISO-003）。"""
     if user_scope is None or not user_scope.is_owner:
         return
     if not user_scope.allows(specific_part):
@@ -225,3 +213,13 @@ def verify_write_scope(specific_part: str, user_scope: 'UserScope | None') -> No
             f'写操作二次校验失败：{specific_part} 不在用户绑定范围 '
             f'{sorted(user_scope.bound_specific_parts)} 内'
         )
+
+
+def verify_owner_self_scope(user_scope: 'UserScope | None') -> int:
+    """确认门执行个人设置前的第二道身份校验，返回受信任的 User.pk。"""
+    if user_scope is None or not user_scope.is_owner:
+        raise ScopeViolationError('个人设置仅允许普通业主本人修改')
+    user_id = getattr(user_scope, 'user_id', None)
+    if not isinstance(user_id, int) or user_id <= 0:
+        raise ScopeViolationError('当前会话未关联有效业主账号')
+    return user_id

@@ -43,6 +43,7 @@ import re
 import threading
 from typing import Annotated, List, Optional, Tuple, TypedDict
 
+from asgiref.sync import sync_to_async
 from langchain_core.messages import (
     AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage)
 from langchain_core.tools import tool
@@ -112,6 +113,13 @@ def delegate_write(specific_part: str = "", items: Optional[list] = None,
 
 
 DELEGATION_TOOLS = [delegate_knowledge, delegate_read, delegate_write]
+# 最小权限：系统管家只可委托知识检索；知识专家仅可按需取实时数据；
+# 只有巡检专家可以提出写处置。这样既消除系统管家的自委托，也避免知识问答产生写提案。
+DELEGATION_TOOLS_BY_EXPERT = {
+    "freeark-expert": [delegate_knowledge],
+    "inspection-expert": DELEGATION_TOOLS,
+    "sanheng-knowledge": [delegate_read],
+}
 DELEGATION_TOOL_NAMES = {t.name for t in DELEGATION_TOOLS}
 READ_DELEGATION_NAMES = {"delegate_knowledge", "delegate_read"}
 
@@ -139,11 +147,12 @@ class State(TypedDict, total=False):
     # MiniAppChatConsumer 经 adapter 注入；None=无限制（admin/operator 路径直通）
     user_scope: Optional[object]  # UserScope instance or None
     # ── v1.12.0 新增（MOD-P1203/04）：人格偏好 + 活跃房间
-    persona: Optional[dict]  # {"identity","address","tone"}（兼容旧键）or None
     active_specific_part: Optional[str]  # 前端首页选中的房间号（如 "3-1-7-702"），None=未选择
-    # v1.13.0（US-001 AC-001-02）：本轮是否要求副官在回复末尾询问称呼偏好。
-    # 由 MiniAppChatConsumer 判定（用户从未设过称呼 + 首次对话），随 persona 同路透传。
-    persona_ask_preference: Optional[bool]
+    # v1.13.0：人格指令文本（已由调用方构造好的完整字符串）。
+    # 编排层对人格的 schema、默认值、首次询问策略一无所知——那些都是领域策略，
+    # 由 consumers 经 api.persona.build_persona_instruction() 构造后透传进来。
+    # 空/None = 本轮不注入人格块。
+    persona_prompt: Optional[str]
 
 
 # 从消息里提取 ChatConsumer 注入的 [__freeark_user__:<name>] 前缀，构造 operator 追溯。
@@ -161,49 +170,43 @@ def _operator_from_state(state: State) -> str:
     return f"energy-agent::{user}"
 
 
+from .scope_enforcer import UNDERSCORE_PARAM_TOOLS as _INTERNAL_CONTEXT_TOOLS
+
+
+async def _ainvoke_tool_with_scope(tool, tool_name: str, args: dict):
+    """执行工具，并保留仅编排层注入的安全上下文。
+
+    LangChain 的工具 schema 会剔除以下划线开头的参数；对于需要业主范围或
+    user_id 的工具，必须从受信任的编排层直接调用底层函数。LLM 仍只能提供
+    正常工具 schema 中的参数，内部参数只由 ScopeEnforcer 注入。
+    """
+    if tool_name in _INTERNAL_CONTEXT_TOOLS:
+        func = getattr(tool, 'func', None)
+        if not callable(func):
+            raise RuntimeError(f'内部上下文工具不可用: {tool_name}')
+        # 这类工具会访问 Django ORM；thread_sensitive 保持与当前请求一致的
+        # 数据库线程/事务语义，避免测试事务和 SQLite 下的跨线程锁表。
+        return await sync_to_async(func, thread_sensitive=True)(**args)
+    return await tool.ainvoke(args)
+
+
 # ── v1.12.0 人格与座舱上下文注入（MOD-P1203/04）────────────────────────────────
 
-def build_persona_message(
-    persona: Optional[dict],
-    ask_preference: bool = False,
-) -> Optional[SystemMessage]:
-    """将人格偏好构造成独立的 SystemMessage 块。
+def build_persona_message(persona_prompt: Optional[str]) -> Optional[SystemMessage]:
+    """把调用方给的人格指令文本包成独立的 SystemMessage 块。
 
-    v1.13.0 重写（三处修复，对应 2026-08-22 的生产实测）：
+    2026-08-22 依赖反转：本函数原先 `from api.persona import effective_persona`，
+    自己懂 persona 的三个键、默认值和首次询问策略——那是编排层对宿主 App 的唯一一条
+    反向依赖，方向错了。人格是**领域策略**，通用编排骨架不该懂。现在文案构造搬到
+    api.persona.build_persona_instruction()，由 consumers 调用后经 adapter 透传，
+    编排层退化为「有文本就包一层，没有就不注入」。
 
-    1. **字段语义拆清**。旧版只有 greeting_style/tone_style 两个键且语义是混的——
-       tone_style 在默认分支当"称呼"用、在自定义分支被拼成"以'X'风格交流"。实测把
-       tone_style 设成"胖子熊大人"，模型答"我是胖子熊大人，智能方舟的副官"，
-       把用户的称呼当成了自己的名字。现改由 api.persona 归一为
-       identity(自称) / address(称呼用户) / tone(语气) 三个语义单一的键。
-    2. **身份与称呼分层**。旧版一句"保持该角色定位贯穿整个对话"把身份和称呼一起
-       锁死，导致用户说"以后叫我胖子熊大人"时副官答"我必须遵循守则，仍以'尊敬的
-       舰长大人'称呼您"——把用户偏好当成了不可违抗的规则。现在身份不可变、
-       称呼与语气可由用户改。
-    3. **首次询问偏好**（ask_preference，US-001 AC-001-02）：用户从未设过称呼且是
-       首次对话时，要求在回复末尾自然地问一句，且不得打断对当前问题的正常回答。
+    这条边反转后，langgraph_chat 对 api.* 的依赖回到零（adapter.py 除外——
+    它本就是绑定宿主的适配层）。
     """
-    from api.persona import effective_persona
-
-    eff = effective_persona(persona)
-    parts = [
-        f"你的身份是「{eff['identity']}」，请始终以该身份自居，不得自称其它名字。",
-        f"请称呼当前用户为「{eff['address']}」。",
-    ]
-    if eff['tone']:
-        parts.append(f"请以「{eff['tone']}」的语气与用户交流。")
-    parts.append(
-        "身份设定贯穿整个对话、不可更改；但称呼与语气属于用户偏好——"
-        "若用户要求换一个称呼或调整语气，不要以「守则」「设定」为由拒绝，"
-        "直接接受并从本次回复起改用新称呼。"
-    )
-    if ask_preference:
-        parts.append(
-            "另外，该用户尚未设置过称呼偏好且这是其首次对话："
-            "请在本次回复的末尾用一句话自然地询问他希望被如何称呼。"
-            "该询问必须放在正常回答之后，不得打断或替代对用户当前问题的回答。"
-        )
-    return SystemMessage(content="".join(parts))
+    if not persona_prompt:
+        return None
+    return SystemMessage(content=persona_prompt)
 
 
 def build_cabin_context_message(
@@ -546,15 +549,13 @@ class Orchestrator:
             return [Send("general", {
                 "query": state.get("route_text", ""), "messages": [],
                 "user_scope": state.get("user_scope"),
-                "persona": state.get("persona"),
-                "persona_ask_preference": state.get("persona_ask_preference"),
+                "persona_prompt": state.get("persona_prompt"),
                 "active_specific_part": state.get("active_specific_part"),
             })]
         return [Send("expert", {
             "name": name, "query": q, "messages": [],
             "user_scope": state.get("user_scope"),
-            "persona": state.get("persona"),
-            "persona_ask_preference": state.get("persona_ask_preference"),
+            "persona_prompt": state.get("persona_prompt"),
             "active_specific_part": state.get("active_specific_part"),
         }) for name, q in plan]
 
@@ -565,12 +566,12 @@ class Orchestrator:
         allow_deleg = name in self.delegating_experts
         base_tools = TOOLS_BY_EXPERT.get(name, [])
         tool_map = {t.name: t for t in base_tools}
-        bound = list(base_tools) + (DELEGATION_TOOLS if allow_deleg else [])
+        bound = list(base_tools) + (
+            DELEGATION_TOOLS_BY_EXPERT.get(name, []) if allow_deleg else [])
         llm = self.llm.bind_tools(bound) if bound else self.llm
 
         # v1.12.0：人格 + 座舱上下文注入（MOD-P1203/04）
-        _persona = build_persona_message(
-            state.get("persona"), bool(state.get("persona_ask_preference")))
+        _persona = build_persona_message(state.get("persona_prompt"))
         _cabin = build_cabin_context_message(
             state.get("user_scope"), state.get("active_specific_part"))
         msgs: List[BaseMessage] = [
@@ -611,7 +612,10 @@ class Orchestrator:
             for tc in tcs:
                 if allow_deleg and tc["name"] in READ_DELEGATION_NAMES:
                     out, log = await self._handle_read_delegation(
-                        name, tc["name"], tc.get("args", {}), query)
+                        name, tc["name"], tc.get("args", {}), query,
+                        user_scope=state.get("user_scope"),
+                        active_specific_part=state.get("active_specific_part"),
+                        persona_prompt=state.get("persona_prompt"))
                     delegations.append(log)
                 else:
                     t = tool_map.get(tc["name"])
@@ -631,7 +635,8 @@ class Orchestrator:
                             _enforced_args = None
                             _clarification = f"权限拒绝：您无权对该专有部分执行写操作。（{_scope_err}）"
                         if _enforced_args is not None:
-                            out = await t.ainvoke(_enforced_args)
+                            out = await _ainvoke_tool_with_scope(
+                                t, tc["name"], _enforced_args)
                         else:
                             out = {"clarification": _clarification, "scope_blocked": True}
                     else:
@@ -673,13 +678,23 @@ class Orchestrator:
                 "args": {"specific_part": sp, "items": args.get("items") or []}}
 
     async def _handle_read_delegation(self, origin: str, tool_name: str,
-                                      args: dict, origin_query: str):
-        """只读委托：跑目标只读子专家，返回 (回灌结果, 审计日志)。无副作用。"""
+                                      args: dict, origin_query: str, *,
+                                      user_scope=None,
+                                      active_specific_part: Optional[str] = None,
+                                      persona_prompt: Optional[str] = None):
+        """只读委托：跑目标只读子专家，返回 (回灌结果, 审计日志)。无副作用。
+
+        业主范围是调用链安全上下文，必须随委托传给子专家；不能因为进入了
+        ``delegate_read`` 就退化为管理员的无范围工具调用。
+        """
         args = args or {}
         if tool_name == "delegate_knowledge":
             q = args.get("question") or (
                 f"（{origin} 委托）请就以下情况做三恒原理/机理分析：{origin_query}")
-            ans = (await self._run_subexpert("sanheng-knowledge", q)).get("answer", "")
+            ans = (await self._run_subexpert(
+                "sanheng-knowledge", q, user_scope=user_scope,
+                active_specific_part=active_specific_part,
+                persona_prompt=persona_prompt)).get("answer", "")
             return ({"status": "OK", "from": "sanheng-knowledge",
                      "intent": "knowledge_query", "data": ans},
                     {"target_agent": "sanheng-knowledge",
@@ -689,13 +704,18 @@ class Orchestrator:
         q = args.get("query") or origin_query
         if part:
             q = f"{q}（设备 {part}）"
-        ans = (await self._run_subexpert("freeark-expert", q)).get("answer", "")
+        ans = (await self._run_subexpert(
+            "freeark-expert", q, user_scope=user_scope,
+            active_specific_part=active_specific_part,
+            persona_prompt=persona_prompt)).get("answer", "")
         return ({"status": "OK", "from": "freeark-expert",
                  "intent": "read_query", "data": ans},
                 {"target_agent": "freeark-expert",
                  "intent": "read_query", "status": "OK"})
 
-    async def _run_subexpert(self, name: str, query: str) -> dict:
+    async def _run_subexpert(self, name: str, query: str, *, user_scope=None,
+                             active_specific_part: Optional[str] = None,
+                             persona_prompt: Optional[str] = None) -> dict:
         """跑被委托的只读子专家：过滤写工具、不带委托工具（深度限 1）→ 返回 {"answer": ...}。
 
         子专家的所有 LLM 生成均打 INTERNAL_NOSTREAM_TAG：它是委托的**内部产物**，只回灌给
@@ -707,6 +727,10 @@ class Orchestrator:
         llm = self.llm.bind_tools(tools) if tools else self.llm
         msgs: List[BaseMessage] = [
             SystemMessage(content=EXPERT_PROMPTS.get(name, "") + _date_hint()),
+        ]
+        _persona = build_persona_message(persona_prompt)
+        _cabin = build_cabin_context_message(user_scope, active_specific_part)
+        msgs += ([_persona] if _persona else []) + ([_cabin] if _cabin else []) + [
             HumanMessage(content=query),
         ]
         nostream = {"tags": [INTERNAL_NOSTREAM_TAG]}
@@ -717,7 +741,21 @@ class Orchestrator:
             msgs.append(ai)
             for tc in ai.tool_calls:
                 t = tool_map.get(tc["name"])
-                out = await t.ainvoke(tc["args"]) if t else {"error": "no tool"}
+                if not t:
+                    out = {"error": "no tool"}
+                else:
+                    from .scope_enforcer import check_and_enforce, ScopeViolationError
+                    try:
+                        enforced_args, clarification = check_and_enforce(
+                            tc["name"], tc.get("args", {}), user_scope)
+                    except ScopeViolationError as exc:
+                        enforced_args = None
+                        clarification = f"权限拒绝：{exc}"
+                    if enforced_args is None:
+                        out = {"clarification": clarification, "scope_blocked": True}
+                    else:
+                        out = await _ainvoke_tool_with_scope(
+                            t, tc["name"], enforced_args)
                 msgs.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
             ai = await llm.ainvoke(msgs, config=nostream)
         return {"answer": ai.content}
@@ -754,7 +792,8 @@ class Orchestrator:
                 # 侧已对「非 owner 身份」拒绝，且写入时以 signer 自己 user_id 为键，
                 # 已满足安全不变量。
                 from .scope_enforcer import (
-                    verify_write_scope, ScopeViolationError as _SVE, OWNER_SELF_TOOLS,
+                    verify_write_scope, verify_owner_self_scope,
+                    ScopeViolationError as _SVE, OWNER_SELF_TOOLS,
                 )
                 _ws = state.get("user_scope")
                 _sp = pw["args"].get("specific_part", "")
@@ -765,14 +804,17 @@ class Orchestrator:
                 try:
                     if _need_sp_check:
                         verify_write_scope(_sp, _ws)
+                        _owner_user_id = None
+                    else:
+                        _owner_user_id = verify_owner_self_scope(_ws)
                 except _SVE as _ve:
-                    ans = (f"⚠️ 安全拦截：专有部分 {_sp} 不在您的绑定范围内，"
-                           f"写操作已中止。如有问题请联系管理员。")
+                    ans = f"⚠️ 安全拦截：{_ve}，写操作已中止。"
                     new_results.append({"expert": r["expert"], "answer": ans})
                     continue
                 # ── end v1.8.0 / v1.13.0 ────────────────────────────────────────────────
                 out = await asyncio.to_thread(
-                    execute_write, pw["tool"], pw["args"], operator_id)
+                    execute_write, pw["tool"], pw["args"], operator_id,
+                    owner_user_id=_owner_user_id)
                 if isinstance(out, dict) and out.get("success", False):
                     ans = f"✅ 已执行：{out.get('summary') or preview}"
                 else:
@@ -797,7 +839,7 @@ class Orchestrator:
             # persona——各专家已按副官人格作答，融合这一步又把身份改回旧称。身份改由人格块决定。
             # 注意：融合阶段恒不询问偏好——各分支已在自己的回复里问过一次，
             # 这里再问会让最终回复出现两遍相同的询问。
-            _persona = build_persona_message(state.get("persona"))
+            _persona = build_persona_message(state.get("persona_prompt"))
             ai = await self.llm.ainvoke([
                 SystemMessage(content=(
                     "以第一人称统一作答，身份与自称以随后的人格设定为准。"
@@ -840,8 +882,7 @@ class Orchestrator:
         方舟智能体本人」——而"你是谁"恰恰最容易被路由判为域外落到本节点，导致同一问题
         在 expert 分支自称「副官」、在本分支自称「方舟智能体」，与小程序副官入口表述不一致。"""
         query = _current_query(state.get("query", ""))  # 剥历史/标签，只留当前问题
-        _persona = build_persona_message(
-            state.get("persona"), bool(state.get("persona_ask_preference")))
+        _persona = build_persona_message(state.get("persona_prompt"))
         msgs: List[BaseMessage] = [
             SystemMessage(content=GENERAL_PROMPT + _date_hint()),
         ] + ([_persona] if _persona else []) + [

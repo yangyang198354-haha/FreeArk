@@ -313,7 +313,7 @@ function panelDev(sn, pc) {
 describe('buildCard', () => {
   it('客厅(260001)：switch 抽为头部开关、temp_set 为卡面控件，温度/湿度/露点统一小字 chips、NTC_temp 进查看全部', () => {
     const panel = { id: 'sys-260001', title: '客厅', devices: [panelDev(2222, '260001')] }
-    const attrs = { 2222: { switch: 'off', temp: '24.5', humidity: '55.0', temp_set: '26.0', NTC_temp: '24.5', comm_fault_timeout: 'normal', error_1: '0' } }
+    const attrs = { 2222: { switch: 'off', temp: '24.5', humidity: '55.0', temp_set: '26.0', NTC_temp: '24.5', system_switch: 'on', comm_fault_timeout: 'normal', error_1: '0' } }
     const card = buildCard(panel, attrs, CONFIG)
     expect(card.icon).toBe('🌡')
     expect(card.switchCtl.w.tag).toBe('switch')
@@ -324,6 +324,7 @@ describe('buildCard', () => {
     expect(card.small.find((m) => m.tag === 'humidity').value).toBe('55.0%') // 原值拼单位，不做小数裁剪
     expect(card.small.find((m) => m.tag === 'dew_point_temp').value).toBe('—') // 无值占位
     expect(card.rest.map((r) => r.tag)).toEqual(['NTC_temp']) // comm_fault/error 被过滤
+    expect(card.rest.some((r) => r.tag === 'system_switch')).toBe(false) // #客厅不重复展示主机的 system_switch
   })
 
   it('主机(270001)：system_switch 头部、mode(dots) 排首位、能源供应/阀开度进查看全部', () => {

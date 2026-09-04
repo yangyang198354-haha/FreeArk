@@ -117,9 +117,8 @@ FreeArk/
 ├── miniprogram/                      # uni-app 微信小程序
 │   ├── pages/ components/ composables/ store/ subpackages/ tests/
 ├── datacollection/                   # PLC 采集 + MQTT + 定时调度（生产运行）
-├── agents/                           # Agent 提示词与 LangGraph PoC
-│   ├── freeark-expert/ energy-expert/ inspection-expert/ sanheng-knowledge/
-│   └── langgraph-poc/
+├── agents/                           # 三位正式 Agent 的运行时提示词
+│   └── freeark-expert/ inspection-expert/ sanheng-knowledge/
 ├── docs/                             # 需求/架构/开发/测试/部署/排障/规格
 ├── scripts/                          # 探针、测试清单生成、标签注入
 ├── systemctl/                        # systemd unit + 服务说明

@@ -55,8 +55,35 @@
             <text class="btext">{{ personaGreeting }}</text>
           </view>
         </view>
-        <view class="chips">
-          <view v-for="(c, i) in quickChips" :key="i" class="chip" @tap="sendText(c)"><text>{{ c }}</text></view>
+        <view class="recommendations" :class="{ 'is-collapsed': recommendationsCollapsed }">
+          <view class="recommendations-head" @tap="recommendationsCollapsed = !recommendationsCollapsed">
+            <view class="recommendations-heading">
+              <view class="recommendations-mark"><text>✦</text></view>
+              <view class="recommendations-heading-text">
+                <text class="recommendations-title">灵感提问</text>
+                <text class="recommendations-subtitle">{{ recommendationsCollapsed ? '点击展开推荐问题' : '从这里开始和副官交流' }}</text>
+              </view>
+            </view>
+            <view class="recommendations-action">
+              <text>{{ recommendationsCollapsed ? '展开' : '收起' }}</text>
+              <view class="recommendations-chevron" :class="{ 'is-up': !recommendationsCollapsed }"></view>
+            </view>
+          </view>
+          <view v-if="!recommendationsCollapsed" class="recommendations-body">
+            <view class="recommendation-section">
+              <text class="recommendation-label">副官可以这样帮您</text>
+              <view v-if="recommendationLoading" class="recommendation-hint"><text>正在准备问题…</text></view>
+              <view v-else-if="capabilityQuestion" class="chip" @tap="sendRecommendation(capabilityQuestion)">
+                <text>{{ capabilityQuestion }}</text>
+              </view>
+            </view>
+            <view v-if="popularQuestions.length" class="recommendation-section">
+              <text class="recommendation-label">大家常问</text>
+              <view v-for="(question, i) in popularQuestions" :key="i" class="chip" @tap="sendRecommendation(question)">
+                <text>{{ question }}</text>
+              </view>
+            </view>
+          </view>
         </view>
       </block>
 
@@ -114,7 +141,7 @@
     </block>
 
     <view v-else class="adjutant-away">
-      <image class="adjutant-away-image" :src="adjutantAwaySrc" mode="aspectFill" />
+      <image class="adjutant-away-image" :src="'/static/adjutant-away.jpg'" mode="aspectFill" />
       <view class="adjutant-away-shade" />
       <view class="adjutant-away-copy">
         <text class="adjutant-away-title">副官外出中</text>
@@ -147,12 +174,6 @@ const authStore = useAuthStore()
 const chatStore = useChatStore()
 const ownerStore = useOwnerStore()
 
-// ⚠️ 字符串拼接而不是字面量 '/static/adjutant-away.jpg'。
-// uni-app 微信小程序编译器会把模板里出现的"字面量静态路径"转成 Vite asset import，
-// 结果指向 /assets/xxx.hash.jpg —— 但小程序平台下那个文件不会被实际拷贝，渲染层
-// 报 Failed to load image。用 JS 变量 + 拼接形式，模板编译器无法识别为静态路径。
-const adjutantAwaySrc = '/static/' + 'adjutant-away.jpg'
-
 const sysInfo = uni.getSystemInfoSync()
 const statusBarHeight = sysInfo.statusBarHeight || 20
 
@@ -177,7 +198,10 @@ const showHistory = ref(false)
 const histSessions = ref([])
 const histLoading = ref(false)
 
-const quickChips = ['客厅主机不制冷？', '如何开启离家节能', '新风滤网多久换']
+const recommendationsCollapsed = ref(false)
+const recommendationLoading = ref(false)
+const capabilityQuestion = ref('')
+const popularQuestions = ref([])
 
 const messages = computed(() => chatStore.messages)
 const wsConnected = computed(() => chatStore.wsConnected)
@@ -247,9 +271,6 @@ function initWs() {
       connecting.value = false
       // 链路层异常走横幅 + 自动重连，不弹 toast：快速切页时 socket 连开连关，
       // 这里会连着弹好几个「连接异常」。服务端下发的 error 帧（业务错误）仍照旧提示。
-      // rebase 取舍（2026-08-22）：apk-test 原先弹 showModal 询问是否重连，是为了让 APK
-      // 端断连有明确反馈。该诉求已由横幅（showDiscBanner）+ 自动退避重连 + 手动重连按钮
-      // 覆盖，且弹窗在快速切页时同样会连弹多个，故统一收敛到横幅方案。
       if (err?.code === 'WS_ERROR') {
         armLinkGrace()
         scheduleRetry()
@@ -268,9 +289,6 @@ function initWs() {
         uni.showToast({ title: '鉴权失败，请重新登录', icon: 'none' })
         authStore.logout()
         uni.reLaunch({ url: '/pages/login/index' })
-      } else if (code !== 1000) {
-        // 非正常关闭，提示用户并提供重连
-        chatStore.setStatusText('链接已断开（code: ' + code + '），可点击重连')
       }
     },
   })
@@ -323,9 +341,7 @@ function connectWs() {
   chatWs.connect(authStore.token, sessionKeyParam.value, activeSp)
 }
 
-/** 手动重连：清掉退避配额，立刻收起横幅给出反馈。
- *  rebase 取舍（2026-08-22）：重连由本层单一所有——它感知 onHide 挂起（suspended），
- *  并驱动断连横幅；chat-ws.js 内部那套自动重连已移除，避免同一次断开触发两套退避。 */
+/** 手动重连：清掉退避配额，立刻收起横幅给出反馈。 */
 function reconnect() {
   clearLinkTimers()
   retryCount = 0
@@ -381,6 +397,29 @@ function onInputError(error) {
   uni.showToast({ title: error.message || '操作失败', icon: 'none', duration: 2000 })
 }
 
+async function loadRecommendations() {
+  recommendationLoading.value = true
+  try {
+    const result = await api.getAdjutantRecommendations()
+    capabilityQuestion.value = typeof result?.capability_question === 'string'
+      ? result.capability_question : ''
+    popularQuestions.value = Array.isArray(result?.popular_questions)
+      ? result.popular_questions.slice(0, 3) : []
+  } catch {
+    // 推荐加载失败不影响正常聊天，保留空区域即可。
+    capabilityQuestion.value = ''
+    popularQuestions.value = []
+  } finally {
+    recommendationLoading.value = false
+  }
+}
+
+function sendRecommendation(question) {
+  if (!question || !wsConnected.value || isStreaming.value) return
+  recommendationsCollapsed.value = true
+  onSend({ text: question, media: [] })
+}
+
 function handleConfirm(approved) {
   chatWs.sendConfirm(approved)
   const last = messages.value[messages.value.length - 1]
@@ -394,6 +433,7 @@ function newSession() {
   shouldLoadHistoryOnConnect.value = false
   sessionKeyParam.value = null
   chatStore.resetSession()
+  loadRecommendations()
   if (chatWs) chatWs.close()
   connectWs()
 }
@@ -471,6 +511,7 @@ onLoad((options) => {
   chatStore.resetSession()
   if (sessionKeyParam.value) chatStore.sessionKey = sessionKeyParam.value
   if (adjutantEnabled.value) startChat()
+  loadRecommendations()
   // 监听键盘高度变化，动态顶起输入栏
   // #ifdef MP-WEIXIN
   wx.onKeyboardHeightChange(keyboardListener)
@@ -641,20 +682,68 @@ onUnload(() => {
   display: block; width: 68rpx; height: 68rpx; border-radius: 18rpx; margin: 0 0 14rpx;
   background: linear-gradient(150deg, rgba(47,244,224,0.18), rgba(139,92,246,0.18));
   border: 1px solid rgba(56,230,224,0.45);
-  display: flex; align-items: center; justify-content: center;
+  text-align: center; line-height: 68rpx;
+  vertical-align: top;
   box-shadow: 0 0 12px rgba(47,244,224,0.25);
 }
-.avatar-ark text { font-size: 22rpx; font-weight: 900; letter-spacing: 1rpx; color: #aef9f2; }
+.avatar-ark text { font-size: 22rpx; font-weight: 900; letter-spacing: 1rpx; color: #aef9f2; display: inline-block; }
 
 /* 问候语气泡（直接写在 index.vue 中，不用 ChatBubble 组件）*/
 .bubble { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 22rpx 26rpx; vertical-align: top; }
 .bubble-ai { background: rgba(14,22,42,0.85); border: 1px solid rgba(56,230,224,0.2); border-radius: 10rpx 28rpx 28rpx 28rpx; }
 .btext { font-size: 27rpx; line-height: 1.65; color: #dbeeff; overflow-wrap: break-word; word-wrap: break-word; }
 
-/* quick chips */
-.chips { display: flex; flex-wrap: wrap; gap: 16rpx; padding-left: 88rpx; margin-bottom: 26rpx; }
-.chip { border: 1px solid rgba(56,230,224,0.35); border-radius: 28rpx; padding: 12rpx 22rpx; background: rgba(47,244,224,0.05); }
-.chip text { font-size: 24rpx; color: #9fe9e0; }
+/* 动态推荐问题 */
+.recommendations {
+  margin: 0 0 28rpx; overflow: hidden; border: 1rpx solid rgba(240,117,255,0.55);
+  border-radius: 20rpx;
+  background:
+    radial-gradient(90% 150% at 100% 0%, rgba(63,177,255,0.26), transparent 58%),
+    linear-gradient(135deg, rgba(67,23,103,0.96), rgba(16,24,69,0.94));
+  box-shadow: 0 10rpx 26rpx rgba(0,0,0,0.28), 0 0 20rpx rgba(219,77,255,0.14), inset 0 1rpx 0 rgba(255,220,255,0.2);
+}
+.recommendations.is-collapsed {
+  border-color: rgba(209,106,255,0.42);
+  background: linear-gradient(100deg, rgba(55,20,89,0.88), rgba(18,31,73,0.86));
+}
+.recommendations-head {
+  display: flex; align-items: center; justify-content: space-between; min-height: 64rpx; padding: 16rpx 20rpx 16rpx 18rpx;
+  background: linear-gradient(90deg, rgba(255,78,209,0.12), rgba(50,185,255,0.05));
+}
+.recommendations-heading { display: flex; align-items: center; min-width: 0; }
+.recommendations-mark {
+  display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 42rpx; height: 42rpx;
+  margin-right: 14rpx; border: 1rpx solid rgba(255,154,239,0.75); border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255,77,204,0.34), rgba(75,184,255,0.22));
+  box-shadow: 0 0 16rpx rgba(255,74,205,0.32);
+}
+.recommendations-mark text { font-size: 23rpx; line-height: 1; color: #fff0fd; text-shadow: 0 0 8rpx #ff67da; }
+.recommendations-heading-text { display: flex; flex-direction: column; min-width: 0; }
+.recommendations-title { font-size: 25rpx; font-weight: 700; letter-spacing: 1rpx; color: #ffe2fb; text-shadow: 0 0 10rpx rgba(255,94,215,0.48); }
+.recommendations-subtitle { margin-top: 3rpx; overflow: hidden; font-size: 20rpx; color: rgba(205,210,255,0.78); text-overflow: ellipsis; white-space: nowrap; }
+.recommendations-action {
+  display: flex; flex: 0 0 auto; align-items: center; padding: 8rpx 10rpx 8rpx 14rpx;
+  font-size: 21rpx; color: #a9e8ff;
+}
+.recommendations-chevron {
+  width: 10rpx; height: 10rpx; margin-left: 10rpx; border-right: 2rpx solid #8edfff; border-bottom: 2rpx solid #8edfff;
+  transform: rotate(45deg) translateY(-3rpx); transition: transform 180ms ease;
+}
+.recommendations-chevron.is-up { transform: rotate(225deg) translateY(-3rpx); }
+.recommendations-body { padding: 2rpx 20rpx 22rpx; border-top: 1rpx solid rgba(244,136,255,0.23); }
+.recommendation-section { padding-top: 18rpx; }
+.recommendation-section + .recommendation-section { margin-top: 4rpx; border-top: 1rpx dashed rgba(182,134,255,0.3); }
+.recommendation-label { display: block; margin-bottom: 12rpx; font-size: 21rpx; letter-spacing: .5rpx; color: rgba(226,193,255,0.88); }
+.recommendation-hint { padding: 10rpx 4rpx; }
+.recommendation-hint text { font-size: 22rpx; color: rgba(188,205,255,0.68); }
+.chip {
+  display: block; border: 1rpx solid rgba(133,191,255,0.42); border-radius: 14rpx; padding: 14rpx 18rpx;
+  background: linear-gradient(100deg, rgba(77,89,181,0.28), rgba(41,120,181,0.16));
+  box-shadow: inset 0 1rpx 0 rgba(224,231,255,0.12);
+}
+.chip:active { border-color: rgba(255,161,239,0.86); background: rgba(207,80,235,0.25); transform: scale(0.985); }
+.chip + .chip { margin-top: 10rpx; }
+.chip text { display: block; font-size: 24rpx; line-height: 1.45; color: #e5ebff; }
 
 /* v1.13.0: input bar replaced by ChatInputBar component (theme="dark") */
 

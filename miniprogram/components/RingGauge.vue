@@ -58,16 +58,20 @@ function render() {
       const ctx = canvas.getContext('2d')
       const w = info.width
       const h = info.height
-      canvas.width = w * dpr
-      canvas.height = h * dpr
+      const pw = Math.round(w * dpr)
+      const ph = Math.round(h * dpr)
+      canvas.width = pw
+      canvas.height = ph
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
       const frac = Math.min(Math.max(Number(props.progress) || 0, 0), 100) / 100
       chart = new uCharts({
         type: 'arcbar',
         context: ctx,
         canvas2d: true,
         pixelRatio: dpr,
-        width: w * dpr,
-        height: h * dpr,
+        width: pw,
+        height: ph,
         background: 'rgba(0,0,0,0)',
         animation: true,
         timing: 'easeOut',
