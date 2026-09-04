@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @module MOD-VOICE-INPUT
  * @description 语音输入封装（v1.12.0 MOD-P1208 方案B）
  *
@@ -23,6 +23,22 @@ var _manager = null
 //   - starting 期间松手调 stop() → "recorder not start"
 //   - stopping 期间再次 start() → "is recording or paused"
 var _state = 'idle'
+var _onStateChange = null
+
+/**
+ * 设置状态变化回调。供 ChatInputBar 等 UI 组件在「录音真的启动时」点亮按钮动画，
+ * 避免 iOS 上 start()/onStart() 延迟导致 UI 与原生层录音状态不同步。
+ * @param {(state: 'idle'|'starting'|'recording'|'stopping') => void} cb
+ */
+export function setStateChangeCallback(cb) {
+  _onStateChange = typeof cb === 'function' ? cb : null
+}
+
+function _setState(next) {
+  if (_state === next) return
+  _state = next
+  try { if (_onStateChange) _onStateChange(next) } catch (_) {}
+}
 
 /** 获取或创建 RecorderManager（单例）。 */
 function _getManager() {
@@ -30,9 +46,7 @@ function _getManager() {
   _manager = uni.getRecorderManager()
 
   _manager.onStart(function () {
-    if (_state === 'starting') {
-      _state = 'recording'
-    }
+    _setState('recording')
   })
 
   _manager.onError(function (res) {
@@ -46,7 +60,7 @@ function _getManager() {
     if (msg.indexOf('recorder not start') !== -1 ||
         msg.indexOf('is recording or paused') !== -1 ||
         msg.indexOf('stop record fail') !== -1) {
-      _state = 'idle'
+      _setState('idle')
       uni.hideToast()
       return
     }
@@ -54,14 +68,14 @@ function _getManager() {
     // "audio is recording, don't start again" 表示上一次录音的原生层 stop
     // 尚未完成。主动停止残留录音机，提示用户重试。
     if (msg.indexOf("don't start") !== -1 || msg.indexOf('already') !== -1) {
-      _state = 'idle'
+      _setState('idle')
       uni.hideToast()
       uni.showToast({ title: '录音繁忙，请稍后重试', icon: 'none', duration: 2000 })
       try { _manager.stop() } catch (_) { /* ignore */ }
       return
     }
 
-    _state = 'idle'
+    _setState('idle')
     uni.hideToast()
     // 权限错误：引导用户去设置页打开
     if (msg.indexOf('auth') !== -1 || msg.indexOf('permission') !== -1 || msg.indexOf('deny') !== -1) {
@@ -142,17 +156,17 @@ export async function startRecording() {
   // starting / recording 态：已经在录音或正在启动，拒绝重复 start
   if (_state !== 'idle') return
 
-  _state = 'starting'
+  _setState('starting')
 
   var ok = await _checkPermission()
-  if (!ok) { _state = 'idle'; return }
+  if (!ok) { _setState('idle'); return }
 
   // 快速点击（touchend 早于权限返回）时，handleVoiceEnd 可能已把状态置回 idle，
   // 此时不应继续启动录音（启动后没有对应的 stop → 录音卡死）。
-  if (_state !== 'starting') { _state = 'idle'; return }
+  if (_state !== 'starting') { _setState('idle'); return }
 
   var manager = _getManager()
-  if (!manager) { _state = 'idle'; return }
+  if (!manager) { _setState('idle'); return }
 
   uni.showToast({ title: '正在聆听…', icon: 'none', duration: 60000 })
 
@@ -170,7 +184,7 @@ export async function startRecording() {
     })
   } catch (e) {
     uni.hideToast()
-    _state = 'idle'
+    _setState('idle')
     throw e
   }
 }
@@ -184,7 +198,7 @@ export function stopAndRecognize() {
     // iOS 上此时调用 manager.stop() 会报 "recorder not start"。
     // 取消本次录音，直接返回 null。
     if (_state === 'starting') {
-      _state = 'idle'
+      _setState('idle')
       uni.hideToast()
       resolve(null)
       return
@@ -196,12 +210,12 @@ export function stopAndRecognize() {
       return
     }
 
-    _state = 'stopping'
+    _setState('stopping')
     var manager = _getManager()
-    if (!manager) { _state = 'idle'; uni.hideToast(); resolve(null); return }
+    if (!manager) { _setState('idle'); uni.hideToast(); resolve(null); return }
 
     manager.onStop(function (res) {
-      _state = 'idle'
+      _setState('idle')
       uni.hideToast()
       var tempFilePath = res && res.tempFilePath
       if (!tempFilePath) {

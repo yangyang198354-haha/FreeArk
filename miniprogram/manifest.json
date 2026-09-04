@@ -2,8 +2,8 @@
   "name": "智能方舟座舱",
   "appid": "__UNI__FREEARK",
   "description": "FreeArk 三恒系统移动端",
-  "versionName": "1.0.3",
-  "versionCode": "10003",
+  "versionName": "1.0.4",
+  "versionCode": "10004",
   "transformPx": false,
   "mp-weixin": {
     "appid": "wxc68346b8e889def4",
@@ -53,7 +53,7 @@
       "Record": {},
       "Scanner": {}
     },
-    "versionName": "1.0.3"
+    "versionName": "1.0.4"
   },
   "h5": {
     "router": {

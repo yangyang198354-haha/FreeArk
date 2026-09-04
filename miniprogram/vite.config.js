@@ -39,11 +39,16 @@ function copyStaticPlugin() {
   }
 }
 
-export default defineConfig({
-  plugins: [uni(), copyStaticPlugin()],
-  // 统一输出到 dist/build/mp-weixin（dev 和 build 都用这个目录，
-  // 微信开发者工具直接打开此目录即可）
-  build: {
-    outDir: 'dist/build/mp-weixin',
-  },
+export default defineConfig(({ mode }) => {
+  // 多端输出目录：按 -p {platform} 传入到 Vite 的 platform 由 vite-plugin-uni
+  // 处理，但我们需要显式区分 h5 / mp-weixin 的产物根目录。
+  // vite-plugin-uni 在构建时会设置 process.env.UNI_PLATFORM，以此判断。
+  const platform = process.env.UNI_PLATFORM || (process.argv.find(a => a.startsWith('-p:') || a === '-p') && process.env.UNI_INPUT_DIR ? null : 'mp-weixin') || 'mp-weixin'
+  const outDir = platform === 'h5' ? 'dist/build/h5' : 'dist/build/mp-weixin'
+  return {
+    plugins: [uni(), copyStaticPlugin()],
+    build: {
+      outDir,
+    },
+  }
 })

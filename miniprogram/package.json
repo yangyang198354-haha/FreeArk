@@ -1,9 +1,11 @@
 {
   "name": "freeark-miniprogram",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "scripts": {
     "dev:mp-weixin": "cross-env UNI_INPUT_DIR=. uni -p mp-weixin",
     "build:mp-weixin": "cross-env UNI_INPUT_DIR=. uni build -p mp-weixin",
+    "dev:h5": "cross-env UNI_INPUT_DIR=. uni -p h5",
+    "build:h5": "cross-env UNI_INPUT_DIR=. uni build -p h5",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -13,12 +15,13 @@
     "marked": "^4.3.0",
     "mqtt": "^4.3.8",
     "pinia": "^2.1.7",
-    "vue": "^3.4.21"
+    "vue": "3.5.38"
   },
   "devDependencies": {
     "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5010320260611001",
     "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010320260611001",
     "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/compiler-sfc": "3.5.38",
     "@vue/test-utils": "^2.4.11",
     "cross-env": "^10.1.0",
     "events": "^3.3.0",
@@ -26,5 +29,17 @@
     "util": "^0.12.5",
     "vite": "^5.2.8",
     "vitest": "^2.1.9"
+  },
+  "overrides": {
+    "@vue/compiler-core": "3.5.38",
+    "@vue/compiler-dom": "3.5.38",
+    "@vue/compiler-sfc": "3.5.38",
+    "@vue/compiler-ssr": "3.5.38",
+    "@vue/reactivity": "3.5.38",
+    "@vue/runtime-core": "3.5.38",
+    "@vue/runtime-dom": "3.5.38",
+    "@vue/server-renderer": "3.5.38",
+    "@vue/shared": "3.5.38",
+    "vue": "3.5.38"
   }
 }

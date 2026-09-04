@@ -9,6 +9,7 @@
 
 | 版本号 | 发布日期 | 发布说明链接 | APK 下载链接 |
 | :----: | :------: | :----------: | :----------: |
+| v1.0.4 | 2026-09-04 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1Fz_-t-xIgCtH73EYpxcJ1g?pwd=eib2) 提取码: eib2 |
 | v1.0.3 | 2026-08-29 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1AwnJghE08O0nT5DIt03Q_Q?pwd=8qsj) 提取码: 8qsj |
 | v1.0.2 | 2026-08-22 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1pkFqpoUGQUNjlSmKKQmgeQ?pwd=awzd) 提取码: awzd |
 | v1.0.1 | 2026-08-03 | 见下方详情 | [百度网盘](https://pan.baidu.com/s/1UhZTQ0vrf3rB5bgmj3Iw1A?pwd=7xn9) 提取码: 7xn9 |
@@ -19,8 +20,79 @@
 ## 版本详情
 
 <!-- ==================================================================
-     新版本发布时：在此上方插入新版本详情块（复制下方模板填写即可）
+     v1.0.4
      ================================================================== -->
+
+### v1.0.4 — 2026-09-04
+
+**发布类型**：内测
+
+**版本号**：versionName `1.0.4` / versionCode `10004`
+
+> versionCode 延续 `major*10000 + minor*100 + patch` 规则（1.0.4 → 10004），
+> 与微信小程序端的 versionCode `103/104` 永不撞号。
+> ⚠️ 注意：`project.miniapp.json` 中的 `version/versionCode` 在 v1.0.2 后停止更新，
+> 本次直接跳升到 `1.0.4 / 10004` 与 manifest 同步；若你有未登记的 v1.0.3 上传记录，
+> 下次发布时请将 versionCode 继续 +1 到 10005，避免 Android 视为降级安装。
+
+**APK 下载链接**：
+- [百度网盘](https://pan.baidu.com/s/1Fz_-t-xIgCtH73EYpxcJ1g?pwd=eib2) 提取码: eib2
+- APK 文件名：智能方舟座舱-测试版-1.0.4.apk
+
+**关键变更**：
+- **后端 LangGraph 多智能体 P0 作用域越权修复 + P1/P2 加固（生产已上线）**：新增 `SCOPED_QUERY_TOOLS` / `OWNER_SELF_TOOLS` / `FILTERED_OWNER_WORKORDER_TOOLS` 工具分类；`get_write_status` 等读工具注入 `_bound_specific_parts` 过滤，普通业主仅能看到自己房号的写记录；`set_persona` 等 Owner 自写工具启用 `_user_id` 强校验，并拒绝 admin/operator 账号误用；`_gate` 二次校验 `verify_owner_self_scope` 以真实用户主键注入写入链路。
+- **后端 LangGraph P1 安全修复**：persona 字段写入启用注入防护（控制字符/换行符剔除 + 注入模式黑名单 + `PersonaInjectionError`），阻止持久化的恶意身份/称呼/语气每轮注入 SystemMessage；`_INTERNAL_CONTEXT_TOOLS` 改为从 scope_enforcer 导出 `UNDERSCORE_PARAM_TOOLS` 单一真源，避免新增需下划线参数工具时漏改造；`set_persona.save()` fallback 收窄为仅 `FieldError`，不再把 DB 断连/约束冲突吞为二次异常；`_poll_write_status_until_final` 新增 `final_status="not_found"` 语义（越权 0 条 vs 真 pending 解耦），不再误导用户以为"自家写操作还在等待 PLC 回执"。
+- **后端 P2 代码质量与可观测性**：轮询超时 `POLL_TIMEOUT_SECONDS` 从硬编码 3s 提为模块常量；非标写记录信封 fallback 分支补 `logger.warning`；`_get_user_by_id` 对 `OperationalError/InterfaceError` 重新抛出，避免"DB 断连"被误译为"账号不存在"；E2E 测试 `FREEARK_POC_MOCK=1` 从模块级迁移到 `test_settings.py`，避免先 import 污染其他测试。
+- **后端新模块**：`adjutant_recommendations` 副官推荐模块（功能开关/灰度/隐私说明），通过 `views_miniapp.py` + `urls_miniapp.py` 提供端点；新增 persona 偏好查询与设置端点；配套测试文件 `test_adjutant_recommendations.py` / `test_langgraph_phase_g.py` / `test_persona_preference.py`。
+- **清理旧原型**：移除 `agents/langgraph-poc/` 整套旧原型（orchestrator / adapter / bench / fa_tools 等 20 个文件），删除各 `agents/<name>/SYSTEM_PROMPT.md` 旧版非 LangGraph 提示词，当前真源为同名 `*.langgraph.md`。
+- **微信小程序主分支（main 8 commits 同步）**：
+  - 副官推荐功能页：功能开关、图片懒加载与压缩、隐私安全文案（用户可关闭/重置）。
+  - iOS 适配：tabBar 隐形配色 + onShow 双次 `hideTabBar` 兜底，消灭 iOS 启动 1~2 帧底栏闪烁；ArkTabBar 改为 `position:fixed bottom:0 z-index:999`，避免内容过长把底栏挤出视口；输入框底部占位精确等于 `100rpx + safe-area`。
+  - iOS 录音：`voice-input.js` 不再无条件 `manager.stop()` 清理残留，状态机 idle/starting/recording/stopping 4 态防止重复 start，消除 iOS "recorder not start" 报错。
+  - iOS 深色模式：bind 页自定义导航栏纯深色背景 + 左返回箭头 + 居中标题。
+  - 新版 chat 页：ChatInputBar 整合文本输入 + 语音按钮，录音状态通过 `setStateChangeCallback` 实时点亮 UI（与 4.1 构建修复配套）。
+  - 二维码解析：识别 `\d+:(.+)` 版本前缀自动剥离，兼容新旧二维码。
+  - 环状 gauge 组件：uCharts custom 渐变在 iOS Safari 真机右半弧杂色修复。
+- **多端 apk-test 合并（保留 Android 打包配置）**：main 合并到 apk-test 时，完整保留 `manifest.json app-plus` 段（包名 `com.freeark.cockpit`、权限、Camera+Record+Scanner 模块）、6 张 `freeark_icon_*` 多尺寸图标、`static/android/network_security_config.xml`（内网 HTTP 明文放行）、`project.miniapp.json` 的 `mini-android/mini-ios` 扩展 SDK 配置与 iOS 隐私描述。
+- **多端构建工程化补齐**：
+  - H5 端：新增 `miniprogram/index.html` 壳；`vite.config.js` 改为按 `UNI_PLATFORM` 分流输出目录（mp-weixin → `dist/build/mp-weixin`，h5 → `dist/build/h5`）；`package.json` 新增 `dev:h5` / `build:h5` 脚本；Vue lockstep 从 3.4.21 升到 3.5.38 并在 `overrides` 钉死 11 个子包，解决 `normalizeCssVarValue` 导出缺失导致的 H5 构建中断。
+  - 微信小程序端：`utils/voice-input.js` 新增 `setStateChangeCallback` export（配合新版 ChatInputBar 的 UI 状态同步）、`_setState` 包装统一 fire UI 回调，13 处直接赋值迁移到统一入口。
+- **版本号统一（单一真源）**：`manifest.json`（versionName × 2 / versionCode）、`app-plus.versionName`、`package.json` version、`project.miniapp.json` 的 version 与 versionCode 全部同步为 `1.0.4 / 10004`。
+- **质量门**：Vitest 297/297（19 files，1.64s）；后端 P0 作用域 E2E 36/36；后端全量回归 2242 OK（14 skips 与 v1.0.3 相同）；微信小程序构建成功（150 files / 1.9 MB）；H5 构建成功（3 files / 62.7 KB）；后端生产健康检查 HTTP 200，systemd 服务 running。
+
+**修复的问题**：
+- **P0 越权**：普通业主可通过 `get_write_status` / `get_persona` 等绕过作用域查看他人写记录或调用未授权工具，修复后 ScopeEnforcer 注入 bound 过滤器，`final_status` 与 gate 双层防线均生效。
+- **P1 持久型 prompt injection**：`set_persona` 之前仅 `strip()[:MAX]`，恶意身份字符串可写入数据库并在后续每轮 SystemMessage 中注入，修复后 `sanitize_persona_value` + 黑名单前置拒绝。
+- **iOS 录音「点了没反应」假象**：`onStart` 回调晚于权限检查，UI `isRecording` 与内部状态不一致；修复后 4 态状态机 + `setStateChangeCallback` 保证 UI 点亮只在录音真正启动时发生，starting→stopping→idle 的路径覆盖快速点击场景。
+- **H5 构建中断 `normalizeCssVarValue is not exported`**：DCloud alpha 编译器将 runtime-core 升到 3.5.38 但我们 package 锁了 vue 3.4，导致两套 Vue lockstep 失配；修复后顶层 vue 与 overrides 全 11 子包钉到 3.5.38。
+- **H5 构建缺入口「Could not resolve entry module index.html」**：新增 `miniprogram/index.html` 作为 H5 壳。
+- **新版 ChatInputBar 导入失败 `setStateChangeCallback is not a function`**：voice-input 缺少该 export，补 export + 13 处赋值迁移为 `_setState`。
+- `project.miniapp.json` 的 version/versionCode 停留在 v1.0.2，与 manifest 脱节，修复后跳升对齐到 1.0.4/10004。
+
+**APK 专项（本次 main→apk-test rebase 与构建链路的取舍）**：
+- **main→apk-test 合并策略**：冲突时 `manifest.json app-plus` 段、`project.miniapp.json mini-android/mini-ios` 段、`static/android/*`、`freeark_icon_*` 6 张图标、`package.json app-plus*` 相关字段**一律以 apk-test 为准**，不被 main 删除覆盖；微信小程序源码 / Vue 页面 / JS 工具 / 后端代码**以 main 为准**（main 是主分支，包含副官推荐、iOS 适配、persona 设置、chat 新版等业务改动）。
+- **版本号对齐策略**：main 合并前 manifest v1.0.3/10003、apk-test project.miniapp v1.0.2/10002，本次统一为 1.0.4/10004，两端同步。
+- **新增构建脚本保留 apk-test 后端健康检查**：20s WebSocket 心跳、`wx.getAppAuthorizeSetting` 多端判断、Media/Camera/Record/Scanner 扩展 SDK（mini-android 声明为 `media/scanner=true`）、iOS 3 条隐私描述均保留。
+- **Android APK 阻塞项（非代码问题，纯工具链）**：本地缺少 `@dcloudio/uni-app-plus` 适配包、HBuilderX CLI (hbx)、Gradle、Android SDK，导致无法本地生成 APK；当前推荐方案 **HBuilderX 云打包（路径 A）** 已在 APK 下载链接条目写明，无需额外改任何代码——所有打包配置已完整声明。
+
+**已知问题 / 注意事项**：
+- Android APK 构建需 HBuilderX（路径 A 云打包最快，20 分钟内完成；路径 B 离线 SDK+Android Studio 约 1 人日）。
+- 14 skips 与 v1.0.3 相同：2 个 MySQL 并发测试（SQLite 文件锁无法模拟，需真实 MySQL CI）、12 个 Linux shell 脚本测试（本机 Windows，需 bash+sha256sum，部署树莓派环境下正常运行）。
+- mp-weixin `project.miniapp.json` 本次从 10002 跳到 10004（跳过了 10003），若你在 2026-08-29 到 2026-09-04 之间曾以微信原生打包链路单独上传过 v1.0.3，请将 versionCode 再 +1 到 10005 后再发布，避免 Android 判定为降级。
+- 本次后端部署（P0/P1/P2）无 DB migration，Rollback 仅需 git revert 到 v1.0.3 并 `systemctl restart freeark-backend`，5 分钟可完成。
+- H5 路由为 history 模式，Nginx 部署需配 `try_files $uri $uri/ /index.html;`，否则刷新深层路由会 404。
+- 小程序 uploadFile / request 合法域需在微信公众平台后台按环境配置，否则真机无法访问后端。
+
+**本次发布包含的 Commit**：
+- `a25e483` (main HEAD 汇入) — 副官推荐模块、persona 端点、main 微信小程序 8 commits、清理 langgraph-poc 旧原型、旧提示词
+- `f936c83` (main HEAD 汇入) — SDLC P1/P2 代码 review 修复 + 生产部署 commit
+- `8096c72` (main HEAD 汇入) — fix(P0-scope): LangGraph 作用域越权修复 + write-status/persona 工具 + E2E 测试
+- `a10b09b` (apk-test merge commit) — Merge branch 'main' into apk-test（保留 apk-test Android 打包配置）
+- 本地 apk-test 构建修复 commit（待你确认执行 commit & push 后会补入哈希）：
+  - fix(mp-weixin build): voice-input 补 setStateChangeCallback export 与 _setState
+  - fix(h5 build): 新增 index.html 壳 + vite 多端 outDir + build:h5 script + Vue 3.5.38 lockstep + overrides 钉死
+  - chore(version): 1.0.3→1.0.4, versionCode 10003→10004（manifest × 2 处 / package.json / project.miniapp.json）
+  - docs: 新增 RELEASE_NOTES_v1.0.4.md + CHANGELOG.md + 本 ReleaseNotes v1.0.4 段
 
 <!-- ==================================================================
      v1.0.3
