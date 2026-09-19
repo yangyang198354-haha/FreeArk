@@ -105,7 +105,12 @@ function toggleReasoning() {
 const renderedHtml = computed(() => {
   if (!props.content) return ''
   try {
-    const mdHtml = renderMarkdown(props.content)
+    const mdHtml = props.theme === 'cyberpunk'
+      ? renderMarkdown(props.content, {
+          tableBorderColor: 'rgba(56,230,224,0.3)',
+          tableHeaderBg: 'rgba(47,244,224,0.08)',
+        })
+      : renderMarkdown(props.content)
     if (props.theme === 'cyberpunk') {
       // Inline styles are the ONLY reliable way to style inner rich-text nodes
       // in WeChat mini programs (scoped CSS + global CSS both fail to penetrate).

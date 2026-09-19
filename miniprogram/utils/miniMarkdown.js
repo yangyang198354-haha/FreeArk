@@ -66,8 +66,12 @@ function parseAligns(sepLine) {
   })
 }
 
-export function renderMarkdown(src) {
+export function renderMarkdown(src, opts = {}) {
   if (!src) return ''
+  // <rich-text> 不继承页面 CSS，表格边框必须内联注入。配色由调用方按主题传入，
+  // 默认走浅色（工单/会话浅底）。
+  const borderColor = opts.tableBorderColor || '#d0d7de'
+  const headerBg = opts.tableHeaderBg || '#f6f8fa'
   // 用原始文本做块级判定（'>' '#' 等未转义），转义延后到 inline()/代码块内进行。
   const lines = String(src).replace(/\r\n/g, '\n').split('\n')
   let html = ''
@@ -109,16 +113,16 @@ export function renderMarkdown(src) {
       const headers = tr[1].split('|').map(c => c.trim())
       const aligns = parseAligns(lines[i + 1])
       i += 2 // 跳过表头和分隔行
-      html += '<table><thead><tr>'
+      html += `<table style="border-collapse:collapse;width:100%;margin:8px 0"><thead><tr>`
       headers.forEach((h, idx) => {
-        html += `<th style="text-align:${aligns[idx] || 'left'}">${inline(h)}</th>`
+        html += `<th style="text-align:${aligns[idx] || 'left'};border:1px solid ${borderColor};background:${headerBg};padding:6px 10px;font-weight:bold">${inline(h)}</th>`
       })
       html += '</tr></thead><tbody>'
       while (i < lines.length && RE_TABLE_ROW.test(lines[i])) {
         const cells = lines[i].replace(/^\||\|\s*$/g, '').split('|').map(c => inline(c.trim()))
         html += '<tr>'
         cells.forEach((c, idx) => {
-          html += `<td style="text-align:${aligns[idx] || 'left'}">${c}</td>`
+          html += `<td style="text-align:${aligns[idx] || 'left'};border:1px solid ${borderColor};padding:6px 10px">${c}</td>`
         })
         html += '</tr>'
         i++
