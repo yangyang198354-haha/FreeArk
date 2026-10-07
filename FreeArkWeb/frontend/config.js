@@ -12,7 +12,7 @@ window.API_CONFIG = {
   localUrl: 'http://localhost:8000',
   
   // 生产环境API地址
-  productionUrl: 'http://et116374mm892.vicp.fun',
+  productionUrl: 'https://ai-freeark.xin',
   
   // 获取当前配置的API基础URL
   get baseUrl() {

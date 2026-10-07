@@ -37,7 +37,7 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ```
 # 生产环境API地址
-VITE_API_BASE_URL=http://et116374mm892.vicp.fun
+VITE_API_BASE_URL=https://ai-freeark.xin
 ```
 
 ## 2. 生效机制

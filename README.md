@@ -282,7 +282,7 @@ Ran **2254 tests in 75.142s** — **OK (skipped=14)**。14 skips 全部是环境
 ## 生产部署
 
 - **服务器**：树莓派 5，内网 `192.168.31.51`，用户 `yangyang`
-- **外网**：阿里云 VPS `47.109.197.217` + frp 隧道（web → `:18080`，SSH → `:57279`）；旧花生壳通道 `et116374mm892.vicp.fun` 待备案后退役
+- **外网**：`https://ai-freeark.xin`（VPS nginx 443 终止 TLS）→ 阿里云 VPS `47.109.197.217` + frp 隧道（web → `:18080`，SSH → `:57279`）。旧花生壳通道 `et116374mm892.vicp.fun` 已于 2026-10 彻底退役（域名 NXDOMAIN），勿再引用
 - **部署方式**：`git pull` + `systemctl restart`（**禁止 pscp 逐文件上传**）
 - **分支策略**：
   - `main`：后端 + Web 前端 + 小程序源码主干，生产后端从 main 拉取

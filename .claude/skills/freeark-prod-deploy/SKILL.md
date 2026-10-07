@@ -8,7 +8,7 @@ description: FreeArk 生产环境部署参考手册。当需要部署 FreeArk �
 > **信息快照：2026-06-26（v1.7.0 退役 OpenClaw + v1.8.0 小程序业主端上线；聊天后端 = 进程内 LangGraph 直连 DeepSeek）。** 带 ⚠️ 的项为易变 / 用前需实测复核。
 > ⚠️ **OpenClaw 已于 2026-06-26 从生产完全卸载**（停服+禁用+删 user unit+`npm uninstall -g openclaw`+清 `~/.openclaw`/token/`/tmp/openclaw-1000`+删 nginx control UI+删 `.env` 的 `OPENCLAW_*`）。聊天唯一路径 = `api/chat_backend.get_chat_adapter()` → `LangGraphAdapter`（进程内编排，直连 DeepSeek v4-flash）。本文凡涉 OpenClaw 的段落仅作历史存档。
 > ⚠️ **perf-P1a（Redis Channel Layer + `--workers 2`）已回滚**：channels_redis 4.3.0 与 redis-py 8.0.0 不兼容（WS receive 触发 RESP3 读取超时），已退回 `InMemoryChannelLayer` + `--workers 1`。Redis 服务保留，**当前仅 perf-P2 缓存（db=1）在用，Channel Layer（db=0）已停用**。
-> ⚠️ **外网访问改造中（2026-06-26 起）**：新增 **阿里云 VPS `47.109.197.217` + frp 隧道**作对外通道（web→VPS `:18080`、SSH→VPS `:57279`），比花生壳稳（不依赖会抽风的 vicp.fun 公司 DNS）。两条通道并存；Phase B（待 `ai-freeark.xin` ICP 备案）将切 443/HTTPS 并退役花生壳。详见 §1、§10。
+> ⚠️ **外网通道：`https://ai-freeark.xin`（唯一）**。VPS nginx 443（Let's Encrypt）终止 TLS → frp 隧道 → Pi nginx:8080（web→VPS `:18080`、SSH→VPS `:57279`）。**旧花生壳通道 `et116374mm892.vicp.fun` 已于 2026-10 彻底退役**：域名已 NXDOMAIN（8.8.8.8 亦解析不到）、生产 `.env`/nginx/仓库引用均已清除，**不要再引用该域名或 `HostKeyAlias`**。详见 §1、§10。
 > **本文件不含任何密码。** SSH 用密钥认证（见 §10）；数据库凭据在 `settings.py`、用 `dbshell` 间接使用。
 > 本手册给"怎么做"，但每次部署仍须先实测"当前是什么样"（生产工作树状态、服务状态、本次拉取涉及的文件）。
 
@@ -24,9 +24,9 @@ description: FreeArk 生产环境部署参考手册。当需要部署 FreeArk �
 | 生产服务器 | 树莓派 Raspberry Pi 5（aarch64），hostname `raspberrypi`，4GB RAM |
 | OS | Debian 13 (trixie) |
 | 内网地址 | `192.168.31.51`（wlan0；eth0 上还有多个内部 VLAN IP） |
-| 外网访问（推荐）| **阿里云 VPS `47.109.197.217` + frp 隧道**（2026-06-26 起）：web→VPS `:18080`、SSH→VPS `:57279`。目标域名 `ai-freeark.xin`（待 ICP 备案，Phase B 切 443/HTTPS）|
-| 外网访问（旧）| 花生壳动态域名 `et116374mm892.vicp.fun`（中继 `43.228.71.225`）；Phase B 备案后退役 |
-| SSH 端口 | 外网 `57279`（两条通道同此端口 → 内网 22）|
+| 外网访问 | **`https://ai-freeark.xin`**（VPS nginx 443 终止 TLS）→ 阿里云 VPS `47.109.197.217` + frp 隧道：web→VPS `:18080`、SSH→VPS `:57279` |
+| 外网访问（已退役）| ⛔ 花生壳 `et116374mm892.vicp.fun`（2026-10 彻底退役，域名 NXDOMAIN，勿引用）|
+| SSH 端口 | 外网 `57279`（VPS → 内网 22）|
 | SSH 用户 | `yangyang` |
 | SSH 认证 | SSH 密钥（见 §10）。**本文件不存密码。** |
 | sudo | 免密（NOPASSWD）|
@@ -38,15 +38,13 @@ description: FreeArk 生产环境部署参考手册。当需要部署 FreeArk �
 | 生产数据库 | MySQL 9.4.0 @ `192.168.31.98:3306`，库名 `freeark` |
 | 聊天 AI | **进程内 LangGraph**（`api/langgraph_chat/`，无独立服务/端口），直连 DeepSeek v4-flash（`.env` 的 `DEEPSEEK_API_KEY`）。v1.7.0 起取代 OpenClaw |
 
-**连接方式（SSH 密钥已配置，见 §10）。两条通道并存，优先用 VPS（更稳，不依赖会抽风的 vicp.fun 公司 DNS）：**
-- ✅ **VPS+frp 隧道（推荐，2026-06-26 起）**：`ssh -p 57279 yangyang@47.109.197.217`
+**连接方式（SSH 密钥已配置，见 §10）。唯一通道 = VPS + frp 隧道：**
+- ✅ **VPS+frp 隧道**：`ssh -p 57279 yangyang@47.109.197.217`
   - 路径：开发机 → 阿里云 VPS `47.109.197.217:57279` → frp 隧道 → 树莓派 sshd:22。
-  - 与花生壳那条的 known_hosts 指纹冲突时加 `-o HostKeyAlias=et116374mm892.vicp.fun`（同一台 Pi，复用 key）。
-- **花生壳（旧，仍可用，Phase B 退役）**：`ssh -p 57279 yangyang@et116374mm892.vicp.fun`
-  - ⚠️ 公司 DNS 偶发解析不了 vicp.fun：用 `nslookup et116374mm892.vicp.fun 8.8.8.8` 取中继 IP（`43.228.71.225`）+ `-o HostKeyAlias=et116374mm892.vicp.fun` 直连。
-- plink（PuTTY）：把上面的 host 套进 `plink -ssh -P 57279 yangyang@<host> "<远程命令>"`。
+  - 不依赖会抽风的公司 DNS（vicp.fun 时代的老问题已随花生壳退役消失）。
+- plink（PuTTY）：`plink -ssh -P 57279 yangyang@47.109.197.217 "<远程命令>"`。
 - ⚠️ 在 Claude Code 里调用 plink/ssh 请用 **Bash 工具**，不要用 PowerShell（原因见 §9）。
-- **隧道不通时排查**：连 VPS 自身用 `ssh root@47.109.197.217`（开发机公钥已装），看 `systemctl status frps`；Pi 上看 `systemctl status frpc`（检查 frpc 需先经花生壳通道连入）。frp 0.61.1 装在 `/usr/local/frp/`，配置 `*.toml`（**token 不在本文件**）。
+- **隧道不通时排查**：连 VPS 自身用 `ssh root@47.109.197.217`（开发机公钥已装），看 `systemctl status frps`；再经内网（或让现场人员）看 Pi 的 `systemctl status frpc` —— ⚠️ **花生壳备用通道已不存在**，frpc 挂了就无法远程连入 Pi，需现场/内网恢复。frp 0.61.1 装在 `/usr/local/frp/`，配置 `*.toml`（**token 不在本文件**）。
 
 ---
 
@@ -140,7 +138,7 @@ systemctl list-units 'freeark*' --no-pager     # 全部 freeark 服务一览
 ```
 
 **关键文件**：
-- nginx 站点配置：`/etc/nginx/sites-enabled/freeark`（监听 `:8080`，server_name `et116374mm892.vicp.fun 192.168.31.51`）
+- nginx 站点配置：`/etc/nginx/sites-enabled/freeark`（监听 `:8080`，server_name `ai-freeark.xin 192.168.31.51`）
 - Nginx `/ws/` 块要求 `proxy_http_version 1.1` + `Upgrade $http_upgrade` + `Connection "upgrade"` + `proxy_read_timeout 600s`（聊天可能很久）
 - Django ASGI 入口：`freearkweb.asgi:application`（ProtocolTypeRouter；`http` → Django，`websocket` → AllowedHostsOriginValidator + URLRouter）
 - Uvicorn 启动参数：`--host 0.0.0.0 --port 8000 --workers 1 --app-dir /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb`
@@ -157,8 +155,9 @@ systemctl list-units 'freeark*' --no-pager     # 全部 freeark 服务一览
 `.env` 必含字段（其他略）：
 ```
 DEBUG=False
-ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,192.168.31.51,192.168.31.52,et116374mm892.vicp.fun
-# ↑ 必须含 192.168.31.51（Pi 自身 IP）和外网域名；否则 AllowedHostsOriginValidator 会 403 拒绝 WS Origin
+ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,192.168.31.51,192.168.31.52,47.109.197.217,ai-freeark.xin,www.ai-freeark.xin
+# ↑ 必须含 192.168.31.51（Pi 自身 IP）、VPS IP 和外网域名；否则 AllowedHostsOriginValidator 会 403 拒绝 WS Origin
+# ⚠️ 小程序 WS 的 Origin 是 https://servicewechat.com（与 Host 不同）；若小程序 WS 报「连接已断开」且服务端日志无任何 WS 请求，先查该域名是否在白名单
 DEEPSEEK_API_KEY=<DeepSeek API key，LangGraph 直连 LLM 用，绝不入仓>
 # 可选（v1.8.0 微信一键登录用；缺失时账号密码注册/绑定/隔离仍可用，仅微信登录返回 503）：
 # WECHAT_MINIAPP_APPID=<微信小程序 AppID>
@@ -314,10 +313,8 @@ nginx 直接服务 `dist/` 静态文件，构建完成即生效；如需保险�
 
 ## 10. SSH 密钥认证设置
 
-> ✅ **当前状态（2026-05-22；2026-06-26 增 VPS 通道）**：开发机 `~/.ssh/id_ed25519` 的公钥已装到生产树莓派
-> `~/.ssh/authorized_keys`，免密登录可用。两条通道（同一把密钥、同一台 Pi）：
-> - 推荐 `ssh -p 57279 yangyang@47.109.197.217`（VPS+frp 隧道）
-> - 旧 `ssh -p 57279 yangyang@et116374mm892.vicp.fun`（花生壳）
+> ✅ **当前状态（2026-05-22；2026-06-26 增 VPS 通道；2026-10 花生壳退役）**：开发机 `~/.ssh/id_ed25519` 的公钥已装到生产树莓派
+> `~/.ssh/authorized_keys`，免密登录可用。唯一通道：`ssh -p 57279 yangyang@47.109.197.217`（VPS+frp 隧道，同一把密钥、同一台 Pi）。
 >
 > 同一把公钥也已装到 **VPS 的 root**（`ssh root@47.109.197.217`，用于管理 frps/nginx）。OpenSSH 自动用默认密钥，无需 `-i`。下面的步骤仅供换新开发机 / 重装密钥时参考。
 
@@ -328,11 +325,11 @@ nginx 直接服务 `dist/` 静态文件，构建完成即生效；如需保险�
 ssh-keygen -t ed25519 -C "freeark-deploy"
 
 # 2. 安装公钥到生产（此步需输入一次密码，之后即免密）
-ssh -p 57279 yangyang@et116374mm892.vicp.fun "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys" < $env:USERPROFILE\.ssh\id_ed25519.pub
+ssh -p 57279 yangyang@47.109.197.217 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys" < $env:USERPROFILE\.ssh\id_ed25519.pub
 #  （Bash 环境用： ... < ~/.ssh/id_ed25519.pub ）
 
 # 3. 之后免密连接
-ssh -p 57279 yangyang@et116374mm892.vicp.fun
+ssh -p 57279 yangyang@47.109.197.217
 ```
 
 - plink 使用密钥：用 `puttygen` 把 `id_ed25519` 转成 `.ppk`，`plink -i <key.ppk>`；或用 pageant 加载密钥。

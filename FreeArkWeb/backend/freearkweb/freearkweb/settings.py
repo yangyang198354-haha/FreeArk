@@ -35,7 +35,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-i%ixus$z-threi-#e&(th
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'  # 默认关闭DEBUG模式
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.51,192.168.31.52,et116374mm892.vicp.fun').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.31.51,192.168.31.52,ai-freeark.xin,www.ai-freeark.xin').split(',')
 
 # 生产环境安全设置
 if not DEBUG:
@@ -239,7 +239,8 @@ CORS_ALLOWED_ORIGINS = [
     'http://192.168.31.52',
     'http://192.168.31.52:8000',
     'http://192.168.31.52:8080',
-    'http://et116374mm892.vicp.fun',  # 修正：mm892（原来少了一个m）
+    'https://ai-freeark.xin',      # 公网 HTTPS 域名（VPS nginx 终止 TLS → frp → Pi）
+    'https://www.ai-freeark.xin',
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -273,7 +274,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# CSRF信任源配置 - 允许本地环境、内网IP和花生壳域名
+# CSRF信任源配置 - 允许本地环境、内网IP和公网域名
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://localhost:8080',
@@ -283,7 +284,8 @@ CSRF_TRUSTED_ORIGINS = [
     'http://192.168.31.52',
     'http://192.168.31.52:8000',
     'http://192.168.31.52:8080',
-    'http://et116374mm892.vicp.fun',  # 修正拼写
+    'https://ai-freeark.xin',      # 公网 HTTPS 域名（VPS nginx 终止 TLS → frp → Pi）
+    'https://www.ai-freeark.xin',
 ]
 
 # 确保cookie在开发环境中正确设置
