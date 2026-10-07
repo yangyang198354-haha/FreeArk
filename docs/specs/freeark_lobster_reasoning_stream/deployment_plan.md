@@ -81,7 +81,7 @@ venv/bin/pip list | grep -E "channels|uvicorn|aiohttp"
 | `OPENCLAW_GATEWAY_TOKEN` | `grep -c OPENCLAW_GATEWAY_TOKEN .env` | 应返回 1（字段存在）；不打印值 |
 | `OPENCLAW_TIMEOUT` | `grep OPENCLAW_TIMEOUT .env` | 应为 60 |
 | `OPENCLAW_CONNECT_TIMEOUT` | `grep OPENCLAW_CONNECT_TIMEOUT .env` | 应为 10 |
-| `ALLOWED_HOSTS` | `grep ALLOWED_HOSTS .env` | 须含 `192.168.31.51` 和 `et116374mm892.vicp.fun` |
+| `ALLOWED_HOSTS` | `grep ALLOWED_HOSTS .env` | 须含 `192.168.31.51` 和 `ai-freeark.xin` |
 | `DEBUG` | `grep "^DEBUG=" .env` | 应为 `False` |
 
 **可选新增字段**（本次部署可追加，若不设则使用模型默认 reasoning_effort）：
@@ -180,7 +180,7 @@ ls -lh /home/yangyang/FreeArk_backup/ | tail -5
 
 ```bash
 # SSH 连接
-# 开发机 Bash 工具：ssh -p 57279 yangyang@et116374mm892.vicp.fun
+# 开发机 Bash 工具：ssh -p 57279 yangyang@47.109.197.217
 
 cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend
 

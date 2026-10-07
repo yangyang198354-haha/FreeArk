@@ -25,7 +25,7 @@ file_header:
 |----|------|
 | 部署版本 | v0.5.6 — 设备面板实时数据刷新 |
 | 基线版本 | v0.5.5（commit: 14229b5） |
-| 部署目标 | 生产树莓派 192.168.31.51（外网接入：et116374mm892.vicp.fun:57279） |
+| 部署目标 | 生产树莓派 192.168.31.51（外网接入：47.109.197.217:57279） |
 | 项目路径 | `/home/yangyang/Freeark/FreeArk` |
 | 部署方式 | plink SSH + git pull（禁止 pscp 逐文件上传） |
 | 受影响服务 | freeark-task-scheduler.service、freeark-mqtt-consumer.service、freeark-web.service |
@@ -141,8 +141,8 @@ git log origin/main --oneline -3
 # 方式 A：内网直连
 ssh yangyang@192.168.31.51
 
-# 方式 B：外网经动态域名
-plink -ssh yangyang@et116374mm892.vicp.fun -P 57279
+# 方式 B：外网经 VPS frp 隧道
+plink -ssh yangyang@47.109.197.217 -P 57279
 ```
 
 登录后确认：

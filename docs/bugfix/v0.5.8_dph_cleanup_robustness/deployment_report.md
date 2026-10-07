@@ -76,7 +76,7 @@ git push origin main
 ### Step 2: 生产服务器 — SSH 连接确认
 
 ```
-plink -ssh yangyang@et116374mm892.vicp.fun -P 57279
+plink -ssh yangyang@47.109.197.217 -P 57279
 → SSH_OK / yangyang / aarch64 (树莓派 ARM64)
 ```
 

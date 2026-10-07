@@ -418,7 +418,7 @@ freeark-skill/SKILL.md（1 个 tool）
 ```bash
 SSH="ssh -o BatchMode=yes -o UserKnownHostsFile=/c/fa-home/.ssh/known_hosts \
      -i /c/fa-home/.ssh/id_ed25519 -p 57279 -o ConnectTimeout=20 \
-     yangyang@et116374mm892.vicp.fun"
+     yangyang@47.109.197.217"
 
 # 步骤 1：确认 agents/ 目录已在 Pi 上 git pull 落地
 $SSH 'cd /home/yangyang/Freeark/FreeArk && git log -1 --oneline && ls agents/freeark-skill/'

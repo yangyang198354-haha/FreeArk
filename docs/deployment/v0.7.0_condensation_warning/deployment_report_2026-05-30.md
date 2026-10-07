@@ -11,7 +11,7 @@
 
 | # | 步骤 | 命令/对象 | 结果 |
 |---|---|---|---|
-| 1 | SSH 连通 | `ssh -o HostKeyAlias=et116374mm892.vicp.fun yangyang@115.236.153.170` | ✅ CONNECTED (raspberrypi) |
+| 1 | SSH 连通 | `ssh -o HostKeyAlias=<旧动态域名> yangyang@<旧隧道 IP>`（该通道已于 2026-10 退役） | ✅ CONNECTED (raspberrypi) |
 | 2 | 拉取范围核对 | `git diff --name-only a5a8c70 4765cf4` | ✅ 不含 `.env`/`package-lock.json`/`heartbeat_broker_config.json` |
 | 3 | 生产拉取 | `git pull origin main` | ✅ Fast-forward → 4765cf4（29 files, 6048 insertions） |
 | 4 | 迁移计划核对 | `migrate api 0029 --plan` | ✅ 仅 CreateModel + 1 约束 + 2 索引，**无任何 ALTER 既有表** |

@@ -7,7 +7,7 @@
 | commit | `a5a8c70 feat(fault-mgmt): v0.6.4 故障管理按"实际房间"5 类过滤 + 房间列 (BUG-FM-009/010/011)` |
 | 部署日期 | 2026-05-29 |
 | 部署人 | Claude Code (devops-engineer via PM Orchestrator) |
-| 目标 | 生产 — 树莓派 `192.168.31.51` / `et116374mm892.vicp.fun:57279` |
+| 目标 | 生产 — 树莓派 `192.168.31.51` / `47.109.197.217:57279` |
 | 方式 | Bash SSH + `git pull` + `manage.py migrate` + systemd restart + `npm run build` |
 | 授权 | PRODUCTION_DEPLOY_CONFIRM=true（用户 2026-05-29 本轮会话明确授权） |
 
@@ -53,7 +53,7 @@
 
 ### Step 1 — 部署前置检查
 
-> **通道说明**：本次部署 frp/花生壳隧道（`et116374mm892.vicp.fun:57279`）一度中断（banner timeout），用户重启生产树莓派后改走**内网直连** `ssh -p 22 yangyang@192.168.31.51`（开发机当时在 `192.168.31.69`，同 31 网段）。下方命令均为实际执行的内网版本。
+> **通道说明**：本次部署 frp/花生壳隧道一度中断（banner timeout），用户重启生产树莓派后改走**内网直连** `ssh -p 22 yangyang@192.168.31.51`（开发机当时在 `192.168.31.69`，同 31 网段）。下方命令均为实际执行的内网版本。
 
 **命令：**
 ```bash
@@ -85,7 +85,6 @@ a825e0d feat(fault-mgmt): v0.6.3 房间过滤/设备名归一化/故障描述中
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'sudo systemctl stop freeark-fault-consumer && systemctl is-active freeark-fault-consumer || true'
 ```
@@ -103,7 +102,6 @@ is-active: inactive
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk && git pull origin main'
 ```
@@ -129,7 +127,6 @@ Fast-forward
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk && git log -1 --oneline && \
      ls FreeArkWeb/backend/freearkweb/api/migrations/0027_fault_event_room_columns.py && \
@@ -151,7 +148,6 @@ FreeArkWeb/backend/freearkweb/api/migrations/0028_fault_event_backfill_room.py
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py migrate api 0027 --noinput'
@@ -173,7 +169,6 @@ Running migrations:
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py migrate api 0028 --noinput'
@@ -197,7 +192,6 @@ real	0m5.647s
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'sudo systemctl restart freeark-backend && sleep 3 && \
      systemctl is-active freeark-backend && \
@@ -220,7 +214,6 @@ May 29 22:59:43 raspberrypi freeark-backend[2084]: INFO:     Uvicorn running on 
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'sudo systemctl restart freeark-mqtt-consumer && sleep 3 && \
      systemctl is-active freeark-mqtt-consumer'
@@ -239,7 +232,6 @@ mqtt-consumer: active
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'sudo systemctl start freeark-fault-consumer && sleep 3 && \
      systemctl is-active freeark-fault-consumer && \
@@ -260,7 +252,6 @@ May 29 22:59:55 raspberrypi systemd[1]: Started freeark-fault-consumer.service -
 **命令（备份 + 构建）：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend && \
      sudo mkdir -p /home/yangyang/FreeArk_backup && \
@@ -282,7 +273,6 @@ dist/assets/index-BhB--xiS.js   1,185.34 kB │ gzip: 383.24 kB
 **命令（rsync dist + nginx reload）：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'sudo rsync -av --delete \
        /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend/dist/ \
@@ -295,7 +285,7 @@ ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
 sent 3,852,569 bytes  received 1,472 bytes  7,708,082.00 bytes/sec
 total size is 3,849,011  speedup is 1.00
 === nginx -t ===
-[warn] conflicting server name "et116374mm892.vicp.fun"/"192.168.31.51"/"_" ... ignored  (既有无害告警)
+[warn] conflicting server name "<旧动态域名>"/"192.168.31.51"/"_" ... ignored  (既有无害告警；该域名已于 2026-10 从 nginx server_name 移除，此告警不再出现)
 nginx: configuration file /etc/nginx/nginx.conf test is successful
 === nginx reloaded ===
 ```
@@ -310,7 +300,6 @@ nginx: configuration file /etc/nginx/nginx.conf test is successful
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'systemctl status freeark-backend freeark-mqtt-consumer freeark-fault-consumer \
      --no-pager | grep -E "Active|Main PID"'
@@ -331,7 +320,6 @@ ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py showmigrations api | tail -5'
@@ -353,7 +341,6 @@ ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
 **命令：**
 ```bash
 ssh -p 57279 -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
     yangyang@${PROD_IP} \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      echo "SELECT COUNT(*) AS total, SUM(CASE WHEN room_name IS NOT NULL THEN 1 ELSE 0 END) AS filled, SUM(CASE WHEN room_id IS NOT NULL THEN 1 ELSE 0 END) AS fk_set FROM fault_event;" | \

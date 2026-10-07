@@ -6,7 +6,7 @@ title       : freeark-inspection-agent 生产部署计划
 project     : FreeArk v1.1.0
 created_at  : 2026-06-16
 status      : 待执行（须用户明确 CONFIRM 后方可在生产执行）
-target      : 树莓派 192.168.31.51（内网）/ et116374mm892.vicp.fun:57279（外网）
+target      : 树莓派 192.168.31.51（内网）/ 47.109.197.217:57279（外网）
 references  :
   - docs/requirements/v1.1.0_autonomous_inspection_agent/architecture_design.md §12
   - docs/requirements/v1.1.0_autonomous_inspection_agent/test_plan.md §6（Pi 权威回归）
@@ -39,7 +39,7 @@ references  :
 - [ ] **langgraph 依赖**：Pi 的 venv 已装 langgraph/langchain（方案 A 已上线即满足）。巡检 Agent **直接构造 `Orchestrator()`**，与 `CHAT_BACKEND` 取值无关——无需把 chat 切到 langgraph。
 - [ ] **凭证**：`.env` 内 `DEEPSEEK_API_KEY` 有效（Agent 走真 DeepSeek 决策；缺失会导致决策失败→全部兜底建单）。
 - [ ] **提示词目录**：`agents/inspection-expert/SYSTEM_PROMPT.langgraph.md` 在仓内（prompts.py 按 `__file__` 上溯自动定位 `agents/`；如有定制路径可设 `LANGGRAPH_AGENTS_DIR`）。
-- [ ] **磁盘/连接**：生产 DB（192.168.31.98:3306）可达；Pi 出网正常（注意 wlan0 power_save 与 vicp.fun DNS 既有风险，见 §7）。
+- [ ] **磁盘/连接**：生产 DB（192.168.31.98:3306）可达；Pi 出网正常（注意 wlan0 power_save 既有风险，见 §7）。
 
 ---
 
@@ -134,7 +134,7 @@ journalctl -u freeark-inspection-agent --since today | grep -iE 'ERROR|兜底|�
 ## 7. 已知生产风险（运维提示）
 
 - **wlan0 省电劣化**（`project_prod_internet_loss_wifi_rca`）：间歇网络抖动会让 LLM 决策超时 → 兜底建单（不丢单），日志可见 ERROR。非致命。
-- **vicp.fun DNS 偶发失败**（`feedback_prod_ssh_dns_workaround`）：SSH 连接时用 8.8.8.8 解析 IP + HostKeyAlias 绕过。
+- **外网隧道 DNS**（原 `feedback_prod_ssh_dns_workaround`）：旧动态域名已于 2026-10 退役；现外网通道为固定 IP 的 VPS frp 隧道（`47.109.197.217:57279`），无 DNS 解析风险。
 - **pid1 fd 上限 1024**（`project_prod_internet_loss_wifi_rca` 附带）：新增常驻进程占用少量 fd，留意总量。
 - **服务清单**（`project_freeark_systemd_services`）：本服务为**新增**，不替代任何现有服务；勿与 `freeark-fault-consumer` 混淆。
 

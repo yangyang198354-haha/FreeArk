@@ -7,7 +7,7 @@
 | commit | `e6e2b7b fix(fault-mgmt): v0.6.2 房号段数匹配 + 设备类型 product_code 过滤 (BUG-FM-004/005)` |
 | 部署日期 | 2026-05-28 |
 | 部署人 | Claude Code (Opus 4.7) |
-| 目标 | 生产 — 树莓派 `192.168.31.51` / `et116374mm892.vicp.fun:57279` |
+| 目标 | 生产 — 树莓派 `192.168.31.51` / `47.109.197.217:57279` |
 | 方式 | ssh + `git pull` + systemd restart（符合"禁 pscp"硬约束） |
 | 结果 | ✅ 成功，生产真实数据验证两 BUG 均已修复 |
 
@@ -124,7 +124,7 @@ specific_part='9-1-604' + sub_type='study_room_thermostat' → match count=0
 
 ### 回滚方案
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   'cd /home/yangyang/Freeark/FreeArk && git reset --hard 94fb3fd && \
    sudo systemctl restart freeark-backend && sudo systemctl restart freeark-mqtt-consumer'
 ```

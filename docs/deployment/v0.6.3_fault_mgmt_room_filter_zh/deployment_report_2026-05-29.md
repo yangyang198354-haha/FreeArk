@@ -7,7 +7,7 @@
 | commit | `a825e0d feat(fault-mgmt): v0.6.3 房间过滤/设备名归一化/故障描述中文化 (BUG-FM-006/007/008)` |
 | 部署日期 | 2026-05-29 |
 | 部署人 | Claude Code (Opus 4.7) |
-| 目标 | 生产 — 树莓派 `192.168.31.51` / `et116374mm892.vicp.fun:57279`（部署时本地 DNS 异常，用解析后 IP `115.236.153.170` + `HostKeyAlias` 直连） |
+| 目标 | 生产 — 树莓派 `192.168.31.51` / `47.109.197.217:57279`（2026-05-29 部署时本地 DNS 异常，经旧动态域名解析出的 IP + `HostKeyAlias` 直连；该通道已于 2026-10 退役） |
 | 方式 | ssh + `git pull` + systemd restart + `manage.py backfill_fault_message_zh` |
 | 结果 | ✅ 成功，三个 BUG 在生产 ORM 实测中均验证生效 |
 
@@ -37,7 +37,7 @@
 | 本地测试 | `python manage.py test api.tests_fault_event` → **170/170 通过**（原 147 + 新增 23） |
 | 生产 HEAD（拉取前） | `e6e2b7b` (v0.6.2 BUG-FM-004/005) |
 | 本次 commit 范围 vs 本地长期修改 | `.env`、`heartbeat_broker_config.json`、`package-lock.json` 零交集，安全 |
-| 本地 DNS 解析 | 异常（公司 DNS 暂时无法解析 `vicp.fun`）→ 用公网 DNS（8.8.8.8）解析得 `115.236.153.170`，IP + `HostKeyAlias` workaround |
+| 本地 DNS 解析 | 异常（公司 DNS 暂时无法解析当时的旧动态域名）→ 用公网 DNS（8.8.8.8）解析得 IP，IP + `HostKeyAlias` workaround；该通道已于 2026-10 退役 |
 
 ---
 
@@ -45,7 +45,7 @@
 
 ### Step 1 — 拉代码
 ```
-ssh ... yangyang@115.236.153.170 'cd /home/yangyang/Freeark/FreeArk && git pull origin main'
+ssh ... yangyang@47.109.197.217 'cd /home/yangyang/Freeark/FreeArk && git pull origin main'
 → Updating e6e2b7b..a825e0d Fast-forward
   10 files changed, 1183 insertions(+), 90 deletions(-)
 ```
@@ -161,7 +161,7 @@ device_tree_sync 周期同步**不会**影响显示（归一化在 serializer �
 ### 回滚
 ```bash
 # 代码回滚
-ssh ... yangyang@115.236.153.170 \
+ssh ... yangyang@47.109.197.217 \
   'cd /home/yangyang/Freeark/FreeArk && git reset --hard e6e2b7b && \
    sudo systemctl restart freeark-backend && sudo systemctl restart freeark-mqtt-consumer'
 

@@ -23,7 +23,7 @@ file_header:
 
 | 项 | 内容 |
 |----|------|
-| 部署目标 | 生产树莓派 192.168.31.51（外网：et116374mm892.vicp.fun:57279） |
+| 部署目标 | 生产树莓派 192.168.31.51（外网：47.109.197.217:57279） |
 | 项目路径 | `/home/yangyang/Freeark/FreeArk` |
 | 部署方式 | plink SSH + git pull（无 pscp、无 migration） |
 | 提交范围 | v0.5.5 基线（14229b5）→ v0.5.6（0510821，含 ee4b6a8 代码 + 0510821 文档） |
@@ -75,7 +75,7 @@ file_header:
 | 步骤 | 描述 | 执行时间 | 结果 | 备注 |
 |------|------|---------|------|------|
 | Step 0 | 本地 git push origin main | 17:30 | ✅ 成功 | 推送 ee4b6a8（代码）+ 0510821（文档）；与 v0.5.6 无关的临时脚本/旧版本文档均已排除 |
-| Step 1 | plink SSH 登录（外网 et116374mm892.vicp.fun:57279） | 17:32 | ✅ 成功 | 内网 192.168.31.51 当前不可达，走外网穿透 |
+| Step 1 | plink SSH 登录（外网动态域名隧道，旧通道已于 2026-10 退役） | 17:32 | ✅ 成功 | 内网 192.168.31.51 当前不可达，走外网穿透 |
 | Step 2 | git pull 拉取 v0.5.6 代码 | 17:33 | ✅ 成功 | Fast-forward 14229b5 → 0510821（含 7a97693）；工作区 `.env`/`package-lock.json` 本地修改未受影响 |
 | Step 3 | npm run build（就地，nginx 直读 dist） | 17:31 | ✅ 成功 | 构建耗时 24.0s；`DeviceCardsView-BvIyPoYS.js` 已重建 |
 | Step 4 | 重启 freeark-task-scheduler | 17:33 | ✅ active | 旧进程 SIGTERM 90s 未退被 SIGKILL（既有现象，与 v0.5.6 无关，详见 §6 OBS-001） |

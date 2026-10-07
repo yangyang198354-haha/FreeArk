@@ -59,7 +59,7 @@ python manage.py test api.tests.test_csrf_relogin --settings=freearkweb.test_set
 ### Step 3: 生产服务器 — SSH 连接确认
 
 ```
-plink -ssh yangyang@et116374mm892.vicp.fun -P 57279
+plink -ssh yangyang@47.109.197.217 -P 57279
 → SSH_OK / yangyang / aarch64 (树莓派 ARM64)
 ```
 
@@ -126,7 +126,7 @@ cd FreeArkWeb/frontend && npm run build
 确认：
 
 ```
-1. 访问 http://192.168.31.51:8080（或外网 et116374mm892.vicp.fun:57279）
+1. 访问 http://192.168.31.51:8080（或外网 https://ai-freeark.xin）
 2. 登录 → 跳转首页（第 1 次登录）
 3. 点击「退出登录」→ Network 中 POST /api/auth/logout/ 返回 200，
    Application > Cookies 中 csrftoken cookie 已清除

@@ -34,7 +34,7 @@ HOME=/c/fa-home ssh -i /c/fa-home/.ssh/id_ed25519 \
   -o UserKnownHostsFile=/c/fa-home/.ssh/known_hosts \
   -o StrictHostKeyChecking=accept-new \
   -o ConnectTimeout=20 \
-  -p 57279 yangyang@et116374mm892.vicp.fun \
+  -p 57279 yangyang@47.109.197.217 \
   'cd /home/yangyang/Freeark/FreeArk && git status'
 # 期望：只有 .env / package-lock.json / heartbeat_broker_config.json 是本地修改
 ```
@@ -48,7 +48,7 @@ HOME=/c/fa-home ssh -i /c/fa-home/.ssh/id_ed25519 \
   -o UserKnownHostsFile=/c/fa-home/.ssh/known_hosts \
   -o StrictHostKeyChecking=accept-new \
   -o ConnectTimeout=20 \
-  -p 57279 yangyang@et116374mm892.vicp.fun \
+  -p 57279 yangyang@47.109.197.217 \
   'systemctl is-active redis-server && redis-cli ping && ss -tlnp | grep 6379'
 # 期望：active + PONG + 127.0.0.1:6379
 ```
@@ -68,7 +68,7 @@ HOME=/c/fa-home ssh -i /c/fa-home/.ssh/id_ed25519 \
   -o UserKnownHostsFile=/c/fa-home/.ssh/known_hosts \
   -o StrictHostKeyChecking=accept-new \
   -o ConnectTimeout=20 \
-  -p 57279 yangyang@et116374mm892.vicp.fun \
+  -p 57279 yangyang@47.109.197.217 \
   'cd /home/yangyang/Freeark/FreeArk && git pull origin main'
 ```
 

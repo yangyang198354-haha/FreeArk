@@ -31,7 +31,7 @@
 | # | 问题 | 解决 |
 |---|---|---|
 | **D1** | systemd unit 文件 venv 路径推断错误（`/home/yangyang/Freeark/venv/` 不存在，实际是 `Freeark/FreeArk/venv/`）| commit `bf666f9` 修正后重 push |
-| **D2** | DNS `et116374mm892.vicp.fun` 间歇性解析失败 | 等待 DNS 恢复后重连，3 次出现 |
+| **D2** | 外网隧道域名 DNS 间歇性解析失败 | 等待 DNS 恢复后重连，3 次出现 |
 
 ## 服务状态快照
 

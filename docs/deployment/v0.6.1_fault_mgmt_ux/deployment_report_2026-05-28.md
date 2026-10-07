@@ -4,7 +4,7 @@
 |---|---|
 | 部署日期 | 2026-05-28 |
 | 部署人 | Yang Yang（Claude Code 协助执行 SSH 步骤） |
-| 目标主机 | 树莓派 Raspberry Pi 5，`192.168.31.51`（外网 `et116374mm892.vicp.fun:57279`） |
+| 目标主机 | 树莓派 Raspberry Pi 5，`192.168.31.51`（外网 `47.109.197.217:57279`） |
 | 部署前 HEAD | `1554e8f fix(dph-cleanup): _run_cleanup 前 close_old_connections() (BUG-DPH-003)` |
 | 部署后 HEAD | `c7aa7fd feat(fault-mgmt): v0.6.1 UX 调整（导航/房号控件/设备名/默认筛选）` |
 | 部署方式 | plink+ssh 手工 + `git pull origin main`（密钥认证，无密码） |
@@ -68,7 +68,7 @@ sp=8-1-14-1403    sn=21997  pc=270001  fault=comm_fault_timeout     | device_nam
 ## 回滚预案（如发现 E2E 问题）
 
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun
+ssh -p 57279 yangyang@47.109.197.217
 cd /home/yangyang/Freeark/FreeArk
 git revert c7aa7fd --no-edit
 # 推到 GitHub（开发机 commit）：git push origin main 后再到 prod git pull

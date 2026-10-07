@@ -19,7 +19,7 @@
 ## 部署步骤
 
 1. 本地提交 + push origin main（1 vue + 2 文档，不触碰 .env/package-lock/heartbeat_broker_config.json）
-2. ⚠️ 公司 DNS 偶发无法解析 vicp.fun，采用绕过：8.8.8.8 解析得 IP 115.236.153.170，ssh + HostKeyAlias=域名 直连
+2. ⚠️ 公司 DNS 偶发无法解析旧动态域名，采用绕过：8.8.8.8 解析得 IP，ssh + HostKeyAlias=域名 直连（该通道已于 2026-10 退役）
 3. 生产 `git pull origin main` → fast-forward 至 eb19665
 4. 生产 `cp -r dist <备份>` + `npm run build` → `✓ built in 18.88s`，0 报错
 5. nginx 直接服务 dist/，即时生效，无需重启

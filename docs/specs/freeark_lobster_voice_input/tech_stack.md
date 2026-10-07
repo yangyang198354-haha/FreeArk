@@ -105,7 +105,7 @@ file_header:
 
 | 约束 | 说明 |
 |------|------|
-| HTTPS 要求 | `getUserMedia` 在非 localhost 环境下必须在 HTTPS/WSS 下运行。生产已有反向代理（参考 ALLOWED_HOSTS 含域名 `et116374mm892.vicp.fun`），需确认 TLS 终止配置 |
+| HTTPS 要求 | `getUserMedia` 在非 localhost 环境下必须在 HTTPS/WSS 下运行。生产已有反向代理（参考 ALLOWED_HOSTS 含域名 `ai-freeark.xin`），需确认 TLS 终止配置 |
 | aiohttp WS client 模式 | 与 OpenClawAdapter 相同：`async with aiohttp.ClientSession() as session: async with session.ws_connect(url) as ws:` |
 | --workers 1 约束 | 现有 uvicorn 启动参数 `--workers 1`（InMemoryChannelLayer 不支持多进程），STTConsumer 同受此约束，不引入状态共享问题 |
 | 生产 Pi 5 资源 | 树莓派 Pi 5，避免引入 CPU 密集型音频处理（无转码，传输原始编码帧） |

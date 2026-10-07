@@ -81,19 +81,15 @@ GitHub (origin/main)   ← 当前已含 commit a5a8c70
 
 ```bash
 # 标准连接（本地 DNS 正常时）
-ssh -p 57279 yangyang@et116374mm892.vicp.fun '<remote command>'
+ssh -p 57279 yangyang@47.109.197.217 '<remote command>'
 
-# DNS 故障绕过（公司 DNS 不识别 vicp.fun TLD 时）
-IP=$(nslookup et116374mm892.vicp.fun 8.8.8.8 | awk '/^Address: / && !/8\.8\.8\.8/{print $2; exit}')
 ssh -p 57279 \
     -o BatchMode=yes \
     -o StrictHostKeyChecking=no \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
-    yangyang@${IP} '<remote command>'
+    yangyang@47.109.197.217 '<remote command>'
 ```
 
-> 注：v0.6.3 部署时本地 DNS 异常，实际用 IP `115.236.153.170` + HostKeyAlias 直连。
-> v0.6.4 部署前须重新 nslookup 获取当前 IP（花生壳 IP 可能已变）。
+> 注：v0.6.3 部署时本地 DNS 异常，实际用旧动态域名解析出的 IP + HostKeyAlias 直连（该通道已于 2026-10 退役）。
 
 ---
 

@@ -1,7 +1,7 @@
 # FreeArk v0.5.1 生产部署实际执行报告
 
 **日期**：2026-05-20
-**目标**：`192.168.31.51`（树莓派，用户 `yangyang`）— 本次经外网动态域名隧道 `et116374mm892.vicp.fun:57279` 接入
+**目标**：`192.168.31.51`（树莓派，用户 `yangyang`）— 本次经外网动态域名隧道接入（旧花生壳通道，已于 2026-10 退役）
 **基线**：v0.5.0（`21d831f`）→ **目标**：v0.5.1（`72363d6`）
 **部署方式**：plink SSH + `git pull --ff-only` + 生产服务器构建前端（沿用内存中既有部署 recipe）
 **执行人**：Claude Code（受用户明确 CONFIRM 授权后通过 plink 代为执行）
@@ -54,7 +54,7 @@
 
 1. **datacollection 服务未重启**：改动文件 `plc_write_manager.py` 仅被 `plc_data_viewer_gui.py`（GUI 工具）与 `log_config_manager.py` 引用，无运行中的 systemd 服务直接引用它。该改动将在下次运行楼栋模式下发 GUI/批量工具时生效，无需重启常驻服务。
 2. **未单独生成 cicd_pipeline.md / deployment_plan.md**：沿用 v0.5.0 既定做法，按内存知识库 `feedback_deploy_via_git_pull.md` 的 plink + git pull recipe 直接执行。
-3. **nginx 既有告警**：reload 时出现 `conflicting server name` warning（`et116374mm892.vicp.fun` / `192.168.31.51` 在 :8080 重复），为既有配置问题，非本次引入，`nginx -t` 通过。
+3. **nginx 既有告警**：reload 时出现 `conflicting server name` warning（旧动态域名 / `192.168.31.51` 在 :8080 重复），为既有配置问题，非本次引入，`nginx -t` 通过。
 4. **未做 MySQL dump**：v0.5.1 无 model/migration 变更，DB schema 未动，回滚仅需代码层。
 
 ---

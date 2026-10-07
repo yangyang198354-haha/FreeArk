@@ -224,7 +224,7 @@ openclaw config schema | python3 -m json.tool | grep -A 5 '"secrets"'
 ```bash
 SSH="ssh -o BatchMode=yes -o UserKnownHostsFile=/c/fa-home/.ssh/known_hosts \
      -i /c/fa-home/.ssh/id_ed25519 -p 57279 -o ConnectTimeout=20 \
-     yangyang@et116374mm892.vicp.fun"
+     yangyang@47.109.197.217"
 
 # 命令 A：完整 config schema（最重要）
 $SSH 'openclaw config schema | python3 -m json.tool'

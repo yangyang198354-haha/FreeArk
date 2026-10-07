@@ -67,7 +67,7 @@ file_header:
                                                [STAGE 2: 生产前置检查]
                                                 │
                                                 ├─ SSH 连接 Pi
-                                                │   ssh -p 57279 yangyang@et116374mm892.vicp.fun
+                                                │   ssh -p 57279 yangyang@47.109.197.217
                                                 │
                                                 ├─ 依赖版本检查 (§1.1)
                                                 │   python / node / pip packages
@@ -234,7 +234,7 @@ git push origin main
 
 **SSH 连接**（须用 Bash 工具，不要 PowerShell）：
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun
+ssh -p 57279 yangyang@47.109.197.217
 ```
 
 ---
@@ -401,7 +401,7 @@ cd FreeArkWeb/backend/freearkweb
 python manage.py test api.tests.test_reasoning_stream -v 2
 
 # SSH 连接生产
-ssh -p 57279 yangyang@et116374mm892.vicp.fun
+ssh -p 57279 yangyang@47.109.197.217
 
 # ── 生产（Pi SSH 内）─────────────────────────────────────────────
 # 检查拉取范围

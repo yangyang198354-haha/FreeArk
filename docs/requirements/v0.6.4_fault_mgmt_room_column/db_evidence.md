@@ -17,12 +17,8 @@ PM Orchestrator 无法直接 SSH 执行命令，以下为已备好的查询命�
 ## 执行前准备
 
 ```bash
-# 如公司 DNS 不识别 vicp.fun，先解析 IP：
-nslookup et116374mm892.vicp.fun 8.8.8.8
-# 记下解析到的 IP，替换下面命令中的 <PROD_IP>
-
 # 以下所有命令在 Bash（非 PowerShell）中执行
-PROD_IP=<上面解析到的IP>
+PROD_IP=47.109.197.217
 WORKDIR=/home/yangyang/Freeark/FreeArk
 MANAGE="venv/bin/python FreeArkWeb/backend/freearkweb/manage.py dbshell"
 ```

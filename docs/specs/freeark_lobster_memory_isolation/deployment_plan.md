@@ -132,7 +132,7 @@ git diff --name-only ef3c509 origin/main
 |------|---------|------|
 | `OPENCLAW_BASE_URL` | `grep OPENCLAW_BASE_URL FreeArkWeb/backend/.env` | `http://127.0.0.1:18789` |
 | `OPENCLAW_GATEWAY_TOKEN` | `grep -c OPENCLAW_GATEWAY_TOKEN FreeArkWeb/backend/.env` | 返回 1 |
-| `ALLOWED_HOSTS` | `grep ALLOWED_HOSTS FreeArkWeb/backend/.env` | 须含 `192.168.31.51` 和 `et116374mm892.vicp.fun` |
+| `ALLOWED_HOSTS` | `grep ALLOWED_HOSTS FreeArkWeb/backend/.env` | 须含 `192.168.31.51` 和 `ai-freeark.xin` |
 | `DEBUG` | `grep "^DEBUG=" FreeArkWeb/backend/.env` | `False` |
 | `APP_LOG_LEVEL` | `grep APP_LOG_LEVEL FreeArkWeb/backend/.env` | 当前仍为 `INFO`（reasoning_stream 验证期遗留），本次部署不改，§9 用到 |
 

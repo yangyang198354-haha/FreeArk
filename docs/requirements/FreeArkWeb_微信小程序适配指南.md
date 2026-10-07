@@ -95,7 +95,8 @@ serve(application, host='0.0.0.0', port=443,
 ALLOWED_HOSTS = [
     'localhost', '127.0.0.1', 
     '192.168.31.51', '192.168.31.52',
-    'et116374mm892.vicp.fun',  # 确保此域名已备案
+    'ai-freeark.xin',
+    'www.ai-freeark.xin',  # 已 ICP 备案 + HTTPS
 ]
 
 # settings.py - CORS配置优化
@@ -283,7 +284,7 @@ path('auth/wechat-login/', views.wechat_login, name='wechat-login'),
 
 | 优先级 | 任务内容 | 实施说明 | 完成标记 |
 |--------|----------|----------|----------|
-| 高 | 申请并配置SSL证书 | 为域名et116374mm892.vicp.fun申请SSL证书 | □ |
+| 高 | 申请并配置SSL证书 | 已由 VPS nginx 为 `ai-freeark.xin` 配置 Let's Encrypt 证书（443 终止 TLS） | ✅ |
 | 高 | 配置HTTPS服务器 | 修改start_waitress_server.py支持HTTPS | □ |
 | 高 | 更新ALLOWED_HOSTS和CORS配置 | 确保域名在白名单中，配置正确的跨域策略 | □ |
 | 中 | 统一API响应格式 | 实现自定义异常处理，统一错误响应格式 | □ |
@@ -298,15 +299,15 @@ path('auth/wechat-login/', views.wechat_login, name='wechat-login'),
 2. 进入小程序管理后台
 3. 依次点击「开发」→「开发设置」→「服务器域名」
 4. 添加以下域名到对应白名单：
-   - request合法域名：`https://et116374mm892.vicp.fun`
-   - uploadFile合法域名（如需文件上传）：`https://et116374mm892.vicp.fun`
-   - downloadFile合法域名（如需文件下载）：`https://et116374mm892.vicp.fun`
+   - request合法域名：`https://ai-freeark.xin`
+   - uploadFile合法域名（如需文件上传）：`https://ai-freeark.xin`
+   - downloadFile合法域名（如需文件下载）：`https://ai-freeark.xin`
 
 ## 七、测试建议
 
 1. **HTTPS测试**: 使用curl或Postman测试HTTPS接口是否正常
    ```bash
-   curl -v https://et116374mm892.vicp.fun/api/health/
+   curl -v https://ai-freeark.xin/api/health/
    ```
 
 2. **CORS测试**: 使用浏览器控制台测试跨域请求

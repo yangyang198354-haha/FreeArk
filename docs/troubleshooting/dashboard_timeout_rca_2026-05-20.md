@@ -4,7 +4,7 @@
 - **现象**：系统看板「总电量查询 / 今日用电量 / 本月用电量」长时间转圈，随后前端报
   `404 (Not Found)`（`/api/dashboard/total-energy/`、`/api/dashboard/summary/`）与
   `net::ERR_NETWORK_CHANGED`（`/api/dashboard/activities/`），多刷新几次又能成功。
-- **调查方式**：plink 经动态域名 `et116374mm892.vicp.fun:57279` 连入生产树莓派，
+- **调查方式**：plink 经外网动态域名隧道（旧通道，已于 2026-10 退役）连入生产树莓派，
   实测后端、nginx 日志、生产 MySQL（192.168.31.98）。
 - **结论**：**确认是数据库性能问题。** 用户判断正确。
 

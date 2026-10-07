@@ -25,7 +25,7 @@
 | 项目 | 值 |
 |------|---|
 | 生产服务器 | 树莓派，内网 192.168.31.51 |
-| 外网访问 | et116374mm892.vicp.fun:57279 |
+| 外网访问 | https://ai-freeark.xin（Web）/ 47.109.197.217:57279（SSH） |
 | 前端静态文件目录 | `/home/pi/freeark-prod/FreeArkWeb/frontend/dist/` |
 | 后端服务 | freeark-backend.service（Waitress，本次不重启） |
 | 部署工具 | plink（SSH）+ git pull |
@@ -93,7 +93,7 @@ git log origin/main --oneline -3
 # 内网直连
 ssh yangyang@192.168.31.51
 # 或外网
-plink -ssh yangyang@et116374mm892.vicp.fun -P 57279
+plink -ssh yangyang@47.109.197.217 -P 57279
 ```
 
 ### Step 4: 生产服务器 — git pull 拉取源码

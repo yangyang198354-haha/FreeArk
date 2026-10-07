@@ -125,7 +125,7 @@ openclaw-agent 账号 Token 明文已销毁（部署报告 §3.2）。需重新�
 ```bash
 SSH="ssh -o BatchMode=yes -o UserKnownHostsFile=/c/fa-home/.ssh/known_hosts \
   -i /c/fa-home/.ssh/id_ed25519 -p 57279 -o ConnectTimeout=20 \
-  yangyang@et116374mm892.vicp.fun"
+  yangyang@47.109.197.217"
 
 # 重新生成并脱敏（REQ-NFR-007：全文正则脱敏）
 $SSH '/home/yangyang/Freeark/FreeArk/venv/bin/python \

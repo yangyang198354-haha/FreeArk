@@ -23,7 +23,7 @@ file_header:
 | BUG | BUG-FM-009 / BUG-FM-010 / BUG-FM-011 |
 | 基线版本 (回滚锚点) | `a825e0d` — v0.6.3（部署前上一个稳定 commit） |
 | 目标 commit | `a5a8c70 feat(fault-mgmt): v0.6.4 故障管理按"实际房间"5 类过滤 + 房间列 (BUG-FM-009/010/011)` |
-| 目标环境 | 生产树莓派 Pi 5（内网 192.168.31.51，外网 et116374mm892.vicp.fun:57279） |
+| 目标环境 | 生产树莓派 Pi 5（内网 192.168.31.51，外网 47.109.197.217:57279） |
 | 仓库路径 | `/home/yangyang/Freeark/FreeArk/` |
 | venv | `/home/yangyang/Freeark/FreeArk/venv/bin/python` |
 | manage.py 路径 | `/home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb/manage.py` |
@@ -101,13 +101,11 @@ file_header:
 ### Step 1 — 部署前置检查
 
 ```bash
-# 1a. 解析当前生产 IP（花生壳动态 IP，每次部署前实时取）
-nslookup et116374mm892.vicp.fun 8.8.8.8
+# 1a. 生产外网入口（固定 IP，无需 DNS 解析）：47.109.197.217:57279
 
 # 1b. 检查生产工作树状态与当前 HEAD
 ssh -p 57279 \
-    -o HostKeyAlias=et116374mm892.vicp.fun \
-    yangyang@<PROD_IP> \
+    yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk && git status --short && git log -1 --oneline'
 ```
 
@@ -120,7 +118,7 @@ ssh -p 57279 \
 ### Step 2 — 停止 freeark-fault-consumer
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'sudo systemctl stop freeark-fault-consumer && systemctl is-active freeark-fault-consumer'
 ```
 
@@ -131,7 +129,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 3 — git pull
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk && git pull origin main'
 ```
 
@@ -144,7 +142,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 4 — 验证 commit 落地
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk && git log -1 --oneline && \
      ls FreeArkWeb/backend/freearkweb/api/migrations/0027_fault_event_room_columns.py && \
      ls FreeArkWeb/backend/freearkweb/api/migrations/0028_fault_event_backfill_room.py'
@@ -159,7 +157,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 5 — 执行 migration 0027（DDL）
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py migrate api 0027 --noinput'
 ```
@@ -173,7 +171,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 6 — 执行 migration 0028（历史回填）
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py migrate api 0028 --noinput'
 ```
@@ -188,7 +186,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 7 — 重启 freeark-backend
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'sudo systemctl restart freeark-backend && sleep 3 && \
      systemctl is-active freeark-backend && \
      sudo journalctl -u freeark-backend -n 20 --no-pager'
@@ -203,7 +201,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 8 — 重启 freeark-mqtt-consumer
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'sudo systemctl restart freeark-mqtt-consumer && sleep 3 && \
      systemctl is-active freeark-mqtt-consumer'
 ```
@@ -215,7 +213,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 9 — 启动 freeark-fault-consumer
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'sudo systemctl start freeark-fault-consumer && sleep 3 && \
      systemctl is-active freeark-fault-consumer && \
      sudo journalctl -u freeark-fault-consumer -n 20 --no-pager'
@@ -230,7 +228,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### Step 10 — 前端构建与部署
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend && \
      sudo mkdir -p /home/yangyang/FreeArk_backup && \
      cp -r dist /home/yangyang/FreeArk_backup/dist_backup_$(date +%Y%m%d%H%M%S) && \
@@ -240,7 +238,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 构建完成后同步 dist 到 nginx 静态目录：
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'sudo rsync -av --delete /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend/dist/ \
      /usr/share/nginx/html/ && sudo nginx -t && sudo systemctl reload nginx'
 ```
@@ -257,7 +255,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### V1 — 服务状态
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'systemctl status freeark-backend freeark-mqtt-consumer freeark-fault-consumer \
      --no-pager | grep -E "Active|Main PID"'
 ```
@@ -267,7 +265,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### V2 — Migration 确认
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py showmigrations api | tail -5'
 ```
@@ -285,7 +283,7 @@ FROM fault_event;
 ```
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
      echo "SELECT COUNT(*) AS total, SUM(CASE WHEN room_name IS NOT NULL THEN 1 ELSE 0 END) AS filled, SUM(CASE WHEN room_id IS NOT NULL THEN 1 ELSE 0 END) AS fk_set FROM fault_event;" | \
      /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py dbshell'
@@ -296,7 +294,7 @@ ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
 ### V4 — API 烟测（新 5 类 sub_type）
 
 ```bash
-ssh -p 57279 -o HostKeyAlias=et116374mm892.vicp.fun yangyang@<PROD_IP> \
+ssh -p 57279 yangyang@47.109.197.217 \
     'curl -s http://127.0.0.1:8000/api/devices/fault-event-categories/ | \
      python3 -m json.tool | grep -E "study_room_panel|master_bedroom_panel|children_room|living_room|fresh_air"'
 ```

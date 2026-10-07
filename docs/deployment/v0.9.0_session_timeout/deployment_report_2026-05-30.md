@@ -50,7 +50,7 @@
 ## 部署步骤
 
 1. 本地提交 + push origin main（`d5b5ff6`，13 文件，不触碰 .env/package-lock/heartbeat_broker_config.json）。
-2. SSH：外网 `et116374mm892.vicp.fun:57279` 偶发 `kex_exchange_identification: Connection closed`（花生壳/frp 隧道瞬断），改用 **LAN `192.168.31.51:22`** 直连（开发机同网段，更稳）。
+2. SSH：外网动态域名隧道偶发 `kex_exchange_identification: Connection closed`（隧道瞬断），改用 **LAN `192.168.31.51:22`** 直连（开发机同网段，更稳）；该外网通道已于 2026-10 退役。
 3. 生产 `git pull origin main` → fast-forward 至 `d5b5ff6`，生产本地修改（.env / heartbeat / package-lock）完整保留，无冲突。
 4. `sqlmigrate` 预检 DDL（仅 CREATE TABLE 新表）→ `migrate api 0030` → `api_token_activity` 表已建。
 5. 重启 `freeark-backend`（settings 认证类 + 新 authentication/models/views 属 Web 路径；worker 不涉 DRF 认证，未重启，避免打断 MQTT/故障消费）。

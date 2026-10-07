@@ -25,7 +25,7 @@ file_header:
 | 部署版本 | BUG-FM-003 patch（基于 v0.6.1-FM-UX） |
 | 基线版本 | v0.6.1-FM-UX（部署前 HEAD = c7aa7fd） |
 | 目标 commit | `94fb3fd fix(fault-mgmt): 故障类型/设备类型过滤器无效 (BUG-FM-003)` |
-| 部署目标 | 生产树莓派 Pi 5（内网 192.168.31.51，外网 et116374mm892.vicp.fun:57279） |
+| 部署目标 | 生产树莓派 Pi 5（内网 192.168.31.51，外网 47.109.197.217:57279） |
 | 项目路径 | `/home/yangyang/Freeark/FreeArk` |
 | venv 路径 | `/home/yangyang/Freeark/FreeArk/venv` |
 | 部署方式 | plink + git pull origin main（密钥认证） |
@@ -98,7 +98,7 @@ axios 1.x（项目使用 `^1.7.9`）对数组参数默认序列化为带方括�
 ### Step 1 — 部署前置检查
 
 ```bash
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk && git status --short && git log -1 --oneline"
 ```
 
@@ -111,7 +111,7 @@ plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 2 — 执行 git pull
 
 ```bash
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk && git pull origin main"
 ```
 
@@ -124,7 +124,7 @@ plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 3 — 验证落地
 
 ```bash
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk && \
    git log -1 --oneline && \
    grep -n 'URLSearchParams' FreeArkWeb/frontend/src/views/FaultManagementView.vue | head -5"
@@ -139,7 +139,7 @@ plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 4 — 前端构建（备份 + build）
 
 ```bash
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend && \
    cp -r dist /home/yangyang/FreeArk_backup/dist_backup_$(date +%Y%m%d%H%M%S) && \
    npm run build 2>&1 | tail -20"
@@ -159,7 +159,7 @@ plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
 验收标准：确认 freeark-backend.service 仍为 active(running) 即可。
 
 ```bash
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "systemctl is-active freeark-backend"
 ```
 
@@ -169,11 +169,11 @@ plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
 
 ```bash
 # 6a. 健康检查
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "curl -sS http://127.0.0.1:8080/api/health/ -m 10"
 
 # 6b. 验证修复标志已编入前端 bundle
-plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+plink -ssh -P 57279 yangyang@47.109.197.217 \
   "grep -r 'URLSearchParams' /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend/dist/assets/*.js \
    | head -3 && echo 'URLSearchParams fix confirmed in bundle'"
 ```
@@ -201,7 +201,7 @@ git revert 94fb3fd --no-edit
 git push origin main
 
 # 在生产服务器执行
-# plink -ssh -P 57279 yangyang@et116374mm892.vicp.fun \
+# plink -ssh -P 57279 yangyang@47.109.197.217 \
 #   "cd /home/yangyang/Freeark/FreeArk && git pull origin main"
 
 # 前端回滚（如已构建新版本）：

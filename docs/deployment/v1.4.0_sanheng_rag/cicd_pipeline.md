@@ -74,9 +74,6 @@ $PI_HOST = "192.168.31.51"
 $PI_USER = "pi"
 $PROD_DIR = "/home/pi/freeark-prod"
 
-# 若公司 DNS 不解析 vicp.fun，先解析 IP
-# nslookup et116374mm892.vicp.fun 8.8.8.8
-
 # plink 连接测试
 plink -ssh ${PI_USER}@${PI_HOST} "echo 'SSH 连接正常'"
 ```

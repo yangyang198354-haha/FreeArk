@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
 # deploy_execute.sh — v0.6.1-FM-UX 生产部署执行脚本
-# 目标主机：树莓派 Pi 5，et116374mm892.vicp.fun:57279
+# 目标主机：树莓派 Pi 5（阿里云 VPS + frp 隧道 47.109.197.217:57279）
 # 用法：bash deploy_execute.sh
 # 注意：需要 SSH 密钥免密，在 Windows 下用 Git Bash 或 WSL 执行
 # =============================================================================
 
 set -euo pipefail
 
-SSH_HOST="yangyang@et116374mm892.vicp.fun"
+SSH_HOST="yangyang@47.109.197.217"
 SSH_PORT="57279"
 REPO_ROOT="/home/yangyang/Freeark/FreeArk"
 FRONTEND_DIR="$REPO_ROOT/FreeArkWeb/frontend"

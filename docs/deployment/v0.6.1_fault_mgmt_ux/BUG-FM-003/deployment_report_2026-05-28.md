@@ -7,7 +7,7 @@
 | commit | `94fb3fd fix(fault-mgmt): 故障类型/设备类型过滤器无效 (BUG-FM-003)` |
 | 部署日期 | 2026-05-28 |
 | 部署人 | Claude Code (Opus 4.7) |
-| 目标环境 | 生产 — 树莓派 `192.168.31.51` / `et116374mm892.vicp.fun:57279` |
+| 目标环境 | 生产 — 树莓派 `192.168.31.51` / `47.109.197.217:57279` |
 | 部署方式 | plink/ssh + `git pull` + `npm run build`（符合"禁 pscp"硬约束） |
 | 部署结果 | ✅ 成功 |
 | 服务重启 | 无（纯前端变更） |
@@ -99,7 +99,7 @@ curl http://127.0.0.1:8080/api/health/
 ### 回滚方案
 若发现回归，最快回滚：
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   'cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend && \
    rm -rf dist && \
    cp -r /home/yangyang/FreeArk_backup/dist_backup_20260528211200 dist'
@@ -115,7 +115,7 @@ cd /home/yangyang/Freeark/FreeArk && git reset --hard c7aa7fd
 
 ## 5. 生产验证建议（请用户验证）
 
-打开故障管理页面 `http://et116374mm892.vicp.fun:<外网映射端口>/`，依次验证：
+打开故障管理页面 `https://ai-freeark.xin/`，依次验证：
 
 1. **单选故障类型**：勾选"通信"，列表只显示通信类故障
 2. **多选故障类型**：同时勾选"通信"+"传感器"，列表显示这两类

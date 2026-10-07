@@ -27,7 +27,7 @@ file_header:
 | 部署版本 | v0.6.1-FM-UX — 故障管理 UX 调整 |
 | 基线版本 | v0.6.0（部署前 HEAD，预期为 1554e8f 或近期 commit） |
 | 目标 commit | `c7aa7fd feat(fault-mgmt): v0.6.1 UX 调整（导航/房号控件/设备名/默认筛选）` |
-| 部署目标 | 生产树莓派 Pi 5（内网 192.168.31.51，外网 et116374mm892.vicp.fun:57279） |
+| 部署目标 | 生产树莓派 Pi 5（内网 192.168.31.51，外网 47.109.197.217:57279） |
 | 项目路径 | `/home/yangyang/Freeark/FreeArk` |
 | venv 路径 | `/home/yangyang/Freeark/FreeArk/venv` |
 | 部署方式 | Bash SSH + git pull origin main |
@@ -99,7 +99,7 @@ file_header:
 ### Step 1 — 部署前置检查
 
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk && git status --short && git log -1 --oneline"
 ```
 
@@ -112,7 +112,7 @@ ssh -p 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 2 — 执行 git pull
 
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk && git pull origin main"
 ```
 
@@ -125,7 +125,7 @@ ssh -p 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 3 — 验证落地
 
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk && \
    git log -1 --oneline && \
    ls -la FreeArkWeb/backend/freearkweb/api/device_name_cache.py && \
@@ -142,7 +142,7 @@ ssh -p 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 4 — 前端构建
 
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/frontend && \
    cp -r dist /home/yangyang/FreeArk_backup/dist_backup_$(date +%Y%m%d%H%M%S) && \
    npm run build" 2>&1 | tail -30
@@ -158,7 +158,7 @@ ssh -p 57279 yangyang@et116374mm892.vicp.fun \
 ### Step 5 — 重启后端
 
 ```bash
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "sudo systemctl restart freeark-backend && \
    sleep 3 && \
    systemctl is-active freeark-backend && \
@@ -175,11 +175,11 @@ ssh -p 57279 yangyang@et116374mm892.vicp.fun \
 
 ```bash
 # 6a. 健康检查
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "curl -sS http://127.0.0.1:8080/api/health/ -m 10"
 
 # 6b. 序列化器字段验证（不依赖 HTTP auth）
-ssh -p 57279 yangyang@et116374mm892.vicp.fun \
+ssh -p 57279 yangyang@47.109.197.217 \
   "cd /home/yangyang/Freeark/FreeArk/FreeArkWeb/backend/freearkweb && \
    /home/yangyang/Freeark/FreeArk/venv/bin/python manage.py shell -c \"
 from api.models import FaultEvent
