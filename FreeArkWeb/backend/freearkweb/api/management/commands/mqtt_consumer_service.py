@@ -145,11 +145,14 @@ class Command(BaseCommand):
             logger.error(traceback.format_exc())
             self.stdout.write(self.style.ERROR(f'运行MQTT消费者服务时发生错误: {str(e)}'))
             exit_code = 1
-        else:
-            exit_code = 0
-
         logger.info(f'📋 服务退出，退出码: {exit_code}')
-        return exit_code
+        # 不能 `return exit_code`：Django 的 BaseCommand.execute() 会把 handle() 的返回值
+        # 当作"输出"交给 self.stdout.write()，整数会触发
+        # AttributeError: 'int' object has no attribute 'endswith'（并把非 0 变成 exit 1）。
+        # 同时原 `else: exit_code = 0` 会在"启动失败"路径把 exit_code(1) 覆盖成 0，
+        # 使 systemd 误判为成功、不再拉起（2026-10-16 服务被永久停掉的根因）。
+        # 改为 sys.exit：既保留真实退出码，又跳过 Django 的 stdout 打印。
+        sys.exit(exit_code)
 
     def _log_health_snapshot(self):
         """每隔 monitor_interval 秒打一行 INFO 级别健康快照，便于运维看 journal。"""
