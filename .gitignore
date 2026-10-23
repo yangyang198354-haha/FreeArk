@@ -135,6 +135,12 @@ docs/_build/
 # Claude Code 目录：忽略本地设置/记忆等，但纳入项目级 skills
 .claude/*
 !.claude/skills/
+# SDLC agent suite (sdlc-agent-suite v3.3): agents, hooks, settings, per-agent project memory
+!.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
+!.claude/agent-memory/
+.claude/agents/knowledge_base/_archive_v1/
 
 # SDLC 过程产物（代码审查/测试/部署报告等，本地保留不进仓库）
 sdlc/
