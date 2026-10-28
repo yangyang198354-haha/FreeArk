@@ -8,3 +8,4 @@
 蒸馏：PM 交付后调用 `kb-curator`（PHASE_12），或手动运行 `claude --agent kb-curator`。报告与日志在 `project_workspace/_kb_distillation/`。
 
 项目事实（目录、命令、环境、禁用项）放 `../project_profile.md`，不放知识库或记忆。
+
