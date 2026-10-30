@@ -18,6 +18,7 @@
 - [M-DE-013] 〔服务〕部分服务的 `Restart=` 已调整（如 mqtt-consumer 改为 `always`，commit a3bd3445），以 `systemctl cat <svc>` 为准。 — conf 0.9 · 证据 人工维护知识库迁移 · 首见 2026-10-22 · 命中 0
 - [M-DE-014] 〔访问〕SSH：`ssh -p 57279 yangyang@47.109.197.217`（VPS + frp，密钥认证），主机密钥指纹 `SHA256:TfpCSrSLuK1UspD2mpikebK0bE0IFnPH8bSigERWnmk`；Web `https://ai-freeark.xin`。花生壳已退役。 — conf 0.9 · 证据 人工维护知识库迁移 · 首见 2026-10-22 · 命中 0
 - [M-DE-015] 〔CI〕`.github/workflows/ci.yml`：三个 job（后端全量 `test api` / datacollection pytest / 前端 vitest+build），`.claude/**` 与文档变更不触发。基线存在既有失败时 CI 会红，判断回归要对比基线。 — conf 0.9 · 证据 人工维护知识库迁移 · 首见 2026-10-22 · 命中 0
+- [M-DE-016] 〔长驻命令鲁棒性〕schedule cron 常驻的 Django management command（如 dph_cleanup）必须双层兜底：`cursor.execute()` 外层 `try/except OperationalError`，捕获后记日志 + `connection.close()` + return（**不重抛**）；`while True` 内 `schedule.run_pending()` 再包一层 `except Exception`。否则一次 2013 "Lost connection" 就冲出主循环崩溃，systemd 反复重启而当日任务永不完成；`--once` 模式下同样从 exit 1 变 exit 0。 — conf 0.9 · 证据 旧知识库 KE-PM-006 迁移（2026-05-22 RCA FINAL + 实测） · 首见 2026-10-30 · 命中 0
 
 ## 用户偏好与禁止项
 

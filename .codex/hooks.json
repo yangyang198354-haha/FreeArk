@@ -1,0 +1,85 @@
+{
+  "description": "FreeArk SDLC v3.7 lifecycle adapters; review with /hooks",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'memory']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "commandWindows": "python -X utf8 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'memory']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "SDLC memory"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "agent-builder|devops-engineer|kb-curator|pm-orchestrator|requirement-analyst|software-developer|system-architect|test-engineer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'memory']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "commandWindows": "python -X utf8 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'memory']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "SDLC memory"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|spawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'pre-agent']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "commandWindows": "python -X utf8 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'pre-agent']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "SDLC pre-agent"
+          }
+        ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'web']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "commandWindows": "python -X utf8 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'web']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "SDLC web"
+          }
+        ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'tools']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "commandWindows": "python -X utf8 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'tools']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "SDLC tools"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "agent-builder|devops-engineer|kb-curator|requirement-analyst|software-developer|system-architect|test-engineer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'stop']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "commandWindows": "python -X utf8 -c \"import pathlib,subprocess,runpy,sys; root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'stop']; runpy.run_path(sys.argv[0],run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "SDLC stop"
+          }
+        ]
+      }
+    ]
+  }
+}

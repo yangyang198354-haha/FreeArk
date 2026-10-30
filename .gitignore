@@ -144,6 +144,9 @@ docs/_build/
 
 # SDLC 过程产物（代码审查/测试/部署报告等，本地保留不进仓库）
 sdlc/
+# Codex SDLC 协议、画像、知识与模板是运行配置，不是过程产物。
+!.codex/sdlc/
+!.codex/sdlc/**
 
 # 临时诊断脚本
 debug_ssh.py

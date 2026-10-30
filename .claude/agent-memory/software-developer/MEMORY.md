@@ -9,6 +9,7 @@
 - [M-SD-004] 〔鉴权〕管理员判断用 `User.role == 'admin'`，不是 `is_staff`（二者无联动；`/api/auth/me/` 不返回 is_staff；v1.4.0 知识库页打不开即因误用 is_staff，commit 9cf65d1）。 — conf 0.9 · 证据 人工维护知识库迁移 · 首见 2026-10-22 · 命中 0
 - [M-SD-005] 〔鉴权〕视图权限类用 `api.views.IsAdminUser` / `api.views.IsOwnerUser`。 — conf 0.9 · 证据 人工维护知识库迁移 · 首见 2026-10-22 · 命中 0
 - [M-SD-006] 〔测试命令〕见画像 P4 与 `.claude/skills/test-runner/SKILL.md`；基线以实跑为准。 — conf 0.9 · 证据 人工维护知识库迁移 · 首见 2026-10-22 · 命中 0
+- [M-SD-007] 〔样式任务防越界〕"只改样式/UI"任务里子代理会顺带把 JS 压成单行、删内联样式，diff 出现大额净删除。派活时写明"只改 CSS、不动任何 JS 逻辑"；提交前用方法名集合对比核验（`git diff main -- . | grep -oE '(function|const|class)\s+\w+' | sort -u` 前后比对），有越界就逐行复核。 — conf 0.9 · 证据 旧知识库 KE-SD-003 迁移（用户警告 + 实际越界案例） · 首见 2026-10-30 · 命中 0
 
 ## 用户偏好与禁止项
 

@@ -1,0 +1,6 @@
+# Project layer; does not change the parent sandbox or approval policy.
+[features]
+hooks = true
+
+[agents]
+enabled = true
