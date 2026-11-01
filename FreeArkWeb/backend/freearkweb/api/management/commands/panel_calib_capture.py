@@ -55,7 +55,7 @@ _HBC_CONFIG_PATH = os.path.join(
 
 _FALLBACK_CONFIG: dict = {
     'protocol': 'wss',
-    'host': 'www.ttqingjiao.site',
+    'host': 'www.yueqiu.online',
     'port': 8084,
     'path': '/mqtt',
     'username': 'admin',
@@ -130,7 +130,7 @@ class Command(BaseCommand):
 
         cfg = _load_config()
         protocol  = cfg.get('protocol', 'wss')
-        host      = cfg.get('host', 'www.ttqingjiao.site')
+        host      = cfg.get('host', 'www.yueqiu.online')
         port      = int(cfg.get('port', 8084))
         path      = cfg.get('path', '/mqtt')
         username  = cfg.get('username', 'admin')

@@ -367,7 +367,7 @@ MEDIA_ROOT = BASE_DIR / os.environ.get('MEDIA_ROOT', 'media')
 # ⚠️ 该 broker 为厂商共享云，admin/public 可读写全租户所有屏——客户端直连的
 #    全租户越权风险已在需求 OQ-10 书面接受。
 SCREEN_MQTT_PROTOCOL = os.environ.get('SCREEN_MQTT_PROTOCOL', 'wxs')
-SCREEN_MQTT_HOST = os.environ.get('SCREEN_MQTT_HOST', 'www.ttqingjiao.site')
+SCREEN_MQTT_HOST = os.environ.get('SCREEN_MQTT_HOST', 'www.yueqiu.online')
 SCREEN_MQTT_PORT = int(os.environ.get('SCREEN_MQTT_PORT', '8084'))
 SCREEN_MQTT_PATH = os.environ.get('SCREEN_MQTT_PATH', '/mqtt')
 SCREEN_MQTT_USERNAME = os.environ.get('SCREEN_MQTT_USERNAME', 'admin')
