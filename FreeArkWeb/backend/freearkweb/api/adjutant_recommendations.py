@@ -69,7 +69,9 @@ CAPABILITY_QUESTIONS = (
 
 POPULAR_WINDOW_DAYS = 30
 POPULAR_SCAN_LIMIT = 1200
-POPULAR_MIN_FREQUENCY = 3
+# 业主量少时 3 次门槛长期无题上榜（2026-11 生产实测 30 天仅 8 条业主消息），降为 2；
+# 跨用户门槛 POPULAR_MIN_UNIQUE_USERS 不变，单个用户刷屏仍无法上榜。
+POPULAR_MIN_FREQUENCY = 2
 POPULAR_MIN_UNIQUE_USERS = 2
 POPULAR_LIMIT = 3
 # POPULAR_CACHE_KEY 的版本号 = 热门问题「归一化口径」的版本：该 key 缓存的是「按某套意图规则
@@ -359,7 +361,29 @@ def get_adjutant_recommendations() -> dict:
         # 推荐功能不可影响聊天页或暴露底层错误；调用方记录异常即可。
         popular_questions = []
 
+    capability_question = secrets.choice(CAPABILITY_QUESTIONS)
     return {
-        "capability_question": secrets.choice(CAPABILITY_QUESTIONS),
-        "popular_questions": popular_questions,
+        "capability_question": capability_question,
+        "popular_questions": _fill_from_bank(popular_questions, capability_question),
     }
+
+
+def _fill_from_bank(popular: list[str], capability_question: str) -> list[str]:
+    """真实热门不足 POPULAR_LIMIT 条时，用能力题库随机补齐。
+
+    题库为受控文案，不含任何用户数据，补位不影响隐私约束。补位题不与能力引导题
+    重复，也不与已上榜问题（或彼此）属于同一意图，避免同义问题挤在一起。
+    """
+    result = list(popular[:POPULAR_LIMIT])
+    used_intents = {_question_intent(_normalise_question(q)) for q in result}
+    used_intents.add(_question_intent(_normalise_question(capability_question)))
+    candidates = [q for q in CAPABILITY_QUESTIONS if q != capability_question]
+    for question in secrets.SystemRandom().sample(candidates, len(candidates)):
+        if len(result) >= POPULAR_LIMIT:
+            break
+        intent = _question_intent(_normalise_question(question))
+        if intent in used_intents:
+            continue
+        used_intents.add(intent)
+        result.append(question)
+    return result

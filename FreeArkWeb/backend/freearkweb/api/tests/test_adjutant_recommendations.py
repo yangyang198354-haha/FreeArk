@@ -339,7 +339,8 @@ class AdjutantRecommendationRuleDesignTest(TestCase):
         """T-14（AC-009-01/03、AC-007-01/04）：缓存 key 口径、冻结常量与前端锚点。"""
         self.assertEqual(POPULAR_CACHE_KEY, 'adjutant:popular-questions:v3')
         self.assertEqual(POPULAR_LIMIT, 3)
-        self.assertEqual(POPULAR_MIN_FREQUENCY, 3)
+        # 2026-11：生产业主量少，3 次门槛长期无题上榜，经用户决策降为 2（跨用户门槛不变）
+        self.assertEqual(POPULAR_MIN_FREQUENCY, 2)
         self.assertEqual(POPULAR_MIN_UNIQUE_USERS, 2)
         self.assertEqual(POPULAR_SCAN_LIMIT, 1200)
         self.assertEqual(POPULAR_WINDOW_DAYS, 30)
@@ -395,7 +396,9 @@ class AdjutantRecommendationRuleDesignTest(TestCase):
             result = get_adjutant_recommendations()
         self.assertIsInstance(result, dict)
         self.assertIn(result['capability_question'], CAPABILITY_QUESTIONS)
-        self.assertEqual(result['popular_questions'], [])
+        # 聚合失败时热门为空，由题库补位
+        self.assertEqual(len(result['popular_questions']), POPULAR_LIMIT)
+        self.assertTrue(set(result['popular_questions']).issubset(CAPABILITY_QUESTIONS))
 
 
 # ---------------------------------------------------------------------------
@@ -448,11 +451,19 @@ class AdjutantRecommendationAggregationTest(TestCase):
 
         self.assertEqual(_popular_questions(), [])
 
-    def test_requires_three_messages_from_two_distinct_owners(self):
+    def test_requires_two_messages_from_two_distinct_owners(self):
         for _ in range(3):
             _message(self.owner_a, '新风滤网多久需要更换？')
 
         self.assertEqual(_popular_questions(), [])
+
+    def test_two_messages_from_two_owners_reach_threshold(self):
+        _message(self.owner_a, '新风滤网多久需要更换？')
+        self.assertEqual(_popular_questions(), [])
+
+        cache.clear()
+        _message(self.owner_b, '新风滤网多久更换一次？')
+        self.assertEqual(_popular_questions(), [FILTER_LABEL])
 
     def test_display_layer_popular_questions_are_diverse(self):
         """T-07（AC-002-03 / AC-007-01）：D2 展示层 —— 只对返回值断言。
@@ -702,8 +713,10 @@ class AdjutantRecommendationEndpointTest(TestCase):
         self.assertEqual(response.data['capability_question'], '帮我看看今天的能耗情况。')
 
         popular = response.data['popular_questions']
-        self.assertEqual(len(popular), 1)                     # ① 长度
-        self.assertEqual(popular[0], FILTER_LABEL)            # ② 明确受控文案
+        self.assertEqual(len(popular), POPULAR_LIMIT)         # ① 长度（1 条真实热门 + 题库补位）
+        self.assertEqual(popular[0], FILTER_LABEL)            # ② 明确受控文案（真实热门排在补位题前）
+        self.assertTrue(set(popular[1:]).issubset(CAPABILITY_QUESTIONS))
+        self.assertNotIn('帮我看看今天的能耗情况。', popular[1:])  # 补位不与能力引导题重复
         self.assertIn(popular[0], CONTROLLED_LABELS)          # ③ 来自规则集合
         self.assertNotEqual(                                  # ④ 排除未命中回退原文路径
             popular[0], _normalise_question(safe_question),
@@ -745,7 +758,9 @@ class AdjutantRecommendationEndpointTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(response.data['capability_question'], CAPABILITY_QUESTIONS)
-        self.assertEqual(response.data['popular_questions'], [])
+        # 无真实热门（隐私过滤 / 聚合或缓存失败）时由能力题库补位，补位不含任何用户语料
+        self.assertEqual(len(response.data['popular_questions']), POPULAR_LIMIT)
+        self.assertTrue(set(response.data['popular_questions']).issubset(CAPABILITY_QUESTIONS))
 
     def test_endpoint_degradation_exposes_no_internals(self):
         """T-17（AC-010-02）：聚合异常时端点 200 且不泄露内部信息。"""
@@ -755,7 +770,9 @@ class AdjutantRecommendationEndpointTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(response.data['capability_question'], CAPABILITY_QUESTIONS)
-        self.assertEqual(response.data['popular_questions'], [])
+        # 无真实热门（隐私过滤 / 聚合或缓存失败）时由能力题库补位，补位不含任何用户语料
+        self.assertEqual(len(response.data['popular_questions']), POPULAR_LIMIT)
+        self.assertTrue(set(response.data['popular_questions']).issubset(CAPABILITY_QUESTIONS))
 
         body = json.dumps(response.data, ensure_ascii=False)
         for leaked in (
@@ -813,7 +830,9 @@ class AdjutantRecommendationE2ETest(TestCase):
         response = self._get(self.token)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['popular_questions'], [])
+        # 无真实热门（隐私过滤 / 聚合或缓存失败）时由能力题库补位，补位不含任何用户语料
+        self.assertEqual(len(response.data['popular_questions']), POPULAR_LIMIT)
+        self.assertTrue(set(response.data['popular_questions']).issubset(CAPABILITY_QUESTIONS))
         self.assertNotIn(
             private_question,
             json.dumps(response.data, ensure_ascii=False),
@@ -826,7 +845,9 @@ class AdjutantRecommendationE2ETest(TestCase):
             response = self._get(self.token)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['popular_questions'], [])
+        # 无真实热门（隐私过滤 / 聚合或缓存失败）时由能力题库补位，补位不含任何用户语料
+        self.assertEqual(len(response.data['popular_questions']), POPULAR_LIMIT)
+        self.assertTrue(set(response.data['popular_questions']).issubset(CAPABILITY_QUESTIONS))
         self.assertIn(response.data['capability_question'], CAPABILITY_QUESTIONS)
         body = json.dumps(response.data, ensure_ascii=False)
         for leaked in (marker, 'Traceback', 'RuntimeError'):
