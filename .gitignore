@@ -147,6 +147,9 @@ sdlc/
 # Codex SDLC 协议、画像、知识与模板是运行配置，不是过程产物。
 !.codex/sdlc/
 !.codex/sdlc/**
+# Trae SDLC 协议、脚本、知识与模板同理（上面的 sdlc/ 规则会误伤）
+!.trae/sdlc/
+!.trae/sdlc/**
 
 # 临时诊断脚本
 debug_ssh.py

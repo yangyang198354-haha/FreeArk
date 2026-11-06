@@ -55,7 +55,7 @@ class Text(HTMLParser):
 
 def fetch(page):
     url = PAGES[page]
-    with build_opener(Redirect).open(Request(url, headers={"User-Agent": "FreeArk-Codex-Docs/1.0"}), timeout=20) as response:
+    with build_opener(Redirect).open(Request(url, headers={"User-Agent": "SDLC-Codex-Docs/1.0"}), timeout=20) as response:
         if not allowed(response.url):
             raise ValueError("unexpected response URL")
         content = response.read(2_000_001)

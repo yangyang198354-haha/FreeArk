@@ -1,5 +1,5 @@
 {
-  "description": "FreeArk SDLC v3.7 lifecycle adapters; review with /hooks",
+  "description": "SDLC v3.7 lifecycle adapters; review with /hooks",
   "hooks": {
     "SessionStart": [
       {

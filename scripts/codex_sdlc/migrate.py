@@ -19,10 +19,13 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGE = ROOT / "output/codex-migration"
+PROJECT = ROOT.name
 
 
 def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+    if not path.exists():
+        return None
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def suite_version():
@@ -182,7 +185,7 @@ def build():
         emit(".codex/sdlc/" + relative.as_posix(), content, records, source.relative_to(ROOT).as_posix())
     for role in meta_by_role:
         source = ROOT / f".claude/agent-memory/{role}/MEMORY.md"
-        content = adapt(source.read_text(encoding="utf-8-sig")) if source.exists() else f"# {role} 项目记忆 — FreeArk\n\n## 已验证\n\n## 用户偏好与禁止项\n\n## 待验证\n"
+        content = adapt(source.read_text(encoding="utf-8-sig")) if source.exists() else f"# {role} 项目记忆 — {PROJECT}\n\n## 已验证\n\n## 用户偏好与禁止项\n\n## 待验证\n"
         emit(f".codex/agent-memory/{role}/MEMORY.md", content, records,
              source.relative_to(ROOT).as_posix() if source.exists() else None, preserve=True)
     # Preserve topic files, not just memory indexes.
@@ -206,7 +209,7 @@ def build():
         hooks.setdefault(event, []).append({"matcher": matcher, "hooks": [{"type": "command", "command": command,
             "commandWindows": windows, "timeout": 30, "statusMessage": f"SDLC {mode}"}]})
     version = suite_version()
-    emit(".codex/hooks.json", json.dumps({"description": f"FreeArk SDLC v{version} lifecycle adapters; review with /hooks", "hooks": hooks}, ensure_ascii=False, indent=2) + "\n", records, ".claude/settings.json")
+    emit(".codex/hooks.json", json.dumps({"description": f"{PROJECT} SDLC v{version} lifecycle adapters; review with /hooks", "hooks": hooks}, ensure_ascii=False, indent=2) + "\n", records, ".claude/settings.json")
     emit(".codex/config.toml", "# Project layer; does not change the parent sandbox or approval policy.\n[features]\nhooks = true\n\n[agents]\nenabled = true\n", records)
     settings = json.loads((ROOT / ".claude/settings.json").read_text(encoding="utf-8"))
     rules = ["# Migrated from .claude/settings.json. Most restrictive matching rule wins."]
@@ -218,7 +221,7 @@ def build():
             patterns.add(parts)
         for parts in sorted(patterns):
             pattern = [[parts[0], parts[0] + ".exe", parts[0] + ".cmd"], *parts[1:]]
-            rules.append(f"prefix_rule(pattern={json.dumps(pattern)}, decision={json.dumps(decision)}, justification=\"FreeArk SDLC project permission policy\")")
+            rules.append(f"prefix_rule(pattern={json.dumps(pattern)}, decision={json.dumps(decision)}, justification=\"{PROJECT} SDLC project permission policy\")")
     emit(".codex/rules/sdlc.rules", "\n".join(rules) + "\n", records, ".claude/settings.json")
     for source in sorted((ROOT / ".claude/skills").rglob("SKILL.md")):
         content = adapt(source.read_text(encoding="utf-8-sig")).replace("Claude Code", "Codex")
@@ -226,7 +229,7 @@ def build():
         if source.parent.name == "test-runner":
             content += "\n## Codex 执行补充\n\n基线对照前先保存并核验用户未提交改动；不得直接用示例 checkout 覆盖这些改动。相同目录/环境的前后对照只在可完整还原时进行。历史基线是参考，当前结论来自本次实跑。Windows 环境变量和解释器语法见 `.codex/sdlc/runtime_adapter.md`。\n"
         emit(".agents/skills/" + source.relative_to(ROOT / ".claude/skills").as_posix(), content, records, source.relative_to(ROOT).as_posix())
-    emit("AGENTS.md", '''# FreeArk Codex 工作约定
+    emit("AGENTS.md", f'''# {PROJECT} Codex 工作约定
 
 修改前先看现有 diff，保留用户未提交改动。项目事实与命令参考 `.codex/sdlc/project_profile.md`；按任务读取相关章节，测试/部署额外读取 `.agents/skills/` 对应 SKILL.md。
 

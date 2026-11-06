@@ -350,14 +350,6 @@
       "preserve_on_rerun": false
     },
     {
-      "target": ".agents/skills/freeark-prod-deploy/SKILL.md",
-      "source": ".claude/skills/freeark-prod-deploy/SKILL.md",
-      "source_sha256": "6c3ddfb3c482825540c8b7c77d26260490fd19b008213f71a0549be312dce4be",
-      "previous_sha256": "92f03470fff4d655c4a079b6fc056d64e10ef11abe5f06805b9eee9d686a5ceb",
-      "sha256": "92f03470fff4d655c4a079b6fc056d64e10ef11abe5f06805b9eee9d686a5ceb",
-      "preserve_on_rerun": false
-    },
-    {
       "target": ".agents/skills/test-runner/SKILL.md",
       "source": ".claude/skills/test-runner/SKILL.md",
       "source_sha256": "bcd79280acf4d5396ab9cb78a1cd410ce67fddef7f53e332a45f3d06a705c901",
