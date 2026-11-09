@@ -7,13 +7,16 @@ In Claude Code a SubagentStop hook (a) blocks once when the final message lacks
 runtime, so the PM runs this right after each subagent skill returns.
 
 Usage:
-    python .trae/sdlc/scripts/kb_inbox.py --check-response --text-file reply.txt
+    python .trae/sdlc/scripts/kb_inbox.py --check-response --text-file reply.txt \
+        [--agent requirement-analyst] [--expect-invocation demo-A-001]
     python .trae/sdlc/scripts/kb_inbox.py --agent requirement-analyst \
         --text-file reply.txt [--root .] [--docs docs/sdlc/demo]
 
 Exit codes:
     0  response OK (and, if proposals, appended/idempotent)
-    3  response missing <agent_response>, <invocation_id> or <status> (PM must re-ask)
+    3  response invalid: missing/not-trailing <agent_response>, missing <invocation_id>
+       or <status>, invocation/agent mismatch (PM must re-ask; treat as FAILURE)
+    1  script error (fail-closed: PM must treat as FAILURE, never as OK)
 """
 from __future__ import annotations
 
@@ -28,7 +31,10 @@ import sys
 
 SECRET = re.compile(
     r"(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}"
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?i:password|passwd|secret|token)\s*[=:]\s*\S+)"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?i:password|passwd|secret|token)\s*[=:]\s*\S+"
+    r"|(?<=://)[^\s/:@]+:[^\s/@]+(?=@)"              # credentials in URLs
+    r"|(?<![\dA-Za-z])\d{17}[\dXx](?![\dA-Za-z])"     # PRC resident ID (shared_protocol §L-2)
+    r"|(?<![\d-])\d{4}(?:[ -]?\d{4}){3}(?:[ -]?\d{1,3})?(?![\d-]))"  # bank cards (16-19 digits)
 )
 
 
@@ -44,9 +50,12 @@ def find(tag: str, text: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-def check_response(text: str) -> tuple[bool, str]:
+def check_response(text: str, expect_invocation: str = "", agent: str = "") -> tuple[bool, str]:
     if "<agent_response>" not in text:
         return False, "缺少 <agent_response> 块（共享协议 §E）"
+    if not text.rstrip().endswith("</agent_response>"):
+        return False, "<agent_response> 必须是回复的最后一块（共享协议 §E）"
+    text = text[text.rfind("<agent_response>"):]
     inv = find("invocation_id", text)
     status = find("status", text)
     if not inv:
@@ -55,6 +64,11 @@ def check_response(text: str) -> tuple[bool, str]:
         return False, "<agent_response> 缺少 <status>"
     if status not in {"SUCCESS", "PARTIAL_SUCCESS", "FAILURE", "BLOCKED", "CLARIFICATION_NEEDED"}:
         return False, "<status> 非法值：%s" % status
+    if expect_invocation and inv != expect_invocation:
+        return False, "<invocation_id>=%s 与本次调用 %s 不一致" % (inv, expect_invocation)
+    agent_id = find("agent_id", text)
+    if agent and agent != "unknown" and agent_id and agent_id != agent:
+        return False, "<agent_id>=%s 与被调用技能 %s 不一致" % (agent_id, agent)
     return True, "OK invocation_id=%s status=%s" % (inv, status)
 
 
@@ -90,18 +104,20 @@ def main() -> int:
     ap.add_argument("--root", default=".")
     ap.add_argument("--planning-dir", default="project_workspace")
     ap.add_argument("--check-response", action="store_true")
+    ap.add_argument("--expect-invocation", default="")
     args = ap.parse_args()
 
     text = read_text(args.text_file)
-    ok, msg = check_response(text)
+    ok, msg = check_response(text, args.expect_invocation, args.agent)
     print(("RESPONSE_OK %s" if ok else "RESPONSE_INVALID %s") % msg)
     if args.check_response:
         # Validation mode is READ-ONLY: never touch the inbox here, so that
         # `--check-response` alone cannot create rows with agent=unknown.
         return 0 if ok else 3
     if not ok:
-        return 0
+        return 3
 
+    text = text[text.rfind("<agent_response>"):]
     inv = find("invocation_id", text)
     rows = proposals(text, args.agent, inv)
     if not rows:
@@ -135,6 +151,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as exc:  # never break the agent run
-        print("KB_INBOX_ERROR %s" % exc)
-        sys.exit(0)
+    except Exception as exc:  # fail closed: an unchecked reply must not pass the gate
+        print("KB_INBOX_ERROR %s（PM 按 FAILURE 处理，修复后重跑）" % exc)
+        sys.exit(1)

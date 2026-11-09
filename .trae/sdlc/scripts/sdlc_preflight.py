@@ -14,9 +14,9 @@ Usage:
 Exit codes:
     0  OK
     2  cwd is not the repository root (same rule as the Claude hook)
-    3  profile missing / DRAFT, or a required preflight item failed
-
-Never raises: unexpected errors degrade to a report, not a crash.
+    3  profile missing / DRAFT (--check-flow-start), or a required preflight item failed
+    4  --check-all: suite OK but profile MISSING / not APPROVED (bootstrap the profile first)
+    1  script error (fail-closed: do not load sdlc-* skills until fixed)
 """
 from __future__ import annotations
 
@@ -147,7 +147,7 @@ def check_all() -> int:
         except Exception as exc:  # noqa: BLE001
             problems.append("phase_status not well-formed: %s (%s)" % (rel, exc))
 
-    # 5) profile status (informational only)
+    # 5) profile status (exit 4 when not APPROVED; see docstring)
     status, _ = profile_status()
 
     # 6) memory seeds
@@ -163,6 +163,10 @@ def check_all() -> int:
             print("  - " + p)
         return 3
 
+    if status != "APPROVED":
+        print("PREFLIGHT_OK_PROFILE_PENDING skills=%d profile=%s；先生成/确认画像（status=APPROVED）再启动流程。"
+              % (len(SKILL_NAMES), status))
+        return 4
     print("PREFLIGHT_OK skills=%d profile=%s" % (len(SKILL_NAMES), status))
     return 0
 
@@ -190,6 +194,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as exc:  # never break the run
-        print("PREFLIGHT_ERROR %s" % exc)
-        sys.exit(0)
+    except Exception as exc:  # fail closed: an unverified cwd must not pass
+        print("PREFLIGHT_ERROR %s（检查未完成，视为失败）" % exc)
+        sys.exit(1)

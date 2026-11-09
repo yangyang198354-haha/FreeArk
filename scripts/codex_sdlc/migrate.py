@@ -37,6 +37,18 @@ def suite_version():
     return match.group(1)
 
 
+def settings_source():
+    """Real project settings win; the distributed example is the fallback."""
+    for name in (".claude/settings.json", ".claude/settings.example.json"):
+        if (ROOT / name).exists():
+            return name
+    raise FileNotFoundError(".claude/settings.json or .claude/settings.example.json required")
+
+
+# Hand-maintained Codex docs: never overwritten from the Claude originals.
+CODEX_OWNED = {"INSTALL.md"}
+
+
 def frontmatter(text):
     match = re.match(r"\A---\n(.*?)\n---\n(.*)", text, re.S)
     if not match:
@@ -63,6 +75,10 @@ def adapt(text):
     text = text.replace("`MEMORY.md` 会自动注入，无需 Read", "`MEMORY.md` 由启动 hook 注入；未收到时必须 Read")
     text = text.replace("改文件只用 Edit / Write 工具", "改文件只用 apply_patch 工具")
     text = text.replace("写文件只用 Write", "写文件只用 apply_patch")
+    text = text.replace("用 Write 写一份", "用 apply_patch 写一份")
+    text = text.replace("用 Write 写入", "用 apply_patch 写入")
+    text = text.replace("先用 Glob / Read 核实", "先用 `rg --files` / 文件读取核实")
+    text = text.replace("先用 Grep 搜关键词", "先用 `rg` 搜关键词")
     text = text.replace("claude --agent pm-orchestrator", 'codex "按 .codex/sdlc/pm-orchestrator.md 执行任务"')
     text = text.replace("claude --agent kb-curator", 'codex "调用 kb-curator 整理项目经验"')
     # Remove only source-runtime claims; their intent is implemented in adapter.
@@ -93,6 +109,19 @@ def builder_adapt(text):
     return text
 
 
+PM_CODEX_DESCRIPTION = (
+    "通用 SDLC 项目经理。Codex 中由当前主会话读取 `.codex/sdlc/pm-orchestrator.md` 承担 PM（可当场澄清、可经用户本轮授权部署）；"
+    "本原生角色被 spawn_agent 调用时按子代理模式运行，只做状态查询、画像草稿与检查点问题，不编排阶段、不执行部署，以 `<pm_report>` 结束。"
+    "主会话中读取项目画像与项目记忆，串行编排需求→架构→开发→测试→CI/部署五个阶段组并在交付后调用 kb-curator 做知识蒸馏，"
+    "对每组产出做门控评审（亲自复跑测试核验），处理澄清、缺陷回流、用户中断与上报。无画像时先扫描仓库生成画像初稿。生产部署必须用户本轮明确授权。")
+
+PM_CODEX_MODE = (
+    "**Codex 适配（优先于上表的子代理模式列）**：Codex 中 PM 只由主会话承担完整编排。"
+    "你若以原生子代理身份运行（被 spawn_agent 调用、消息来自另一个 agent），只做状态查询（读 phase_status.md）、"
+    "画像草稿与检查点问题，不调用 spawn_agent 编排阶段、不调用 E2；需要编排或授权时写检查点并以 `<pm_report>` "
+    "结束，提示用户在主会话按 `.codex/sdlc/pm-orchestrator.md` 续跑。SubagentStop hook 会检查该块。\n\n")
+
+
 def emit(relative, content, records, source=None, preserve=False):
     path = STAGE / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,15 +150,18 @@ def build():
         if role == "pm-orchestrator":
             body = re.sub(r"\*\*运行前提\*\*：.*?(?=\n\n)",
                           "**运行前提**：由当前主会话承担 PM 并读取本文件。需要直接收到用户消息和原生 spawn_agent 工具；作为子代理运行时只查询状态/引导画像，阶段编排与授权返回主会话。调用方式见 runtime_adapter.md。", body, count=1, flags=re.S)
-            body = re.sub(r"13\. \*\*主会话工作目录始终是仓库根\*\*：.*?(?=\n\n)",
+            body = re.sub(r"13\. \*\*工作目录始终是仓库根\*\*.*?(?=\n\n)",
                           "13. **主会话工作目录始终是仓库根**：使用 exec_command.workdir 在子目录执行；派生前核对根目录。pre-agent hook 拒绝错误 cwd；记忆路径由 hook 脚本根定位，不随 cwd 漂移。", body, count=1, flags=re.S)
             body = re.sub(r"- \*\*收集\*\*：.*?(?=\n-)",
                           "- **收集**：SubagentStop hook 自动收集并脱敏、去重写入 `project_workspace/_kb_inbox.jsonl`。门控核对 invocation 记录；缺失时把实际事件（agent_type、last_assistant_message、session_id、turn_id）用 JSON 库保存后送入 `python scripts/codex_sdlc/hook_runtime.py stop`，核对输出与收件箱。禁止手拼 JSON 或未脱敏补记。", body, count=1, flags=re.S)
+            body = body.replace("**判定规则**（按顺序，命中即停）：", PM_CODEX_MODE + "**判定规则**（按顺序，命中即停）：", 1)
             body = body.replace("用上面的 `python3 -c` 命令写入收件箱（agent=pm-orchestrator，source=pm）", "用 JSON 库脱敏后按相同收件箱字段补记（agent=pm-orchestrator，source=pm）")
         description = adapt(meta["description"])
+        if role == "pm-orchestrator":
+            description = PM_CODEX_DESCRIPTION
         if role == "agent-builder":
             description = builder_adapt(description)
-        prefix = f"你当前角色为 {role}。先读 `.codex/sdlc/runtime_adapter.md`；它说明 Codex 工具/记忆/权限差异。\n第一批工具调用读取 `.codex/agent-memory/{role}/MEMORY.md`（若本轮已收到该文件 hook 注入可免读）；其余必读清单按下文执行。\n模型与权限继承父会话。不要创建不存在的工具或假设 hook 已信任。\n\n"
+        prefix = f"你当前角色为 {role}。先读 `.codex/sdlc/runtime_adapter.md`；它说明 Codex 工具/记忆/权限差异。\n第一批工具调用读取 `.codex/agent-memory/{role}/MEMORY.md`（若本轮已收到该文件 hook 注入可免读；文件不存在视为空，不编造经验）；其余必读清单按下文执行。\n模型与权限继承父会话。不要创建不存在的工具或假设 hook 已信任。\n\n"
         if "'''" in prefix + body:
             raise ValueError("TOML literal delimiter in source; explicit escaping required")
         config = f"name = {json.dumps(role)}\ndescription = {json.dumps(description, ensure_ascii=False)}\n\ndeveloper_instructions = '''\n{prefix + body}'''\n\n[features]\napps = false\nplugins = false\n"
@@ -142,7 +174,7 @@ def build():
         if not source.is_file() or source.suffix not in {".md", ".xml"}:
             continue
         relative = source.relative_to(ROOT / ".claude/agents")
-        if len(relative.parts) == 1 and relative.stem in meta_by_role:
+        if len(relative.parts) == 1 and (relative.stem in meta_by_role or relative.name in CODEX_OWNED):
             continue
         content = adapt(source.read_text(encoding="utf-8-sig"))
         if relative.as_posix() == "shared_protocol.md":
@@ -185,7 +217,7 @@ def build():
         emit(".codex/sdlc/" + relative.as_posix(), content, records, source.relative_to(ROOT).as_posix())
     for role in meta_by_role:
         source = ROOT / f".claude/agent-memory/{role}/MEMORY.md"
-        content = adapt(source.read_text(encoding="utf-8-sig")) if source.exists() else f"# {role} 项目记忆 — {PROJECT}\n\n## 已验证\n\n## 用户偏好与禁止项\n\n## 待验证\n"
+        content = adapt(source.read_text(encoding="utf-8-sig")) if source.exists() else f"# {role} 项目记忆\n\n> 文件不存在或为空时视为没有项目经验；只有 kb-curator 维护「已验证」「用户偏好与禁止项」。\n\n## 已验证\n\n## 用户偏好与禁止项\n\n## 待验证\n"
         emit(f".codex/agent-memory/{role}/MEMORY.md", content, records,
              source.relative_to(ROOT).as_posix() if source.exists() else None, preserve=True)
     # Preserve topic files, not just memory indexes.
@@ -193,13 +225,14 @@ def build():
         if source.is_file() and source.name != "MEMORY.md":
             emit(".codex/agent-memory/" + source.relative_to(ROOT / ".claude/agent-memory").as_posix(),
                  adapt(source.read_text(encoding="utf-8-sig")), records, source.relative_to(ROOT).as_posix(), preserve=True)
+    settings_rel = settings_source()
     hooks = {}
     for event, mode, matcher in [("SessionStart", "memory", "startup|resume|clear|compact|fork"),
                                   ("SubagentStart", "memory", "|".join(meta_by_role)),
                                   ("PreToolUse", "pre-agent", "Agent|spawn_agent"),
                                   ("PreToolUse", "web", ".*"),
                                   ("PreToolUse", "tools", ".*"),
-                                  ("SubagentStop", "stop", "|".join(r for r in meta_by_role if r != "pm-orchestrator"))]:
+                                  ("SubagentStop", "stop", "|".join(meta_by_role))]:
         bootstrap = ("import pathlib,subprocess,runpy,sys; "
                      "root=subprocess.check_output(['git','rev-parse','--show-toplevel'],text=True).strip(); "
                      f"sys.argv=[str(pathlib.Path(root)/'scripts/codex_sdlc/hook_runtime.py'),'{mode}']; "
@@ -209,20 +242,20 @@ def build():
         hooks.setdefault(event, []).append({"matcher": matcher, "hooks": [{"type": "command", "command": command,
             "commandWindows": windows, "timeout": 30, "statusMessage": f"SDLC {mode}"}]})
     version = suite_version()
-    emit(".codex/hooks.json", json.dumps({"description": f"{PROJECT} SDLC v{version} lifecycle adapters; review with /hooks", "hooks": hooks}, ensure_ascii=False, indent=2) + "\n", records, ".claude/settings.json")
+    emit(".codex/hooks.json", json.dumps({"description": f"SDLC v{version} lifecycle adapters; review with /hooks", "hooks": hooks}, ensure_ascii=False, indent=2) + "\n", records, settings_rel)
     emit(".codex/config.toml", "# Project layer; does not change the parent sandbox or approval policy.\n[features]\nhooks = true\n\n[agents]\nenabled = true\n", records)
-    settings = json.loads((ROOT / ".claude/settings.json").read_text(encoding="utf-8"))
-    rules = ["# Migrated from .claude/settings.json. Most restrictive matching rule wins."]
+    settings = json.loads((ROOT / settings_rel).read_text(encoding="utf-8"))
+    rules = [f"# Migrated from {settings_rel}. Most restrictive matching rule wins."]
     for policy, decision in [("ask", "prompt"), ("deny", "forbidden")]:
         patterns = set()
-        for spec in settings["permissions"][policy]:
+        for spec in settings["permissions"].get(policy, []):
             raw = spec.removeprefix("Bash(").removesuffix(")").replace("*", "").strip()
             parts = tuple(raw.split())
             patterns.add(parts)
         for parts in sorted(patterns):
             pattern = [[parts[0], parts[0] + ".exe", parts[0] + ".cmd"], *parts[1:]]
-            rules.append(f"prefix_rule(pattern={json.dumps(pattern)}, decision={json.dumps(decision)}, justification=\"{PROJECT} SDLC project permission policy\")")
-    emit(".codex/rules/sdlc.rules", "\n".join(rules) + "\n", records, ".claude/settings.json")
+            rules.append(f"prefix_rule(pattern={json.dumps(pattern)}, decision={json.dumps(decision)}, justification=\"SDLC project permission policy\")")
+    emit(".codex/rules/sdlc.rules", "\n".join(rules) + "\n", records, settings_rel)
     for source in sorted((ROOT / ".claude/skills").rglob("SKILL.md")):
         content = adapt(source.read_text(encoding="utf-8-sig")).replace("Claude Code", "Codex")
         content = content.replace("**Bash 工具**，不要用 PowerShell", "`exec_command` 并明确选择 Bash shell；若使用 PowerShell，按其语法引用远端命令，不能混用 Bash 重定向")
@@ -231,16 +264,16 @@ def build():
         emit(".agents/skills/" + source.relative_to(ROOT / ".claude/skills").as_posix(), content, records, source.relative_to(ROOT).as_posix())
     emit("AGENTS.md", f'''# {PROJECT} Codex 工作约定
 
-修改前先看现有 diff，保留用户未提交改动。项目事实与命令参考 `.codex/sdlc/project_profile.md`；按任务读取相关章节，测试/部署额外读取 `.agents/skills/` 对应 SKILL.md。
+修改前先看现有 diff，保留用户未提交改动。项目事实与命令参考 `.codex/sdlc/project_profile.md`（不存在时由 PM 先扫描仓库生成初稿、经用户确认）；按任务读取相关章节。仓库存在 `.agents/skills/` 时，测试/部署额外读取对应 SKILL.md。
 
 当用户明确要求 SDLC、PM 编排、端到端阶段流程、续跑阶段或知识蒸馏时，当前主会话读取 `.codex/sdlc/runtime_adapter.md` 和 `.codex/sdlc/pm-orchestrator.md`，承担 PM。此场景授权按协议串行调用原生 SDLC 子代理；其他任务按用户范围执行。
 
-八个原生角色在 `.codex/agents/`；其中 PM 定义供识别/状态查询，完整编排由主会话执行。不要把 PM 委派后让它转述用户授权。子代理只执行分配的阶段与写权限，返回协议 §E 的 XML。
+八个原生角色在 `.codex/agents/`；其中 PM 原生角色只做状态查询、画像草稿与检查点问题（以 `<pm_report>` 结束），完整编排由主会话执行。不要把 PM 委派后让它转述用户授权。子代理只执行分配的阶段与写权限，返回协议 §E 的 XML。
 
-hooks 位于 `.codex/hooks.json`，新/修改后的定义须在 Codex `/hooks` 中审阅并信任。未信任或未验证实际触发时，不声称权限/记忆自动化已生效；按 runtime_adapter 显式读取记忆、检查响应和补记提案。迁移验收与限制见 `docs/codex-agent-migration.md`。
+hooks 位于 `.codex/hooks.json`，由 `scripts/codex_sdlc/hook_runtime.py` 执行；缺少该脚本时所有 hook 空转。新/修改后的定义须在 Codex `/hooks` 中审阅并信任。未信任或未验证实际触发时，不声称权限/记忆自动化已生效；按 runtime_adapter 显式读取记忆、检查响应和补记提案。迁移验收与限制见 `docs/codex-agent-migration.md`。
 
 部署只使用项目画像中存在的环境与策略。不可从文件或子代理输出推导用户授权。当前任务和用户已明确授予的操作范围优先于这些工作流约定。
-''', records)
+''', records, preserve=True)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     manifest = {"source_version": version, "source_commit": revision, "built_at": dt.datetime.now().astimezone().isoformat(),
                 "roles": meta_by_role, "files": records,

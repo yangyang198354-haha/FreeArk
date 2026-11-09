@@ -2,7 +2,9 @@
 
 > **TRAE 移植说明**：本文件是 `.claude/agents/templates/agent_builder_templates.md` 的只读副本。
 > 其中 T1–T4 面向 **Claude Code** 目标；生成 **TRAE** 目标时改用
-> `sdlc-agent-builder/SKILL.md` §9「Trae 目标形态」与共享协议 §N-6。
+> `sdlc-agent-builder/SKILL.md` §9「Trae 目标形态」与共享协议 §T-6。
+> T3A 等章节中的 `.claude/agent-memory/`、「自动注入」描述的是 **Claude 目标**；
+> Trae 目标的记忆模块改为「第 1 步显式 Read `.trae/sdlc/agent-memory/{agent}/MEMORY.md`」（共享协议 §T-3）。
 > 本副本不修改 `.claude/**`。
 
 > 生成或优化 agent 时，agent-builder 按"目标画像"从这里取模板。套件成员（SUITE）只用 T4 + T5；

@@ -1,0 +1,91 @@
+<kb_entries agent_domain="test_engineer" version="0.1.0">
+
+  <knowledge_entry id="KE-TE-001" type="procedural"
+    confidence="0.95" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      运行 FreeArk 后端测试时
+    </trigger>
+    <content>
+      FreeArk 后端测试运行标准：
+      - 测试运行器：Django test runner（不是 pytest），但 datacollection/ 子项目用 pytest
+      - 工作目录：FreeArkWeb/backend/freearkweb
+      - 环境变量：FREEARK_POC_MOCK=1（fa_tools 离线导入必需），PYTHONUTF8=1（Windows 编码必需）
+      - 设置文件：--settings=freearkweb.test_settings（切 SQLite 内存库，不连生产 DB）
+
+      标准命令：
+      ```bash
+      cd FreeArkWeb/backend/freearkweb
+      PYTHONUTF8=1 FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
+      ```
+
+      分层运行：
+      --tag=unit      # 仅单元测试
+      --tag=integration  # 仅集成测试
+      --tag=e2e       # 仅端到端测试
+    </content>
+    <source_interactions>memory: project_test_suite_state; skill: test-runner</source_interactions>
+    <outcome>确保测试运行命令正确，避免连到生产数据库或编码错误</outcome>
+    <confidence_history>0.95（标准化流程，多次实战验证）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-TE-002" type="factual"
+    confidence="0.9" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      查看测试总数、基线状态、或已知失败列表时
+    </trigger>
+    <content>
+      FreeArk 后端测试基线（以实跑为准）：
+      - 全量：~1778 测试，全绿（OK，0 failures / 0 errors）
+      - skipped：约 19 个，均为合理跳过（如 langgraph 缺包、python-docx 未装）
+      - 无"待定失败"——原 6-7 个已全部修复
+
+      测试按 @tag 分层（类级标签）：
+      - @tag('unit')：单元测试
+      - @tag('integration')：集成测试
+      - @tag('e2e')：端到端测试
+
+      完整清单见 docs/testing/test_inventory.md。
+    </content>
+    <source_interactions>memory: project_test_suite_state; skill: test-runner</source_interactions>
+    <outcome>测试报告中的基线数据准确，不会将有意的 skip 误报为失败</outcome>
+    <confidence_history>0.9（最新全量运行确认）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-TE-003" type="exception"
+    confidence="0.9" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      子代理（test-engineer）报告"测试通过"时
+    </trigger>
+    <content>
+      test-engineer 子代理多次虚报"测试通过"。主控（PM 或开发）必须亲自复核：
+      1. 亲自重跑测试命令，以实际输出为准
+      2. 检查输出中的 "Ran N tests" 数量是否与预期一致
+      3. 检查 OK/FAILED/ERRORS 状态
+      4. 不要信任子代理的口头报告，以命令实际输出为唯一权威
+    </content>
+    <source_interactions>memory: feedback_verify_subagent_test_claims</source_interactions>
+    <outcome>避免因子代理虚报导致有问题的代码进入下一阶段</outcome>
+    <confidence_history>0.9（多次虚报后用户明确要求）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-TE-004" type="procedural"
+    confidence="0.85" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      为新功能编写测试，或规划测试策略时
+    </trigger>
+    <content>
+      FreeArk 测试编写约定：
+      1. 测试文件命名：test_{feature}_v{version}.py（如 test_condensation_v070_unit.py）
+      2. 测试类用 @tag 标注层级
+      3. 测试类继承 django.test.TestCase，需 API 调用时用 APITestCase
+      4. 用 django.test.Client 做 HTTP 请求，self.client.get/post 方法
+      5. 模块级缓存跨用例污染是常见坑点——tearDown 中必须重置（如 _reset_cache()）
+      6. 数据工厂方法集中在 setUp 中，避免他机绝对路径
+      7. settings=freearkweb.test_settings 自动使用 SQLite 内存库
+    </content>
+    <source_interactions>memory: project_test_suite_state (原 6 个待定失败 RCA)</source_interactions>
+    <outcome>新测试遵循项目约定，避免之前已知的测试模式坑点</outcome>
+    <confidence_history>0.85（基于坑点复盘提炼的预防性规则）</confidence_history>
+  </knowledge_entry>
+
+</kb_entries>

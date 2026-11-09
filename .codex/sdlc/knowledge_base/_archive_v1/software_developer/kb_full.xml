@@ -1,0 +1,87 @@
+<kb_entries agent_domain="software_developer" version="0.1.0">
+
+  <knowledge_entry id="KE-SD-001" type="procedural"
+    confidence="0.95" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      修改 Django 数据库模型（字段重命名、删除、类型变更），或创建新迁移时
+    </trigger>
+    <content>
+      FreeArk 项目存在既有迁移漂移，makemigrations 会夹带无关 id/索引变更。
+      规则：
+      1. 迁移必须手写 scoped，不得使用 makemigrations 全产物
+      2. 迁移号并行易撞车：fetch 后改号+改依赖保线性
+      3. 已应用到生产的迁移文件绝对不能直接修改，必须创建新迁移
+      4. 字段重命名用 migrations.RenameField，makemigrations 会生成 AddField+RemoveField（破坏数据）
+      5. 生产部署前检查：showmigrations 确认生产库状态、迁移编号连续、无跳号
+    </content>
+    <source_interactions>memory: project_migration_drift_handwrite_scoped, KE-PM-003</source_interactions>
+    <outcome>避免生产数据库与代码不一致，防止 migrate 无操作但代码报 column does not exist</outcome>
+    <confidence_history>0.95（有明确的故障现象和完整解决过程，置信度极高）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-SD-002" type="factual"
+    confidence="0.95" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      实现鉴权逻辑、权限检查、或前端路由守卫时
+    </trigger>
+    <content>
+      FreeArk 管理员鉴权使用 User.role == 'admin'，不是 Django 的 is_staff。
+      关键事实：
+      - User 模型有 role 字段（admin/operator/user），与 Django is_staff 无联动
+      - 后端视图鉴权用 views.IsAdminUser（非 DRF 内置 IsAdminUser）
+      - 前端守卫和菜单通过 role 字段判断
+      - /api/auth/me/ 不返回 is_staff
+      - v1.4.0 知识库页打不开即因错误使用了 is_staff（commit 9cf65d1）
+    </content>
+    <source_interactions>memory: project_admin_auth_role_not_isstaff</source_interactions>
+    <outcome>避免鉴权逻辑错误导致页面不可达或权限漏洞</outcome>
+    <confidence_history>0.95（有实际 bug 修复记录，高置信度）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-SD-003" type="exception"
+    confidence="0.9" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      执行"只改样式/UI"的任务，或评审以样式修改为主的 PR 时
+    </trigger>
+    <content>
+      子代理在"只改样式"任务中会越界重写/压缩 JS 代码，导致：
+      - JS 被压缩成单行
+      - 内联样式被删除
+      - diff 出现巨大净删除
+
+      防护措施：
+      1. 任务开始前明确声明"只改 CSS/样式，不修改任何 JS 逻辑"
+      2. commit 前用方法名集合对比核验逻辑无丢失：
+         git diff main -- . | grep -oE '(function|const|class)\s+\w+' | sort -u
+      3. 若 diff 显示 JS 文件有超出样式的变更，必须逐行复核
+    </content>
+    <source_interactions>memory: feedback_subagent_style_task_overreach</source_interactions>
+    <outcome>防止样式任务意外破坏业务逻辑</outcome>
+    <confidence_history>0.9（用户明确警告，有实际越界案例）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-SD-004" type="procedural"
+    confidence="0.9" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      运行后端测试验证代码改动时
+    </trigger>
+    <content>
+      FreeArk 后端测试运行标准命令：
+      ```bash
+      cd FreeArkWeb/backend/freearkweb
+      PYTHONUTF8=1 FREEARK_POC_MOCK=1 python manage.py test api --settings=freearkweb.test_settings
+      ```
+      关键要点：
+      - 测试运行器是 Django test runner（非 pytest，但 datacollection 用 pytest）
+      - 必须 FREEARK_POC_MOCK=1（离线导入 fa_tools 必需）
+      - 必须 PYTHONUTF8=1（Windows 避免 cp1252 编码错误）
+      - 用 --settings=freearkweb.test_settings（切 SQLite 内存库，不连生产 DB）
+      - 全量基线：~1778 测试，全绿
+      - 用 --tag=unit|integration|e2e 分层运行
+    </content>
+    <source_interactions>memory: project_test_suite_state</source_interactions>
+    <outcome>确保代码验证流程正确，避免连到生产数据库或因环境变量缺失导致假失败</outcome>
+    <confidence_history>0.9（已多次验证的标准化流程）</confidence_history>
+  </knowledge_entry>
+
+</kb_entries>

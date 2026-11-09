@@ -1,0 +1,74 @@
+<kb_entries agent_domain="system_architect" version="0.1.0">
+
+  <knowledge_entry id="KE-SA-001" type="constraint"
+    confidence="1.0" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      任何涉及部署方案、CI/CD、测试环境、或基础设施选型的架构决策
+    </trigger>
+    <content>
+      FreeArk 项目绝对禁止使用 Docker 或任何容器化方案。
+      所有服务直接运行在物理机操作系统上（systemd service），测试和 CI 也不例外。
+      架构设计中的部署视图必须描述物理机进程模型（systemd unit + Nginx + Python venv），不得出现 Dockerfile/docker-compose/k8s。
+    </content>
+    <source_interactions>shared_protocol.md Section L-1; memory: project_infrastructure</source_interactions>
+    <outcome>架构设计不引入容器化依赖，确保与生产物理机部署一致</outcome>
+    <confidence_history>1.0（硬性约束，不可违反）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-SA-002" type="domain"
+    confidence="0.9" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      设计设备数据查询 API、设备面板、或任何与楼宇/房间相关数据模型时
+    </trigger>
+    <content>
+      FreeArk 所有设备数据挂在 specific_part（专有部分/住宅单元）上下文锚点之下。
+      规则：
+      1. specific_part 是数据查询的必填入口，不可由后端从"设备ID"推导
+      2. 前端总是在已知 specific_part 的上下文中进入设备面板
+      3. DeviceConfig 的 device_id（如 "hvac-main-ctrl"）和 PLCLatestData 的 specific_part（如 "9-1-31-3104"）格式不同，不能直接 JOIN
+      4. screenMac = OwnerInfo.unique_id（v1.8.0 确立）
+    </content>
+    <source_interactions>KE-PM-002; memory: project_miniprogram_owner_v180</source_interactions>
+    <outcome>避免"面板永远为空"类架构缺陷</outcome>
+    <confidence_history>0.9（用户明确澄清 + 多次实战验证）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-SA-003" type="domain"
+    confidence="0.85" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      设计设备通信、参数读写、或小程序直连设备相关架构时
+    </trigger>
+    <content>
+      FreeArk 设备通信使用 MQTT 协议，关键事实：
+      - 数据采集后端通过 MQTT broker 与 PLC/屏端通信
+      - 屏端（微信小程序直连）使用独立共享云 broker，与采集用 broker 不同
+      - 屏端写命令主题：/screen/service/cloud/to/screen/{screenMac}，报文名 DeviceWrite
+      - 屏端值推送主题：/screen/upload/screen/to/cloud/{screenMac}，报文名 DeviceStatusUpdate
+      - 无独立写回执，写确认靠监听 DeviceStatusUpdate 中 attrTag 变为目标值
+      - 值编码为语义串（on/off, "26.0"），非数值码
+      - 生产 MQTT broker 地址和凭据在 settings.py 中
+    </content>
+    <source_interactions>memory: project_miniprogram_param_settings_v1100; KE-REQ-002</source_interactions>
+    <outcome>架构设计中的设备通信层方案与生产协议一致</outcome>
+    <confidence_history>0.85（抓包实测 + 线上运行确认）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-SA-004" type="factual"
+    confidence="0.95" frequency="1" created_at="2026-07-13T00:00:00Z" last_updated="2026-07-13T00:00:00Z" status="ACTIVE">
+    <trigger>
+      设计数据持久化方案、数据库选型、或测试策略时
+    </trigger>
+    <content>
+      FreeArk 双数据库架构：
+      生产：MySQL 8.x @ 192.168.31.98:3306（物理机部署，非容器），库名 freeark
+      测试：SQLite 内存库，通过 test_settings.py 切换，不连任何远程 DB
+
+      数据库连接字符串必须通过 Django settings 环境变量注入，不得硬编码凭据。
+      device_param_history 表曾经 3600 万行（已被 dph_cleanup_service 定期清理），设计模型时注意大表的分批删除策略。
+    </content>
+    <source_interactions>shared_protocol.md Section L-3/L-4; memory: project_db_perf_dashboard_timeout</source_interactions>
+    <outcome>确保架构方案中的数据层设计与 FreeArk 实际部署环境兼容</outcome>
+    <confidence_history>0.95（生产运行事实 + 协议明确约束）</confidence_history>
+  </knowledge_entry>
+
+</kb_entries>

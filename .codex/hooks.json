@@ -1,5 +1,5 @@
 {
-  "description": "SDLC v3.7 lifecycle adapters; review with /hooks",
+  "description": "SDLC v3.9 lifecycle adapters; review with /hooks",
   "hooks": {
     "SessionStart": [
       {
@@ -69,7 +69,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "agent-builder|devops-engineer|kb-curator|requirement-analyst|software-developer|system-architect|test-engineer",
+        "matcher": "agent-builder|devops-engineer|kb-curator|pm-orchestrator|requirement-analyst|software-developer|system-architect|test-engineer",
         "hooks": [
           {
             "type": "command",

@@ -1,13 +1,15 @@
 ---
 name: sdlc-devops-engineer
-description: '通用 SDLC 运维工程师（GROUP_E1：PHASE_10 CI/CD、PHASE_11a 部署计划；GROUP_E2：PHASE_11b 部署执行）。E1 基于已批准设计与测试结果，产出 cicd_pipeline.md（阶段、环境矩阵、制品管理）与 deployment_plan.md（预检、策略、DEPLOY/ROLLBACK、验证），只用项目画像中存在的环境与部署方式。E2 仅在授权后执行并写部署报告，含回滚与回滚失败处理。由 pm-orchestrator 调用。'
+description: '通用 SDLC 运维工程师（GROUP_E1：PHASE_10 CI/CD、PHASE_11a 部署计划；GROUP_E2：PHASE_11b 部署执行）。E1 基于已批准设计与测试结果，产出 cicd_pipeline.md（阶段、环境矩阵、制品管理）与 deployment_plan.md（预检、策略、DEPLOY/ROLLBACK、验证），只用项目画像中存在的环境与部署方式。E2 仅在授权后执行并写部署报告，含回滚与回滚失败处理。由 sdlc-orchestrator 调用。'
 ---
 
-> **TRAE 运行说明（复刻自 `.claude/agents/devops-engineer.md`，套件 v3.7）**
+> **TRAE 运行说明（复刻自 `.claude/agents/devops-engineer.md`，套件 v3.9）**
 > - 调用：以 `Skill` 工具调用本技能，名称 = `sdlc-devops-engineer`。
 > - 机制映射：Claude Code `Agent` 子代理 → TRAE `sdlc-*` skill；`Bash` 工具 → `Shell` 工具。
 > - 项目记忆：原套件由运行时**自动注入** `MEMORY.md`；TRAE **不会自动注入**，本技能第一步必须**显式 Read** `.trae/sdlc/agent-memory/devops-engineer/MEMORY.md`（不存在则视为空）。
 > - 经验收件箱：原 `SubagentStop` hook 自动收集；TRAE 由 PM 在每次子代理返回后运行 `python .trae/sdlc/scripts/kb_inbox.py` 强制补记。
+> - 必读追加：共享协议 §T（TRAE 运行适配）。下文的「§N」均指源协议的「领域与外部依赖（画像 P11）」。
+> - 直接加载（不经 `sdlc-orchestrator`）时，调用消息须自带完整 `<agent_invocation>`；缺失则返回 CLARIFICATION_NEEDED。
 > - 工具需求（Trae）：Read, Write, Edit, Shell, Glob, Grep
 > - 通用知识库：`.trae/sdlc/knowledge_base/generic/devops-engineer.md`（必读）
 # DevOps Engineer — 运维工程师（GROUP_E）

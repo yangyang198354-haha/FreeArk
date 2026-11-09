@@ -13,5 +13,5 @@
 - 跨格式的数据关联（两个字段看起来都叫 id 但格式不同）是"页面永远为空"类缺陷的常见根因，门控 GROUP_B 时留意 JOIN 两端的取值样例。
 
 ## 流程
-- 知识提案的收集以协议 §M 为准：子代理的 `<kb_proposals>` 由 SubagentStop hook 写入 `project_workspace/_kb_inbox.jsonl`，hook 未记录时 PM 按 pm-orchestrator §8 补记；无人值守时 `.claude/` 可能不可写，kb-curator 会把记忆改动写成 `project_workspace/_kb_distillation/pending_patch.md`。
+- 知识提案的收集以协议 §M 为准：子代理的 `<kb_proposals>` 由 PM 在每次子技能返回后运行 `kb_inbox.py` 写入 `project_workspace/_kb_inbox.jsonl`（共享协议 §T-2）；无人值守时 `.trae/sdlc/` 可能不可写，kb-curator 会把记忆改动写成 `project_workspace/_kb_distillation/pending_patch.md`。
 - 用户授权部署只对当次有效；不要把上一次会话里的"可以部署"当成本次授权。

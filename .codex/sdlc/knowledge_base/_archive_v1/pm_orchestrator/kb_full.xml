@@ -1,0 +1,173 @@
+<kb_entries agent_domain="pm_orchestrator" version="0.1.0">
+
+  <knowledge_entry id="KE-PM-001" type="heuristic"
+    confidence="0.9" frequency="1" created_at="2026-04-19T00:00:00Z" last_updated="2026-04-19T00:00:00Z" status="ACTIVE">
+    <trigger>
+      子代理评估"某功能是否已实现"，或 PM 评审子代理输出的功能验证报告时
+    </trigger>
+    <content>
+      功能实现评估必须以代码为唯一权威，不得以设计文档为准。
+
+      强制验证流程：
+      1. grep 关键类名 / 函数名 / 路由名，确认代码文件中是否存在
+      2. 读取代码文件，确认逻辑完整性
+      3. 设计文档仅作辅助参考（文档描述"计划"，代码描述"现实"）
+
+      反模式（必须避免）：
+      - 看到设计文档写"需要新增 XxxHandler"就断言"该 handler 不存在"
+      - 不 grep 代码直接依赖文档得出"功能未实现"的结论
+
+      典型场景：设计阶段计划用 GenericDeviceHandler，开发时改用了 PLCLatestDataHandler，
+      文档未同步，子代理错误报告"功能未实现"。
+    </content>
+    <source_interactions>FreeArk DeviceCards 会话 2026-04-19，经验1</source_interactions>
+    <outcome>避免基于过时文档产生误判，减少无效返工</outcome>
+    <confidence_history>0.9（用户明确确认，初始即高置信度）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-PM-002" type="domain"
+    confidence="0.9" frequency="1" created_at="2026-04-19T00:00:00Z" last_updated="2026-04-19T00:00:00Z" status="ACTIVE">
+    <trigger>
+      为物业/楼宇/工业物联网类系统设计 API，涉及"设备数据查询"或"设备面板"功能时
+    </trigger>
+    <content>
+      在物业/楼宇管理类系统中，所有设备数据挂在"专有部分"（住宅单元/区域，specific_part）
+      这个上下文锚点之下。API 设计必须遵循以下原则：
+
+      1. specific_part 是必填入口参数，不可省略或由后端从"设备ID"推导
+      2. 前端总是在已知 specific_part 的上下文中进入设备面板
+      3. "配置/元数据"表（如 DeviceConfig）的主键语义必须反复确认：
+         - 它是"设备实体的唯一标识"？还是"参数的分类标签/分组名"？
+         - 两者含义和 JOIN 逻辑完全不同，混淆会导致永远查不到数据
+      4. 设计评审必问三个问题：
+         a. 用户从哪个页面进入此功能？携带了什么上下文参数？
+         b. API 的必填参数是否反映了该上下文？
+         c. 各表的 JOIN 条件两端字段格式是否一致（如 "hvac-main-ctrl" vs "9-1-31-3104" 完全不同）？
+
+      反模式（必须避免）：
+      - 用 DeviceConfig.device_id（值如 "hvac-main-ctrl"）去 JOIN PLCLatestData.specific_part
+        （值如 "9-1-31-3104"），两者格式不同，永远不会匹配
+    </content>
+    <source_interactions>FreeArk DeviceCards 会话 2026-04-19，经验2</source_interactions>
+    <outcome>避免架构设计阶段的核心逻辑错误，防止"面板永远为空"类缺陷</outcome>
+    <confidence_history>0.9（用户明确澄清业务逻辑，高置信度）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-PM-003" type="procedural"
+    confidence="0.95" frequency="1" created_at="2026-04-19T00:00:00Z" last_updated="2026-04-19T00:00:00Z" status="ACTIVE">
+    <trigger>
+      需要修改 Django 数据库模型字段（重命名、删除、类型变更），且该模型的迁移文件已应用到生产数据库时
+    </trigger>
+    <content>
+      已应用到生产的 Django 迁移文件绝对不能直接修改，必须创建新迁移。违反此规则
+      会导致：migrate 输出"No migrations to apply"但代码与库不一致，服务启动后报
+      "column 'xxx' does not exist"。
+
+      字段重命名的正确流程：
+      1. 还原已应用的迁移文件至其原始状态（与生产库保持一致）
+      2. 手写新迁移（不能依赖 makemigrations 自动生成）：
+         - 使用 migrations.RenameField 完成字段重命名
+         - makemigrations 无法检测重命名（会生成 AddField + RemoveField，破坏数据）
+      3. 若字段上有索引，必须先 RemoveIndex 再 AddIndex（不能用 RenameIndex，
+         因为索引名通常包含字段名）
+      4. 部署前执行检查：python manage.py showmigrations，确认生产库的已应用状态
+
+      部署前必检清单（Django 模型变更时）：
+      - showmigrations 确认生产库状态
+      - 确认新迁移文件编号连续，无跳号
+      - 新迁移中不含对已应用迁移文件的内容修改
+    </content>
+    <source_interactions>FreeArk DeviceCards 会话 2026-04-19，经验3</source_interactions>
+    <outcome>避免生产数据库与代码不一致导致服务启动失败</outcome>
+    <confidence_history>0.95（有明确的故障现象和完整解决过程，置信度极高）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-PM-004" type="heuristic"
+    confidence="0.85" frequency="1" created_at="2026-04-19T00:00:00Z" last_updated="2026-04-19T00:00:00Z" status="ACTIVE">
+    <trigger>
+      子代理交付新前端功能页面，PM 进行功能完整性评审时
+    </trigger>
+    <content>
+      新功能的交付完整性不仅包括功能页面本身，还必须包括"导航入口"。
+      没有入口的功能页面等于不可达，用户体验上等同于未实现。
+
+      导航入口评审检查项：
+      1. 应用中是否有至少一个链接/按钮可以跳转到该页面？
+      2. 需要上下文参数的页面（如必须携带 specific_part），入口是否在能自然提供
+         该上下文的地方（如专有部分详情页），而不是孤立的顶级菜单？
+      3. 入口是否自动携带必填参数，避免用户手动输入 URL？
+
+      典型错误：路由 /device-cards 已注册，但整个应用无任何链接指向它，
+      用户必须手动输入 URL，且无法自动携带 specific_part 参数。
+
+      正确做法：
+      - 在 SpecificPartDetailView.vue 页头添加"设备面板"按钮，自动携带 specific_part 跳转
+      - 可选在 Layout.vue 侧边栏添加顶级快捷入口
+    </content>
+    <source_interactions>FreeArk DeviceCards 会话 2026-04-19，经验4</source_interactions>
+    <outcome>确保新功能真正可达，避免"已实现但不可用"的交付缺陷</outcome>
+    <confidence_history>0.85（用户确认，场景清晰，初始置信度较高）</confidence_history>
+  </knowledge_entry>
+
+  <knowledge_entry id="KE-PM-005" type="factual"
+    confidence="0.9" frequency="1" created_at="2026-04-19T00:00:00Z" last_updated="2026-04-19T00:00:00Z" status="ACTIVE">
+    <trigger>
+      在自动化流程或脚本中通过 SSH 连接 FreeArk 生产服务器时
+    </trigger>
+    <content>
+      FreeArk 生产服务器固定信息（供脚本复用，不含任何密码）：
+      - 连接：ssh -p 57279 yangyang@47.109.197.217 "{command}"（阿里云 VPS + frp 隧道，SSH 密钥认证）
+      - 内网地址：192.168.31.51（仅内网可达时使用）
+      - 主机密钥指纹：SHA256:TfpCSrSLuK1UspD2mpikebK0bE0IFnPH8bSigERWnmk（首次连接时核对）
+      - 项目根目录：/home/yangyang/Freeark/FreeArk/
+      - Python 虚拟环境：/home/yangyang/Freeark/FreeArk/venv/
+      - 后端服务重启：sudo systemctl restart freeark-backend
+      - 前端构建命令：cd FreeArkWeb/frontend && npm run build
+
+      旧的 Windows plink -pw 方式与花生壳通道均已弃用；详细流程见 .agents/skills/freeark-prod-deploy/SKILL.md。
+    </content>
+    <source_interactions>FreeArk DeviceCards 会话 2026-04-19，经验5</source_interactions>
+    <outcome>自动化部署脚本可直接使用上述参数，无需交互确认主机密钥</outcome>
+    <confidence_history>0.9（用户提供明确的服务器信息和解决方案，高置信度）</confidence_history>
+  </knowledge_entry>
+
+
+  <knowledge_entry id="KE-PM-006" type="exception"
+    confidence="0.9" frequency="1" created_at="2026-05-22T00:00:00Z" last_updated="2026-05-22T00:00:00Z" status="ACTIVE">
+    <trigger>
+      FreeArk dph_cleanup_service 或类似 Django management command 以 schedule 库 cron 模式
+      常驻运行时，出现进程崩溃（exit code 1）或数据库操作超时故障时
+    </trigger>
+    <content>
+      根因：device_param_history 表膨胀（3600 万行 / 11.6 GB）+ InnoDB buffer pool 仅 128 MB，
+      边界查询（SELECT id ... ORDER BY collected_at DESC LIMIT 1）因索引无法驻留内存而阻塞
+      100s+，触发 MySQL OperationalError(2013, 'Lost connection to MySQL server during query')。
+
+      两种失败模式：
+      1. --once 模式（oneshot）：异常从 _run_cleanup() 传播 → handle() 未捕获 → Django
+         management command 以 exit code 1 退出 → systemd 标记 failed。
+      2. cron/schedule 常驻模式：异常从 _run_cleanup() → schedule.run_pending() → while True
+         主循环冲出 → 进程崩溃，systemd Restart=on-failure 重启（30s 间隔），当日清理未完成。
+
+      修复模式（已验证）：
+      1. 在 _run_cleanup() 全体 cursor.execute() 外层加 try/except OperationalError + Exception。
+         捕获后：log_error() 记录完整错误 + connection.close() 关闭坏连接 + return（不重新抛出）。
+      2. 在 handle() 的 while True 内的 schedule.run_pending() 外加第二层 try/except Exception，
+         作为防止任何未预期异常冲出主循环的最后一道防线。
+      3. --once 模式下：_run_cleanup() 内捕获后 return，handle() 正常退出（exit code 0）。
+
+      关键 import：from django.db import connection, OperationalError（同一模块，不需要单独 import）
+
+      根治方向（代码修复之外）：
+      - DPH 表瘦身（分批 DELETE 超期数据，目标 < 100 万行）
+      - innodb_buffer_pool_size 从 128MB 提升至 512MB+（评估 DB 服务器可用内存后确定）
+    </content>
+    <source_interactions>FreeArk dph oneshot + 3:00 cron job 故障分析，2026-05-22</source_interactions>
+    <outcome>
+      修复后：_run_cleanup() 超时异常被捕获并记录，cron 模式进程不再崩溃，
+      --once 模式以 exit code 0 退出（DB 错误已记录），systemd Restart 机制对 cron 模式有实际意义。
+    </outcome>
+    <confidence_history>0.9（RCA FINAL 文档 + 代码审查 + 实测证据支持，高置信度）</confidence_history>
+  </knowledge_entry>
+
+</kb_entries>

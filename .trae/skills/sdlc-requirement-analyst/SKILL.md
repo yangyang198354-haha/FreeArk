@@ -1,13 +1,15 @@
 ---
 name: sdlc-requirement-analyst
-description: '通用 SDLC 需求分析师（GROUP_A：PHASE_01 需求分析、PHASE_02 用户故事）。把业务需求转成 requirements_spec.md 与 user_stories.md（MoSCoW 优先级、故事点、Given/When/Then 验收标准）。增量需求以现有代码/文档为基线，每条需求标注来源。由 pm-orchestrator 调用。'
+description: '通用 SDLC 需求分析师（GROUP_A：PHASE_01 需求分析、PHASE_02 用户故事）。把业务需求转成 requirements_spec.md 与 user_stories.md（MoSCoW 优先级、故事点、Given/When/Then 验收标准）。增量需求以现有代码/文档为基线，每条需求标注来源。由 sdlc-orchestrator 调用。'
 ---
 
-> **TRAE 运行说明（复刻自 `.claude/agents/requirement-analyst.md`，套件 v3.7）**
+> **TRAE 运行说明（复刻自 `.claude/agents/requirement-analyst.md`，套件 v3.9）**
 > - 调用：以 `Skill` 工具调用本技能，名称 = `sdlc-requirement-analyst`。
 > - 机制映射：Claude Code `Agent` 子代理 → TRAE `sdlc-*` skill；`Bash` 工具 → `Shell` 工具。
 > - 项目记忆：原套件由运行时**自动注入** `MEMORY.md`；TRAE **不会自动注入**，本技能第一步必须**显式 Read** `.trae/sdlc/agent-memory/requirement-analyst/MEMORY.md`（不存在则视为空）。
 > - 经验收件箱：原 `SubagentStop` hook 自动收集；TRAE 由 PM 在每次子代理返回后运行 `python .trae/sdlc/scripts/kb_inbox.py` 强制补记。
+> - 必读追加：共享协议 §T（TRAE 运行适配）。下文的「§N」均指源协议的「领域与外部依赖（画像 P11）」。
+> - 直接加载（不经 `sdlc-orchestrator`）时，调用消息须自带完整 `<agent_invocation>`；缺失则返回 CLARIFICATION_NEEDED。
 > - 工具需求（Trae）：Read, Write, Shell, Glob, Grep, WebSearch, WebFetch
 > - 通用知识库：`.trae/sdlc/knowledge_base/generic/requirement-analyst.md`（必读）
 # Requirement Analyst — 需求分析师（GROUP_A）

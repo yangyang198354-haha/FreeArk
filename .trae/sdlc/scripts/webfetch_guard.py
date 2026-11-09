@@ -14,7 +14,7 @@ Usage:
 
 Exit codes:
     0  allowed / all citations allowed
-    1  denied / citation outside the allowlist
+    1  denied / citation outside the allowlist / script error (fail-closed)
 """
 from __future__ import annotations
 
@@ -78,5 +78,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as exc:
-        print("WEBFETCH_GUARD_ERROR %s" % exc)
-        sys.exit(0)
+        print("WEBFETCH_GUARD_ERROR %s（视为拒绝）" % exc)
+        sys.exit(1)

@@ -12,13 +12,16 @@
 | `SubagentStop` | `.claude/hooks/sdlc_subagent_stop.py` | `python .trae/sdlc/scripts/kb_inbox.py --check-response --text-file <reply>` | 子技能返回后、PM 门控前（**必须**） |
 | `PreToolUse` (WebFetch/WebSearch) | `.claude/hooks/sdlc_webfetch_guard.py` | `python .trae/sdlc/scripts/webfetch_guard.py --url <u>` / `--search` | agent-builder 联网前 |
 | 收件箱自动收集 | 同上 SubagentStop | `python .trae/sdlc/scripts/kb_inbox.py --agent <a> --text-file <reply>` | 每次子技能返回后 |
-| `permissions.ask`（ssh/scp/git push/安装依赖） | `.claude/settings.json` | TRAE 工具审批（用户可见的权限确认）+ 画像 P9 规则 | 执行前 |
+| `permissions.ask`（ssh/scp/rsync/git push/安装依赖） | `.claude/settings.json` | 画像 P9 规则 + PM 逐字复述用户本轮授权并等待确认（sdlc-orchestrator §10 规则 4）；TRAE 自带的工具审批弹窗未经核实【推断】，不作为依据 | 执行前 |
+
+所有脚本 **fail-closed**：返回非 0（含脚本异常的 1）一律视为未通过。`sdlc_preflight.py --check-all` 返回 4 表示套件正常但画像缺失或未 APPROVED。
 
 ## 2. 关键差异与补偿
 
 | 能力 | Claude Code | TRAE | 补偿方式 |
 |---|---|---|---|
-| 子代理 | `Agent` 工具 + 独立上下文 | `Skill` 工具 + **共享上下文** | PM 必须在同一轮内完成落盘校验与门控；禁止并行加载多个角色技能 |
+| 子代理 | `Agent` 工具 + 独立上下文 | `Skill` 工具 + **共享上下文** | PM 必须在同一轮内完成落盘校验与门控；禁止并行加载多个角色技能；PM 始终为主会话模式 |
+| 工具白名单 | frontmatter `tools` | 无 | 说明块列出所需工具；写路径只靠协议 §A + PM 门控核对 |
 | 项目记忆 | `memory: project` **自动注入**前 200 行 | **不自动注入** | 每个 `sdlc-*` 技能的第 1 步必须 Read `.trae/sdlc/agent-memory/{agent}/MEMORY.md` |
 | 通用知识库 | `knowledge_base/generic/*.md` 必读 | 同（已迁移到 `.trae/sdlc/knowledge_base/generic/`） | 必读清单中列全路径 |
 | 记忆写权限 | 运行时按 agent 隔离 | 由协议 §A 约束 | PM 门控时抽查 |
@@ -29,7 +32,7 @@
 
 ```
 .trae/
-├── skills/sdlc-*/SKILL.md          ← 9 个技能（1 编排 + 1 协议 + 6 角色 + kb-curator + agent-builder）
+├── skills/sdlc-*/SKILL.md          ← 9 个技能（1 编排 + 1 协议 + 5 阶段角色 + kb-curator + agent-builder）
 │   └── sdlc-agent-builder/templates/agent_builder_templates.md
 └── sdlc/
     ├── project_profile.md          ← 画像（PM 生成；status=DRAFT→APPROVED）
@@ -48,12 +51,13 @@
 ## 4. 启动方式
 
 1. 在主会话中调用 `Skill: sdlc-orchestrator`；
-2. PM 先跑 `sdlc_preflight.py --check-all`；
-3. 画像缺失或 `status=DRAFT` → 先生成/确认画像，再进入流程。
+2. PM 先跑 `sdlc_preflight.py --check-all`（0 = 就绪；4 = 画像缺失或未 APPROVED；其他非 0 = 套件损坏）；
+3. 画像缺失或 `status=DRAFT` → 先生成/确认画像，再进入流程（`--check-flow-start` 返回 0 才可启动）。
 
 ## 5. 安全
 
 - 本文件与 `.claude/**` 都不得写入任何凭据；
 - `agent-builder` 即使获得 `WRITE_TARGET` 授权，也不得修改 `.claude/**` 与
   `.trae/sdlc/scripts/**`、`.trae/sdlc/suite_config.md`；
-- 远程操作（ssh/scp/git push）与依赖安装一律需要用户当轮确认（画像 P9）。
+- 远程操作（ssh/scp/rsync/git push）与依赖安装一律需要用户当轮确认（画像 P9）。
+- 运行状态目录 `project_workspace/.hook_state/` 只存子技能回复副本，已加入 `.gitignore`。

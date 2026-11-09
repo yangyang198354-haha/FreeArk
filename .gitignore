@@ -161,3 +161,5 @@ ssh_check.py
 
 # SDLC Agent Suite 项目工作区（本地过程产物，不进仓库）
 project_workspace/
+
+output/

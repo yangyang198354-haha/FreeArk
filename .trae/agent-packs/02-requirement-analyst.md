@@ -1,15 +1,17 @@
-<!-- agent-pack: sdlc-requirement-analyst | source: .claude/agents/requirement-analyst.md@v3.7 | generator: .trae/sdlc/scripts/port_from_claude.py -->
+<!-- agent-pack: sdlc-requirement-analyst | source: .claude/agents/requirement-analyst.md@v3.9 | generator: .trae/sdlc/scripts/port_from_claude.py -->
 # Agent Pack — sdlc-requirement-analyst
 
 > 单文件注册包：正文与 `.trae/skills/sdlc-requirement-analyst/SKILL.md` **逐字一致**（不含 frontmatter）。
 > 用法：在不支持 skills 的会话中，把本文件全文作为该角色的系统提示；
 > 在 TRAE 中优先直接加载 `Skill: sdlc-requirement-analyst`。
 
-> **TRAE 运行说明（复刻自 `.claude/agents/requirement-analyst.md`，套件 v3.7）**
+> **TRAE 运行说明（复刻自 `.claude/agents/requirement-analyst.md`，套件 v3.9）**
 > - 调用：以 `Skill` 工具调用本技能，名称 = `sdlc-requirement-analyst`。
 > - 机制映射：Claude Code `Agent` 子代理 → TRAE `sdlc-*` skill；`Bash` 工具 → `Shell` 工具。
 > - 项目记忆：原套件由运行时**自动注入** `MEMORY.md`；TRAE **不会自动注入**，本技能第一步必须**显式 Read** `.trae/sdlc/agent-memory/requirement-analyst/MEMORY.md`（不存在则视为空）。
 > - 经验收件箱：原 `SubagentStop` hook 自动收集；TRAE 由 PM 在每次子代理返回后运行 `python .trae/sdlc/scripts/kb_inbox.py` 强制补记。
+> - 必读追加：共享协议 §T（TRAE 运行适配）。下文的「§N」均指源协议的「领域与外部依赖（画像 P11）」。
+> - 直接加载（不经 `sdlc-orchestrator`）时，调用消息须自带完整 `<agent_invocation>`；缺失则返回 CLARIFICATION_NEEDED。
 > - 工具需求（Trae）：Read, Write, Shell, Glob, Grep, WebSearch, WebFetch
 > - 通用知识库：`.trae/sdlc/knowledge_base/generic/requirement-analyst.md`（必读）
 # Requirement Analyst — 需求分析师（GROUP_A）

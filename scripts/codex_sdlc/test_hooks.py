@@ -13,7 +13,7 @@ import hook_runtime as hooks
 
 def response(inv="case-1", role="software-developer", proposal=""):
     return (f"<agent_response><invocation_id>{inv}</invocation_id><agent_id>{role}</agent_id>"
-            "<status>SUCCESS</status><output_files/><evidence/><notes>shared_protocol.md</notes>"
+            "<status>SUCCESS</status><output_files/><evidence>pytest -q: 3 passed</evidence><notes>shared_protocol.md</notes>"
             f"<kb_proposals>{proposal}</kb_proposals></agent_response>")
 
 
@@ -73,11 +73,50 @@ class HooksTests(unittest.TestCase):
 
     def test_bad_xml_and_trailing_text_are_rejected(self):
         for text in [response() + " trailing", response().replace("SUCCESS", "UNKNOWN"),
-                     response().replace("<evidence/>", ""), response().replace("case-1", "x & y"),
+                     response().replace("<evidence>pytest -q: 3 passed</evidence>", ""),
+                     response().replace("pytest -q: 3 passed", ""), response().replace("case-1", "x & y"),
                      response(role="test-engineer")]:
             with self.subTest(text=text):
                 data = {**self.data, "turn_id": text, "last_assistant_message": text}
                 self.assertEqual(hooks.stop(data, self.root)["decision"], "block")
+
+    def test_evidence_only_required_for_build_test_deploy_roles(self):
+        for role in ("requirement-analyst", "system-architect", "kb-curator", "agent-builder"):
+            text = response(role=role).replace("<evidence>pytest -q: 3 passed</evidence>", "")
+            data = {**self.data, "agent_type": role, "turn_id": role, "last_assistant_message": text}
+            with self.subTest(role=role):
+                self.assertEqual(hooks.stop(data, self.root), {})
+
+    def test_pm_stop_requires_trailing_pm_report(self):
+        data = {**self.data, "agent_type": "pm-orchestrator", "last_assistant_message": "汇报，没有块"}
+        self.assertEqual(hooks.stop(data, self.root)["decision"], "block")
+        ok = "汇报\n<pm_report mode=\"subagent\"><run_status>CHECKPOINT</run_status></pm_report>"
+        self.assertEqual(hooks.stop({**data, "turn_id": "t2", "last_assistant_message": ok}, self.root), {})
+        self.assertFalse((self.root / "project_workspace/_kb_inbox.jsonl").exists())
+
+    def test_stop_leaves_no_debug_state(self):
+        data = {**self.data, "last_assistant_message": response()}
+        hooks.stop(data, self.root)
+        self.assertFalse((self.root / "project_workspace/.codex_hook_state/last_input_keys.json").exists())
+
+    def test_apply_patch_write_boundaries(self):
+        def patch(role, path):
+            data = {"agent_type": role, "tool_name": "apply_patch",
+                    "tool_input": {"input": f"*** Begin Patch\n*** Update File: {path}\n@@\n-a\n+b\n*** End Patch"}}
+            return hooks.tool_guard(data, self.root)
+        denied = [("software-developer", ".codex/hooks.json"), ("test-engineer", "scripts/codex_sdlc/hook_runtime.py"),
+                  ("agent-builder", ".codex/rules/sdlc.rules"), ("requirement-analyst", ".codex/agent-memory/test-engineer/MEMORY.md"),
+                  ("system-architect", ".codex/sdlc/knowledge_base/generic/x.md"), ("devops-engineer", ".codex/agents/kb-curator.toml"),
+                  ("software-developer", "../outside.txt"), ("kb-curator", ".claude/agents/x.md")]
+        for role, path in denied:
+            with self.subTest(role=role, path=path):
+                self.assertEqual(patch(role, path)["hookSpecificOutput"]["permissionDecision"], "deny")
+        allowed = [("software-developer", "src/app.py"), ("requirement-analyst", ".codex/agent-memory/requirement-analyst/MEMORY.md"),
+                   ("kb-curator", ".codex/agent-memory/test-engineer/MEMORY.md"), ("agent-builder", ".codex/agents/new-role.toml")]
+        for role, path in allowed:
+            with self.subTest(role=role, path=path):
+                self.assertEqual(patch(role, path), {})
+        self.assertEqual(hooks.tool_guard({"tool_name": "apply_patch", "tool_input": "*** Update File: .codex/hooks.json"}, self.root), {})
 
     def test_valid_response_collects_decodes_and_deduplicates(self):
         proposal = '<proposal scope="project" evidence="GR-C-1">A &amp; B</proposal>'

@@ -20,6 +20,12 @@ ROOT = Path(__file__).resolve().parents[2]
 ROLES = {"pm-orchestrator", "requirement-analyst", "system-architect",
          "software-developer", "test-engineer", "devops-engineer",
          "kb-curator", "agent-builder"}
+# shared_protocol §E: <evidence> is mandatory for test/build/deploy work only.
+EVIDENCE_ROLES = {"software-developer", "test-engineer", "devops-engineer"}
+# Runtime/config paths no SDLC role may patch (§A + runtime_adapter "shell 与权限").
+PROTECTED_PATHS = (".claude/", ".codex/config.toml", ".codex/hooks.json", ".codex/rules/",
+                   ".codex/sdlc/runtime_adapter.md", ".codex/sdlc/migration_manifest.json",
+                   "scripts/codex_sdlc/", "AGENTS.md")
 SECRET = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)"
     r"|sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}"
@@ -215,20 +221,44 @@ def append_proposals(response, role, data, root):
                     seen.add(key)
 
 
+def block_once(data, root, error):
+    state = state_dir(root)
+    # Per turn, not per permanent agent id: a resumed agent gets another check.
+    identity = [data.get(k, "") for k in ("session_id", "agent_id", "turn_id")]
+    if not data.get("turn_id"):
+        identity.append(data.get("agent_transcript_path", ""))
+    flag = state / ("blocked_" + token(identity))
+    if not flag.exists() and not data.get("stop_hook_active"):
+        flag.touch()
+        return {"decision": "block", "reason": error}
+    return {"systemMessage": "SDLC 响应仍无效；已达到补齐次数上限，PM 必须按 FAILURE 处理。"}
+
+
 def stop(data, root=ROOT):
     role = resolve_role(data)
-    if role not in ROLES - {"pm-orchestrator"}:
+    if role not in ROLES:
         return {}
     message = last_message(data)
+    if role == "pm-orchestrator":
+        # PM writes its own proposals; only the trailing <pm_report> is checked.
+        reports = re.findall(r"<pm_report\b.*?</pm_report>", message, re.S)
+        if reports and message.rstrip().endswith(reports[-1]):
+            return {}
+        return block_once(data, root, "子代理模式下 pm-orchestrator 的最终回复最后必须是完整的 <pm_report> 块"
+                          "（pm-orchestrator §9）；有待用户决定的问题先写检查点（§5.1）。请补齐后结束。")
     matches = re.findall(r"<agent_response>.*?</agent_response>", message, re.S)
     error = "最终回复必须以完整的 <agent_response> XML 结束。"
     response = None
     if matches and message.rstrip().endswith(matches[-1]):
         try:
             candidate = ET.fromstring(matches[-1])
-            required = {"invocation_id", "agent_id", "status", "output_files", "evidence", "notes"}
+            required = {"invocation_id", "agent_id", "status", "output_files", "notes"}
+            if role in EVIDENCE_ROLES:
+                required.add("evidence")
             if not required.issubset({e.tag for e in candidate}):
-                error = "agent_response 缺少 invocation_id/agent_id/status/output_files/evidence/notes。"
+                error = "agent_response 缺少必填字段：" + "/".join(sorted(required - {e.tag for e in candidate})) + "。"
+            elif role in EVIDENCE_ROLES and not candidate.findtext("evidence", "").strip():
+                error = "测试/构建/部署类角色的 <evidence> 不能为空（执行过的关键命令及输出尾部）。"
             elif not candidate.findtext("invocation_id", "").strip() or not candidate.findtext("notes", "").strip():
                 error = "invocation_id 与 notes 已读文件清单不能为空。"
             elif candidate.findtext("agent_id") != role:
@@ -240,18 +270,8 @@ def stop(data, root=ROOT):
         except ET.ParseError:
             error = "agent_response 必须是可解析 XML；转义 &、< 等字符或使用 CDATA。"
     if response is None:
-        state = state_dir(root)
-        # Per turn, not per permanent agent id: a resumed agent gets another check.
-        identity = [data.get(k, "") for k in ("session_id", "agent_id", "turn_id")]
-        if not data.get("turn_id"):
-            identity.append(data.get("agent_transcript_path", ""))
-        flag = state / ("blocked_" + token(identity))
-        if not flag.exists() and not data.get("stop_hook_active"):
-            flag.touch()
-            return {"decision": "block", "reason": error + " 请补齐后结束（shared_protocol §E）。"}
-        return {"systemMessage": "SDLC 响应仍无效；已达到补齐次数上限，PM 必须按 FAILURE 处理。"}
+        return block_once(data, root, error + " 请补齐后结束（shared_protocol §E）。")
     append_proposals(response, role, data, root)
-    (state_dir(root) / "last_input_keys.json").write_text(json.dumps(sorted(data)), encoding="utf-8")
     return {}
 
 
@@ -265,13 +285,51 @@ def web_guard(data, root=ROOT):
     return {}
 
 
+def patch_targets(tool_input):
+    """File paths named in an apply_patch payload (string or {input|patch: str})."""
+    text = tool_input
+    if isinstance(tool_input, dict):
+        text = tool_input.get("input") or tool_input.get("patch") or tool_input.get("command") or ""
+        if isinstance(text, list):
+            text = "\n".join(map(str, text))
+    if not isinstance(text, str):
+        return []
+    return [m.strip() for m in re.findall(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$", text, re.M)]
+
+
+def write_violation(role, target, root):
+    path = Path(target)
+    if not path.is_absolute():
+        path = root / path
+    try:
+        rel = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return f"{target} 在仓库外"
+    if any(rel == p.rstrip("/") or rel.startswith(p) for p in PROTECTED_PATHS if p.endswith("/")) or rel in PROTECTED_PATHS:
+        return f"{rel} 是运行时/配置文件，SDLC 角色不得修改"
+    memory = re.match(r"\.codex/agent-memory/([^/]+)/", rel)
+    if memory and role != "kb-curator" and memory.group(1) != role:
+        return f"{rel} 是其他角色的记忆，只有 kb-curator 可写"
+    if rel.startswith(".codex/sdlc/knowledge_base/") and role != "kb-curator":
+        return f"{rel} 是通用知识库，只有 kb-curator 可写（用户确认后）"
+    if (rel.startswith(".codex/agents/") or rel.startswith(".codex/sdlc/")) and role not in {"agent-builder", "kb-curator"}:
+        return f"{rel} 是套件定义，阶段角色不得修改"
+    return None
+
+
 def tool_guard(data, root=ROOT):
     role = resolve_role(data)
     if role not in ROLES:
         return {}
     name = str(data.get("tool_name", ""))
     leaf = name.split(".")[-1]
-    if leaf in {"Bash", "exec_command", "apply_patch", "Read", "Write", "Edit",
+    if leaf == "apply_patch":
+        for target in patch_targets(data.get("tool_input")):
+            reason = write_violation(role, target, root)
+            if reason:
+                return deny(f"{role} 越界写入（shared_protocol §A）：{reason}。")
+        return {}
+    if leaf in {"Bash", "exec_command", "Read", "Write", "Edit",
                 "Glob", "Grep", "update_plan", "view_image", "write_stdin"}:
         return {}
     if leaf in {"Agent", "spawn_agent", "send_message", "followup_task", "wait_agent",

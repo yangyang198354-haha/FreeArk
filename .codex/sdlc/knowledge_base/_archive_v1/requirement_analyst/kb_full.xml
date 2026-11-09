@@ -1,0 +1,70 @@
+<kb_entries agent_domain="requirement_analyst" version="0.1.0">
+
+<knowledge_entry id="KE-REQ-001" type="pattern"
+  confidence="0.9" frequency="1" created_at="2026-06-29T00:00:00Z" last_updated="2026-06-29T00:00:00Z" status="ACTIVE">
+  <trigger>处理增量版本需求（相对已 APPROVED 基线）时，如何组织继承与变更关系</trigger>
+  <content>
+    对已 APPROVED 基线版本的增量需求，每条功能需求应标注变更类型（新增/变更/继承）。
+    继承项只需保留引用说明，不重复详细规格；变更项需明确「变更前」与「变更后」的差异。
+    约束层（C-xx）优先继承，新增约束编号续接基线（如基线 C-01~C-05 则新增从 C-06 开始）。
+    非功能需求同样标注继承/新增，避免遗漏基线 NFR。
+  </content>
+  <source_interactions>round-1（v1.12.0 参数设置页重设计需求分析）</source_interactions>
+  <outcome>产出了结构清晰的增量需求规格，REQ-FUNC 和 REQ-NFUNC 均正确标注变更类型</outcome>
+  <confidence_history>初始 0.9（PM 任务完成）</confidence_history>
+</knowledge_entry>
+
+<knowledge_entry id="KE-REQ-002" type="procedural"
+  confidence="0.9" frequency="1" created_at="2026-06-29T00:00:00Z" last_updated="2026-06-29T00:00:00Z" status="ACTIVE">
+  <trigger>FreeArk 微信小程序屏端 MQTT 协议相关需求分析</trigger>
+  <content>
+    已知屏端 MQTT 协议关键事实（v1.10.0 OQ-03 抓包实测，已 APPROVED）：
+    - 写命令主题：/screen/service/cloud/to/screen/{screenMac}，报文名 DeviceWrite
+    - 值推送主题：/screen/upload/screen/to/cloud/{screenMac}（注意是 upload 不是 service），报文名 DeviceStatusUpdate
+    - 无独立写回执，写确认 = 监听 DeviceStatusUpdate 中 attrTag 变为目标值（8s 超时）
+    - 值编码：语义串（on/off，cold/hot/wind/dehumidification，"26.0" 不 ×10）
+    - DeviceWrite 中 deviceSn 为字符串，DeviceStatusUpdate 中 deviceSn 为整数（需双向兼容）
+    后续 FreeArk 项目屏端 MQTT 相关需求可直接引用此事实，无需重新分析。
+  </content>
+  <source_interactions>round-1（v1.12.0），源自 v1.10.0 capture_findings_oq03.md</source_interactions>
+  <outcome>需求文档中 DeviceWrite/DeviceStatusUpdate 相关验收标准均正确引用此协议事实</outcome>
+  <confidence_history>初始 0.9（已抓包实测确认）</confidence_history>
+</knowledge_entry>
+
+<knowledge_entry id="KE-REQ-003" type="heuristic"
+  confidence="0.8" frequency="1" created_at="2026-06-29T00:00:00Z" last_updated="2026-06-29T00:00:00Z" status="ACTIVE">
+  <trigger>小程序端侧骨架缓存需求，含 TTL 和两阶段渲染模式</trigger>
+  <content>
+    FreeArk 小程序端侧骨架缓存策略（v1.11.1 ADR-1111-04 验证，v1.12.0 延续）：
+    - 骨架 TTL：正常 24h，sync_status=pending 时 5min
+    - 两阶段渲染：Phase 1 骨架（从缓存同步加载，≤300ms），Phase 2 值叠加（MQTT 异步推送）
+    - 降级：网络失败时优先使用过期缓存（保留骨架不白屏），提示「数据可能已过时」
+    - 骨架缓存 key 格式：owner_structure_{specific_part}
+    - 写链路和骨架缓存完全分离，骨架缓存不作为参数可写性的权威来源
+    分析骨架缓存需求时，两阶段渲染和降级策略均为标准模式，可直接套用。
+  </content>
+  <source_interactions>round-1（v1.12.0），源自 v1.11.1 实现和 v1.12.0 PM 需求</source_interactions>
+  <outcome>REQ-FUNC-005、REQ-FUNC-006 均采用此模式，US-04、US-05 验收标准覆盖两阶段和降级场景</outcome>
+  <confidence_history>初始 0.8（启发式规则，基于已验证实现推断）</confidence_history>
+</knowledge_entry>
+
+<knowledge_entry id="KE-REQ-004" type="domain"
+  confidence="0.9" frequency="1" created_at="2026-06-29T00:00:00Z" last_updated="2026-06-29T00:00:00Z" status="ACTIVE">
+  <trigger>FreeArk 微信小程序业主端（role=user）参数设置页相关领域知识</trigger>
+  <content>
+    FreeArk 小程序业主端关键域知识（截至 v1.12.0）：
+    - 业主角色：role=user，走 /api/miniapp/ + IsOwnerUser
+    - 设备标识：screenMac = OwnerInfo.unique_id（v1.8.0 确立）
+    - productCode → 角色名：270001=主机/集中供暖，130004=新风，260001=主温控，120003=末端温控/房间级
+    - 骨架接口：GET /api/miniapp/owner/structure/?specific_part=，响应含 rooms（含 room_name）和 system_devices
+    - 配置接口：GET /api/miniapp/device-settings/config/，返回 broker 连接参数、可写白名单（writable_attrs）、productCode 角色映射
+    - 实时值接口：GET /api/miniapp/owner/realtime-params/?specific_part=（5min 缓存）
+    - 审计接口：POST /api/miniapp/device-settings/audit/（尽力而为）
+    - 可写属性白名单（屏端 attrTag）：switch、system_switch、temp_set、out_temp_set、mode、energy_supply_mode、energy_saving_sign
+  </content>
+  <source_interactions>round-1（v1.12.0），整合 v1.10.0/v1.11.x 背景</source_interactions>
+  <outcome>需求文档中所有 API 端点、角色名、设备标识引用均正确</outcome>
+  <confidence_history>初始 0.9（已上线事实）</confidence_history>
+</knowledge_entry>
+
+</kb_entries>
