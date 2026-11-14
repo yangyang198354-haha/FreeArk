@@ -11,9 +11,14 @@
  *   ADR-1110-04 决策：模块级 composable（Option A），单例存于模块作用域变量。
  *   - _instance: ScreenMqtt 单例（null = 未连接）
  *   - _refCount: 活跃引用计数（acquire +1 / release -1，降至 0 时断开）
- *   - _connected: Vue ref<boolean>，响应式连接状态
- *   - _activeSubscriptions: 已订阅的 screenMac 集合（订阅去重）
+ *   - _connected: Vue ref<boolean>，响应式连接状态（随 ScreenMqtt 连接事件同步）
+ *   - _desiredSubscriptions: 期望订阅的 screenMac 集合（跨重连保留）
+ *   - _activeSubscriptions: 当前已在 broker 上生效的订阅集合（断线时清空）
  *   - _updateListeners: DeviceStatusUpdate 全局回调列表
+ *
+ *   FND-007（连接自愈）：连接失败或中途断线时按指数退避自动重连
+ *   （3s→6s→…→60s 封顶），重连成功后自动恢复订阅；页面 onShow 也可调用
+ *   ensureConnected() 立即补连。修复“启动时失败一次就整场会话永远橙色”。
  *
  *   param-settings.vue 迁移映射（零语义变更，ADR-1110-04 §迁移策略）:
  *     mqtt = new ScreenMqtt(broker, topics)  →  mqttClient.acquire(broker, topics)
@@ -32,6 +37,10 @@ import { ScreenMqtt } from './screenMqtt'
 
 // ── 模块级单例状态（跨组件共享，不在函数内）──────────────────────────────────
 
+/** 重连退避参数：首次 3s，逐次翻倍，60s 封顶 */
+const RETRY_BASE_MS = 3000
+const RETRY_MAX_MS = 60000
+
 /** @type {ScreenMqtt|null} MQTT 客户端单例 */
 let _instance = null
 
@@ -41,11 +50,17 @@ let _refCount = 0
 /** 响应式连接状态（Vue ref，组件可直接 watch） */
 const _connected = ref(false)
 
-/** 已订阅的 screenMac 集合（幂等订阅去重） */
+/** 期望订阅集合（断线重连后据此自动恢复订阅） */
+const _desiredSubscriptions = new Set()
+
+/** 当前已在 broker 上生效的订阅集合（断线时清空，避免重复 SUBSCRIBE） */
 const _activeSubscriptions = new Set()
 
 /** DeviceStatusUpdate 全局回调列表（onDeviceUpdate 注册，返回注销函数） */
 const _updateListeners = []
+
+/** 连接状态回调列表（onConnectionChange 注册；重连成功后可重新拉取值） */
+const _connListeners = []
 
 /**
  * 在途连接 Promise（FND-005 修复）：发起连接时创建唯一 Promise，
@@ -55,9 +70,16 @@ const _updateListeners = []
  */
 let _connectPromise = null
 
-/** 当前 broker/topics 配置（用于相同配置时跳过重新连接） */
+/** 当前 broker/topics 配置（重连时复用） */
 let _currentBroker = null
 let _currentTopics = null
+
+/** 自动重连定时器与当前退避时长 */
+let _retryTimer = null
+let _retryDelay = RETRY_BASE_MS
+
+/** 主动销毁实例期间置真，避免 disconnect 触发的 close 事件又去排队重连 */
+let _destroying = false
 
 // ── 内部工具 ────────────────────────────────────────────────────────────────
 
@@ -68,24 +90,99 @@ function _onDeviceUpdateGlobal(parsed) {
   }
 }
 
+/** 重连成功后恢复期望订阅（幂等：已生效的 mac 不重复 SUBSCRIBE） */
+function _replaySubscriptions() {
+  if (!_instance || !_connected.value) return
+  for (const mac of _desiredSubscriptions) {
+    if (_activeSubscriptions.has(mac)) continue
+    try {
+      _instance.subscribeRoom(mac)
+      _activeSubscriptions.add(mac)
+    } catch (e) {
+      console.warn('[useMqttClient] 恢复订阅失败 mac=', mac, e && e.message)
+    }
+  }
+}
+
 function _setupInstance(broker, topics) {
   _instance = new ScreenMqtt(broker, topics)
   _instance.onDeviceUpdate(_onDeviceUpdateGlobal)
+  _instance.onStateChange(_onInstanceState)
   _currentBroker = broker
   _currentTopics = topics
 }
 
-function _teardown() {
-  if (_instance) {
-    try { _instance.disconnect() } catch (e) { /* ignore */ }
-    _instance = null
+/** 连接状态变化回调：同步 UI 状态；连接成功恢复订阅；意外断线排队重连。 */
+function _onInstanceState(next) {
+  _connected.value = next
+  if (next) {
+    _retryDelay = RETRY_BASE_MS
+    _replaySubscriptions()
   }
-  _connected.value = false
+  for (const cb of (_destroying ? [] : _connListeners)) {
+    try { cb(next) } catch (e) { console.error('[useMqttClient] conn listener error:', e) }
+  }
+  if (next) return
+  // 正在 connects/主动销毁/页面已释放时不排队，避免无意义重连
+  if (_connectPromise || _destroying || _refCount <= 0) return
+  _scheduleRetry()
+}
+
+function _destroyInstance() {
   _activeSubscriptions.clear()
-  _currentBroker = null
-  _currentTopics = null
-  _refCount = 0
-  _connectPromise = null
+  if (!_instance) {
+    _connected.value = false
+    return
+  }
+  _destroying = true
+  try { _instance.disconnect() } catch (e) { /* ignore */ }
+  _instance = null
+  _destroying = false
+  _connected.value = false
+}
+
+function _clearRetry() {
+  if (_retryTimer) {
+    clearTimeout(_retryTimer)
+    _retryTimer = null
+  }
+}
+
+/** 按当前退避时长排队一次重连；失败则退避翻倍后继续。 */
+function _scheduleRetry() {
+  if (_retryTimer || _refCount <= 0 || !_currentBroker || _connectPromise) return
+  const delay = _retryDelay
+  console.log('[useMqttClient] 将在', delay, 'ms 后自动重连')
+  _retryTimer = setTimeout(async () => {
+    _retryTimer = null
+    if (_refCount <= 0 || !_currentBroker) return
+    try {
+      await _connectOnce(_currentBroker, _currentTopics)
+    } catch (e) {
+      console.warn('[useMqttClient] 自动重连失败，继续退避:', e && e.message)
+      _retryDelay = Math.min(_retryDelay * 2, RETRY_MAX_MS)
+      _scheduleRetry()
+    }
+  }, delay)
+}
+
+/** 建立唯一在途连接（并发调用复用同一 Promise）。 */
+function _connectOnce(broker, topics) {
+  if (_connectPromise) return _connectPromise
+  _connectPromise = (async () => {
+    _destroyInstance()
+    _setupInstance(broker, topics)
+    await _instance.connect()
+    _connected.value = true
+    _retryDelay = RETRY_BASE_MS
+    _replaySubscriptions()
+  })()
+  return _connectPromise
+    .catch((e) => {
+      _destroyInstance()
+      throw e
+    })
+    .finally(() => { _connectPromise = null })
 }
 
 // ── 公开 composable 工厂 ─────────────────────────────────────────────────────
@@ -102,12 +199,14 @@ export function useMqttClient() {
    * IFC-1110-FE-01-1: acquire
    * 增加引用计数；若引用计数从 0 升至 1，创建 ScreenMqtt 并 connect()。
    * 若已连接且 broker 配置相同，直接返回（幂等）。
+   * 连接失败时进入指数退避自动重连，并向调用方抛出首次错误。
    * @param {object} broker - {protocol, host, port, path, username, password}
    * @param {object} topics - {value_uplink, write_downlink}
    * @returns {Promise<void>}
    */
   async function acquire(broker, topics) {
     _refCount = Math.max(0, _refCount) + 1
+    if (_refCount === 1) _retryDelay = RETRY_BASE_MS
     console.log('[useMqttClient] acquire refCount=', _refCount)
 
     if (_instance && _connected.value) {
@@ -124,35 +223,42 @@ export function useMqttClient() {
       return
     }
 
-    // 发起新连接：创建唯一在途 Promise 存入模块级变量，供并发 acquire 复用。
-    _connectPromise = (async () => {
-      if (_instance) {
-        // 旧实例存在但未连接，清理后重建
-        try { _instance.disconnect() } catch (e) { /* ignore */ }
-        _instance = null
-        _activeSubscriptions.clear()
-      }
-      _setupInstance(broker, topics)
-      await _instance.connect()
-      _connected.value = true
-      console.log('[useMqttClient] acquire: 连接成功')
-    })()
-
+    _clearRetry()
     try {
-      await _connectPromise
+      await _connectOnce(broker, topics)
+      console.log('[useMqttClient] acquire: 连接成功')
     } catch (e) {
       console.error('[useMqttClient] acquire: 连接失败:', e && e.message)
-      _teardown()   // 注意：_teardown 内会把 _connectPromise 置回 null
+      _scheduleRetry()
       throw e
-    } finally {
-      // 成功路径在此清空在途 Promise（失败路径已由 _teardown 清空，重复赋 null 无害）
-      _connectPromise = null
+    }
+  }
+
+  /**
+   * 补连：不改变引用计数，仅在“已持有引用但当前未连接”时立即重连。
+   * 页面 onShow / 切回前台时调用，配合自动重连让链路可自愈。
+   * @returns {Promise<void>}
+   */
+  async function ensureConnected() {
+    if (_refCount <= 0 || _connected.value || !_currentBroker) return
+    if (_connectPromise) {
+      await _connectPromise
+      return
+    }
+    _clearRetry()
+    try {
+      await _connectOnce(_currentBroker, _currentTopics)
+      console.log('[useMqttClient] ensureConnected: 补连成功')
+    } catch (e) {
+      console.warn('[useMqttClient] ensureConnected: 补连失败:', e && e.message)
+      _scheduleRetry()
+      throw e
     }
   }
 
   /**
    * IFC-1110-FE-01-2: release
-   * 减少引用计数；若降至 0，调用 disconnect() 并清空单例。
+   * 减少引用计数；若降至 0，取消重连、调用 disconnect() 并清空单例。
    * _refCount 有下界保护（不降至负数）。
    */
   function release() {
@@ -160,18 +266,25 @@ export function useMqttClient() {
     console.log('[useMqttClient] release refCount=', _refCount)
     if (_refCount === 0) {
       console.log('[useMqttClient] release: 引用计数归零，断开 MQTT')
-      _teardown()
+      _clearRetry()
+      _destroyInstance()
+      _desiredSubscriptions.clear()
+      _currentBroker = null
+      _currentTopics = null
+      _retryDelay = RETRY_BASE_MS
     }
   }
 
   /**
    * IFC-1110-FE-01-3: subscribe
-   * 订阅 screenMac 的上行 topic（幂等：已订阅则跳过）。
+   * 订阅 screenMac 的上行 topic（幂等）。未连接时登记，重连成功后自动补订阅。
    * @param {string} screenMac
    */
   function subscribe(screenMac) {
+    if (!screenMac) return
+    _desiredSubscriptions.add(screenMac)
     if (!_instance || !_connected.value) {
-      console.warn('[useMqttClient] subscribe: 未连接，跳过订阅 mac=', screenMac)
+      console.warn('[useMqttClient] subscribe: 未连接，登记待重连后订阅 mac=', screenMac)
       return
     }
     if (_activeSubscriptions.has(screenMac)) {
@@ -248,15 +361,32 @@ export function useMqttClient() {
     }
   }
 
+  /**
+   * 注册连接状态回调（true=已连接 / false=已断开，含自动重连结果）。
+   * 页面可据此在重连成功后补订阅、重新发布 DeviceStatusRead。
+   * @param {function} cb - (connected: boolean) => void
+   * @returns {function} 注销函数
+   */
+  function onConnectionChange(cb) {
+    if (typeof cb !== 'function') return () => {}
+    if (_connListeners.indexOf(cb) === -1) _connListeners.push(cb)
+    return function off() {
+      const i = _connListeners.indexOf(cb)
+      if (i >= 0) _connListeners.splice(i, 1)
+    }
+  }
+
   return {
     connected,
     acquire,
+    ensureConnected,
     release,
     subscribe,
     publishRead,
     publishWrite,
     waitConfirm,
     onDeviceUpdate,
+    onConnectionChange,
   }
 }
 

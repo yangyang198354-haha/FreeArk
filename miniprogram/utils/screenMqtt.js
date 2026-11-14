@@ -109,6 +109,26 @@ export class ScreenMqtt {
     this.client = null
     this._updateCbs = []
     this._connected = false
+    this._stateCbs = []
+  }
+
+  /** 注册连接状态回调（connect/close/offline/disconnect 时触发），返回注销函数。 */
+  onStateChange(cb) {
+    if (typeof cb !== 'function') return () => {}
+    this._stateCbs.push(cb)
+    return () => {
+      const i = this._stateCbs.indexOf(cb)
+      if (i >= 0) this._stateCbs.splice(i, 1)
+    }
+  }
+
+  /** 更新连接状态并通知监听者（状态未变化时不重复通知）。 */
+  _setConnected(next) {
+    if (this._connected === next) return
+    this._connected = next
+    for (const cb of this._stateCbs.slice()) {
+      try { cb(next) } catch (e) { /* ignore */ }
+    }
   }
 
   connect() {
@@ -144,7 +164,7 @@ export class ScreenMqtt {
       this.client = new mqtt.MqttClient(buildUniStream(opts), opts)
       this.client.on('connect', () => {
         console.log('[ScreenMqtt] event: connect (CONNACK ok)')
-        this._connected = true
+        this._setConnected(true)
         clearTimeout(hardTimer)
         finish(resolve)
       })
@@ -155,10 +175,13 @@ export class ScreenMqtt {
         finish(reject, err)
       })
       this.client.on('reconnect', () => console.log('[ScreenMqtt] event: reconnect'))
-      this.client.on('offline', () => console.warn('[ScreenMqtt] event: offline'))
+      this.client.on('offline', () => {
+        console.warn('[ScreenMqtt] event: offline')
+        this._setConnected(false)
+      })
       this.client.on('close', () => {
         console.warn('[ScreenMqtt] event: close')
-        this._connected = false
+        this._setConnected(false)
       })
     })
   }
@@ -226,7 +249,7 @@ export class ScreenMqtt {
       this.client = null
     }
     this._updateCbs = []
-    this._connected = false
+    this._setConnected(false)
   }
 }
 

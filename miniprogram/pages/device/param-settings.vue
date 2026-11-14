@@ -327,6 +327,7 @@ const mqttConnected = computed(() => mqttClient.connected.value)
 
 let knownSns = new Set()
 let _offDeviceUpdate = null
+let _offConnChange = null
 let _deviceUpdateTimer = null
 let _queuedDeviceUpdates = {}
 let _snapshotSaveTimer = null
@@ -600,8 +601,9 @@ async function connectRoom() {
   })
 
   try {
-    await mqttClient.acquire(broker.value, topics.value)
+    // 先登记订阅：未连接时由模块层在重连成功后自动补订阅
     mqttClient.subscribe(mac)
+    await mqttClient.acquire(broker.value, topics.value)
     const allSns = _discoverSns(sp, mac)
     if (allSns.length > 0) {
       allSns.forEach((s) => knownSns.add(s))
@@ -610,6 +612,32 @@ async function connectRoom() {
   } catch (e) {
     uni.showToast({ title: '设备通道连接失败：' + (e && e.message || ''), icon: 'none' })
   }
+}
+
+/** 订阅当前房间并主动拉取全部设备值（连接成功/重连成功时调用）。 */
+function syncChannel() {
+  const room = currentRoom.value
+  const mac = room && room.screen_mac
+  if (!mac) return
+  mqttClient.subscribe(mac)
+  const allSns = _discoverSns(room.specific_part, mac)
+  if (allSns.length > 0) {
+    allSns.forEach((s) => knownSns.add(s))
+    mqttClient.publishRead(mac, allSns)
+  }
+}
+
+/**
+ * 补连：页面 onShow 时若通道未连接则立即重连，并重新拉取设备实时值。
+ * 自动退避重连由 useMqttClient 模块层兜底，这里失败不弹提示避免重复打扰。
+ */
+async function restoreChannel() {
+  const room = currentRoom.value
+  if (!room || !room.screen_mac) return
+  try {
+    await mqttClient.ensureConnected()
+    syncChannel()
+  } catch (e) { /* 静默：模块层会自动重试 */ }
 }
 
 /** 设备 SN 发现：结构骨架 device_sns 优先，回退结构缓存，再回退遗留 SN 缓存。 */
@@ -806,6 +834,11 @@ onLoad(() => {
   // 注：HOLO-HUD 数字/铭牌字体直接走 CSS 字体栈里的系统等宽（Menlo/Monaco/monospace）。
   //   原 uni.loadFontFace 远程拉 jsdelivr Orbitron 不稳（CDN 返回非法 TTF → OTS 解析报错），
   //   已移除；真机若要 Orbitron，改为打包本地 .ttf（static/）并在后台配 downloadFile 合法域名。
+
+  // 自动重连成功后补订阅并重新拉取设备实时值（网络恢复后无需手动重进页面）
+  _offConnChange = mqttClient.onConnectionChange((ok) => {
+    if (ok) syncChannel()
+  })
 })
 
 onShow(() => {
@@ -814,6 +847,7 @@ onShow(() => {
   uni.hideTabBar({ animation: false, fail: () => {} })
   setTimeout(() => uni.hideTabBar({ animation: false, fail: () => {} }), 100)
   if (rooms.value.length === 0) loadConfig()
+  else if (!mqttConnected.value) restoreChannel()
 })
 
 // tab 页常驻，onUnload 不会触发，用 onHide 保存设备快照
@@ -832,6 +866,7 @@ onUnload(() => {
   }
   Object.values(_flushTimers).forEach((t) => clearTimeout(t))
   if (_offDeviceUpdate) { _offDeviceUpdate(); _offDeviceUpdate = null }
+  if (_offConnChange) { _offConnChange(); _offConnChange = null }
   mqttClient.release()
 })
 </script>
