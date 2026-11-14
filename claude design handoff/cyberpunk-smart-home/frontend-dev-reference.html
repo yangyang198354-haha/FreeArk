@@ -1,0 +1,2023 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk Smart Home - 前端开发参考文档</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ===== DOCUMENT STYLES (NOT cyberpunk app styles) ===== */
+        :root {
+            --doc-bg: #ffffff;
+            --doc-surface: #f8f9fa;
+            --doc-border: #e2e8f0;
+            --doc-text: #1e293b;
+            --doc-text-secondary: #64748b;
+            --doc-text-muted: #94a3b8;
+            --doc-accent: #3b82f6;
+            --doc-accent-bg: #eff6ff;
+            --doc-code-bg: #1e293b;
+            --doc-code-text: #e2e8f0;
+            --doc-success: #22c55e;
+            --doc-warning: #f59e0b;
+            --doc-danger: #ef4444;
+            --doc-purple: #8b5cf6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background: var(--doc-bg);
+            color: var(--doc-text);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===== TYPOGRAPHY ===== */
+        .doc-title {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }
+        .doc-subtitle {
+            font-size: 16px;
+            color: var(--doc-text-secondary);
+            margin-bottom: 32px;
+        }
+        h2.section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--doc-accent);
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--doc-accent);
+            margin-bottom: 24px;
+            margin-top: 56px;
+        }
+        h3.subsection-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--doc-text);
+            margin-top: 32px;
+            margin-bottom: 16px;
+            padding-left: 12px;
+            border-left: 3px solid var(--doc-accent);
+        }
+        h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--doc-text);
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+
+        /* ===== LAYOUT ===== */
+        .doc-container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 48px 32px 96px;
+        }
+
+        /* ===== CODE BLOCKS ===== */
+        .code-block {
+            background: var(--doc-code-bg);
+            color: var(--doc-code-text);
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin: 12px 0 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            overflow-x: auto;
+            position: relative;
+        }
+        .code-block .keyword { color: #c084fc; }
+        .code-block .property { color: #67e8f9; }
+        .code-block .value { color: #fde68a; }
+        .code-block .comment { color: #6b7280; font-style: italic; }
+        .code-block .selector { color: #34d399; }
+        .code-label {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 10px;
+            color: var(--doc-text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ===== TABLES ===== */
+        .token-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 24px;
+            font-size: 13px;
+        }
+        .token-table th {
+            background: var(--doc-surface);
+            text-align: left;
+            padding: 10px 14px;
+            font-weight: 600;
+            border-bottom: 2px solid var(--doc-border);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--doc-text-secondary);
+        }
+        .token-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--doc-border);
+            vertical-align: middle;
+        }
+        .token-table tr:hover td {
+            background: var(--doc-accent-bg);
+        }
+        .token-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--doc-accent);
+            white-space: nowrap;
+        }
+
+        /* ===== COLOR SWATCHES ===== */
+        .swatch {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            border: 1px solid rgba(0,0,0,0.1);
+            vertical-align: middle;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        .swatch-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ===== COMPONENT DEMO AREA ===== */
+        .component-demo {
+            background: #0a0a0f;
+            border-radius: 8px;
+            padding: 24px;
+            margin: 16px 0 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .component-demo::before {
+            content: 'Preview (Dark Mode)';
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            z-index: 10;
+        }
+        .demo-grid-2x2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            max-width: 320px;
+        }
+        .demo-flex-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ===== INFO CALLOUT ===== */
+        .callout {
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 16px 0 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .callout-info {
+            background: var(--doc-accent-bg);
+            border-left: 4px solid var(--doc-accent);
+            color: var(--doc-text);
+        }
+        .callout-warning {
+            background: #fffbeb;
+            border-left: 4px solid var(--doc-warning);
+            color: var(--doc-text);
+        }
+        .callout-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        /* ===== ANIMATION DEMO ===== */
+        .anim-demo {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: var(--doc-surface);
+            border: 1px solid var(--doc-border);
+            border-radius: 6px;
+            margin: 8px 8px 8px 0;
+        }
+        .anim-demo .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--doc-accent);
+        }
+
+        /* ===== TABLE OF CONTENTS ===== */
+        .toc {
+            background: var(--doc-surface);
+            border: 1px solid var(--doc-border);
+            border-radius: 8px;
+            padding: 24px 32px;
+            margin-bottom: 40px;
+        }
+        .toc-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--doc-text-muted);
+            margin-bottom: 16px;
+        }
+        .toc ul { list-style: none; }
+        .toc li { margin-bottom: 6px; }
+        .toc a {
+            color: var(--doc-accent);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .toc a:hover { text-decoration: underline; }
+        .toc a.sub {
+            margin-left: 20px;
+            font-size: 13px;
+            color: var(--doc-text-secondary);
+        }
+
+        /* ===== UTILITY REFERENCE ===== */
+        .util-card {
+            background: var(--doc-surface);
+            border: 1px solid var(--doc-border);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 8px 0;
+        }
+        .util-card .util-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--doc-accent);
+            margin-bottom: 4px;
+        }
+        .util-card .util-desc {
+            font-size: 13px;
+            color: var(--doc-text-secondary);
+        }
+
+        /* ===== DIVIDER ===== */
+        .doc-divider {
+            border: none;
+            border-top: 1px solid var(--doc-border);
+            margin: 40px 0;
+        }
+
+        /* ===== NEON INLINE ===== */
+        .neon-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--doc-purple);
+        }
+
+        /* ===== BADGE ===== */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .badge-dark { background: #1e293b; color: #e2e8f0; }
+        .badge-light { background: #f1f5f9; color: #475569; }
+    </style>
+</head>
+<body>
+<div class="doc-container">
+
+    <!-- ===== DOCUMENT HEADER ===== -->
+    <div style="margin-bottom: 8px;">
+        <span class="badge badge-dark">v1.0</span>
+        <span class="badge badge-light" style="margin-left: 4px;">Cyberpunk Smart Home</span>
+    </div>
+    <div class="doc-title">前端开发参考文档</div>
+    <div class="doc-subtitle">Front-End Development Reference &mdash; 供 Claude / AI 编码助手使用的完整 UI 实现规范</div>
+
+    <!-- ===== TABLE OF CONTENTS ===== -->
+    <div class="toc">
+        <div class="toc-title">目录 Table of Contents</div>
+        <ul>
+            <li><a href="#sec-tokens">1. Design Token 系统</a></li>
+            <li><a href="#sec-colors" class="sub">1.1 色彩系统</a></li>
+            <li><a href="#sec-typography" class="sub">1.2 排版系统</a></li>
+            <li><a href="#sec-spacing" class="sub">1.3 间距系统</a></li>
+            <li><a href="#sec-radius" class="sub">1.4 圆角系统</a></li>
+            <li><a href="#sec-shadows" class="sub">1.5 阴影 / 辉光系统</a></li>
+            <li><a href="#sec-animation-tokens" class="sub">1.6 动画 / 过渡令牌</a></li>
+            <li><a href="#sec-components">2. 组件规范</a></li>
+            <li><a href="#sec-header" class="sub">2.1 Header 栏</a></li>
+            <li><a href="#sec-status-pills" class="sub">2.2 连接状态胶囊</a></li>
+            <li><a href="#sec-module-cards" class="sub">2.3 系统模块卡片</a></li>
+            <li><a href="#sec-threat-gauges" class="sub">2.4 威胁面板仪表</a></li>
+            <li><a href="#sec-room-cards" class="sub">2.5 房间状态卡片</a></li>
+            <li><a href="#sec-bottom-nav" class="sub">2.6 底部导航栏</a></li>
+            <li><a href="#sec-brackets" class="sub">2.7 角落装饰 (Corner Brackets)</a></li>
+            <li><a href="#sec-animations">3. 动画目录</a></li>
+            <li><a href="#sec-utilities">4. 工具类参考</a></li>
+            <li><a href="#sec-layout" class="sub">5. 布局规范</a></li>
+            <li><a href="#sec-icons" class="sub">6. SVG 图标样式指南</a></li>
+        </ul>
+    </div>
+
+    <!-- ====================================================================
+         SECTION 1: DESIGN TOKEN SYSTEM
+         ==================================================================== -->
+    <h2 class="section-title" id="sec-tokens">1. Design Token 系统</h2>
+
+    <!-- 1.1 COLOR SYSTEM -->
+    <h3 class="subsection-title" id="sec-colors">1.1 色彩系统</h3>
+
+    <h4>背景色 (Background)</h4>
+    <table class="token-table">
+        <thead>
+            <tr><th>Token</th><th>暗色模式值</th><th>亮色模式值</th><th>色样</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-bg-primary</td>
+                <td class="neon-val">#0a0a0f</td>
+                <td class="neon-val">#e8e8f0</td>
+                <td><span class="swatch" style="background:#0a0a0f;"></span><span class="swatch" style="background:#e8e8f0;"></span></td>
+                <td>主背景 (body)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-bg-secondary</td>
+                <td class="neon-val">#12121a</td>
+                <td class="neon-val">#f0f0f8</td>
+                <td><span class="swatch" style="background:#12121a;"></span><span class="swatch" style="background:#f0f0f8;"></span></td>
+                <td>次要背景区域</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-bg-card</td>
+                <td class="neon-val">#111128</td>
+                <td class="neon-val">#ffffff</td>
+                <td><span class="swatch" style="background:#111128;"></span><span class="swatch" style="background:#ffffff;"></span></td>
+                <td>卡片背景</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-bg-elevated</td>
+                <td class="neon-val">#16213e</td>
+                <td class="neon-val">#f8f8ff</td>
+                <td><span class="swatch" style="background:#16213e;"></span><span class="swatch" style="background:#f8f8ff;"></span></td>
+                <td>悬浮 / 提升层级</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-bg-overlay</td>
+                <td class="neon-val">rgba(10,10,15,0.85)</td>
+                <td class="neon-val">rgba(232,232,240,0.85)</td>
+                <td><span class="swatch" style="background:rgba(10,10,15,0.85);"></span></td>
+                <td>遮罩层 (header/nav 毛玻璃)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>文字色 (Text)</h4>
+    <table class="token-table">
+        <thead>
+            <tr><th>Token</th><th>暗色模式值</th><th>亮色模式值</th><th>色样</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-text-primary</td>
+                <td class="neon-val">#e0e0ff</td>
+                <td class="neon-val">#1a1a2e</td>
+                <td><span class="swatch" style="background:#e0e0ff;"></span></td>
+                <td>主要文字</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-text-secondary</td>
+                <td class="neon-val">#8888aa</td>
+                <td class="neon-val">#555577</td>
+                <td><span class="swatch" style="background:#8888aa;"></span></td>
+                <td>次要文字 / 说明文字</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-text-muted</td>
+                <td class="neon-val">#555577</td>
+                <td class="neon-val">#8888aa</td>
+                <td><span class="swatch" style="background:#555577;"></span></td>
+                <td>禁用 / 占位文字</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-text-inverse</td>
+                <td class="neon-val">#1a1a2e</td>
+                <td class="neon-val">#e0e0ff</td>
+                <td><span class="swatch" style="background:#1a1a2e;"></span></td>
+                <td>反色文字 (霓虹底色上)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>霓虹色板 (Neon Palette)</h4>
+    <table class="token-table">
+        <thead>
+            <tr><th>Token</th><th>值</th><th>色样</th><th>使用场景</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-neon-cyan</td>
+                <td class="neon-val">#00f0ff</td>
+                <td><span class="swatch" style="background:#00f0ff;"></span></td>
+                <td>主强调色 / 舰桥主题 / 默认辉光</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-magenta</td>
+                <td class="neon-val">#ff2d7b</td>
+                <td><span class="swatch" style="background:#ff2d7b;"></span></td>
+                <td>危险 / 威胁 / 错误状态</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-yellow</td>
+                <td class="neon-val">#f0e130</td>
+                <td><span class="swatch" style="background:#f0e130;"></span></td>
+                <td>警告 / 提醒</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-green</td>
+                <td class="neon-val">#39ff14</td>
+                <td><span class="swatch" style="background:#39ff14;"></span></td>
+                <td>成功 / 正常 / 空气质量</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-purple</td>
+                <td class="neon-val">#b026ff</td>
+                <td><span class="swatch" style="background:#b026ff;"></span></td>
+                <td>水力模块 / 书房 / 副官标签</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-orange</td>
+                <td class="neon-val">#ff6a00</td>
+                <td><span class="swatch" style="background:#ff6a00;"></span></td>
+                <td>能耗表 / 次卧 / 预警仪表</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-pink</td>
+                <td class="neon-val">#ff69b4</td>
+                <td><span class="swatch" style="background:#ff69b4;"></span></td>
+                <td>辅助装饰色</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-neon-blue</td>
+                <td class="neon-val">#4169ff</td>
+                <td><span class="swatch" style="background:#4169ff;"></span></td>
+                <td>信息 / 辅助蓝色辉光</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>语义化状态色 (Semantic States)</h4>
+    <table class="token-table">
+        <thead>
+            <tr><th>Token</th><th>引用</th><th>辉光 Token</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-accent</td>
+                <td>var(--cyber-neon-cyan)</td>
+                <td class="token-name">--cyber-accent-glow</td>
+                <td>主强调色</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-danger</td>
+                <td>var(--cyber-neon-magenta)</td>
+                <td class="token-name">--cyber-danger-glow</td>
+                <td>危险 / 错误</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-warning</td>
+                <td>var(--cyber-neon-yellow)</td>
+                <td class="token-name">--cyber-warning-glow</td>
+                <td>警告</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-success</td>
+                <td>var(--cyber-neon-green)</td>
+                <td class="token-name">--cyber-success-glow</td>
+                <td>成功 / 正常</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="callout callout-info">
+        <div class="callout-title">辉光 (Glow) 值一览</div>
+        <code style="font-size:12px;">
+            --cyber-accent-glow: rgba(0, 240, 255, 0.4)<br>
+            --cyber-danger-glow: rgba(255, 45, 123, 0.4)<br>
+            --cyber-warning-glow: rgba(240, 225, 48, 0.4)<br>
+            --cyber-success-glow: rgba(57, 255, 20, 0.4)<br>
+            --cyber-purple-glow: rgba(176, 38, 255, 0.4)<br>
+            --cyber-orange-glow: rgba(255, 106, 0, 0.4)<br>
+            --cyber-blue-glow: rgba(65, 105, 255, 0.4)<br>
+            --cyber-pink-glow: rgba(255, 105, 180, 0.4)
+        </code>
+    </div>
+
+    <h4>边框与分割线</h4>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>暗色值</th><th>亮色值</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-border</td>
+                <td class="neon-val">rgba(0, 240, 255, 0.15)</td>
+                <td class="neon-val">rgba(0, 240, 255, 0.25)</td>
+                <td>常规边框</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-border-strong</td>
+                <td class="neon-val">rgba(0, 240, 255, 0.35)</td>
+                <td class="neon-val">rgba(0, 240, 255, 0.5)</td>
+                <td>强调边框</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-divider</td>
+                <td class="neon-val">rgba(136, 136, 170, 0.12)</td>
+                <td>-</td>
+                <td>分割线</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>网格 / 扫描线</h4>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-grid-color</td>
+                <td class="neon-val">rgba(0, 240, 255, 0.04)</td>
+                <td>背景网格线颜色</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-grid-gap</td>
+                <td class="neon-val">24px</td>
+                <td>网格间距</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-scanline-opacity</td>
+                <td class="neon-val">0.03</td>
+                <td>扫描线不透明度</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 1.2 TYPOGRAPHY -->
+    <h3 class="subsection-title" id="sec-typography">1.2 排版系统</h3>
+
+    <h4>字体族 (Font Families)</h4>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-font-display</td>
+                <td class="neon-val">'Orbitron', 'Rajdhani', sans-serif</td>
+                <td>标题 / 标签 / 大写标题字</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-font-body</td>
+                <td class="neon-val">'Rajdhani', 'Noto Sans SC', sans-serif</td>
+                <td>正文 / 按钮 / 导航标签</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-font-mono</td>
+                <td class="neon-val">'Share Tech Mono', 'Courier New', monospace</td>
+                <td>数据读数 / 状态标签 / 代码</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>字号阶梯 (Type Scale)</h4>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>实际用途</th></tr></thead>
+        <tbody>
+            <tr><td class="token-name">--cyber-text-xs</td><td class="neon-val">10px</td><td>数据游标、微标签</td></tr>
+            <tr><td class="token-name">--cyber-text-sm</td><td class="neon-val">12px</td><td>辅助说明、房间卡片副标题</td></tr>
+            <tr><td class="token-name">--cyber-text-base</td><td class="neon-val">14px</td><td>正文默认</td></tr>
+            <tr><td class="token-name">--cyber-text-md</td><td class="neon-val">16px</td><td>增强正文</td></tr>
+            <tr><td class="token-name">--cyber-text-lg</td><td class="neon-val">20px</td><td>小节标题</td></tr>
+            <tr><td class="token-name">--cyber-text-xl</td><td class="neon-val">24px</td><td>页面标题</td></tr>
+            <tr><td class="token-name">--cyber-text-2xl</td><td class="neon-val">32px</td><td>大标题</td></tr>
+            <tr><td class="token-name">--cyber-text-3xl</td><td class="neon-val">40px</td><td>仪表中心数字</td></tr>
+        </tbody>
+    </table>
+
+    <h4>行高 / 字重 / 字间距</h4>
+    <table class="token-table">
+        <thead><tr><th>类别</th><th>Token</th><th>值</th></tr></thead>
+        <tbody>
+            <tr><td>行高</td><td class="token-name">--cyber-leading-tight</td><td>1.2</td></tr>
+            <tr><td>行高</td><td class="token-name">--cyber-leading-normal</td><td>1.5</td></tr>
+            <tr><td>行高</td><td class="token-name">--cyber-leading-relaxed</td><td>1.7</td></tr>
+            <tr><td>字重</td><td class="token-name">--cyber-weight-normal</td><td>400</td></tr>
+            <tr><td>字重</td><td class="token-name">--cyber-weight-medium</td><td>500</td></tr>
+            <tr><td>字重</td><td class="token-name">--cyber-weight-semibold</td><td>600</td></tr>
+            <tr><td>字重</td><td class="token-name">--cyber-weight-bold</td><td>700</td></tr>
+            <tr><td>字间距</td><td class="token-name">--cyber-tracking-tight</td><td>-0.02em</td></tr>
+            <tr><td>字间距</td><td class="token-name">--cyber-tracking-normal</td><td>0</td></tr>
+            <tr><td>字间距</td><td class="token-name">--cyber-tracking-wide</td><td>0.08em</td></tr>
+            <tr><td>字间距</td><td class="token-name">--cyber-tracking-wider</td><td>0.15em</td></tr>
+            <tr><td>字间距</td><td class="token-name">--cyber-tracking-widest</td><td>0.25em</td></tr>
+        </tbody>
+    </table>
+
+    <div class="callout callout-info">
+        <div class="callout-title">排版约定</div>
+        Display 字体默认 <code>text-transform: uppercase</code> + <code>letter-spacing: 0.08em</code>。
+        Mono 字体默认 <code>letter-spacing: 0.15em</code>。
+        状态标签使用 <code>--cyber-font-mono</code> + <code>font-size: 9px</code>，颜色对应当前模块的霓虹色。
+    </div>
+
+    <!-- 1.3 SPACING -->
+    <h3 class="subsection-title" id="sec-spacing">1.3 间距系统</h3>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>典型用途</th></tr></thead>
+        <tbody>
+            <tr><td class="token-name">--cyber-space-1</td><td class="neon-val">4px</td><td>最小间距</td></tr>
+            <tr><td class="token-name">--cyber-space-2</td><td class="neon-val">8px</td><td>图标与文字间距</td></tr>
+            <tr><td class="token-name">--cyber-space-3</td><td class="neon-val">12px</td><td>紧凑内边距</td></tr>
+            <tr><td class="token-name">--cyber-space-4</td><td class="neon-val">16px</td><td>默认容器内边距 / 卡片内边距</td></tr>
+            <tr><td class="token-name">--cyber-space-5</td><td class="neon-val">20px</td><td>小节间距</td></tr>
+            <tr><td class="token-name">--cyber-space-6</td><td class="neon-val">24px</td><td>大间距 / 网格间隙</td></tr>
+            <tr><td class="token-name">--cyber-space-8</td><td class="neon-val">32px</td><td>区块间距</td></tr>
+            <tr><td class="token-name">--cyber-space-10</td><td class="neon-val">40px</td><td>大区块间距</td></tr>
+            <tr><td class="token-name">--cyber-space-12</td><td class="neon-val">48px</td><td>页面级间距</td></tr>
+        </tbody>
+    </table>
+
+    <!-- 1.4 BORDER RADIUS -->
+    <h3 class="subsection-title" id="sec-radius">1.4 圆角系统</h3>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><td class="token-name">--cyber-radius-sm</td><td class="neon-val">2px</td><td>角括号装饰</td></tr>
+            <tr><td class="token-name">--cyber-radius-md</td><td class="neon-val">4px</td><td>小按钮、标签</td></tr>
+            <tr><td class="token-name">--cyber-radius-lg</td><td class="neon-val">8px</td><td>卡片</td></tr>
+            <tr><td class="token-name">--cyber-radius-xl</td><td class="neon-val">12px</td><td>大容器</td></tr>
+            <tr><td class="token-name">--cyber-radius-full</td><td class="neon-val">9999px</td><td>胶囊按钮、状态胶囊</td></tr>
+        </tbody>
+    </table>
+
+    <!-- 1.5 SHADOWS / GLOW -->
+    <h3 class="subsection-title" id="sec-shadows">1.5 阴影 / 辉光系统</h3>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-shadow-sm</td>
+                <td class="neon-val">0 1px 2px rgba(0,0,0,0.5)</td>
+                <td>轻微深度</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-md</td>
+                <td class="neon-val">0 2px 8px rgba(0,0,0,0.5)</td>
+                <td>中等深度 (卡片)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-lg</td>
+                <td class="neon-val">0 4px 16px rgba(0,0,0,0.6)</td>
+                <td>模态 / 弹层</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4>霓虹辉光阴影</h4>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-cyan</td>
+                <td class="neon-val">0 0 12px rgba(0,240,255,0.3), 0 0 24px rgba(0,240,255,0.15)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-magenta</td>
+                <td class="neon-val">0 0 12px rgba(255,45,123,0.3), 0 0 24px rgba(255,45,123,0.15)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-yellow</td>
+                <td class="neon-val">0 0 12px rgba(240,225,48,0.3), 0 0 24px rgba(240,225,48,0.15)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-green</td>
+                <td class="neon-val">0 0 12px rgba(57,255,20,0.3), 0 0 24px rgba(57,255,20,0.15)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-purple</td>
+                <td class="neon-val">0 0 12px rgba(176,38,255,0.3), 0 0 24px rgba(176,38,255,0.15)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-orange</td>
+                <td class="neon-val">0 0 12px rgba(255,106,0,0.3), 0 0 24px rgba(255,106,0,0.15)</td>
+            </tr>
+            <tr>
+                <td class="token-name">--cyber-shadow-glow-blue</td>
+                <td class="neon-val">0 0 12px rgba(65,105,255,0.3), 0 0 24px rgba(65,105,255,0.15)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="callout callout-info">
+        <div class="callout-title">辉光使用模式</div>
+        双层辉光结构：<code>0 0 12px (color-0.3)</code> 内圈 + <code>0 0 24px (color-0.15)</code> 外圈，形成扩散效果。<br>
+        带 <code>inset</code> 的辉光用于边框辉光工具类：<code>inset 0 0 8px (color-0.05)</code> 增加内侧微光。
+    </div>
+
+    <!-- 1.6 ANIMATION TOKENS -->
+    <h3 class="subsection-title" id="sec-animation-tokens">1.6 动画 / 过渡令牌</h3>
+    <table class="token-table">
+        <thead><tr><th>Token</th><th>值</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><td class="token-name">--cyber-transition-fast</td><td class="neon-val">150ms cubic-bezier(0.4, 0, 0.2, 1)</td><td>按钮悬停、快速交互</td></tr>
+            <tr><td class="token-name">--cyber-transition-normal</td><td class="neon-val">250ms cubic-bezier(0.4, 0, 0.2, 1)</td><td>卡片悬停、状态切换</td></tr>
+            <tr><td class="token-name">--cyber-transition-slow</td><td class="neon-val">400ms cubic-bezier(0.4, 0, 0.2, 1)</td><td>展开/收起、模态</td></tr>
+            <tr><td class="token-name">--cyber-flicker-duration</td><td class="neon-val">3s</td><td>闪烁动画周期</td></tr>
+            <tr><td class="token-name">--cyber-scan-line-speed</td><td class="neon-val">8s</td><td>扫描线移动速度</td></tr>
+            <tr><td class="token-name">--cyber-glow-pulse-speed</td><td class="neon-val">2s</td><td>辉光呼吸周期</td></tr>
+        </tbody>
+    </table>
+
+    <hr class="doc-divider">
+
+    <!-- ====================================================================
+         SECTION 2: COMPONENT SPECIFICATIONS
+         ==================================================================== -->
+    <h2 class="section-title" id="sec-components">2. 组件规范</h2>
+
+    <!-- 2.1 HEADER BAR -->
+    <h3 class="subsection-title" id="sec-header">2.1 Header 栏</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        粘性定位在页面顶部。半透明深色背景 + backdrop-filter 毛玻璃效果。底部有一条霓虹渐变动画线。
+    </p>
+
+    <div class="component-demo">
+        <div style="position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(10,10,15,0.88);backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,240,255,0.15);">
+            <div style="width:88px;display:flex;align-items:center;">
+                <button style="display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:8px;border:1px solid rgba(0,240,255,0.15);background:#111128;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+            </div>
+            <div style="flex:1;text-align:center;">
+                <span style="font-family:'Orbitron',sans-serif;font-size:18px;letter-spacing:0.15em;text-transform:uppercase;color:#e0e0ff;">舰桥</span>
+            </div>
+            <div style="display:flex;height:32px;width:88px;align-items:center;justify-content:center;border-radius:9999px;border:1px solid rgba(0,240,255,0.35);background:#111128;">
+                <button style="display:flex;height:100%;flex:1;align-items:center;justify-content:center;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8888aa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.5" fill="#b026ff"></circle><circle cx="12" cy="12" r="1.5" fill="#00f0ff"></circle><circle cx="12" cy="19" r="1.5" fill="#ff2d7b"></circle></svg>
+                </button>
+                <span style="height:16px;width:1px;background:rgba(0,240,255,0.15);"></span>
+                <button style="display:flex;height:100%;flex:1;align-items:center;justify-content:center;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8888aa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">CSS</span>
+<span class="selector">header</span> {
+  <span class="property">position</span>: <span class="value">sticky</span>;
+  <span class="property">top</span>: <span class="value">0</span>;
+  <span class="property">z-index</span>: <span class="value">30</span>;
+  <span class="property">display</span>: <span class="value">flex</span>;
+  <span class="property">align-items</span>: <span class="value">center</span>;
+  <span class="property">justify-content</span>: <span class="value">space-between</span>;
+  <span class="property">padding</span>: <span class="value">10px 16px</span>;
+  <span class="property">background</span>: <span class="value">rgba(10, 10, 15, 0.88)</span>;
+  <span class="property">backdrop-filter</span>: <span class="value">blur(12px)</span>;
+  <span class="property">-webkit-backdrop-filter</span>: <span class="value">blur(12px)</span>;
+  <span class="property">border-bottom</span>: <span class="value">1px solid var(--cyber-border)</span>;
+}
+
+<span class="comment">/* Header 底部渐变动画线 */</span>
+<span class="selector">.header-gradient-line</span> {
+  <span class="property">position</span>: <span class="value">absolute</span>;
+  <span class="property">bottom</span>: <span class="value">-1px</span>;
+  <span class="property">left</span>: <span class="value">0</span>;
+  <span class="property">right</span>: <span class="value">0</span>;
+  <span class="property">height</span>: <span class="value">1px</span>;
+  <span class="property">background</span>: <span class="value">linear-gradient(90deg, transparent, var(--cyber-neon-cyan), var(--cyber-neon-purple), var(--cyber-neon-magenta), transparent)</span>;
+  <span class="property">background-size</span>: <span class="value">200% 100%</span>;
+  <span class="property">animation</span>: <span class="value">borderTrail 4s linear infinite</span>;
+}
+
+<span class="comment">/* 小程序胶囊 (右侧胶囊按钮组) */</span>
+<span class="selector">.capsule-nav</span> {
+  <span class="property">display</span>: <span class="value">flex</span>;
+  <span class="property">height</span>: <span class="value">32px</span>;
+  <span class="property">width</span>: <span class="value">88px</span>;
+  <span class="property">align-items</span>: <span class="value">center</span>;
+  <span class="property">justify-content</span>: <span class="value">center</span>;
+  <span class="property">border-radius</span>: <span class="value">9999px</span>;
+  <span class="property">border</span>: <span class="value">1px solid var(--cyber-border-strong)</span>;
+  <span class="property">background</span>: <span class="value">var(--cyber-bg-card)</span>;
+}
+    </div>
+
+    <div class="callout callout-info">
+        <div class="callout-title">布局要点</div>
+        Header 采用三列布局：左区 88px（返回按钮）、中间 flex:1（标题居中）、右区 88px（胶囊按钮组）。<br>
+        标题使用 <code>.cyber-font-display</code> + <code>font-size: 18px</code> + <code>letter-spacing: var(--cyber-tracking-wider)</code>。<br>
+        顶部需预留 44px 状态栏高度 (<code>h-11</code>)。
+    </div>
+
+    <!-- 2.2 CONNECTION STATUS PILLS -->
+    <h3 class="subsection-title" id="sec-status-pills">2.2 连接状态胶囊</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        圆角胶囊形状，带状态圆点 + 呼吸辉光动画。水平排列，可滚动。
+    </p>
+
+    <div class="component-demo">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 0;">
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9999px;background:rgba(0,240,255,0.06);border:1px solid rgba(0,240,255,0.25);animation:demoGlow 3s ease-in-out infinite;">
+                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#00f0ff;box-shadow:0 0 4px rgba(0,240,255,0.6);"></span>
+                <span style="font-family:'Rajdhani',sans-serif;font-size:11px;color:#8888aa;white-space:nowrap;">接驳方舟神经网络 / 已接驳</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9999px;background:rgba(57,255,20,0.04);border:1px solid rgba(57,255,20,0.2);animation:demoGlow 3s ease-in-out infinite 1.5s;">
+                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#39ff14;box-shadow:0 0 4px rgba(57,255,20,0.6);"></span>
+                <span style="font-family:'Rajdhani',sans-serif;font-size:11px;color:#8888aa;white-space:nowrap;">链接座舱 / 已链接</span>
+            </div>
+        </div>
+    </div>
+    <style>
+        @keyframes demoGlow {
+            0%, 100% { box-shadow: 0 0 4px rgba(0,240,255,0.1); }
+            50% { box-shadow: 0 0 12px rgba(0,240,255,0.2); }
+        }
+    </style>
+
+    <div class="code-block">
+        <span class="code-label">CSS</span>
+<span class="comment">/* 连接状态胶囊 */</span>
+<span class="selector">.status-pill</span> {
+  <span class="property">display</span>: <span class="value">flex</span>;
+  <span class="property">align-items</span>: <span class="value">center</span>;
+  <span class="property">gap</span>: <span class="value">6px</span>;
+  <span class="property">padding</span>: <span class="value">6px 12px</span>;
+  <span class="property">border-radius</span>: <span class="value">9999px</span>;
+  <span class="property">background</span>: <span class="value">rgba(0, 240, 255, 0.06)</span>;
+  <span class="property">border</span>: <span class="value">1px solid rgba(0, 240, 255, 0.25)</span>;
+  <span class="property">animation</span>: <span class="value">glowBreathe 3s ease-in-out infinite</span>;
+  <span class="property">--glow-color</span>: <span class="value">rgba(0, 240, 255, 0.15)</span>;
+  <span class="property">flex-shrink</span>: <span class="value">0</span>;
+}
+
+<span class="comment">/* 状态圆点 */</span>
+<span class="selector">.status-dot</span> {
+  <span class="property">display</span>: <span class="value">inline-block</span>;
+  <span class="property">width</span>: <span class="value">6px</span>;
+  <span class="property">height</span>: <span class="value">6px</span>;
+  <span class="property">border-radius</span>: <span class="value">50%</span>;
+  <span class="property">animation</span>: <span class="value">glowBreathe 2s ease-in-out infinite</span>;
+}
+<span class="selector">.status-dot-cyan</span> {
+  <span class="property">background</span>: <span class="value">var(--cyber-neon-cyan)</span>;
+  <span class="property">--glow-color</span>: <span class="value">rgba(0, 240, 255, 0.5)</span>;
+  <span class="property">box-shadow</span>: <span class="value">0 0 4px rgba(0, 240, 255, 0.6)</span>;
+}
+<span class="selector">.status-dot-green</span> {
+  <span class="property">background</span>: <span class="value">var(--cyber-neon-green)</span>;
+  <span class="property">--glow-color</span>: <span class="value">rgba(57, 255, 20, 0.5)</span>;
+  <span class="property">box-shadow</span>: <span class="value">0 0 4px rgba(57, 255, 20, 0.6)</span>;
+}
+
+<span class="comment">/* glowBreathe 动画 (CSS) */</span>
+<span class="selector">@keyframes glowBreathe</span> {
+  <span class="value">0%, 100%</span> { <span class="property">box-shadow</span>: <span class="value">0 0 4px var(--glow-color, rgba(0,240,255,0.3))</span>; }
+  <span class="value">50%</span> { <span class="property">box-shadow</span>: <span class="value">0 0 16px var(--glow-color, rgba(0,240,255,0.5)), 0 0 32px var(--glow-color, rgba(0,240,255,0.2))</span>; }
+}
+    </div>
+
+    <div class="callout callout-warning">
+        <div class="callout-title">注意事项</div>
+        多个胶囊使用不同的 <code>animation-delay</code> 错开呼吸节奏（如第二个胶囊 <code>1.5s</code>）。文字使用 <code>--cyber-font-body</code> + <code>font-size: 11px</code> + <code>color: var(--cyber-text-secondary)</code>。
+    </div>
+
+    <!-- 2.3 SYSTEM MODULE CARDS -->
+    <h3 class="subsection-title" id="sec-module-cards">2.3 系统模块卡片</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        2x2 网格排列的模块卡片。每张卡片包含：四角装饰、霓虹色 SVG 图标、模块名称、状态标签。卡片入场带有交错的 slide-up 动画。
+    </p>
+
+    <div class="component-demo">
+        <div class="demo-grid-2x2">
+            <!-- CYAN -->
+            <div style="position:relative;border-radius:4px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#111128;border:1px solid rgba(0,240,255,0.35);">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #00f0ff;border-right:2px solid #00f0ff;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #00f0ff;border-left:2px solid #00f0ff;display:block;"></span>
+                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(0,240,255,0.5));">
+                    <circle cx="16" cy="16" r="10"></circle><circle cx="16" cy="16" r="3"></circle>
+                    <line x1="16" y1="6" x2="16" y2="13"></line><line x1="16" y1="19" x2="16" y2="26"></line>
+                    <line x1="6" y1="16" x2="13" y2="16"></line><line x1="19" y1="16" x2="26" y2="16"></line>
+                </svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:13px;font-weight:500;">新风模块</span>
+                <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#00f0ff;">ACTIVE</span>
+            </div>
+            <!-- PURPLE -->
+            <div style="position:relative;border-radius:4px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#111128;border:1px solid rgba(176,38,255,0.3);">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #b026ff;border-right:2px solid #b026ff;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #b026ff;border-left:2px solid #b026ff;display:block;"></span>
+                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="#b026ff" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(176,38,255,0.5));">
+                    <path d="M16 4 C16 4 10 12 10 18 C10 24 16 28 16 28 C16 28 22 24 22 18 C22 12 16 4 16 4Z"></path>
+                    <line x1="16" y1="10" x2="16" y2="26"></line><path d="M12 16 Q16 20 20 16"></path>
+                </svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:13px;font-weight:500;">水力模块</span>
+                <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#b026ff;">ONLINE</span>
+            </div>
+            <!-- GREEN -->
+            <div style="position:relative;border-radius:4px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#111128;border:1px solid rgba(57,255,20,0.25);">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #39ff14;border-right:2px solid #39ff14;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #39ff14;border-left:2px solid #39ff14;display:block;"></span>
+                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(57,255,20,0.5));">
+                    <circle cx="16" cy="16" r="10"></circle><circle cx="16" cy="16" r="6"></circle>
+                    <line x1="16" y1="10" x2="16" y2="22"></line><line x1="10" y1="16" x2="22" y2="16"></line>
+                </svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:13px;font-weight:500;">空气品质</span>
+                <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#39ff14;">GOOD</span>
+            </div>
+            <!-- ORANGE -->
+            <div style="position:relative;border-radius:4px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#111128;border:1px solid rgba(255,106,0,0.25);">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #ff6a00;border-right:2px solid #ff6a00;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #ff6a00;border-left:2px solid #ff6a00;display:block;"></span>
+                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="#ff6a00" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(255,106,0,0.5));">
+                    <polygon points="16,4 20,14 26,14 21,20 23,28 16,23 9,28 11,20 6,14 12,14"></polygon>
+                </svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:13px;font-weight:500;">能耗表</span>
+                <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#ff6a00;">NORMAL</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">HTML 结构</span>
+&lt;<span class="keyword">div</span> <span class="property">class</span>=<span class="value">"cyber-bracket-full cyber-card-glow"</span>
+     <span class="property">style</span>=<span class="value">"background: var(--cyber-bg-card); border: 1px solid var(--cyber-border-strong);
+            border-radius: var(--cyber-radius-md); padding: 14px;
+            animation: cardSlideIn 0.5s ease-out both;
+            --corner-color: var(--cyber-neon-cyan);"</span>&gt;
+  &lt;<span class="keyword">span</span> <span class="property">class</span>=<span class="value">"br-tr"</span>&gt;&lt;/<span class="keyword">span</span>&gt;
+  &lt;<span class="keyword">span</span> <span class="property">class</span>=<span class="value">"br-bl"</span>&gt;&lt;/<span class="keyword">span</span>&gt;
+
+  <span class="comment">&lt;!-- SVG Icon: 36x36, stroke=neon-color, stroke-width=1.5 --&gt;</span>
+  &lt;<span class="keyword">svg</span> <span class="property">width</span>=<span class="value">"36"</span> <span class="property">height</span>=<span class="value">"36"</span> <span class="property">viewBox</span>=<span class="value">"0 0 32 32"</span>
+       <span class="property">fill</span>=<span class="value">"none"</span> <span class="property">stroke</span>=<span class="value">"var(--cyber-neon-cyan)"</span>
+       <span class="property">stroke-width</span>=<span class="value">"1.5"</span> <span class="property">stroke-linecap</span>=<span class="value">"round"</span>
+       <span class="property">style</span>=<span class="value">"filter: drop-shadow(0 0 6px rgba(0,240,255,0.5))"</span>&gt;
+    ...
+  &lt;/<span class="keyword">svg</span>&gt;
+
+  <span class="comment">&lt;!-- Module Name --&gt;</span>
+  &lt;<span class="keyword">span</span> <span class="property">class</span>=<span class="value">"cyber-font-body"</span>
+        <span class="property">style</span>=<span class="value">"font-size: 13px; font-weight: var(--cyber-weight-medium);
+               color: var(--cyber-text-primary);"</span>&gt;
+    新风模块
+  &lt;/<span class="keyword">span</span>&gt;
+
+  <span class="comment">&lt;!-- Status Label --&gt;</span>
+  &lt;<span class="keyword">span</span> <span class="property">class</span>=<span class="value">"cyber-font-mono"</span>
+        <span class="property">style</span>=<span class="value">"font-size: 9px; color: var(--cyber-neon-cyan);"</span>&gt;
+    ACTIVE
+  &lt;/<span class="keyword">span</span>&gt;
+&lt;/<span class="keyword">div</span>&gt;
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">CSS - cardSlideIn 动画</span>
+<span class="selector">@keyframes cardSlideIn</span> {
+  <span class="value">from</span> {
+    <span class="property">opacity</span>: <span class="value">0</span>;
+    <span class="property">transform</span>: <span class="value">translateY(16px) scale(0.96)</span>;
+  }
+  <span class="value">to</span> {
+    <span class="property">opacity</span>: <span class="value">1</span>;
+    <span class="property">transform</span>: <span class="value">translateY(0) scale(1)</span>;
+  }
+}
+
+<span class="comment">/* 交错入场: 每张卡片 animation-delay 递增 0.1s */</span>
+<span class="comment">/* 第1张: cardSlideIn 0.5s ease-out 0s both      */</span>
+<span class="comment">/* 第2张: cardSlideIn 0.5s ease-out 0.1s both    */</span>
+<span class="comment">/* 第3张: cardSlideIn 0.5s ease-out 0.2s both    */</span>
+<span class="comment">/* 第4张: cardSlideIn 0.5s ease-out 0.3s both    */</span>
+    </div>
+
+    <div class="callout callout-info">
+        <div class="callout-title">模块卡片映射</div>
+        <table style="width:100%;font-size:12px;margin-top:8px;">
+            <tr><td style="padding:4px 8px;font-weight:600;">新风模块</td><td style="padding:4px 8px;">Cyan</td><td style="padding:4px 8px;">--cyber-neon-cyan</td><td style="padding:4px 8px;">ACTIVE</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:600;">水力模块</td><td style="padding:4px 8px;">Purple</td><td style="padding:4px 8px;">--cyber-neon-purple</td><td style="padding:4px 8px;">ONLINE</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:600;">空气品质</td><td style="padding:4px 8px;">Green</td><td style="padding:4px 8px;">--cyber-neon-green</td><td style="padding:4px 8px;">GOOD</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:600;">能耗表</td><td style="padding:4px 8px;">Orange</td><td style="padding:4px 8px;">--cyber-neon-orange</td><td style="padding:4px 8px;">NORMAL</td></tr>
+        </table>
+    </div>
+
+    <!-- 2.4 THREAT GAUGES -->
+    <h3 class="subsection-title" id="sec-threat-gauges">2.4 威胁面板仪表 (Threat Board Gauges)</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        SVG 圆环仪表盘。包含多层同心圆环 (静态底环 + 动态填充环 + 脉冲环)、中心数值、十字准线、以及边框渐变流光动画。外围有威胁区域闪烁叠加。
+    </p>
+
+    <div class="component-demo">
+        <div class="demo-grid-2x2">
+            <!-- System Faults - Magenta -->
+            <div style="position:relative;border-radius:4px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#111128;overflow:hidden;">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #ff2d7b;border-right:2px solid #ff2d7b;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #ff2d7b;border-left:2px solid #ff2d7b;display:block;"></span>
+                <svg width="100" height="100" viewBox="0 0 100 100" style="filter:drop-shadow(0 0 8px rgba(255,45,123,0.15));">
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,45,123,0.12)" stroke-width="2"></circle>
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="#ff2d7b" stroke-width="2" stroke-dasharray="276.46" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 50 50)"></circle>
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(176,38,255,0.1)" stroke-width="1.5"></circle>
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="#b026ff" stroke-width="1.5" stroke-dasharray="238.76" stroke-dashoffset="59.69" stroke-linecap="round" transform="rotate(-90 50 50)" opacity="0.6"></circle>
+                    <circle cx="50" cy="50" r="34" fill="none" stroke="rgba(255,106,0,0.08)" stroke-width="1"></circle>
+                    <text x="50" y="54" text-anchor="middle" fill="#ff2d7b" style="font-family:'Share Tech Mono',monospace;font-size:28px;filter:drop-shadow(0 0 8px rgba(255,45,123,0.6));">0</text>
+                    <line x1="50" y1="20" x2="50" y2="35" stroke="rgba(255,45,123,0.15)" stroke-width="0.5"></line>
+                    <line x1="50" y1="65" x2="50" y2="80" stroke="rgba(255,45,123,0.15)" stroke-width="0.5"></line>
+                </svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#8888aa;font-size:12px;">系统故障</span>
+            </div>
+            <!-- Condensation - Orange -->
+            <div style="position:relative;border-radius:4px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#111128;overflow:hidden;">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #ff6a00;border-right:2px solid #ff6a00;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #ff6a00;border-left:2px solid #ff6a00;display:block;"></span>
+                <svg width="100" height="100" viewBox="0 0 100 100" style="filter:drop-shadow(0 0 8px rgba(255,106,0,0.15));">
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,106,0,0.12)" stroke-width="2"></circle>
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="#ff6a00" stroke-width="2" stroke-dasharray="276.46" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 50 50)"></circle>
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(240,225,48,0.1)" stroke-width="1.5"></circle>
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="#f0e130" stroke-width="1.5" stroke-dasharray="238.76" stroke-dashoffset="59.69" stroke-linecap="round" transform="rotate(-90 50 50)" opacity="0.6"></circle>
+                    <circle cx="50" cy="50" r="34" fill="none" stroke="rgba(240,225,48,0.08)" stroke-width="1"></circle>
+                    <text x="50" y="54" text-anchor="middle" fill="#ff6a00" style="font-family:'Share Tech Mono',monospace;font-size:28px;filter:drop-shadow(0 0 8px rgba(255,106,0,0.6));">0</text>
+                    <line x1="50" y1="20" x2="50" y2="35" stroke="rgba(255,106,0,0.15)" stroke-width="0.5"></line>
+                    <line x1="50" y1="65" x2="50" y2="80" stroke="rgba(255,106,0,0.15)" stroke-width="0.5"></line>
+                </svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#8888aa;font-size:12px;">结露预警</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">SVG 圆环结构说明</span>
+<span class="comment">/*
+ * 仪表 SVG 结构 (viewBox="0 0 100 100")：
+ *
+ * 层级1 - 外圈静态底环:
+ *   <circle cx="50" cy="50" r="44" stroke="(color-0.12)" stroke-width="2" />
+ *
+ * 层级2 - 外圈填充环 (动画):
+ *   <circle cx="50" cy="50" r="44" stroke="(neon-color)" stroke-width="2"
+ *           stroke-dasharray="276.46" stroke-dashoffset="(动态值)"
+ *           stroke-linecap="round" transform="rotate(-90 50 50)"
+ *           style="animation: ringDraw 2s ease-out forwards, ringPulse 3s ease-in-out 2s infinite;" />
+ *
+ * 层级3 - 中圈静态底环:
+ *   <circle cx="50" cy="50" r="38" stroke="(color2-0.1)" stroke-width="1.5" />
+ *
+ * 层级4 - 中圈填充环 (脉冲):
+ *   <circle cx="50" cy="50" r="38" stroke="(neon-color2)" stroke-width="1.5"
+ *           stroke-dasharray="238.76" stroke-dashoffset="(值)" stroke-linecap="round"
+ *           transform="rotate(-90 50 50)" opacity="0.6"
+ *           style="animation: ringPulse 4s ease-in-out infinite;" />
+ *
+ * 层级5 - 内圈静态底环:
+ *   <circle cx="50" cy="50" r="34" stroke="(color3-0.08)" stroke-width="1" />
+ *
+ * 层级6 - 中心数值:
+ *   <text x="50" y="54" text-anchor="middle" fill="(neon-color)"
+ *         style="font-family:var(--cyber-font-mono); font-size:28px;
+ *                filter: drop-shadow(0 0 8px (glow));">数值</text>
+ *
+ * 层级7 - 十字准线:
+ *   <line x1="50" y1="20" x2="50" y2="35" stroke="(color-0.15)" stroke-width="0.5" />
+ *   <line x1="50" y1="65" x2="50" y2="80" stroke="(color-0.15)" stroke-width="0.5" />
+ */</span>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">CSS - 仪表动画</span>
+<span class="selector">@keyframes ringDraw</span> {
+  <span class="value">from</span> { <span class="property">stroke-dashoffset</span>: <span class="value">276.46</span>; }
+  <span class="value">to</span> { <span class="property">stroke-dashoffset</span>: <span class="value">0</span>; }
+}
+
+<span class="selector">@keyframes ringPulse</span> {
+  <span class="value">0%, 100%</span> {
+    <span class="property">opacity</span>: <span class="value">1</span>;
+    <span class="property">filter</span>: <span class="value">drop-shadow(0 0 4px currentColor)</span>;
+  }
+  <span class="value">50%</span> {
+    <span class="property">opacity</span>: <span class="value">0.5</span>;
+    <span class="property">filter</span>: <span class="value">drop-shadow(0 0 12px currentColor)</span>;
+  }
+}
+
+<span class="comment">/* 威胁闪烁叠加 */</span>
+<span class="selector">@keyframes warningFlash</span> {
+  <span class="value">0%, 100%</span> { <span class="property">opacity</span>: <span class="value">0</span>; }
+  <span class="value">50%</span> { <span class="property">opacity</span>: <span class="value">0.6</span>; }
+}
+
+<span class="comment">/* threat-border: 边框渐变流光 */</span>
+<span class="selector">.threat-border::before</span> {
+  <span class="property">content</span>: <span class="value">''</span>;
+  <span class="property">position</span>: <span class="value">absolute</span>;
+  <span class="property">inset</span>: <span class="value">-1px</span>;
+  <span class="property">border-radius</span>: <span class="value">inherit</span>;
+  <span class="property">padding</span>: <span class="value">1px</span>;
+  <span class="property">background</span>: <span class="value">linear-gradient(90deg, var(--cyber-neon-magenta), var(--cyber-neon-orange), var(--cyber-neon-yellow), var(--cyber-neon-magenta))</span>;
+  <span class="property">background-size</span>: <span class="value">300% 100%</span>;
+  <span class="property">animation</span>: <span class="value">borderTrail 3s linear infinite</span>;
+  <span class="property">-webkit-mask</span>: <span class="value">linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)</span>;
+  <span class="property">-webkit-mask-composite</span>: <span class="value">xor</span>;
+  <span class="property">mask-composite</span>: <span class="value">exclude</span>;
+}
+    </div>
+
+    <div class="callout callout-info">
+        <div class="callout-title">圆环周长计算</div>
+        <code>circumference = 2 * PI * radius</code><br>
+        r=44: 276.46 | r=38: 238.76 | r=34: 213.63<br>
+        <code>stroke-dashoffset</code> 控制填充比例：0 = 100% 填充，276.46 = 0% 填充。
+    </div>
+
+    <!-- 2.5 ROOM STATUS CARDS -->
+    <h3 class="subsection-title" id="sec-room-cards">2.5 房间状态卡片</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        2x2 网格，每张卡片有主题色 hover 效果、小图标、房间名称、右上角菱形指示器。通过 CSS 自定义属性实现不同颜色变体。
+    </p>
+
+    <div class="component-demo">
+        <div class="demo-grid-2x2">
+            <div style="position:relative;border-radius:4px;padding:16px;display:flex;align-items:center;justify-content:center;background:#111128;min-height:72px;border:1px solid rgba(0,240,255,0.15);cursor:pointer;transition:all 0.3s;">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #00f0ff;border-right:2px solid #00f0ff;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #00f0ff;border-left:2px solid #00f0ff;display:block;"></span>
+                <span style="position:absolute;top:8px;right:8px;color:#00f0ff;font-size:8px;line-height:1;">&#9670;</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="1.5" style="filter:drop-shadow(0 0 3px rgba(0,240,255,0.4));margin-right:8px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:14px;font-weight:500;">主卧</span>
+            </div>
+            <div style="position:relative;border-radius:4px;padding:16px;display:flex;align-items:center;justify-content:center;background:#111128;min-height:72px;border:1px solid rgba(176,38,255,0.15);cursor:pointer;transition:all 0.3s;">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #b026ff;border-right:2px solid #b026ff;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #b026ff;border-left:2px solid #b026ff;display:block;"></span>
+                <span style="position:absolute;top:8px;right:8px;color:#b026ff;font-size:8px;line-height:1;">&#9670;</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b026ff" stroke-width="1.5" style="filter:drop-shadow(0 0 3px rgba(176,38,255,0.4));margin-right:8px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:14px;font-weight:500;">书房</span>
+            </div>
+            <div style="position:relative;border-radius:4px;padding:16px;display:flex;align-items:center;justify-content:center;background:#111128;min-height:72px;border:1px solid rgba(57,255,20,0.15);cursor:pointer;transition:all 0.3s;">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #39ff14;border-right:2px solid #39ff14;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #39ff14;border-left:2px solid #39ff14;display:block;"></span>
+                <span style="position:absolute;top:8px;right:8px;color:#39ff14;font-size:8px;line-height:1;">&#9670;</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#39ff14" stroke-width="1.5" style="filter:drop-shadow(0 0 3px rgba(57,255,20,0.4));margin-right:8px;"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:14px;font-weight:500;">儿童房</span>
+            </div>
+            <div style="position:relative;border-radius:4px;padding:16px;display:flex;align-items:center;justify-content:center;background:#111128;min-height:72px;border:1px solid rgba(255,106,0,0.15);cursor:pointer;transition:all 0.3s;">
+                <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #ff6a00;border-right:2px solid #ff6a00;display:block;"></span>
+                <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #ff6a00;border-left:2px solid #ff6a00;display:block;"></span>
+                <span style="position:absolute;top:8px;right:8px;color:#ff6a00;font-size:8px;line-height:1;">&#9670;</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff6a00" stroke-width="1.5" style="filter:drop-shadow(0 0 3px rgba(255,106,0,0.4));margin-right:8px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span style="font-family:'Rajdhani',sans-serif;color:#e0e0ff;font-size:14px;font-weight:500;">次卧</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">CSS - 房间卡片颜色变体</span>
+<span class="comment">/* 颜色变体通过 CSS 自定义属性实现 */</span>
+<span class="selector">.room-card-cyan</span>   { <span class="property">--room-color</span>: <span class="value">#00f0ff</span>; <span class="property">--room-glow</span>: <span class="value">rgba(0,240,255,0.15)</span>; }
+<span class="selector">.room-card-purple</span> { <span class="property">--room-color</span>: <span class="value">#b026ff</span>; <span class="property">--room-glow</span>: <span class="value">rgba(176,38,255,0.15)</span>; }
+<span class="selector">.room-card-green</span>  { <span class="property">--room-color</span>: <span class="value">#39ff14</span>; <span class="property">--room-glow</span>: <span class="value">rgba(57,255,20,0.15)</span>; }
+<span class="selector">.room-card-orange</span> { <span class="property">--room-color</span>: <span class="value">#ff6a00</span>; <span class="property">--room-glow</span>: <span class="value">rgba(255,106,0,0.15)</span>; }
+
+<span class="comment">/* Hover/Active 效果 */</span>
+<span class="selector">.room-card-cyan:hover, .room-card-cyan:active</span> {
+  <span class="property">border-color</span>: <span class="value">rgba(0,240,255,0.5)</span>;
+  <span class="property">box-shadow</span>: <span class="value">0 0 16px rgba(0,240,255,0.2), inset 0 0 20px rgba(0,240,255,0.04)</span>;
+}
+<span class="comment">/* purple/green/orange 变体同理，替换对应颜色 */</span>
+
+<span class="comment">/* 右上角菱形指示器 */</span>
+<span class="selector">.room-indicator</span> {
+  <span class="property">position</span>: <span class="value">absolute</span>;
+  <span class="property">top</span>: <span class="value">8px</span>;
+  <span class="property">right</span>: <span class="value">8px</span>;
+  <span class="property">color</span>: <span class="value">var(--room-color)</span>;
+  <span class="property">font-size</span>: <span class="value">8px</span>;
+  <span class="property">line-height</span>: <span class="value">1</span>;
+  <span class="property">animation</span>: <span class="value">glowBreathe 2s ease-in-out infinite</span>;
+  <span class="property">--glow-color</span>: <span class="value">var(--room-glow)</span>;
+}
+    </div>
+
+    <div class="callout callout-info">
+        <div class="callout-title">房间卡片映射</div>
+        <table style="width:100%;font-size:12px;margin-top:8px;">
+            <tr><td style="padding:4px 8px;font-weight:600;">主卧</td><td style="padding:4px 8px;">room-card-cyan</td><td style="padding:4px 8px;">房屋图标</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:600;">书房</td><td style="padding:4px 8px;">room-card-purple</td><td style="padding:4px 8px;">书本图标</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:600;">儿童房</td><td style="padding:4px 8px;">room-card-green</td><td style="padding:4px 8px;">笑脸图标</td></tr>
+            <tr><td style="padding:4px 8px;font-weight:600;">次卧</td><td style="padding:4px 8px;">room-card-orange</td><td style="padding:4px 8px;">房屋图标</td></tr>
+        </table>
+    </div>
+
+    <!-- 2.6 BOTTOM NAV -->
+    <h3 class="subsection-title" id="sec-bottom-nav">2.6 底部导航栏 (Bottom Tab Navigation)</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        固定在底部。半透明毛玻璃背景 + 顶部霓虹渐变动画线。4 个等宽 Tab，激活态带辉光下划线 + 图标辉光。
+    </p>
+
+    <div class="component-demo" style="padding-bottom:0;">
+        <div style="position:fixed;bottom:0;left:0;right:0;z-index:40;background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);border-top:1px solid rgba(0,240,255,0.15);max-width:960px;margin:0 auto;">
+            <div style="display:flex;align-items:center;justify-content:space-around;height:50px;">
+                <!-- Active -->
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#00f0ff;position:relative;">
+                    <div style="position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);width:24px;height:2px;border-radius:1px;background:#00f0ff;box-shadow:0 0 8px rgba(0,240,255,0.6),0 0 20px rgba(0,240,255,0.3);"></div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(0,240,255,0.6));"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><line x1="12" y1="2" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="22"></line><line x1="2" y1="12" x2="5" y2="12"></line><line x1="19" y1="12" x2="22" y2="12"></line></svg>
+                    <span style="font-family:'Rajdhani',sans-serif;font-size:10px;text-shadow:0 0 6px rgba(0,240,255,0.4);">舰桥</span>
+                </div>
+                <!-- Inactive -->
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#555577;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 22,8 22,16 12,22 2,16 2,8"></polygon><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    <span style="font-family:'Rajdhani',sans-serif;font-size:10px;">指挥</span>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#555577;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 20 C5 16 8 14 12 14 C16 14 19 16 19 20"></path></svg>
+                    <span style="font-family:'Rajdhani',sans-serif;font-size:10px;">副官</span>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#555577;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9"></polygon></svg>
+                    <span style="font-family:'Rajdhani',sans-serif;font-size:10px;">舰长休息室</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">CSS - 底部导航</span>
+<span class="selector">nav.bottom-nav</span> {
+  <span class="property">position</span>: <span class="value">fixed</span>;
+  <span class="property">bottom</span>: <span class="value">0</span>;
+  <span class="property">left</span>: <span class="value">0</span>;
+  <span class="property">right</span>: <span class="value">0</span>;
+  <span class="property">z-index</span>: <span class="value">40</span>;
+  <span class="property">background</span>: <span class="value">rgba(10, 10, 15, 0.92)</span>;
+  <span class="property">backdrop-filter</span>: <span class="value">blur(12px)</span>;
+  <span class="property">border-top</span>: <span class="value">1px solid var(--cyber-border)</span>;
+}
+
+<span class="comment">/* Tab 容器: max-w-[375px], flex, justify-around, h-[50px] */</span>
+<span class="selector">nav.bottom-nav .tab-container</span> {
+  <span class="property">max-width</span>: <span class="value">375px</span>;
+  <span class="property">margin</span>: <span class="value">0 auto</span>;
+  <span class="property">display</span>: <span class="value">flex</span>;
+  <span class="property">align-items</span>: <span class="value">center</span>;
+  <span class="property">justify-content</span>: <span class="value">space-around</span>;
+  <span class="property">height</span>: <span class="value">50px</span>;
+}
+
+<span class="comment">/* 激活态 Tab 辉光下划线 */</span>
+<span class="selector">.tab-glow-underline::before</span> {
+  <span class="property">content</span>: <span class="value">''</span>;
+  <span class="property">position</span>: <span class="value">absolute</span>;
+  <span class="property">bottom</span>: <span class="value">-2px</span>;
+  <span class="property">left</span>: <span class="value">50%</span>;
+  <span class="property">transform</span>: <span class="value">translateX(-50%)</span>;
+  <span class="property">width</span>: <span class="value">24px</span>;
+  <span class="property">height</span>: <span class="value">2px</span>;
+  <span class="property">border-radius</span>: <span class="value">1px</span>;
+  <span class="property">background</span>: <span class="value">var(--cyber-neon-cyan)</span>;
+  <span class="property">box-shadow</span>: <span class="value">0 0 8px rgba(0,240,255,0.6), 0 0 20px rgba(0,240,255,0.3)</span>;
+  <span class="property">animation</span>: <span class="value">glowBreathe 2s ease-in-out infinite</span>;
+  <span class="property">--glow-color</span>: <span class="value">rgba(0,240,255,0.5)</span>;
+}
+
+<span class="comment">/* 安全区域底部填充 */</span>
+<span class="selector">.safe-area-bottom</span> {
+  <span class="property">height</span>: <span class="value">env(safe-area-inset-bottom, 34px)</span>;
+  <span class="property">background</span>: <span class="value">rgba(10, 10, 15, 0.92)</span>;
+}
+    </div>
+
+    <!-- 2.7 CORNER BRACKETS -->
+    <h3 class="subsection-title" id="sec-brackets">2.7 角落装饰 (Corner Brackets)</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        两种变体：2 角（左上 + 右下）和 4 角（全覆盖）。通过 CSS 伪元素 + 自定义属性实现。
+    </p>
+
+    <div class="component-demo">
+        <div style="display:flex;gap:20px;padding:20px;">
+            <!-- 2-corner -->
+            <div>
+                <div style="position:relative;width:120px;height:80px;border:1px solid rgba(0,240,255,0.2);border-radius:4px;display:flex;align-items:center;justify-content:center;background:#111128;">
+                    <span style="position:absolute;top:-1px;left:-1px;width:12px;height:12px;border-top:2px solid #00f0ff;border-left:2px solid #00f0ff;display:block;"></span>
+                    <span style="position:absolute;bottom:-1px;right:-1px;width:12px;height:12px;border-bottom:2px solid #00f0ff;border-right:2px solid #00f0ff;display:block;"></span>
+                    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#8888aa;">.cyber-bracket</span>
+                </div>
+            </div>
+            <!-- 4-corner -->
+            <div>
+                <div style="position:relative;width:120px;height:80px;border:1px solid rgba(176,38,255,0.2);border-radius:4px;display:flex;align-items:center;justify-content:center;background:#111128;">
+                    <span style="position:absolute;top:-1px;left:-1px;width:14px;height:14px;border-top:2px solid #b026ff;border-left:2px solid #b026ff;display:block;"></span>
+                    <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #b026ff;border-right:2px solid #b026ff;display:block;"></span>
+                    <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #b026ff;border-left:2px solid #b026ff;display:block;"></span>
+                    <span style="position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-bottom:2px solid #b026ff;border-right:2px solid #b026ff;display:block;"></span>
+                    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#8888aa;">.cyber-bracket-full</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="code-block">
+        <span class="code-label">CSS - 角落装饰</span>
+<span class="comment">/* 2 角变体 (左上 + 右下) — 使用 ::before 和 ::after */</span>
+<span class="selector">.cyber-bracket</span> { <span class="property">position</span>: <span class="value">relative</span>; }
+<span class="selector">.cyber-bracket::before, .cyber-bracket::after</span> {
+  <span class="property">content</span>: <span class="value">''</span>;
+  <span class="property">position</span>: <span class="value">absolute</span>;
+  <span class="property">width</span>: <span class="value">12px</span>;
+  <span class="property">height</span>: <span class="value">12px</span>;
+  <span class="property">border-color</span>: <span class="value">var(--corner-color, var(--cyber-accent))</span>;
+  <span class="property">border-style</span>: <span class="value">solid</span>;
+}
+<span class="selector">.cyber-bracket::before</span>  { <span class="property">top</span>: <span class="value">-1px</span>; <span class="property">left</span>: <span class="value">-1px</span>; <span class="property">border-width</span>: <span class="value">2px 0 0 2px</span>; }
+<span class="selector">.cyber-bracket::after</span>   { <span class="property">bottom</span>: <span class="value">-1px</span>; <span class="property">right</span>: <span class="value">-1px</span>; <span class="property">border-width</span>: <span class="value">0 2px 2px 0</span>; }
+
+<span class="comment">/* 4 角变体 — 需要 2 个伪元素 + 2 个子 span */</span>
+<span class="selector">.cyber-bracket-full::before, .cyber-bracket-full::after,
+.cyber-bracket-full .br-tr, .cyber-bracket-full .br-bl</span> {
+  <span class="property">content</span>: <span class="value">''</span>;
+  <span class="property">position</span>: <span class="value">absolute</span>;
+  <span class="property">width</span>: <span class="value">14px</span>;
+  <span class="property">height</span>: <span class="value">14px</span>;
+  <span class="property">border-style</span>: <span class="value">solid</span>;
+  <span class="property">border-color</span>: <span class="value">var(--corner-color, var(--cyber-accent))</span>;
+}
+<span class="selector">.cyber-bracket-full::before</span> { <span class="property">top</span>: <span class="value">-1px</span>; <span class="property">left</span>: <span class="value">-1px</span>;   <span class="property">border-width</span>: <span class="value">2px 0 0 2px</span>; }
+<span class="selector">.cyber-bracket-full::after</span>  { <span class="property">bottom</span>: <span class="value">-1px</span>; <span class="property">right</span>: <span class="value">-1px</span>; <span class="property">border-width</span>: <span class="value">0 2px 2px 0</span>; }
+<span class="selector">.cyber-bracket-full .br-tr</span>   { <span class="property">top</span>: <span class="value">-1px</span>; <span class="property">right</span>: <span class="value">-1px</span>;  <span class="property">border-width</span>: <span class="value">2px 2px 0 0</span>; }
+<span class="selector">.cyber-bracket-full .br-bl</span>   { <span class="property">bottom</span>: <span class="value">-1px</span>; <span class="property">left</span>: <span class="value">-1px</span>;   <span class="property">border-width</span>: <span class="value">0 0 2px 2px</span>; }
+
+<span class="comment">/*
+ * HTML 需要包含两个空 span:
+ *   <span class="br-tr"></span>
+ *   <span class="br-bl"></span>
+ */</span>
+    </div>
+
+    <div class="callout callout-warning">
+        <div class="callout-title">重要</div>
+        4 角变体需要两个子元素 <code>&lt;span class="br-tr"&gt;&lt;/span&gt;</code> 和 <code>&lt;span class="br-bl"&gt;&lt;/span&gt;</code>，因为 CSS 伪元素只有 <code>::before</code> 和 <code>::after</code> 两个。颜色通过 <code>--corner-color</code> 自定义属性控制。
+    </div>
+
+    <hr class="doc-divider">
+
+    <!-- ====================================================================
+         SECTION 3: ANIMATION CATALOG
+         ==================================================================== -->
+    <h2 class="section-title" id="sec-animations">3. 动画目录</h2>
+
+    <h3 class="subsection-title">3.1 cyber-glow-pulse</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">呼吸脉冲效果，用于状态指示器和连接胶囊。</p>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+        <div style="width:12px;height:12px;border-radius:50%;background:#00f0ff;animation:docPulse 2s ease-in-out infinite;"></div>
+        <span style="font-size:13px;color:var(--doc-text-secondary);">播放中的示例</span>
+    </div>
+    <style>
+        @keyframes docPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 4px #00f0ff; }
+            50% { opacity: 0.6; box-shadow: 0 0 16px #00f0ff, 0 0 24px rgba(0,240,255,0.3); }
+        }
+    </style>
+    <div class="code-block">
+<span class="selector">@keyframes cyber-glow-pulse</span> {
+  <span class="value">0%, 100%</span> { <span class="property">opacity</span>: <span class="value">1</span>; }
+  <span class="value">50%</span> { <span class="property">opacity</span>: <span class="value">0.6</span>; }
+}
+<span class="comment">/* 用法: animation: cyber-glow-pulse var(--cyber-glow-pulse-speed) ease-in-out infinite; */</span>
+    </div>
+
+    <h3 class="subsection-title">3.2 cyber-flicker</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">霓虹灯闪烁效果，不规则地短暂降低不透明度。</p>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#ff2d7b;animation:docFlicker 3s linear infinite;">CLEAR</span>
+        <span style="font-size:13px;color:var(--doc-text-secondary);">播放中的示例</span>
+    </div>
+    <style>
+        @keyframes docFlicker {
+            0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% { opacity: 1; }
+            20%, 21.999%, 63%, 63.999%, 65%, 69.999% { opacity: 0.4; }
+        }
+    </style>
+    <div class="code-block">
+<span class="selector">@keyframes cyber-flicker</span> {
+  <span class="value">0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100%</span> { <span class="property">opacity</span>: <span class="value">1</span>; }
+  <span class="value">20%, 21.999%, 63%, 63.999%, 65%, 69.999%</span> { <span class="property">opacity</span>: <span class="value">0.4</span>; }
+}
+<span class="comment">/* 用法: animation: cyber-flicker var(--cyber-flicker-duration) linear infinite; */</span>
+<span class="comment">/* 适合: 状态标签如 "CLEAR", "WARNING" */</span>
+    </div>
+
+    <h3 class="subsection-title">3.3 neon-border-flow</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">霓虹边框流光，三色循环 (Cyan -> Purple -> Magenta)。</p>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;border:2px solid #00f0ff;border-radius:4px;animation:docNeonFlow 3s linear infinite;"></div>
+        <span style="font-size:13px;color:var(--doc-text-secondary);">播放中的示例</span>
+    </div>
+    <style>
+        @keyframes docNeonFlow {
+            0% { border-color: #00f0ff; box-shadow: 0 0 8px rgba(0,240,255,0.3); }
+            33% { border-color: #b026ff; box-shadow: 0 0 8px rgba(176,38,255,0.3); }
+            66% { border-color: #ff2d7b; box-shadow: 0 0 8px rgba(255,45,123,0.3); }
+            100% { border-color: #00f0ff; box-shadow: 0 0 8px rgba(0,240,255,0.3); }
+        }
+    </style>
+    <div class="code-block">
+<span class="selector">@keyframes neon-border-flow</span> {
+  <span class="value">0%</span>   { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-cyan)</span>;    <span class="property">box-shadow</span>: <span class="value">0 0 8px rgba(0,240,255,0.3)</span>; }
+  <span class="value">33%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-purple)</span>;  <span class="property">box-shadow</span>: <span class="value">0 0 8px rgba(176,38,255,0.3)</span>; }
+  <span class="value">66%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-magenta)</span>; <span class="property">box-shadow</span>: <span class="value">0 0 8px rgba(255,45,123,0.3)</span>; }
+  <span class="value">100%</span> { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-cyan)</span>;    <span class="property">box-shadow</span>: <span class="value">0 0 8px rgba(0,240,255,0.3)</span>; }
+}
+    </div>
+
+    <h3 class="subsection-title">3.4 rainbow-border-flow</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">彩虹边框流光，六色完整循环。</p>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;border:2px solid #00f0ff;border-radius:4px;animation:docRainbow 3s linear infinite;"></div>
+        <span style="font-size:13px;color:var(--doc-text-secondary);">播放中的示例</span>
+    </div>
+    <style>
+        @keyframes docRainbow {
+            0%   { border-color: #00f0ff; box-shadow: 0 0 10px rgba(0,240,255,0.4); }
+            16%  { border-color: #39ff14; box-shadow: 0 0 10px rgba(57,255,20,0.4); }
+            33%  { border-color: #f0e130; box-shadow: 0 0 10px rgba(240,225,48,0.4); }
+            50%  { border-color: #ff6a00; box-shadow: 0 0 10px rgba(255,106,0,0.4); }
+            66%  { border-color: #ff2d7b; box-shadow: 0 0 10px rgba(255,45,123,0.4); }
+            83%  { border-color: #b026ff; box-shadow: 0 0 10px rgba(176,38,255,0.4); }
+            100% { border-color: #00f0ff; box-shadow: 0 0 10px rgba(0,240,255,0.4); }
+        }
+    </style>
+    <div class="code-block">
+<span class="selector">@keyframes rainbow-border-flow</span> {
+  <span class="value">0%</span>   { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-cyan)</span>;    <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(0,240,255,0.4)</span>; }
+  <span class="value">16%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-green)</span>;   <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(57,255,20,0.4)</span>; }
+  <span class="value">33%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-yellow)</span>;  <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(240,225,48,0.4)</span>; }
+  <span class="value">50%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-orange)</span>;  <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(255,106,0,0.4)</span>; }
+  <span class="value">66%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-magenta)</span>; <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(255,45,123,0.4)</span>; }
+  <span class="value">83%</span>  { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-purple)</span>;  <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(176,38,255,0.4)</span>; }
+  <span class="value">100%</span> { <span class="property">border-color</span>: <span class="value">var(--cyber-neon-cyan)</span>;    <span class="property">box-shadow</span>: <span class="value">0 0 10px rgba(0,240,255,0.4)</span>; }
+}
+    </div>
+
+    <h3 class="subsection-title">3.5 cardSlideIn</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">卡片入场动画：从下方淡入 + 微缩放。</p>
+    <div class="code-block">
+<span class="selector">@keyframes cardSlideIn</span> {
+  <span class="value">from</span> {
+    <span class="property">opacity</span>: <span class="value">0</span>;
+    <span class="property">transform</span>: <span class="value">translateY(16px) scale(0.96)</span>;
+  }
+  <span class="value">to</span> {
+    <span class="property">opacity</span>: <span class="value">1</span>;
+    <span class="property">transform</span>: <span class="value">translateY(0) scale(1)</span>;
+  }
+}
+<span class="comment">/* 用法: animation: cardSlideIn 0.5s ease-out 0.1s both; */</span>
+<span class="comment">/* 交错: 每张卡片递增 animation-delay 0.1s */</span>
+    </div>
+
+    <h3 class="subsection-title">3.6 ringDraw</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">SVG 圆环绘制动画，stroke-dashoffset 从满值渐变到 0。</p>
+    <div class="code-block">
+<span class="selector">@keyframes ringDraw</span> {
+  <span class="value">from</span> { <span class="property">stroke-dashoffset</span>: <span class="value">276.46</span>; }
+  <span class="value">to</span>   { <span class="property">stroke-dashoffset</span>: <span class="value">0</span>; }
+}
+<span class="comment">/* 用法: animation: ringDraw 2s ease-out forwards; */</span>
+<span class="comment">/* 注意: 276.46 是 r=44 圆的周长 */</span>
+    </div>
+
+    <h3 class="subsection-title">3.7 ringPulse</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">SVG 圆环脉冲，透明度和 drop-shadow 交替变化。</p>
+    <div class="code-block">
+<span class="selector">@keyframes ringPulse</span> {
+  <span class="value">0%, 100%</span> {
+    <span class="property">opacity</span>: <span class="value">1</span>;
+    <span class="property">filter</span>: <span class="value">drop-shadow(0 0 4px currentColor)</span>;
+  }
+  <span class="value">50%</span> {
+    <span class="property">opacity</span>: <span class="value">0.5</span>;
+    <span class="property">filter</span>: <span class="value">drop-shadow(0 0 12px currentColor)</span>;
+  }
+}
+<span class="comment">/* 用法: animation: ringPulse 3s ease-in-out 2s infinite; */</span>
+    </div>
+
+    <h3 class="subsection-title">3.8 glowBreathe</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">呼吸辉光，box-shadow 从小到大脉动。通过 CSS 自定义属性 <code>--glow-color</code> 控制颜色。</p>
+    <div class="code-block">
+<span class="selector">@keyframes glowBreathe</span> {
+  <span class="value">0%, 100%</span> {
+    <span class="property">box-shadow</span>: <span class="value">0 0 4px var(--glow-color, rgba(0,240,255,0.3))</span>;
+  }
+  <span class="value">50%</span> {
+    <span class="property">box-shadow</span>: <span class="value">0 0 16px var(--glow-color, rgba(0,240,255,0.5)),
+                   0 0 32px var(--glow-color, rgba(0,240,255,0.2))</span>;
+  }
+}
+<span class="comment">/* 非常通用: 用于状态点、标签辉光、连接胶囊、菱形指示器 */</span>
+    </div>
+
+    <h3 class="subsection-title">3.9 shimmer</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">标题文字微光流动效果，使用 background-clip: text。</p>
+    <div class="code-block">
+<span class="selector">@keyframes shimmer</span> {
+  <span class="value">0%</span>   { <span class="property">background-position</span>: <span class="value">-200% center</span>; }
+  <span class="value">100%</span> { <span class="property">background-position</span>: <span class="value">200% center</span>; }
+}
+
+<span class="selector">.shimmer-text</span> {
+  <span class="property">background</span>: <span class="value">linear-gradient(90deg,
+    var(--cyber-text-primary) 0%, var(--cyber-neon-cyan) 40%,
+    var(--cyber-text-primary) 60%, var(--cyber-neon-cyan) 100%)</span>;
+  <span class="property">background-size</span>: <span class="value">200% auto</span>;
+  <span class="property">-webkit-background-clip</span>: <span class="value">text</span>;
+  <span class="property">-webkit-text-fill-color</span>: <span class="value">transparent</span>;
+  <span class="property">background-clip</span>: <span class="value">text</span>;
+  <span class="property">animation</span>: <span class="value">shimmer 4s linear infinite</span>;
+}
+    </div>
+
+    <h3 class="subsection-title">3.10 borderTrail</h3>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:8px;">背景位置动画，用于渐变边框流光和 Header/Nav 底部线条。</p>
+    <div class="code-block">
+<span class="selector">@keyframes borderTrail</span> {
+  <span class="value">0%</span>   { <span class="property">background-position</span>: <span class="value">0% 0%</span>; }
+  <span class="value">100%</span> { <span class="property">background-position</span>: <span class="value">200% 0%</span>; }
+}
+<span class="comment">/* 用于 header-gradient-line 和 nav-gradient-line */</span>
+<span class="comment">/* 需配合: background-size: 200% 100% */</span>
+    </div>
+
+    <h3 class="subsection-title">3.11 其他辅助动画</h3>
+    <table class="token-table">
+        <thead><tr><th>动画名</th><th>效果</th><th>用途</th></tr></thead>
+        <tbody>
+            <tr><td class="token-name">iconSpin</td><td>匀速 360 度旋转</td><td>模块卡片中的装饰性慢旋转图标</td></tr>
+            <tr><td class="token-name">icon-spin-slow</td><td>12s/圈</td><td>新风模块图标</td></tr>
+            <tr><td class="token-name">icon-spin-medium</td><td>8s/圈</td><td>通用旋转</td></tr>
+            <tr><td class="token-name">warningFlash</td><td>透明度 0->0.6 闪烁</td><td>威胁仪表背景闪烁叠加</td></tr>
+            <tr><td class="token-name">cursorBlink</td><td>光标闪烁</td><td>数据流文字末尾的方块光标</td></tr>
+            <tr><td class="token-name">scanLineMove</td><td>从顶部移动到底部</td><td>全局扫描光束</td></tr>
+            <tr><td class="token-name">particleFloat</td><td>粒子从底部向上飘浮</td><td>背景霓虹粒子装饰</td></tr>
+            <tr><td class="token-name">hexPulse</td><td>六角图案透明度脉冲</td><td>背景六角装饰</td></tr>
+        </tbody>
+    </table>
+
+    <div class="code-block">
+        <span class="code-label">CSS - 辅助动画代码</span>
+<span class="selector">@keyframes iconSpin</span> {
+  <span class="value">from</span> { <span class="property">transform</span>: <span class="value">rotate(0deg)</span>; }
+  <span class="value">to</span>   { <span class="property">transform</span>: <span class="value">rotate(360deg)</span>; }
+}
+
+<span class="selector">@keyframes warningFlash</span> {
+  <span class="value">0%, 100%</span> { <span class="property">opacity</span>: <span class="value">0</span>; }
+  <span class="value">50%</span>      { <span class="property">opacity</span>: <span class="value">0.6</span>; }
+}
+
+<span class="selector">@keyframes cursorBlink</span> {
+  <span class="value">0%, 50%</span>   { <span class="property">opacity</span>: <span class="value">1</span>; }
+  <span class="value">51%, 100%</span> { <span class="property">opacity</span>: <span class="value">0</span>; }
+}
+
+<span class="selector">@keyframes scanLineMove</span> {
+  <span class="value">0%</span>   { <span class="property">top</span>: <span class="value">-2px</span>; }
+  <span class="value">100%</span> { <span class="property">top</span>: <span class="value">100%</span>; }
+}
+
+<span class="selector">@keyframes particleFloat</span> {
+  <span class="value">0%</span>   { <span class="property">transform</span>: <span class="value">translateY(0) translateX(0)</span>; <span class="property">opacity</span>: <span class="value">0</span>; }
+  <span class="value">10%</span>  { <span class="property">opacity</span>: <span class="value">1</span>; }
+  <span class="value">90%</span>  { <span class="property">opacity</span>: <span class="value">1</span>; }
+  <span class="value">100%</span> { <span class="property">transform</span>: <span class="value">translateY(-120px) translateX(20px)</span>; <span class="property">opacity</span>: <span class="value">0</span>; }
+}
+    </div>
+
+    <hr class="doc-divider">
+
+    <!-- ====================================================================
+         SECTION 4: UTILITY CLASSES
+         ==================================================================== -->
+    <h2 class="section-title" id="sec-utilities">4. 工具类参考</h2>
+
+    <h3 class="subsection-title">4.1 字体工具类</h3>
+
+    <div class="util-card">
+        <div class="util-name">.cyber-font-display</div>
+        <div class="util-desc">应用 <code>--cyber-font-display</code> (Orbitron) + <code>letter-spacing: 0.08em</code> + <code>text-transform: uppercase</code>。用于所有大写标题、区段标签、数据标签。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-font-body</div>
+        <div class="util-desc">应用 <code>--cyber-font-body</code> (Rajdhani)。用于正文、按钮文字、导航标签。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-font-mono</div>
+        <div class="util-desc">应用 <code>--cyber-font-mono</code> (Share Tech Mono) + <code>letter-spacing: 0.15em</code>。用于数据读数、状态标签、代码。</div>
+    </div>
+
+    <h3 class="subsection-title">4.2 文字辉光工具类</h3>
+
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow</div>
+        <div class="util-desc">Cyan 辉光: <code>text-shadow: 0 0 8px var(--cyber-accent-glow), 0 0 20px var(--cyber-accent-glow)</code></div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow-danger</div>
+        <div class="util-desc">Magenta 辉光: <code>text-shadow: 0 0 8px var(--cyber-danger-glow), 0 0 20px var(--cyber-danger-glow)</code></div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow-warning</div>
+        <div class="util-desc">Yellow 辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow-purple</div>
+        <div class="util-desc">Purple 辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow-green</div>
+        <div class="util-desc">Green 辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow-orange</div>
+        <div class="util-desc">Orange 辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-text-glow-blue</div>
+        <div class="util-desc">Blue 辉光</div>
+    </div>
+
+    <h3 class="subsection-title">4.3 边框辉光工具类</h3>
+
+    <div class="util-card">
+        <div class="util-name">.cyber-border-glow</div>
+        <div class="util-desc">Cyan 边框辉光: 外层 <code>--cyber-shadow-glow-cyan</code> + 内层 <code>inset 0 0 8px rgba(0,240,255,0.05)</code></div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-border-glow-danger</div>
+        <div class="util-desc">Magenta 边框辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-border-glow-purple</div>
+        <div class="util-desc">Purple 边框辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-border-glow-green</div>
+        <div class="util-desc">Green 边框辉光</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-border-glow-orange</div>
+        <div class="util-desc">Orange 边框辉光</div>
+    </div>
+
+    <h3 class="subsection-title">4.4 背景装饰工具类</h3>
+
+    <div class="util-card">
+        <div class="util-name">.cyber-scanlines</div>
+        <div class="util-desc">全局扫描线叠加层。使用 <code>::after</code> 伪元素，<code>position: fixed</code>，<code>z-index: 9999</code>，<code>pointer-events: none</code>。使用 <code>repeating-linear-gradient</code> 生成 2px 间距的水平条纹。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-grid-bg</div>
+        <div class="util-desc">背景网格图案。使用两个 <code>linear-gradient</code> (水平 + 垂直) 创建 24px 间距的网格。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-card-glow</div>
+        <div class="util-desc">卡片悬停光扫效果。hover 时出现一个从左到右扫过的白色半透明高光条，同时边框和 box-shadow 增强。需要 <code>@media (hover: hover)</code> 媒体查询包裹 hover 效果（兼容移动端 touch）。</div>
+    </div>
+
+    <h3 class="subsection-title">4.5 装饰工具类</h3>
+
+    <div class="util-card">
+        <div class="util-name">.cyber-bracket</div>
+        <div class="util-desc">2 角装饰（左上 + 右下），使用 <code>::before</code> 和 <code>::after</code>。尺寸 12x12px。颜色通过 <code>--corner-color</code> 控制。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.cyber-bracket-full</div>
+        <div class="util-desc">4 角装饰。需要子元素 <code>.br-tr</code> 和 <code>.br-bl</code>。尺寸 14x14px。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.threat-border</div>
+        <div class="util-desc">威胁面板渐变流光边框。使用 <code>::before</code> 伪元素 + <code>mask-composite: exclude</code> 技术实现边框渐变流光动画。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.shimmer-text</div>
+        <div class="util-desc">标题微光文字效果。使用 <code>background-clip: text</code> + <code>shimmer</code> 动画。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.scan-beam</div>
+        <div class="util-desc">全局扫描光束。fixed 定位，高度 2px，使用 <code>scanLineMove</code> 动画从顶到底循环移动。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.hex-pattern</div>
+        <div class="util-desc">六角形背景装饰图案，使用内嵌 SVG data URI，opacity 0.02，带 <code>hexPulse</code> 呼吸动画。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.data-cursor</div>
+        <div class="util-desc">数据流文字 + 闪烁光标。使用 <code>::after</code> 伪元素显示方块光标 <code>&#9644;</code>，<code>cursorBlink</code> 动画。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.status-dot</div>
+        <div class="util-desc">状态指示圆点。6x6px 圆形，带 <code>glowBreathe</code> 动画。颜色变体：<code>.status-dot-cyan</code>、<code>.status-dot-green</code>。</div>
+    </div>
+    <div class="util-card">
+        <div class="util-name">.tab-glow-underline</div>
+        <div class="util-desc">Tab 激活态辉光下划线。<code>::before</code> 伪元素，24x2px，带辉光 box-shadow + glowBreathe 动画。</div>
+    </div>
+
+    <hr class="doc-divider">
+
+    <!-- ====================================================================
+         SECTION 5: LAYOUT GUIDELINES
+         ==================================================================== -->
+    <h2 class="section-title" id="sec-layout">5. 布局规范</h2>
+
+    <h3 class="subsection-title">5.1 整体页面结构</h3>
+    <div class="code-block">
+<span class="selector">&lt;body&gt;</span>
+  <span class="comment">&lt;!-- 扫描光束 --&gt;</span>
+  <span class="selector">&lt;div</span> <span class="property">class</span>=<span class="value">"scan-beam"</span><span class="selector">&gt;&lt;/div&gt;</span>
+
+  <span class="selector">&lt;main</span> <span class="property">class</span>=<span class="value">"cyber-grid-bg"</span><span class="selector">&gt;</span>
+    <span class="comment">&lt;!-- 六角背景装饰层 --&gt;</span>
+    <span class="selector">&lt;div</span> <span class="property">class</span>=<span class="value">"hex-pattern"</span><span class="selector">&gt;&lt;/div&gt;</span>
+
+    <span class="comment">&lt;!-- 状态栏占位 44px --&gt;</span>
+    <span class="selector">&lt;div</span> <span class="property">style</span>=<span class="value">"height: 44px;"</span><span class="selector">&gt;&lt;/div&gt;</span>
+
+    <span class="comment">&lt;!-- Header (sticky top) --&gt;</span>
+    <span class="selector">&lt;header&gt;...&lt;/header&gt;</span>
+
+    <span class="comment">&lt;!-- 内容容器 --&gt;</span>
+    <span class="selector">&lt;div</span> <span class="property">style</span>=<span class="value">"max-width: 375px; margin: 0 auto; padding: 0 16px; padding-bottom: 100px;"</span><span class="selector">&gt;</span>
+      <span class="comment">&lt;!-- 各内容区段 --&gt;</span>
+    <span class="selector">&lt;/div&gt;</span>
+  <span class="selector">&lt;/main&gt;</span>
+
+  <span class="comment">&lt;!-- 底部导航 (fixed bottom) --&gt;</span>
+  <span class="selector">&lt;nav&gt;...&lt;/nav&gt;</span>
+<span class="selector">&lt;/body&gt;</span>
+    </div>
+
+    <h3 class="subsection-title">5.2 关键布局参数</h3>
+    <table class="token-table">
+        <thead><tr><th>参数</th><th>值</th><th>说明</th></tr></thead>
+        <tbody>
+            <tr><td>最大容器宽度</td><td class="neon-val">375px</td><td>移动优先设计，居中显示</td></tr>
+            <tr><td>容器内边距</td><td class="neon-val">0 16px</td><td>左右各 16px</td></tr>
+            <tr><td>状态栏高度</td><td class="neon-val">44px (h-11)</td><td>顶部透明占位</td></tr>
+            <tr><td>Header 高度</td><td class="neon-val">约 52px</td><td>padding 10px 上下 + 内容 ~32px</td></tr>
+            <tr><td>底部导航高度</td><td class="neon-val">50px + safe-area</td><td>标签区域 50px + 安全区</td></tr>
+            <tr><td>内容底部间距</td><td class="neon-val">100px</td><td>pb-[100px] 为导航栏留空</td></tr>
+            <tr><td>网格模式</td><td class="neon-val">grid-cols-2, gap-2.5</td><td>2x2 等宽网格，间距 10px</td></tr>
+            <tr><td>区段间距</td><td class="neon-val">margin-bottom: 20px</td><td>各 section 之间</td></tr>
+            <tr><td>区段标题行</td><td class="neon-val">flex, items-center, gap-2</td><td>色条 + 标题 + 分割线 + 徽章</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="subsection-title">5.3 区段标题行结构</h3>
+    <div class="code-block">
+<span class="selector">&lt;div</span> <span class="property">class</span>=<span class="value">"flex items-center gap-2 mb-3"</span><span class="selector">&gt;</span>
+  <span class="comment">&lt;!-- 左侧彩色竖条 --&gt;</span>
+  <span class="selector">&lt;div</span> <span class="property">style</span>=<span class="value">"width: 4px; height: 20px; border-radius: 9999px;
+    background: linear-gradient(180deg, var(--cyber-neon-cyan), var(--cyber-neon-purple));
+    box-shadow: 0 0 6px rgba(0,240,255,0.4);"</span><span class="selector">&gt;&lt;/div&gt;</span>
+
+  <span class="comment">&lt;!-- 标题文字 --&gt;</span>
+  <span class="selector">&lt;h2</span> <span class="property">class</span>=<span class="value">"cyber-font-display shimmer-text"</span>
+       <span class="property">style</span>=<span class="value">"font-size: 14px; letter-spacing: 0.25em;"</span><span class="selector">&gt;</span>
+    SYS STATUS
+  <span class="selector">&lt;/h2&gt;</span>
+
+  <span class="comment">&lt;!-- 右侧渐变分割线 --&gt;</span>
+  <span class="selector">&lt;div</span> <span class="property">class</span>=<span class="value">"flex-1"</span>
+       <span class="property">style</span>=<span class="value">"height: 1px; background: linear-gradient(90deg, var(--cyber-border-strong), transparent);"</span><span class="selector">&gt;&lt;/div&gt;</span>
+
+  <span class="comment">&lt;!-- 右侧徽章 --&gt;</span>
+  <span class="selector">&lt;span</span> <span class="property">class</span>=<span class="value">"cyber-font-mono"</span>
+        <span class="property">style</span>=<span class="value">"font-size: 9px; color: var(--cyber-text-muted);"</span><span class="selector">&gt;</span>
+    4 MODULES
+  <span class="selector">&lt;/span&gt;</span>
+<span class="selector">&lt;/div&gt;</span>
+    </div>
+
+    <h3 class="subsection-title">5.4 数据流装饰行</h3>
+    <div class="code-block">
+<span class="comment">&lt;!-- 分隔装饰: 居中文字 + 两侧渐变线 --&gt;</span>
+<span class="selector">&lt;div</span> <span class="property">style</span>=<span class="value">"display: flex; align-items: center; gap: 12px; padding: 0 4px; opacity: 0.4;"</span><span class="selector">&gt;</span>
+  <span class="selector">&lt;div</span> <span class="property">class</span>=<span class="value">"flex-1"</span>
+       <span class="property">style</span>=<span class="value">"height: 1px; background: linear-gradient(90deg, transparent, var(--cyber-neon-cyan), transparent);"</span><span class="selector">&gt;&lt;/div&gt;</span>
+  <span class="selector">&lt;span</span> <span class="property">class</span>=<span class="value">"cyber-font-mono data-cursor"</span>
+        <span class="property">style</span>=<span class="value">"font-size: 8px; color: var(--cyber-neon-cyan);"</span><span class="selector">&gt;</span>
+    SYS.CYCLE.24.7
+  <span class="selector">&lt;/span&gt;</span>
+  <span class="selector">&lt;div</span> <span class="property">class</span>=<span class="value">"flex-1"</span>
+       <span class="property">style</span>=<span class="value">"height: 1px; background: linear-gradient(90deg, transparent, var(--cyber-neon-purple), transparent);"</span><span class="selector">&gt;&lt;/div&gt;</span>
+<span class="selector">&lt;/div&gt;</span>
+    </div>
+
+    <div class="callout callout-info">
+        <div class="callout-title">粒子系统 (JavaScript)</div>
+        背景粒子需要 JS 动态创建 <code>&lt;div class="particle"&gt;</code> 元素。<br>
+        每 800ms 生成一个粒子，随机颜色（从 neon palette 选取）、随机位置、随机大小 1-3px。<br>
+        粒子使用 <code>particleFloat</code> 动画，持续 3-7 秒，动画结束后移除 DOM 元素。<br>
+        初始时快速生成 5 个粒子作为首帧填充。
+    </div>
+
+    <hr class="doc-divider">
+
+    <!-- ====================================================================
+         SECTION 6: SVG ICON STYLE GUIDE
+         ==================================================================== -->
+    <h2 class="section-title" id="sec-icons">6. SVG 图标样式指南</h2>
+
+    <h3 class="subsection-title">6.1 基本规范</h3>
+    <table class="token-table">
+        <thead><tr><th>属性</th><th>值</th><th>说明</th></tr></thead>
+        <tbody>
+            <tr><td>绘制方式</td><td class="neon-val">stroke-based</td><td>所有图标使用 stroke 而非 fill（少数特殊情况除外）</td></tr>
+            <tr><td>stroke-width</td><td class="neon-val">1.5</td><td>统一线宽</td></tr>
+            <tr><td>stroke-linecap</td><td class="neon-val">round</td><td>圆角线端</td></tr>
+            <tr><td>stroke-linejoin</td><td class="neon-val">round</td><td>圆角拐角（部分图标需要）</td></tr>
+            <tr><td>fill</td><td class="neon-val">none</td><td>默认不填充</td></tr>
+            <tr><td>辉光效果</td><td class="neon-val">filter: drop-shadow(0 0 6px rgba(color,0.5))</td><td>通过 CSS filter 添加霓虹辉光</td></tr>
+            <tr><td>颜色</td><td class="neon-val">匹配父卡片主题色</td><td>使用 CSS 变量或对应 hex 值</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="subsection-title">6.2 图标尺寸标准</h3>
+    <table class="token-table">
+        <thead><tr><th>使用位置</th><th>尺寸 (width x height)</th><th>viewBox</th></tr></thead>
+        <tbody>
+            <tr><td>模块卡片图标</td><td class="neon-val">36 x 36</td><td class="neon-val">0 0 32 32</td></tr>
+            <tr><td>房间卡片图标</td><td class="neon-val">16 x 16</td><td class="neon-val">0 0 24 24</td></tr>
+            <tr><td>底部导航图标</td><td class="neon-val">20 x 20</td><td class="neon-val">0 0 24 24</td></tr>
+            <tr><td>Header 按钮图标</td><td class="neon-val">14-16 x 14-16</td><td class="neon-val">0 0 24 24</td></tr>
+            <tr><td>威胁仪表 SVG</td><td class="neon-val">100 x 100</td><td class="neon-val">0 0 100 100</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="subsection-title">6.3 示例图标代码模板</h3>
+    <div class="code-block">
+<span class="comment">&lt;!-- 模块卡片图标标准模板 --&gt;</span>
+<span class="selector">&lt;svg</span> <span class="property">width</span>=<span class="value">"36"</span> <span class="property">height</span>=<span class="value">"36"</span>
+     <span class="property">viewBox</span>=<span class="value">"0 0 32 32"</span>
+     <span class="property">fill</span>=<span class="value">"none"</span>
+     <span class="property">stroke</span>=<span class="value">"var(--cyber-neon-cyan)"</span>
+     <span class="property">stroke-width</span>=<span class="value">"1.5"</span>
+     <span class="property">stroke-linecap</span>=<span class="value">"round"</span>
+     <span class="property">style</span>=<span class="value">"filter: drop-shadow(0 0 6px rgba(0,240,255,0.5))"</span><span class="selector">&gt;</span>
+  <span class="comment">&lt;!-- 图标路径 --&gt;</span>
+<span class="selector">&lt;/svg&gt;</span>
+
+<span class="comment">&lt;!-- 房间卡片图标标准模板 --&gt;</span>
+<span class="selector">&lt;svg</span> <span class="property">width</span>=<span class="value">"16"</span> <span class="property">height</span>=<span class="value">"16"</span>
+     <span class="property">viewBox</span>=<span class="value">"0 0 24 24"</span>
+     <span class="property">fill</span>=<span class="value">"none"</span>
+     <span class="property">stroke</span>=<span class="value">"var(--cyber-neon-cyan)"</span>
+     <span class="property">stroke-width</span>=<span class="value">"1.5"</span>
+     <span class="property">style</span>=<span class="value">"filter: drop-shadow(0 0 3px rgba(0,240,255,0.4))"</span><span class="selector">&gt;</span>
+  <span class="comment">&lt;!-- 图标路径 --&gt;</span>
+<span class="selector">&lt;/svg&gt;</span>
+
+<span class="comment">&lt;!-- 底部导航图标标准模板 --&gt;</span>
+<span class="selector">&lt;svg</span> <span class="property">width</span>=<span class="value">"20"</span> <span class="property">height</span>=<span class="value">"20"</span>
+     <span class="property">viewBox</span>=<span class="value">"0 0 24 24"</span>
+     <span class="property">fill</span>=<span class="value">"none"</span>
+     <span class="property">stroke</span>=<span class="value">"currentColor"</span>
+     <span class="property">stroke-width</span>=<span class="value">"1.5"</span>
+     <span class="property">stroke-linecap</span>=<span class="value">"round"</span><span class="selector">&gt;</span>
+  <span class="comment">&lt;!-- 图标路径 --&gt;</span>
+<span class="selector">&lt;/svg&gt;</span>
+    </div>
+
+    <h3 class="subsection-title">6.4 已有图标清单</h3>
+    <table class="token-table">
+        <thead><tr><th>位置</th><th>描述</th><th>viewBox</th><th>主要路径</th></tr></thead>
+        <tbody>
+            <tr><td>Header 返回</td><td>左箭头 chevron-left</td><td>0 0 24 24</td><td>polyline points="15 18 9 12 15 6"</td></tr>
+            <tr><td>Header 更多</td><td>三个圆点 (三色填充)</td><td>0 0 24 24</td><td>circle cx=12 cy=5/12/19 r=1.5</td></tr>
+            <tr><td>Header 关闭</td><td>圆圈 + X</td><td>0 0 24 24</td><td>circle cx=12 r=8 + 两条交叉线</td></tr>
+            <tr><td>新风模块</td><td>靶心/准星</td><td>0 0 32 32</td><td>同心圆 + 十字线</td></tr>
+            <tr><td>水力模块</td><td>水滴</td><td>0 0 32 32</td><td>水滴路径 + 波浪线</td></tr>
+            <tr><td>空气品质</td><td>同心圆 + 十字</td><td>0 0 32 32</td><td>双圆 + 十字</td></tr>
+            <tr><td>能耗表</td><td>星形/闪电</td><td>0 0 32 32</td><td>polygon 五角星</td></tr>
+            <tr><td>主卧/次卧</td><td>房屋</td><td>0 0 24 24</td><td>房屋路径 + 门</td></tr>
+            <tr><td>书房</td><td>书本</td><td>0 0 24 24</td><td>书本路径</td></tr>
+            <tr><td>儿童房</td><td>笑脸</td><td>0 0 24 24</td><td>圆 + 眼睛 + 微笑</td></tr>
+            <tr><td>Tab 舰桥</td><td>靶心 (同新风)</td><td>0 0 24 24</td><td>圆 + 圆 + 十字</td></tr>
+            <tr><td>Tab 指挥</td><td>六边形 + 十字</td><td>0 0 24 24</td><td>polygon 六边形</td></tr>
+            <tr><td>Tab 副官</td><td>人像</td><td>0 0 24 24</td><td>头部圆 + 身体弧线</td></tr>
+            <tr><td>Tab 休息室</td><td>星形</td><td>0 0 24 24</td><td>polygon 五角星</td></tr>
+        </tbody>
+    </table>
+
+    <div class="callout callout-warning">
+        <div class="callout-title">注意事项</div>
+        <ul style="margin-left:16px;list-style:disc;">
+            <li>底部导航图标使用 <code>stroke="currentColor"</code>，颜色继承自父元素的 <code>color</code> 属性，这样激活/非激活状态只需改变父元素的 color。</li>
+            <li>模块卡片和房间卡片的图标使用具体的颜色值（如 <code>var(--cyber-neon-cyan)</code>），不使用 <code>currentColor</code>。</li>
+            <li>Header 更多按钮中的三个圆点使用 <code>fill</code> 而非 stroke，是唯一的填充型图标。</li>
+            <li>辉光 filter 的强度：大图标 (36px) 使用 <code>0 0 6px</code>，小图标 (16px) 使用 <code>0 0 3px</code>。</li>
+        </ul>
+    </div>
+
+    <hr class="doc-divider">
+
+    <!-- ====================================================================
+         COMPLETE CSS TOKEN BLOCK (for Claude to copy)
+         ==================================================================== -->
+    <h2 class="section-title">附录: 完整 CSS Token 块 (可直接复制)</h2>
+    <p style="color:var(--doc-text-secondary); font-size:14px; margin-bottom:16px;">
+        以下是完整的 <code>colors_and_type.css</code> 内容，Claude 可以直接复制到项目的 <code>&lt;style&gt;</code> 标签中。
+    </p>
+
+    <div class="code-block">
+        <span class="code-label">colors_and_type.css</span>
+<span class="comment">/* Cyberpunk Smart Home - Brand CSS */</span>
+<span class="comment">/* Prefix: cyber */</span>
+<span class="comment">/* Theme Mode: Dark-first cyberpunk */</span>
+
+<span class="selector">:root</span> {
+  <span class="comment">/* ===== Color System ===== */</span>
+  <span class="property">--cyber-bg-primary</span>: <span class="value">#0a0a0f</span>;
+  <span class="property">--cyber-bg-secondary</span>: <span class="value">#12121a</span>;
+  <span class="property">--cyber-bg-card</span>: <span class="value">#111128</span>;
+  <span class="property">--cyber-bg-elevated</span>: <span class="value">#16213e</span>;
+  <span class="property">--cyber-bg-overlay</span>: <span class="value">rgba(10, 10, 15, 0.85)</span>;
+
+  <span class="property">--cyber-text-primary</span>: <span class="value">#e0e0ff</span>;
+  <span class="property">--cyber-text-secondary</span>: <span class="value">#8888aa</span>;
+  <span class="property">--cyber-text-muted</span>: <span class="value">#555577</span>;
+  <span class="property">--cyber-text-inverse</span>: <span class="value">#1a1a2e</span>;
+
+  <span class="comment">/* ===== Neon Palette ===== */</span>
+  <span class="property">--cyber-neon-cyan</span>: <span class="value">#00f0ff</span>;
+  <span class="property">--cyber-neon-magenta</span>: <span class="value">#ff2d7b</span>;
+  <span class="property">--cyber-neon-yellow</span>: <span class="value">#f0e130</span>;
+  <span class="property">--cyber-neon-green</span>: <span class="value">#39ff14</span>;
+  <span class="property">--cyber-neon-purple</span>: <span class="value">#b026ff</span>;
+  <span class="property">--cyber-neon-orange</span>: <span class="value">#ff6a00</span>;
+  <span class="property">--cyber-neon-pink</span>: <span class="value">#ff69b4</span>;
+  <span class="property">--cyber-neon-blue</span>: <span class="value">#4169ff</span>;
+
+  <span class="comment">/* ... (完整 token 见上方章节) ... */</span>
+}
+
+<span class="comment">/* Light mode overrides */</span>
+<span class="selector">html.light</span> {
+  <span class="property">--cyber-bg-primary</span>: <span class="value">#e8e8f0</span>;
+  <span class="property">--cyber-bg-secondary</span>: <span class="value">#f0f0f8</span>;
+  <span class="property">--cyber-bg-card</span>: <span class="value">#ffffff</span>;
+  <span class="property">--cyber-bg-elevated</span>: <span class="value">#f8f8ff</span>;
+  <span class="property">--cyber-bg-overlay</span>: <span class="value">rgba(232, 232, 240, 0.85)</span>;
+  <span class="property">--cyber-text-primary</span>: <span class="value">#1a1a2e</span>;
+  <span class="property">--cyber-text-secondary</span>: <span class="value">#555577</span>;
+  <span class="property">--cyber-text-muted</span>: <span class="value">#8888aa</span>;
+  <span class="property">--cyber-text-inverse</span>: <span class="value">#e0e0ff</span>;
+  <span class="property">--cyber-border</span>: <span class="value">rgba(0, 240, 255, 0.25)</span>;
+  <span class="property">--cyber-border-strong</span>: <span class="value">rgba(0, 240, 255, 0.5)</span>;
+  <span class="property">--cyber-shadow-sm</span>: <span class="value">0 1px 2px rgba(0, 0, 0, 0.08)</span>;
+  <span class="property">--cyber-shadow-md</span>: <span class="value">0 2px 8px rgba(0, 0, 0, 0.1)</span>;
+  <span class="property">--cyber-shadow-lg</span>: <span class="value">0 4px 16px rgba(0, 0, 0, 0.12)</span>;
+}
+    </div>
+
+    <div style="margin-top:60px;padding-top:24px;border-top:1px solid var(--doc-border);text-align:center;">
+        <p style="font-size:12px;color:var(--doc-text-muted);">
+            Cyberpunk Smart Home - Front-End Development Reference v1.0<br>
+            Generated for Claude / AI coding assistant use
+        </p>
+    </div>
+
+</div>
+</body>
+</html>

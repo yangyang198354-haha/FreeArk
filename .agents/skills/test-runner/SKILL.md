@@ -111,6 +111,6 @@ cd datacollection && python -m unittest test_log_config_manager -v
 ## 复核纪律
 本项目历史上子代理多次虚报"测试通过"。任何"通过/数量"结论必须附**真实命令 + 真实输出尾部**（`Ran N tests` 与 `OK`/`FAILED (...)` 行）；重组测试结构后必须对比 `Ran N tests` 的 N 未无故下降。
 
-## Codex 执行补充
+## 运行时执行补充
 
-基线对照前先保存并核验用户未提交改动；不得直接用示例 checkout 覆盖这些改动。相同目录/环境的前后对照只在可完整还原时进行。历史基线是参考，当前结论来自本次实跑。Windows 环境变量和解释器语法见 `.codex/sdlc/runtime_adapter.md`。
+基线对照前先保存并核验用户未提交改动；不得直接用示例 checkout 覆盖这些改动。相同目录/环境的前后对照只在可完整还原时进行。历史基线是参考，当前结论来自本次实跑。Windows 环境变量和解释器语法见当前运行时的适配契约：Codex → `.codex/sdlc/runtime_adapter.md`；Trae → `.agents/sdlc/runtime_adapter_trae.md`。

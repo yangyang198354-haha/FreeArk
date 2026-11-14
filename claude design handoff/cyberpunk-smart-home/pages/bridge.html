@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>舰桥控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style id="theme-vars">
+/* Cyberpunk Smart Home - Brand CSS */
+/* Prefix: cyber */
+/* Theme Mode: Dark-first cyberpunk */
+
+:root {
+  --cyber-bg-primary: #0a0a0f;
+  --cyber-bg-secondary: #0d0d18;
+  --cyber-bg-card: #111128;
+  --cyber-bg-elevated: #16213e;
+  --cyber-bg-overlay: rgba(10, 10, 15, 0.85);
+
+  --cyber-text-primary: #e0e0ff;
+  --cyber-text-secondary: #8888aa;
+  --cyber-text-muted: #555577;
+  --cyber-text-inverse: #0a0a0f;
+
+  --cyber-neon-cyan: #00f0ff;
+  --cyber-neon-magenta: #ff2d7b;
+  --cyber-neon-yellow: #f0e130;
+  --cyber-neon-green: #39ff14;
+  --cyber-neon-purple: #b026ff;
+  --cyber-neon-orange: #ff6a00;
+  --cyber-neon-pink: #ff69b4;
+
+  --cyber-accent: var(--cyber-neon-cyan);
+  --cyber-accent-glow: rgba(0, 240, 255, 0.4);
+  --cyber-danger: var(--cyber-neon-magenta);
+  --cyber-danger-glow: rgba(255, 45, 123, 0.4);
+  --cyber-warning: var(--cyber-neon-yellow);
+  --cyber-warning-glow: rgba(240, 225, 48, 0.4);
+  --cyber-success: var(--cyber-neon-green);
+  --cyber-success-glow: rgba(57, 255, 20, 0.4);
+  --cyber-purple-glow: rgba(176, 38, 255, 0.4);
+  --cyber-orange-glow: rgba(255, 106, 0, 0.4);
+
+  --cyber-border: rgba(0, 240, 255, 0.15);
+  --cyber-border-strong: rgba(0, 240, 255, 0.35);
+  --cyber-divider: rgba(136, 136, 170, 0.12);
+
+  --state-success: var(--cyber-neon-green);
+  --state-warning: var(--cyber-neon-yellow);
+  --state-error: var(--cyber-neon-magenta);
+  --state-info: var(--cyber-neon-cyan);
+
+  --cyber-font-display: 'Orbitron', 'Rajdhani', sans-serif;
+  --cyber-font-body: 'Rajdhani', 'Noto Sans SC', sans-serif;
+  --cyber-font-mono: 'Share Tech Mono', 'Courier New', monospace;
+
+  --cyber-text-xs: 10px;
+  --cyber-text-sm: 12px;
+  --cyber-text-base: 14px;
+  --cyber-text-md: 16px;
+  --cyber-text-lg: 20px;
+  --cyber-text-xl: 24px;
+  --cyber-text-2xl: 32px;
+  --cyber-text-3xl: 40px;
+
+  --cyber-leading-tight: 1.2;
+  --cyber-leading-normal: 1.5;
+  --cyber-leading-relaxed: 1.7;
+
+  --cyber-weight-normal: 400;
+  --cyber-weight-medium: 500;
+  --cyber-weight-semibold: 600;
+  --cyber-weight-bold: 700;
+
+  --cyber-tracking-tight: -0.02em;
+  --cyber-tracking-normal: 0;
+  --cyber-tracking-wide: 0.08em;
+  --cyber-tracking-wider: 0.15em;
+  --cyber-tracking-widest: 0.25em;
+
+  --cyber-radius-sm: 2px;
+  --cyber-radius-md: 4px;
+  --cyber-radius-lg: 8px;
+  --cyber-radius-xl: 12px;
+  --cyber-radius-full: 9999px;
+
+  --cyber-space-1: 4px;
+  --cyber-space-2: 8px;
+  --cyber-space-3: 12px;
+  --cyber-space-4: 16px;
+  --cyber-space-5: 20px;
+  --cyber-space-6: 24px;
+  --cyber-space-8: 32px;
+  --cyber-space-10: 40px;
+  --cyber-space-12: 48px;
+
+  --cyber-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --cyber-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --cyber-transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  --cyber-grid-color: rgba(0, 240, 255, 0.04);
+  --cyber-grid-gap: 24px;
+  --cyber-scanline-opacity: 0.03;
+}
+
+html.light {
+  --cyber-bg-primary: #e8e8f0;
+  --cyber-bg-secondary: #f0f0f8;
+  --cyber-bg-card: #ffffff;
+  --cyber-bg-elevated: #f8f8ff;
+  --cyber-bg-overlay: rgba(232, 232, 240, 0.85);
+  --cyber-text-primary: #1a1a2e;
+  --cyber-text-secondary: #555577;
+  --cyber-text-muted: #8888aa;
+  --cyber-border: rgba(0, 240, 255, 0.25);
+  --cyber-border-strong: rgba(0, 240, 255, 0.5);
+  --cyber-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --cyber-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --cyber-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.cyber-font-display { font-family: var(--cyber-font-display); letter-spacing: var(--cyber-tracking-wide); text-transform: uppercase; }
+.cyber-font-body { font-family: var(--cyber-font-body); }
+.cyber-font-mono { font-family: var(--cyber-font-mono); letter-spacing: var(--cyber-tracking-wider); }
+
+.cyber-text-glow { text-shadow: 0 0 8px var(--cyber-accent-glow), 0 0 20px var(--cyber-accent-glow); }
+.cyber-text-glow-danger { text-shadow: 0 0 8px var(--cyber-danger-glow), 0 0 20px var(--cyber-danger-glow); }
+.cyber-text-glow-warning { text-shadow: 0 0 8px var(--cyber-warning-glow), 0 0 20px var(--cyber-warning-glow); }
+.cyber-text-glow-purple { text-shadow: 0 0 8px var(--cyber-purple-glow), 0 0 20px var(--cyber-purple-glow); }
+.cyber-text-glow-green { text-shadow: 0 0 8px var(--cyber-success-glow), 0 0 20px var(--cyber-success-glow); }
+
+.cyber-border-glow { box-shadow: 0 0 12px rgba(0,240,255,0.3), 0 0 24px rgba(0,240,255,0.15), inset 0 0 8px rgba(0,240,255,0.05); }
+.cyber-border-glow-danger { box-shadow: 0 0 12px rgba(255,45,123,0.3), 0 0 24px rgba(255,45,123,0.15), inset 0 0 8px rgba(255,45,123,0.05); }
+
+.cyber-scanlines::after {
+  content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,var(--cyber-scanline-opacity)) 2px, rgba(0,0,0,var(--cyber-scanline-opacity)) 4px);
+}
+
+.cyber-grid-bg {
+  background-image:
+    linear-gradient(var(--cyber-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--cyber-grid-color) 1px, transparent 1px);
+  background-size: var(--cyber-grid-gap) var(--cyber-grid-gap);
+}
+
+.cyber-bracket { position: relative; }
+.cyber-bracket::before, .cyber-bracket::after {
+  content: ''; position: absolute; width: 12px; height: 12px; border-color: var(--cyber-accent); border-style: solid;
+}
+.cyber-bracket::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.cyber-bracket::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+@keyframes cyber-glow-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+@keyframes cyber-flicker { 0%,19.999%,22%,62.999%,64%,64.999%,70%,100%{opacity:1;}20%,21.999%,63%,63.999%,65%,69.999%{opacity:0.4;} }
+@keyframes neon-border-flow {
+  0% { border-color: var(--cyber-neon-cyan); box-shadow: 0 0 8px rgba(0,240,255,0.3); }
+  33% { border-color: var(--cyber-neon-purple); box-shadow: 0 0 8px rgba(176,38,255,0.3); }
+  66% { border-color: var(--cyber-neon-magenta); box-shadow: 0 0 8px rgba(255,45,123,0.3); }
+  100% { border-color: var(--cyber-neon-cyan); box-shadow: 0 0 8px rgba(0,240,255,0.3); }
+}
+@keyframes rainbow-border-flow {
+  0%   { border-color: var(--cyber-neon-cyan); box-shadow: 0 0 10px rgba(0,240,255,0.4); }
+  16%  { border-color: var(--cyber-neon-green); box-shadow: 0 0 10px rgba(57,255,20,0.4); }
+  33%  { border-color: var(--cyber-neon-yellow); box-shadow: 0 0 10px rgba(240,225,48,0.4); }
+  50%  { border-color: var(--cyber-neon-orange); box-shadow: 0 0 10px rgba(255,106,0,0.4); }
+  66%  { border-color: var(--cyber-neon-magenta); box-shadow: 0 0 10px rgba(255,45,123,0.4); }
+  83%  { border-color: var(--cyber-neon-purple); box-shadow: 0 0 10px rgba(176,38,255,0.4); }
+  100% { border-color: var(--cyber-neon-cyan); box-shadow: 0 0 10px rgba(0,240,255,0.4); }
+}
+@keyframes hue-shift-bg {
+  0%   { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-accent: var(--cyber-accent);
+    --color-border: var(--cyber-border);
+  }
+  @layer base {
+    body { background: var(--cyber-bg-primary); color: var(--cyber-text-primary); overflow-x: hidden; }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+      /* ===== RICH ANIMATIONS ===== */
+
+      /* Card entrance with stagger */
+      @keyframes cardSlideIn {
+        from { opacity: 0; transform: translateY(16px) scale(0.96); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      /* Gauge ring draw */
+      @keyframes ringDraw {
+        from { stroke-dashoffset: 276.46; }
+        to { stroke-dashoffset: 0; }
+      }
+
+      /* Gauge ring pulse */
+      @keyframes ringPulse {
+        0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+        50% { opacity: 0.5; filter: drop-shadow(0 0 12px currentColor); }
+      }
+
+      /* Floating particles */
+      @keyframes particleFloat {
+        0% { transform: translateY(0) translateX(0); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(-120px) translateX(20px); opacity: 0; }
+      }
+
+      /* Data stream lines */
+      @keyframes dataStreamDown {
+        0% { transform: translateY(-100%); opacity: 0; }
+        20% { opacity: 1; }
+        80% { opacity: 1; }
+        100% { transform: translateY(400%); opacity: 0; }
+      }
+
+      /* Shimmer effect for section headers */
+      @keyframes shimmer {
+        0% { background-position: -200% center; }
+        100% { background-position: 200% center; }
+      }
+
+      /* Hex pattern pulse */
+      @keyframes hexPulse {
+        0%, 100% { opacity: 0.03; }
+        50% { opacity: 0.08; }
+      }
+
+      /* Glow breathe */
+      @keyframes glowBreathe {
+        0%, 100% { box-shadow: 0 0 4px var(--glow-color, rgba(0,240,255,0.3)); }
+        50% { box-shadow: 0 0 16px var(--glow-color, rgba(0,240,255,0.5)), 0 0 32px var(--glow-color, rgba(0,240,255,0.2)); }
+      }
+
+      /* Icon rotate spin */
+      @keyframes iconSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      /* Warning flash */
+      @keyframes warningFlash {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 0.6; }
+      }
+
+      /* Typing cursor blink */
+      @keyframes cursorBlink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
+      }
+
+      /* Scan line moving down */
+      @keyframes scanLineMove {
+        0% { top: -2px; }
+        100% { top: 100%; }
+      }
+
+      /* Border trail */
+      @keyframes borderTrail {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+      }
+
+      /* Corner decorations for full four corners */
+      .cyber-bracket-full::before, .cyber-bracket-full::after,
+      .cyber-bracket-full .br-tr, .cyber-bracket-full .br-bl {
+        content: ''; position: absolute; width: 14px; height: 14px; border-style: solid;
+      }
+      .cyber-bracket-full::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-color: var(--corner-color, var(--cyber-neon-cyan)); }
+      .cyber-bracket-full::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-color: var(--corner-color, var(--cyber-neon-cyan)); }
+      .cyber-bracket-full .br-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; border-color: var(--corner-color, var(--cyber-neon-cyan)); }
+      .cyber-bracket-full .br-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; border-color: var(--corner-color, var(--cyber-neon-cyan)); }
+
+      /* Card hover glow */
+      .cyber-card-glow {
+        transition: all var(--cyber-transition-normal);
+        position: relative;
+        overflow: hidden;
+      }
+      .cyber-card-glow::after {
+        content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+        transition: left 0.5s ease;
+      }
+      @media (hover: hover) {
+        .cyber-card-glow:hover::after { left: 120%; }
+        .cyber-card-glow:hover {
+          border-color: rgba(255,255,255,0.2);
+          box-shadow: 0 0 20px rgba(0,240,255,0.15), inset 0 0 30px rgba(0,240,255,0.03);
+        }
+      }
+      .cyber-card-glow:active::after { left: 120%; }
+      .cyber-card-glow:active {
+        border-color: rgba(255,255,255,0.2);
+        box-shadow: 0 0 20px rgba(0,240,255,0.15), inset 0 0 30px rgba(0,240,255,0.03);
+      }
+
+      /* Particle container */
+      .particle {
+        position: absolute;
+        width: 2px; height: 2px;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+
+      /* Active tab glow underline */
+      .tab-glow-underline {
+        position: relative;
+      }
+      .tab-glow-underline::before {
+        content: ''; position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
+        width: 24px; height: 2px; border-radius: 1px;
+        background: var(--cyber-neon-cyan);
+        box-shadow: 0 0 8px rgba(0,240,255,0.6), 0 0 20px rgba(0,240,255,0.3);
+        animation: glowBreathe 2s ease-in-out infinite;
+        --glow-color: rgba(0,240,255,0.5);
+      }
+
+      /* Section header shimmer text */
+      .shimmer-text {
+        background: linear-gradient(90deg, var(--cyber-text-primary) 0%, var(--cyber-neon-cyan) 40%, var(--cyber-text-primary) 60%, var(--cyber-neon-cyan) 100%);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: shimmer 4s linear infinite;
+      }
+
+      /* Threat section danger border animation */
+      .threat-border {
+        position: relative;
+      }
+      .threat-border::before {
+        content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
+        background: linear-gradient(90deg, var(--cyber-neon-magenta), var(--cyber-neon-orange), var(--cyber-neon-yellow), var(--cyber-neon-magenta));
+        background-size: 300% 100%;
+        animation: borderTrail 3s linear infinite;
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+      }
+
+      /* Room card colored variants */
+      .room-card-cyan { --room-color: #00f0ff; --room-glow: rgba(0,240,255,0.15); }
+      .room-card-purple { --room-color: #b026ff; --room-glow: rgba(176,38,255,0.15); }
+      .room-card-green { --room-color: #39ff14; --room-glow: rgba(57,255,20,0.15); }
+      .room-card-orange { --room-color: #ff6a00; --room-glow: rgba(255,106,0,0.15); }
+
+      .room-card-cyan:hover, .room-card-cyan:active { border-color: rgba(0,240,255,0.5); box-shadow: 0 0 16px rgba(0,240,255,0.2), inset 0 0 20px rgba(0,240,255,0.04); }
+      .room-card-purple:hover, .room-card-purple:active { border-color: rgba(176,38,255,0.5); box-shadow: 0 0 16px rgba(176,38,255,0.2), inset 0 0 20px rgba(176,38,255,0.04); }
+      .room-card-green:hover, .room-card-green:active { border-color: rgba(57,255,20,0.5); box-shadow: 0 0 16px rgba(57,255,20,0.2), inset 0 0 20px rgba(57,255,20,0.04); }
+      .room-card-orange:hover, .room-card-orange:active { border-color: rgba(255,106,0,0.5); box-shadow: 0 0 16px rgba(255,106,0,0.2), inset 0 0 20px rgba(255,106,0,0.04); }
+
+      /* Scan beam overlay */
+      .scan-beam {
+        position: fixed; left: 0; width: 100%; height: 2px; z-index: 9998; pointer-events: none;
+        background: linear-gradient(90deg, transparent, rgba(0,240,255,0.08), rgba(176,38,255,0.08), transparent);
+        animation: scanLineMove 6s linear infinite;
+      }
+
+      /* Status dot pulse */
+      .status-dot {
+        display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+        animation: glowBreathe 2s ease-in-out infinite;
+      }
+      .status-dot-cyan { background: var(--cyber-neon-cyan); --glow-color: rgba(0,240,255,0.5); box-shadow: 0 0 4px rgba(0,240,255,0.6); }
+      .status-dot-green { background: var(--cyber-neon-green); --glow-color: rgba(57,255,20,0.5); box-shadow: 0 0 4px rgba(57,255,20,0.6); }
+
+      /* Hex background decoration */
+      .hex-pattern {
+        position: absolute; inset: 0; pointer-events: none; opacity: 0.02;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2300f0ff' fill-opacity='1'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        animation: hexPulse 8s ease-in-out infinite;
+      }
+
+      /* Module card icon spin */
+      .icon-spin-slow { animation: iconSpin 12s linear infinite; }
+      .icon-spin-medium { animation: iconSpin 8s linear infinite; }
+
+      /* Data readout cursor */
+      .data-cursor::after {
+        content: '█'; margin-left: 2px;
+        animation: cursorBlink 1s step-end infinite;
+        color: var(--cyber-neon-cyan);
+        font-size: 10px;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased cyber-scanlines">
+    <!-- Scan beam overlay -->
+    <div class="scan-beam"></div>
+
+    <main class="cyber-grid-bg relative">
+
+        <!-- Hex pattern background layer -->
+        <div class="hex-pattern"></div>
+
+        <!-- Status Bar Spacer -->
+        <div class="h-11 bg-transparent"></div>
+
+        <!-- ===== HEADER BAR ===== -->
+        <header class="sticky top-0 z-30 flex items-center justify-between px-4 py-2.5" style="background:rgba(10,10,15,0.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--cyber-border);">
+            <!-- Animated gradient line under header -->
+            <div style="position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyber-neon-cyan),var(--cyber-neon-purple),var(--cyber-neon-magenta),transparent);animation:borderTrail 4s linear infinite;background-size:200% 100%;"></div>
+            <div class="w-[88px] flex items-center justify-start">
+                <button class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--cyber-border)]" style="background:var(--cyber-bg-card);" aria-label="返回">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-neon-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+            </div>
+            <div class="min-w-0 flex-1 text-center">
+                <h1 class="cyber-font-display shimmer-text" style="font-size:18px;letter-spacing:var(--cyber-tracking-wider);">舰桥</h1>
+            </div>
+            <div class="flex h-8 w-[88px] items-center justify-center rounded-full border border-[var(--cyber-border-strong)]" style="background:var(--cyber-bg-card);">
+                <button class="flex h-full flex-1 items-center justify-center" aria-label="更多">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-text-secondary)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.5" fill="var(--cyber-neon-purple)"></circle><circle cx="12" cy="12" r="1.5" fill="var(--cyber-neon-cyan)"></circle><circle cx="12" cy="19" r="1.5" fill="var(--cyber-neon-magenta)"></circle></svg>
+                </button>
+                <span class="h-4 w-px" style="background:var(--cyber-border);"></span>
+                <button class="flex h-full flex-1 items-center justify-center" aria-label="关闭">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-text-secondary)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Content Container -->
+        <div class="max-w-[375px] mx-auto px-4 pb-[100px] relative">
+
+            <!-- ===== CONNECTION STATUS BAR ===== -->
+            <div class="flex items-center gap-2 py-3">
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full shrink-0" style="background:rgba(0,240,255,0.06);border:1px solid rgba(0,240,255,0.25);animation:glowBreathe 3s ease-in-out infinite;--glow-color:rgba(0,240,255,0.15);">
+                    <span class="status-dot status-dot-cyan"></span>
+                    <span class="cyber-font-body whitespace-nowrap text-[var(--cyber-text-secondary)]" style="font-size:11px;">接驳方舟神经网络 / 已接驳</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full shrink-0" style="background:rgba(57,255,20,0.04);border:1px solid rgba(57,255,20,0.2);animation:glowBreathe 3s ease-in-out infinite 1.5s;--glow-color:rgba(57,255,20,0.12);">
+                    <span class="status-dot status-dot-green"></span>
+                    <span class="cyber-font-body whitespace-nowrap text-[var(--cyber-text-secondary)]" style="font-size:11px;">链接座舱 / 已链接</span>
+                </div>
+            </div>
+
+            <!-- ===== SYS STATUS SECTION ===== -->
+            <section class="mb-5">
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-1 h-5 rounded-full" style="background:linear-gradient(180deg,var(--cyber-neon-cyan),var(--cyber-neon-purple));box-shadow:0 0 6px rgba(0,240,255,0.4);"></div>
+                    <h2 class="cyber-font-display shimmer-text" style="font-size:14px;letter-spacing:var(--cyber-tracking-widest);">SYS STATUS</h2>
+                    <div class="flex-1 h-px" style="background:linear-gradient(90deg,var(--cyber-border-strong),transparent);"></div>
+                    <span class="cyber-font-mono text-[var(--cyber-text-muted)]" style="font-size:9px;">4 MODULES</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <!-- Fresh Air Module — CYAN -->
+                    <div class="cyber-bracket-full cyber-card-glow rounded-md p-3.5 flex flex-col items-center gap-2 border" style="background:var(--cyber-bg-card);border-color:var(--cyber-border-strong);animation:cardSlideIn 0.5s ease-out both;--corner-color:var(--cyber-neon-cyan);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="var(--cyber-neon-cyan)" stroke-width="1.5" stroke-linecap="round" class="icon-spin-slow" style="filter:drop-shadow(0 0 6px rgba(0,240,255,0.5));">
+                            <circle cx="16" cy="16" r="10"></circle>
+                            <circle cx="16" cy="16" r="3"></circle>
+                            <line x1="16" y1="6" x2="16" y2="13"></line>
+                            <line x1="16" y1="19" x2="16" y2="26"></line>
+                            <line x1="6" y1="16" x2="13" y2="16"></line>
+                            <line x1="19" y1="16" x2="26" y2="16"></line>
+                        </svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:13px;font-weight:var(--cyber-weight-medium);">新风模块</span>
+                        <span class="cyber-font-mono" style="font-size:9px;color:var(--cyber-neon-cyan);">ACTIVE</span>
+                    </div>
+                    <!-- Hydraulic Module — PURPLE -->
+                    <div class="cyber-bracket-full cyber-card-glow rounded-md p-3.5 flex flex-col items-center gap-2 border" style="background:var(--cyber-bg-card);border-color:rgba(176,38,255,0.3);animation:cardSlideIn 0.5s ease-out 0.1s both;--corner-color:var(--cyber-neon-purple);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="var(--cyber-neon-purple)" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(176,38,255,0.5));">
+                            <path d="M16 4 C16 4 10 12 10 18 C10 24 16 28 16 28 C16 28 22 24 22 18 C22 12 16 4 16 4Z"></path>
+                            <line x1="16" y1="10" x2="16" y2="26"></line>
+                            <path d="M12 16 Q16 20 20 16"></path>
+                        </svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:13px;font-weight:var(--cyber-weight-medium);">水力模块</span>
+                        <span class="cyber-font-mono" style="font-size:9px;color:var(--cyber-neon-purple);">ONLINE</span>
+                    </div>
+                    <!-- Air Quality — GREEN -->
+                    <div class="cyber-bracket-full cyber-card-glow rounded-md p-3.5 flex flex-col items-center gap-2 border" style="background:var(--cyber-bg-card);border-color:rgba(57,255,20,0.25);animation:cardSlideIn 0.5s ease-out 0.2s both;--corner-color:var(--cyber-neon-green);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="var(--cyber-neon-green)" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(57,255,20,0.5));">
+                            <circle cx="16" cy="16" r="10"></circle>
+                            <circle cx="16" cy="16" r="6"></circle>
+                            <line x1="16" y1="10" x2="16" y2="22"></line>
+                            <line x1="10" y1="16" x2="22" y2="16"></line>
+                        </svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:13px;font-weight:var(--cyber-weight-medium);">空气品质</span>
+                        <span class="cyber-font-mono" style="font-size:9px;color:var(--cyber-neon-green);">GOOD</span>
+                    </div>
+                    <!-- Energy Meter — ORANGE -->
+                    <div class="cyber-bracket-full cyber-card-glow rounded-md p-3.5 flex flex-col items-center gap-2 border" style="background:var(--cyber-bg-card);border-color:rgba(255,106,0,0.25);animation:cardSlideIn 0.5s ease-out 0.3s both;--corner-color:var(--cyber-neon-orange);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" stroke="var(--cyber-neon-orange)" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(255,106,0,0.5));">
+                            <polygon points="16,4 20,14 26,14 21,20 23,28 16,23 9,28 11,20 6,14 12,14"></polygon>
+                        </svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:13px;font-weight:var(--cyber-weight-medium);">能耗表</span>
+                        <span class="cyber-font-mono" style="font-size:9px;color:var(--cyber-neon-orange);">NORMAL</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== THREAT BOARD SECTION ===== -->
+            <section class="mb-5">
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-1 h-5 rounded-full" style="background:linear-gradient(180deg,var(--cyber-neon-magenta),var(--cyber-neon-orange));box-shadow:0 0 6px rgba(255,45,123,0.4);"></div>
+                    <h2 class="cyber-font-display" style="font-size:14px;letter-spacing:var(--cyber-tracking-widest);color:var(--cyber-neon-magenta);text-shadow:0 0 8px rgba(255,45,123,0.4),0 0 20px rgba(255,45,123,0.2);">THREAT BOARD</h2>
+                    <div class="flex-1 h-px" style="background:linear-gradient(90deg,rgba(255,45,123,0.3),transparent);"></div>
+                    <span class="cyber-font-mono" style="font-size:9px;color:var(--cyber-neon-magenta);animation:cyber-flicker 4s linear infinite;">CLEAR</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <!-- System Faults Gauge — MAGENTA ring -->
+                    <div class="cyber-bracket-full threat-border rounded-md p-3 flex flex-col items-center gap-1.5 relative overflow-hidden" style="background:var(--cyber-bg-card);animation:cardSlideIn 0.5s ease-out 0.4s both;">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <!-- Warning flash overlay -->
+                        <div style="position:absolute;inset:0;background:radial-gradient(circle,rgba(255,45,123,0.08),transparent);animation:warningFlash 4s ease-in-out infinite;pointer-events:none;"></div>
+                        <svg width="100" height="100" viewBox="0 0 100 100" style="filter:drop-shadow(0 0 8px rgba(255,45,123,0.15));">
+                            <!-- Outer static ring -->
+                            <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,45,123,0.12)" stroke-width="2"></circle>
+                            <!-- Animated outer ring - magenta -->
+                            <circle cx="50" cy="50" r="44" fill="none" stroke="var(--cyber-neon-magenta)" stroke-width="2" stroke-dasharray="276.46" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 50 50)" style="animation:ringDraw 2s ease-out forwards, ringPulse 3s ease-in-out 2s infinite;color:var(--cyber-neon-magenta);">
+                            </circle>
+                            <!-- Middle ring - purple -->
+                            <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(176,38,255,0.1)" stroke-width="1.5"></circle>
+                            <circle cx="50" cy="50" r="38" fill="none" stroke="var(--cyber-neon-purple)" stroke-width="1.5" stroke-dasharray="238.76" stroke-dashoffset="59.69" stroke-linecap="round" transform="rotate(-90 50 50)" style="animation:ringPulse 4s ease-in-out 0.5s infinite;color:var(--cyber-neon-purple);opacity:0.6;">
+                            </circle>
+                            <!-- Inner ring - orange -->
+                            <circle cx="50" cy="50" r="34" fill="none" stroke="rgba(255,106,0,0.08)" stroke-width="1"></circle>
+                            <!-- Center value -->
+                            <text x="50" y="54" text-anchor="middle" fill="var(--cyber-neon-magenta)" style="font-family:var(--cyber-font-mono);font-size:28px;filter:drop-shadow(0 0 8px rgba(255,45,123,0.6));">0</text>
+                            <!-- Subtle crosshair -->
+                            <line x1="50" y1="20" x2="50" y2="35" stroke="rgba(255,45,123,0.15)" stroke-width="0.5"></line>
+                            <line x1="50" y1="65" x2="50" y2="80" stroke="rgba(255,45,123,0.15)" stroke-width="0.5"></line>
+                        </svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-secondary)]" style="font-size:12px;">系统故障</span>
+                    </div>
+                    <!-- Condensation Warning Gauge — ORANGE/YELLOW ring -->
+                    <div class="cyber-bracket-full threat-border rounded-md p-3 flex flex-col items-center gap-1.5 relative overflow-hidden" style="background:var(--cyber-bg-card);animation:cardSlideIn 0.5s ease-out 0.5s both;">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <div style="position:absolute;inset:0;background:radial-gradient(circle,rgba(255,106,0,0.06),transparent);animation:warningFlash 4s ease-in-out infinite 2s;pointer-events:none;"></div>
+                        <svg width="100" height="100" viewBox="0 0 100 100" style="filter:drop-shadow(0 0 8px rgba(255,106,0,0.15));">
+                            <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,106,0,0.12)" stroke-width="2"></circle>
+                            <!-- Animated outer ring - orange -->
+                            <circle cx="50" cy="50" r="44" fill="none" stroke="var(--cyber-neon-orange)" stroke-width="2" stroke-dasharray="276.46" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 50 50)" style="animation:ringDraw 2s ease-out 0.3s forwards, ringPulse 3s ease-in-out 2.5s infinite;color:var(--cyber-neon-orange);">
+                            </circle>
+                            <!-- Middle ring - yellow -->
+                            <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(240,225,48,0.1)" stroke-width="1.5"></circle>
+                            <circle cx="50" cy="50" r="38" fill="none" stroke="var(--cyber-neon-yellow)" stroke-width="1.5" stroke-dasharray="238.76" stroke-dashoffset="59.69" stroke-linecap="round" transform="rotate(-90 50 50)" style="animation:ringPulse 4s ease-in-out 1s infinite;color:var(--cyber-neon-yellow);opacity:0.6;">
+                            </circle>
+                            <circle cx="50" cy="50" r="34" fill="none" stroke="rgba(240,225,48,0.08)" stroke-width="1"></circle>
+                            <text x="50" y="54" text-anchor="middle" fill="var(--cyber-neon-orange)" style="font-family:var(--cyber-font-mono);font-size:28px;filter:drop-shadow(0 0 8px rgba(255,106,0,0.6));">0</text>
+                            <line x1="50" y1="20" x2="50" y2="35" stroke="rgba(255,106,0,0.15)" stroke-width="0.5"></line>
+                            <line x1="50" y1="65" x2="50" y2="80" stroke="rgba(255,106,0,0.15)" stroke-width="0.5"></line>
+                        </svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-secondary)]" style="font-size:12px;">结露预警</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== ROOM STATUS SECTION ===== -->
+            <section class="mb-5">
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-1 h-5 rounded-full" style="background:linear-gradient(180deg,var(--cyber-neon-green),var(--cyber-neon-cyan));box-shadow:0 0 6px rgba(57,255,20,0.4);"></div>
+                    <h2 class="cyber-font-display shimmer-text" style="font-size:14px;letter-spacing:var(--cyber-tracking-widest);">ROOM STATUS</h2>
+                    <div class="flex-1 h-px" style="background:linear-gradient(90deg,var(--cyber-border-strong),transparent);"></div>
+                    <span class="cyber-font-mono text-[var(--cyber-text-muted)]" style="font-size:9px;">4 ROOMS</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <!-- 主卧 — CYAN theme -->
+                    <div class="cyber-bracket-full room-card-cyan rounded-md p-4 flex items-center justify-center border relative transition-all duration-300 cursor-pointer" style="background:var(--cyber-bg-card);min-height:72px;animation:cardSlideIn 0.5s ease-out 0.6s both;--corner-color:var(--cyber-neon-cyan);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <span class="absolute top-2 right-2" style="color:var(--cyber-neon-cyan);font-size:8px;line-height:1;animation:glowBreathe 2s ease-in-out infinite;--glow-color:rgba(0,240,255,0.5);">&#9670;</span>
+                        <!-- Room icon -->
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-neon-cyan)" stroke-width="1.5" class="mr-2" style="filter:drop-shadow(0 0 3px rgba(0,240,255,0.4));"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:14px;font-weight:var(--cyber-weight-medium);">主卧</span>
+                    </div>
+                    <!-- 书房 — PURPLE theme -->
+                    <div class="cyber-bracket-full room-card-purple rounded-md p-4 flex items-center justify-center border relative transition-all duration-300 cursor-pointer" style="background:var(--cyber-bg-card);min-height:72px;animation:cardSlideIn 0.5s ease-out 0.7s both;--corner-color:var(--cyber-neon-purple);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <span class="absolute top-2 right-2" style="color:var(--cyber-neon-purple);font-size:8px;line-height:1;animation:glowBreathe 2s ease-in-out infinite 0.5s;--glow-color:rgba(176,38,255,0.5);">&#9670;</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-neon-purple)" stroke-width="1.5" class="mr-2" style="filter:drop-shadow(0 0 3px rgba(176,38,255,0.4));"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:14px;font-weight:var(--cyber-weight-medium);">书房</span>
+                    </div>
+                    <!-- 儿童房 — GREEN theme -->
+                    <div class="cyber-bracket-full room-card-green rounded-md p-4 flex items-center justify-center border relative transition-all duration-300 cursor-pointer" style="background:var(--cyber-bg-card);min-height:72px;animation:cardSlideIn 0.5s ease-out 0.8s both;--corner-color:var(--cyber-neon-green);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <span class="absolute top-2 right-2" style="color:var(--cyber-neon-green);font-size:8px;line-height:1;animation:glowBreathe 2s ease-in-out infinite 1s;--glow-color:rgba(57,255,20,0.5);">&#9670;</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-neon-green)" stroke-width="1.5" class="mr-2" style="filter:drop-shadow(0 0 3px rgba(57,255,20,0.4));"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:14px;font-weight:var(--cyber-weight-medium);">儿童房</span>
+                    </div>
+                    <!-- 次卧 — ORANGE theme -->
+                    <div class="cyber-bracket-full room-card-orange rounded-md p-4 flex items-center justify-center border relative transition-all duration-300 cursor-pointer" style="background:var(--cyber-bg-card);min-height:72px;animation:cardSlideIn 0.5s ease-out 0.9s both;--corner-color:var(--cyber-neon-orange);">
+                        <span class="br-tr"></span><span class="br-bl"></span>
+                        <span class="absolute top-2 right-2" style="color:var(--cyber-neon-orange);font-size:8px;line-height:1;animation:glowBreathe 2s ease-in-out infinite 1.5s;--glow-color:rgba(255,106,0,0.5);">&#9670;</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyber-neon-orange)" stroke-width="1.5" class="mr-2" style="filter:drop-shadow(0 0 3px rgba(255,106,0,0.4));"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                        <span class="cyber-font-body text-[var(--cyber-text-primary)]" style="font-size:14px;font-weight:var(--cyber-weight-medium);">次卧</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== DATA STREAM DECORATION ===== -->
+            <div class="mb-4 flex items-center gap-3 px-1" style="opacity:0.4;">
+                <div class="flex-1 h-px" style="background:linear-gradient(90deg,transparent,var(--cyber-neon-cyan),transparent);"></div>
+                <span class="cyber-font-mono data-cursor" style="font-size:8px;color:var(--cyber-neon-cyan);">SYS.CYCLE.24.7</span>
+                <div class="flex-1 h-px" style="background:linear-gradient(90deg,transparent,var(--cyber-neon-purple),transparent);"></div>
+            </div>
+
+        </div>
+
+        <!-- ===== BOTTOM TAB NAVIGATION ===== -->
+        <nav class="fixed bottom-0 inset-x-0 z-40" style="background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);border-top:1px solid var(--cyber-border);">
+            <!-- Animated gradient line above nav -->
+            <div style="position:absolute;top:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyber-neon-cyan),var(--cyber-neon-purple),var(--cyber-neon-magenta),transparent);animation:borderTrail 4s linear infinite;background-size:200% 100%;"></div>
+            <div class="max-w-[375px] mx-auto flex items-center justify-around h-[50px]">
+                <!-- Active Tab — CYAN with glow -->
+                <div class="flex flex-col items-center justify-center gap-0.5 tab-glow-underline" style="color:var(--cyber-neon-cyan);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(0,240,255,0.6));">
+                        <circle cx="12" cy="12" r="8"></circle>
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <line x1="12" y1="2" x2="12" y2="5"></line>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                        <line x1="2" y1="12" x2="5" y2="12"></line>
+                        <line x1="19" y1="12" x2="22" y2="12"></line>
+                    </svg>
+                    <span class="cyber-font-body" style="font-size:10px;text-shadow:0 0 6px rgba(0,240,255,0.4);">舰桥</span>
+                </div>
+                <!-- Command Tab — PURPLE muted -->
+                <div class="flex flex-col items-center justify-center gap-0.5 transition-colors duration-300" style="color:var(--cyber-text-muted);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12,2 22,8 22,16 12,22 2,16 2,8"></polygon>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                    <span class="cyber-font-body" style="font-size:10px;">指挥</span>
+                </div>
+                <!-- XO Tab — MAGENTA muted -->
+                <div class="flex flex-col items-center justify-center gap-0.5 transition-colors duration-300" style="color:var(--cyber-text-muted);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                        <circle cx="12" cy="8" r="4"></circle>
+                        <path d="M5 20 C5 16 8 14 12 14 C16 14 19 16 19 20"></path>
+                    </svg>
+                    <span class="cyber-font-body" style="font-size:10px;">副官</span>
+                </div>
+                <!-- Captain's Lounge Tab — ORANGE muted -->
+                <div class="flex flex-col items-center justify-center gap-0.5 transition-colors duration-300" style="color:var(--cyber-text-muted);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9"></polygon>
+                    </svg>
+                    <span class="cyber-font-body" style="font-size:10px;">舰长休息室</span>
+                </div>
+            </div>
+            <div class="h-[env(safe-area-inset-bottom,34px)]" style="background:rgba(10,10,15,0.92);"></div>
+        </nav>
+
+    </main>
+
+    <script>
+    // === PARTICLE SYSTEM ===
+    // Floating neon particles across the background
+    (function() {
+        const main = document.querySelector('main');
+        const colors = ['var(--cyber-neon-cyan)', 'var(--cyber-neon-purple)', 'var(--cyber-neon-magenta)', 'var(--cyber-neon-green)', 'var(--cyber-neon-orange)', 'var(--cyber-neon-yellow)'];
+        // Resolve CSS variables to actual hex values for JS usage
+        const rootStyle = getComputedStyle(document.documentElement);
+        const resolvedColors = colors.map(c => {
+            try { return rootStyle.getPropertyValue(c.replace('var(','').replace(')','')).trim(); } catch(e) { return c; }
+        }).filter(c => c && c.startsWith('#'));
+        function spawnParticle() {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            const c = resolvedColors[Math.floor(Math.random() * resolvedColors.length)];
+            const x = Math.random() * 100;
+            const dur = 3 + Math.random() * 4;
+            const size = 1 + Math.random() * 2;
+            p.style.cssText = `
+                left:${x}%; bottom:0; width:${size}px; height:${size}px;
+                background:${c}; box-shadow:0 0 4px ${c};
+                animation:particleFloat ${dur}s ease-out forwards;
+            `;
+            main.appendChild(p);
+            setTimeout(() => p.remove(), dur * 1000);
+        }
+        // Spawn particles periodically
+        setInterval(spawnParticle, 800);
+        // Initial burst
+        for (let i = 0; i < 5; i++) setTimeout(spawnParticle, i * 200);
+    })();
+
+    // === DATA STREAM TEXT ROTATION ===
+    // Rotating system message in the data stream decoration
+    (function() {
+        const messages = [
+            'SYS.CYCLE.24.7',
+            'NEURAL.LINK.OK',
+            'SHIELD.ACTIVE',
+            'SCAN.CLEAR',
+            'CORE.TEMP.22C',
+            'NET.LATENCY.3MS',
+            'GRID.STABLE',
+            'QUANTUM.SYNC',
+        ];
+        const el = document.querySelector('.data-cursor');
+        if (!el) return;
+        let idx = 0;
+        setInterval(() => {
+            idx = (idx + 1) % messages.length;
+            el.textContent = messages[idx];
+        }, 3000);
+    })();
+    </script>
+</body>
+</html>

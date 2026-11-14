@@ -1,0 +1,130 @@
+{
+  "project": {
+    "name": "赛博朋克智能家居控制台",
+    "path": "C:\\Users\\yanggyan\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\work-mode-projects\\6a4e2078b5dc3e2dc42954e9\\cyberpunk-smart-home",
+    "operation": "create",
+    "deviceType": "mobile",
+    "language": "zh-CN",
+    "dashboardMode": false,
+    "replicationMode": null,
+    "sourceUrl": null,
+    "visualSpecExcerpt": "Dark cyberpunk mobile UI. Background: #0a0a0f deep navy-black with cyan grid overlay. Cards: #1a1a2e with neon cyan (#00f0ff) 1px borders. Accent: neon cyan primary, neon magenta (#ff2d7b) for alerts/danger, neon yellow (#f0e130) for warnings. Typography: Orbitron for headers (uppercase, wide tracking), Rajdhani for body text. Corner bracket decorations on cards. Circular gauge monitors with glow effects. Bottom tab navigation with neon underline active state. Scanline overlay for CRT feel.",
+    "styleDefinitionBrief": "Cyberpunk smart home control panel: dark background, neon cyan/magenta accents, Orbitron display font, grid patterns, scanline overlay, corner bracket decorations, glow effects on interactive elements.",
+    "designRead": "mobile app / smart home enthusiast / cyberpunk sci-fi immersive / medium density / avoid generic blue UI",
+    "designDials": {
+      "layoutVariance": 3,
+      "motionIntensity": 4,
+      "visualDensity": 3
+    },
+    "styleContinuityAnchors": {
+      "colorSystem": {
+        "primaryColorRole": "neon cyan for primary interactive states and active indicators, magenta for danger/alert states",
+        "brandHuePolicy": "free-explore, multi-hue neon system (cyan primary, magenta danger, yellow warning, green success)",
+        "stateColors": "semantic: green=success, yellow=warning, magenta=error, cyan=info"
+      },
+      "shapeSystem": "angular/sharp corners with 2-4px radius, corner bracket decorations on cards",
+      "typographySystem": "Orbitron for section headers and title (uppercase, wide tracking), Rajdhani for body/UI text, Share Tech Mono for data readouts",
+      "spacingSystem": "compact spacing (8-16px internal), tight rhythm for data-dense mobile layout",
+      "componentLanguage": "angular cards with neon border glow, circular gauge monitors, diamond/polygon status indicators, pill-shaped status badges",
+      "surfaceAndDepth": "dark layered surfaces (#0a0a0f > #12121a > #1a1a2e), neon glow for elevation, no traditional shadows",
+      "imageryAndIconography": "technical/geometric SVG icons, line-style with neon glow, futuristic HUD aesthetic",
+      "interactionTone": "glow on hover/tap, flicker micro-animation on status changes, pulse animation on alerts"
+    },
+    "specsConstraints": null,
+    "sharedProjectShellContract": {
+      "navigationShell": "bottom tab bar with 4 items, neon cyan active underline, icon + label layout",
+      "primaryColorSystem": "neon cyan (#00f0ff) as primary, magenta (#ff2d7b) as danger/alert",
+      "typographySystem": "Orbitron display, Rajdhani body, Share Tech Mono data, uppercase headers with wide tracking",
+      "radiusScale": "2px-4px angular, no soft rounded corners",
+      "surfaceDepthModel": "dark layering with neon glow borders instead of shadows",
+      "ctaStyle": "angular buttons with neon glow border, glow effect on press",
+      "alignmentRules": "left-aligned text, centered status indicators, consistent 16px horizontal padding"
+    },
+    "generationTree": {
+      "root": {
+        "nodeId": "gen-project-shell",
+        "kind": "page-leaf",
+        "pageIds": ["page-bridge"],
+        "output": "pages/bridge.html",
+        "sharedRegions": [],
+        "privateRegions": ["page body"],
+        "mutableSlots": [],
+        "status": "planned",
+        "children": []
+      }
+    }
+  },
+  "designSource": {
+    "operatingMode": "free-explore",
+    "libraryIdentity": null,
+    "libraryPath": null,
+    "cssFilePath": "C:\\Users\\yanggyan\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\work-mode-projects\\6a4e2078b5dc3e2dc42954e9\\cyberpunk-smart-home\\colors_and_type.css",
+    "brandPrefix": "cyber",
+    "themeMode": "dark",
+    "designDecisionSummary": "Cyberpunk dark theme with neon glow effects, angular shapes, sci-fi typography",
+    "componentContractKind": null,
+    "forbiddenInventedComponents": [],
+    "allowedComponents": [],
+    "styleConstraints": {
+      "radiusMax": 8,
+      "spacingBase": 4,
+      "fontSizeBody": 14,
+      "fontSizeMin": 10,
+      "controlHeightDefault": 32,
+      "controlHeightLarge": 38
+    },
+    "productContext": {
+      "kitType": null,
+      "productType": "Smart Home Control App"
+    },
+    "actualTokenNameReference": [
+      { "semanticPurpose": "Primary background", "tokenName": "--cyber-bg-primary" },
+      { "semanticPurpose": "Card background", "tokenName": "--cyber-bg-card" },
+      { "semanticPurpose": "Primary text", "tokenName": "--cyber-text-primary" },
+      { "semanticPurpose": "Secondary text", "tokenName": "--cyber-text-secondary" },
+      { "semanticPurpose": "Neon accent cyan", "tokenName": "--cyber-neon-cyan" },
+      { "semanticPurpose": "Neon accent magenta", "tokenName": "--cyber-neon-magenta" },
+      { "semanticPurpose": "Neon accent yellow", "tokenName": "--cyber-neon-yellow" },
+      { "semanticPurpose": "Neon accent green", "tokenName": "--cyber-neon-green" },
+      { "semanticPurpose": "Border", "tokenName": "--cyber-border" },
+      { "semanticPurpose": "Strong border", "tokenName": "--cyber-border-strong" },
+      { "semanticPurpose": "Accent glow", "tokenName": "--cyber-accent-glow" },
+      { "semanticPurpose": "Display font", "tokenName": "--cyber-font-display" },
+      { "semanticPurpose": "Body font", "tokenName": "--cyber-font-body" },
+      { "semanticPurpose": "Mono font", "tokenName": "--cyber-font-mono" }
+    ]
+  },
+  "pages": [
+    {
+      "nodeId": "page-bridge",
+      "slug": "bridge",
+      "title": "舰桥控制台",
+      "htmlSrc": "pages/bridge.html",
+      "pageIndex": 1,
+      "stateGroupId": null,
+      "stateRole": null,
+      "baseStatePageId": null,
+      "sharedShellContract": [],
+      "mutableRegions": [],
+      "derivedFromHtmlSrc": null,
+      "derivationType": "original",
+      "sourcePageId": null,
+      "sourceHtmlSrc": null,
+      "pageType": "information-dense",
+      "businessScenario": "Smart home command bridge dashboard - system status, threat monitoring, room controls",
+      "visualNorthStar": "Dark sci-fi command bridge interface with neon glow accents, angular card layouts, and HUD-style data readouts",
+      "compositionPattern": "Vertical scroll dashboard: header bar → status pills → 2x2 system module grid → 2-column circular gauges → 2x2 room status grid → bottom tab navigation",
+      "continuityAnchors": ["dark background with grid overlay", "neon cyan accent system", "Orbitron uppercase headers", "angular card borders with glow"],
+      "libraryRestraintMode": false,
+      "uiKitPath": null,
+      "componentPlan": [],
+      "imagePlan": [],
+      "chartsRequired": false,
+      "miniProgramStyle": true,
+      "qualityRisks": ["complex SVG icons needed", "many small interactive elements", "circular gauge animations"]
+    }
+  ],
+  "assets": [],
+  "wiringPlan": [],
+  "hiddenInteractionPlan": []
+}

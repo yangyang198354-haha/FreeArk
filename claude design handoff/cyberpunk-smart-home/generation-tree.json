@@ -1,0 +1,13 @@
+{
+  "root": {
+    "nodeId": "gen-project-shell",
+    "kind": "page-leaf",
+    "pageIds": ["page-bridge"],
+    "output": "pages/bridge.html",
+    "sharedRegions": [],
+    "privateRegions": ["page body"],
+    "mutableSlots": [],
+    "status": "planned",
+    "children": []
+  }
+}

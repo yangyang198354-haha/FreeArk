@@ -1,0 +1,56 @@
+{
+  "migrator": "scripts/trae_sdlc/migrate.py",
+  "source_suite_version": "3.7",
+  "source": [
+    ".codex/agents",
+    ".codex/sdlc",
+    ".codex/agent-memory"
+  ],
+  "target": [
+    ".agents/skills",
+    ".agents/sdlc"
+  ],
+  "roles": [
+    "pm-orchestrator",
+    "requirement-analyst",
+    "system-architect",
+    "software-developer",
+    "test-engineer",
+    "devops-engineer",
+    "kb-curator",
+    "agent-builder"
+  ],
+  "generated_files": {
+    ".agents/sdlc/knowledge_base/README.md": "a3181c2134e44e2d6ad30c5bbe04016b4d961b0e57314aba6cad23bdd8420125",
+    ".agents/sdlc/knowledge_base/generic/agent-builder.md": "987a7cb72cdfed8677a1770b115e4cbf2b98a2c301df98d5714b2c3037fb17e2",
+    ".agents/sdlc/knowledge_base/generic/devops-engineer.md": "75cef04a403c1cccbffc51e3a02c46d91654d2964873c8890218891d0585b6c7",
+    ".agents/sdlc/knowledge_base/generic/kb-curator.md": "8adbd118757565dc50c9276bbb26f9cbd0a765c108c4b914ed4eee069ea12ba3",
+    ".agents/sdlc/knowledge_base/generic/pm-orchestrator.md": "d221b4e3a1efc8f660bc7d7785c5ce15def5dc20f896997c7e15815037e690d9",
+    ".agents/sdlc/knowledge_base/generic/requirement-analyst.md": "79c34151e93562305d4884bfe6c6060923c99c419f413fda5f77f23e0441efd5",
+    ".agents/sdlc/knowledge_base/generic/software-developer.md": "49cff9f114bfdbc22e83e26f68fc7c7f2f459b5300e1bc5d3087cdaa48473f32",
+    ".agents/sdlc/knowledge_base/generic/system-architect.md": "1d324f9a5715e2c2b3c6096228d9af9f49890ced12af8454b24ce40555d34859",
+    ".agents/sdlc/knowledge_base/generic/test-engineer.md": "471bfb1add5ad28022c919df108ad5ba9272050d1d91b5eb75c0492ecc428860",
+    ".agents/sdlc/project_profile.md": "c5e7a8c7bb86124c05f9e4e9c601c7a46b116700349c40af9f0d90a7599c22f5",
+    ".agents/sdlc/shared_protocol.md": "7f0b7f154049a72b0152b994dd537345090096ae19366d54a55e566435234ebb",
+    ".agents/sdlc/templates/agent_builder_templates.md": "1ffb2c11fd58ce882fe20c9b5f3747bc8dc6270dc34f3474828f913117655edc",
+    ".agents/sdlc/templates/project_profile.template.md": "d164381a1a3ed38c811ba49211fe54152c05ca129c6365e1c5b8b7d5074eb70b",
+    ".agents/skills/sdlc-agent-builder/SKILL.md": "e855889b895b959992ac0b9281d03abb43a81420ed676c2773bb163d4c58678b",
+    ".agents/skills/sdlc-devops-engineer/SKILL.md": "73868a6d5573d82a09f16dc29925247064396a80e96acfe171d2ae1e76263af8",
+    ".agents/skills/sdlc-kb-curator/SKILL.md": "db37e870395c5394c81fc4d70ab9fd2cfcf393b861f330550d4eea6d8883fc1f",
+    ".agents/skills/sdlc-pm-orchestrator/SKILL.md": "0f088907efa90d54a172f90b2a50797a04e8c82fd451933ae43cd76c61fcaf88",
+    ".agents/skills/sdlc-requirement-analyst/SKILL.md": "941848d2e30950579b39ff83c64c26ac5417f3e2aa725769b75d412d25227709",
+    ".agents/skills/sdlc-software-developer/SKILL.md": "6b5122901f0314ea62b6fa9945eb0e5aa07e1f556f70b447d7d034edfa354375",
+    ".agents/skills/sdlc-system-architect/SKILL.md": "3a06af288ce28a8c35801d221bf84fd7f021e0cdd3f980871291cffcc84127da",
+    ".agents/skills/sdlc-test-engineer/SKILL.md": "d3b0dc3358c4db11f3073b648923b43af0a15a8219ef54cafb2ca098b4453394"
+  },
+  "copied_memory": {
+    ".agents/sdlc/memory/agent-builder/MEMORY.md": "64255aa9ab2d566ea76cd57df7609226e0fffa0fc74cb0077513aa9149bbcb5c",
+    ".agents/sdlc/memory/devops-engineer/MEMORY.md": "0af24c22d4060aed42098642158cc07a3c9d61f1b9263b1069cf4b8e0939607a",
+    ".agents/sdlc/memory/kb-curator/MEMORY.md": "aa4c62243e73c3de8d40a278cc01542b2e8fb6663844583718068932097a327c",
+    ".agents/sdlc/memory/pm-orchestrator/MEMORY.md": "c0eea7d5e51ca3b94ccb89a6d8f41c013d754aaeaebc1126078b90b134c76229",
+    ".agents/sdlc/memory/requirement-analyst/MEMORY.md": "bd8032f4c491cacd4040426354a087eb74b923f05a649cb6fff69a9ea0864131",
+    ".agents/sdlc/memory/software-developer/MEMORY.md": "dd5efc9c948d57806fa881f37ab36b346855adb0a81dae1b9345163ab38c515b",
+    ".agents/sdlc/memory/system-architect/MEMORY.md": "9c75ac0e644e664109b73198010f97dca6330a8f7668fd1e6e72b10736300157",
+    ".agents/sdlc/memory/test-engineer/MEMORY.md": "b0e862cd7875032c29043134051aefee19dfe7871f7d4ce73966206757fa18fe"
+  }
+}

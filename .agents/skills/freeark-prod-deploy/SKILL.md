@@ -43,7 +43,7 @@ description: FreeArk 生产环境部署参考手册。当需要部署 FreeArk �
   - 路径：开发机 → 阿里云 VPS `47.109.197.217:57279` → frp 隧道 → 树莓派 sshd:22。
   - 不依赖会抽风的公司 DNS（vicp.fun 时代的老问题已随花生壳退役消失）。
 - plink（PuTTY）：`plink -ssh -P 57279 yangyang@47.109.197.217 "<远程命令>"`。
-- ⚠️ 在 Codex 里调用 plink/ssh 请用 `exec_command` 并明确选择 Bash shell；若使用 PowerShell，按其语法引用远端命令，不能混用 Bash 重定向（原因见 §9）。
+- ⚠️ 调用 ssh/plink 用当前运行时的命令工具（Codex: `exec_command` 并明确选择 Bash shell；Trae: `Shell`）；若使用 PowerShell，按其语法引用远端命令，不能混用 Bash 重定向；远端复杂脚本可改用 base64 传输（`echo <b64> | base64 -d | bash`）（原因见 §9）。
 - **隧道不通时排查**：连 VPS 自身用 `ssh root@47.109.197.217`（开发机公钥已装），看 `systemctl status frps`；再经内网（或让现场人员）看 Pi 的 `systemctl status frpc` —— ⚠️ **花生壳备用通道已不存在**，frpc 挂了就无法远程连入 Pi，需现场/内网恢复。frp 0.61.1 装在 `/usr/local/frp/`，配置 `*.toml`（**token 不在本文件**）。
 
 ---
