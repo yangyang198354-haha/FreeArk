@@ -328,6 +328,7 @@ const mqttConnected = computed(() => mqttClient.connected.value)
 let knownSns = new Set()
 let _offDeviceUpdate = null
 let _offConnChange = null
+let _subscribedMac = null
 let _deviceUpdateTimer = null
 let _queuedDeviceUpdates = {}
 let _snapshotSaveTimer = null
@@ -601,14 +602,16 @@ async function connectRoom() {
   })
 
   try {
+    // 切换套户：退订旧屏，避免其上报混入当前设备表、且重连后不再恢复旧订阅
+    if (_subscribedMac && _subscribedMac !== mac) mqttClient.unsubscribe(_subscribedMac)
+    _subscribedMac = mac
     // 先登记订阅：未连接时由模块层在重连成功后自动补订阅
     mqttClient.subscribe(mac)
+    const wasConnected = mqttConnected.value
     await mqttClient.acquire(broker.value, topics.value)
-    const allSns = _discoverSns(sp, mac)
-    if (allSns.length > 0) {
-      allSns.forEach((s) => knownSns.add(s))
-      mqttClient.publishRead(mac, allSns)
-    }
+    // 新建连接时 onConnectionChange(true) 已触发 syncChannel 拉取设备值；
+    // 仅在复用已有连接（无连接事件）时手动拉取，避免重复发 DeviceStatusRead
+    if (wasConnected) syncChannel()
   } catch (e) {
     uni.showToast({ title: '设备通道连接失败：' + (e && e.message || ''), icon: 'none' })
   }
@@ -628,7 +631,8 @@ function syncChannel() {
 }
 
 /**
- * 补连：页面 onShow 时若通道未连接则立即重连，并重新拉取设备实时值。
+ * 补连：页面 onShow 时若通道未连接则立即重连。连接成功后由 onConnectionChange
+ * 回调统一执行 syncChannel 拉取设备值（此处不再重复调用）。
  * 自动退避重连由 useMqttClient 模块层兜底，这里失败不弹提示避免重复打扰。
  */
 async function restoreChannel() {
@@ -636,7 +640,6 @@ async function restoreChannel() {
   if (!room || !room.screen_mac) return
   try {
     await mqttClient.ensureConnected()
-    syncChannel()
   } catch (e) { /* 静默：模块层会自动重试 */ }
 }
 

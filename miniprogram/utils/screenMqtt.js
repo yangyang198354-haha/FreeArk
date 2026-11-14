@@ -191,6 +191,11 @@ export class ScreenMqtt {
     this.client.subscribe(fillTopic(this.topics.value_uplink, screenMac), { qos: 0 })
   }
 
+  unsubscribeRoom(screenMac) {
+    if (!this.client) return
+    this.client.unsubscribe(fillTopic(this.topics.value_uplink, screenMac))
+  }
+
   onDeviceUpdate(cb) { this._updateCbs.push(cb) }
 
   _onMessage(topic, payload) {

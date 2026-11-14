@@ -13,7 +13,8 @@
  *   - _refCount: 活跃引用计数（acquire +1 / release -1，降至 0 时断开）
  *   - _connected: Vue ref<boolean>，响应式连接状态（随 ScreenMqtt 连接事件同步）
  *   - _desiredSubscriptions: 期望订阅的 screenMac 集合（跨重连保留）
- *   - _activeSubscriptions: 当前已在 broker 上生效的订阅集合（断线时清空）
+ *   - _activeSubscriptions: 当前已在 broker 上生效的订阅集合（销毁实例时清空；
+ *     mqtt.js 内置重连由其 resubscribe 机制自动恢复订阅）
  *   - _updateListeners: DeviceStatusUpdate 全局回调列表
  *
  *   FND-007（连接自愈）：连接失败或中途断线时按指数退避自动重连
@@ -53,7 +54,7 @@ const _connected = ref(false)
 /** 期望订阅集合（断线重连后据此自动恢复订阅） */
 const _desiredSubscriptions = new Set()
 
-/** 当前已在 broker 上生效的订阅集合（断线时清空，避免重复 SUBSCRIBE） */
+/** 当前已在 broker 上生效的订阅集合（销毁实例时清空，避免重复 SUBSCRIBE） */
 const _activeSubscriptions = new Set()
 
 /** DeviceStatusUpdate 全局回调列表（onDeviceUpdate 注册，返回注销函数） */
@@ -116,6 +117,9 @@ function _setupInstance(broker, topics) {
 function _onInstanceState(next) {
   _connected.value = next
   if (next) {
+    // 无论经由哪条路径连上（含 mqtt.js 内置重连），都取消待执行的退避重连，
+    // 否则过期计时器会把刚恢复的健康连接拆掉重建
+    _clearRetry()
     _retryDelay = RETRY_BASE_MS
     _replaySubscriptions()
   }
@@ -155,7 +159,7 @@ function _scheduleRetry() {
   console.log('[useMqttClient] 将在', delay, 'ms 后自动重连')
   _retryTimer = setTimeout(async () => {
     _retryTimer = null
-    if (_refCount <= 0 || !_currentBroker) return
+    if (_refCount <= 0 || !_currentBroker || _connected.value) return
     try {
       await _connectOnce(_currentBroker, _currentTopics)
     } catch (e) {
@@ -297,6 +301,21 @@ export function useMqttClient() {
   }
 
   /**
+   * 取消订阅 screenMac（切换套户时调用），同时移出期望集合，重连后不再恢复。
+   * @param {string} screenMac
+   */
+  function unsubscribe(screenMac) {
+    if (!screenMac) return
+    _desiredSubscriptions.delete(screenMac)
+    if (!_activeSubscriptions.has(screenMac)) return
+    _activeSubscriptions.delete(screenMac)
+    if (_instance && _connected.value) {
+      try { _instance.unsubscribeRoom(screenMac) } catch (e) { /* ignore */ }
+    }
+    console.log('[useMqttClient] unsubscribe: mac=', screenMac)
+  }
+
+  /**
    * IFC-1110-FE-01-4: publishRead
    * 向 screenMac 发布 DeviceStatusRead 消息（每个 deviceSn 一条）。
    * 对应 param-settings 现有 mqtt.readStatus(mac, sns)。
@@ -382,6 +401,7 @@ export function useMqttClient() {
     ensureConnected,
     release,
     subscribe,
+    unsubscribe,
     publishRead,
     publishWrite,
     waitConfirm,
