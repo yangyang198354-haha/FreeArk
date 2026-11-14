@@ -403,3 +403,131 @@ export function formatAttrValue(paramName, rawValue) {
 
   return String(rawValue)
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 公共接口 — 抽屉故障条目（舰桥子系统 / 房间）
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 统一比较设备 SN。
+ *
+ * 后端 structure.system_devices[].device_sn 来自 DeviceNode.device_sn
+ * （IntegerField），JSON 序列化为 number；fault_event.device_sn 来自
+ * FaultEvent.device_sn（CharField），JSON 序列化为 string。
+ * JS 严格比较 22155 !== '22155'，因此必须统一转字符串后比较。
+ *
+ * @param {number|string|null|undefined} a
+ * @param {number|string|null|undefined} b
+ * @returns {boolean}
+ */
+export function sameDeviceSn(a, b) {
+  if (a == null || b == null || a === '' || b === '') return false
+  return String(a) === String(b)
+}
+
+/**
+ * IFC-FU-007: 将 fresh_air 参数块中置位的故障 bit 展开为抽屉故障条目。
+ *
+ * fresh_air_fault_status 是 PLC 位域整体字段，不进入 fault_event 表
+ * （后端 fault_classifier 明确排除）。舰桥 Gauge 与模块卡片使用该字段的
+ * popcount 计算故障数，因此抽屉也必须按位展示，才能与模块状态同口径。
+ *
+ * @param {object|null} paramBlock — _makeParamBlock 生成的 { subType, deviceName, attrs }
+ * @returns {Array<object>} 故障条目（无置位 bit 时为空数组）
+ */
+export function buildFreshAirRealtimeFaultEvents(paramBlock) {
+  if (!paramBlock || paramBlock.subType !== 'fresh_air') return []
+
+  const attrs = paramBlock.attrs || []
+  const statusAttr = attrs.find((a) => a.tag === 'fresh_air_fault_status')
+  if (!statusAttr || !statusAttr.expandedBits) return []
+
+  const collectedAt = statusAttr.collectedAt
+    ? String(statusAttr.collectedAt).replace(' ', 'T')
+    : ''
+
+  return statusAttr.expandedBits
+    .filter((bit) => bit.active)
+    .map((bit) => ({
+      id: `plc-fresh-air-bit-${bit.bitIndex}`,
+      deviceName: paramBlock.deviceName || '新风机',
+      deviceTypeLabel: '新风',
+      severity: 'fault',
+      faultType: '新风故障',
+      faultCode: `fresh_air_fault_bit_${bit.bitIndex}`,
+      faultMessage: bit.name,
+      firstSeenAt: collectedAt,
+      roomName: '',
+      source: 'plc-realtime',
+    }))
+}
+
+/**
+ * 合并 MQTT 故障事件与 PLC 位域实时故障条目，按 faultCode 去重。
+ * MQTT 已上报同一位（fresh_air_fault_bit_N）时，以 MQTT 事件为准。
+ *
+ * @param {Array} mqttEvents
+ * @param {Array} plcEvents
+ * @returns {Array}
+ */
+export function mergeFaultEvents(mqttEvents, plcEvents) {
+  const merged = [...(mqttEvents || [])]
+  const existingCodes = new Set(
+    merged.map((ev) => ev && ev.faultCode).filter(Boolean)
+  )
+  for (const ev of (plcEvents || [])) {
+    if (ev && ev.faultCode && existingCodes.has(ev.faultCode)) continue
+    merged.push(ev)
+  }
+  return merged
+}
+
+/**
+ * IFC-BD-002-24: 过滤与指定隔舱匹配的故障事件。
+ *
+ * v1.12.0：子系统按 structure.system_devices 的 sub_type → device_sn 匹配；
+ * 房间按 room_name 匹配；主温控伪房间按 device_sn 匹配。
+ * device_sn 统一用 sameDeviceSn 比较，避免 number/string 类型不一致。
+ *
+ * @param {Array} faultEvents — 全部活跃故障事件
+ * @param {object} compartment — { type, id, name, _thermostatDeviceSn? }
+ * @param {object} structureCache — structure.system_devices 来源
+ * @returns {Array}
+ */
+export function filterFaultEventsByCompartment(faultEvents, compartment, structureCache) {
+  if (!compartment || !faultEvents?.length) return []
+
+  if (compartment.type === 'subsystem') {
+    const targetSubType = ID_TO_SUB_TYPE[compartment.id]
+    if (!targetSubType) return []
+
+    const systemDevices = structureCache?.system_devices || []
+    const matchingSns = new Set(
+      systemDevices
+        .filter((d) => d.sub_type === targetSubType)
+        .map((d) => String(d.device_sn ?? d.sn ?? ''))
+        .filter(Boolean)
+    )
+
+    if (matchingSns.size > 0) {
+      return faultEvents.filter((ev) =>
+        matchingSns.has(String(ev.device_sn ?? ''))
+      )
+    }
+    return []
+  }
+
+  if (compartment.type === 'room') {
+    if (compartment._thermostatDeviceSn) {
+      return faultEvents.filter((ev) =>
+        sameDeviceSn(ev.device_sn, compartment._thermostatDeviceSn)
+      )
+    }
+    return faultEvents.filter((ev) =>
+      ev.room_name === compartment.name ||
+      ev.room_name === compartment.id
+    )
+  }
+
+  return []
+}

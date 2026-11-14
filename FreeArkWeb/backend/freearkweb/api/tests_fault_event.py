@@ -1374,6 +1374,65 @@ class TestHandleMessageIntegration(TestCase):
         _handle_message(msg, cache)
         self.assertEqual(FaultEvent.objects.count(), 0)
 
+    def test_fresh_air_fault_status_expands_to_bits(self):
+        """fresh_air_fault_status 位域 64 → 仅 bit6 生成活跃事件，归零后恢复。"""
+        from api.management.commands.fault_consumer import _handle_message
+        mac = 'e1926f76ea2db0b5'
+        specific_part = '3-1-7-704'
+        cache = self._make_cache_with_mac(mac, specific_part)
+        topic = f'/screen/upload/screen/to/cloud/{mac}'
+
+        msg_fault = self._make_msg(
+            topic=topic,
+            payload_dict=self._make_device_status_payload(
+                device_sn='22155',
+                product_code='130004',
+                items=[{'paramName': 'fresh_air_fault_status', 'value': 64}],
+            ),
+        )
+        _handle_message(msg_fault, cache)
+
+        self.assertEqual(FaultEvent.objects.count(), 1)
+        fe = FaultEvent.objects.first()
+        self.assertEqual(fe.fault_code, 'fresh_air_fault_bit_6')
+        self.assertEqual(fe.fault_message, '新风水阀故障')
+        self.assertEqual(fe.fault_type, 'fresh_air')
+        self.assertEqual(fe.severity, 'warning')
+        self.assertTrue(fe.is_active)
+
+        msg_normal = self._make_msg(
+            topic=topic,
+            payload_dict=self._make_device_status_payload(
+                device_sn='22155',
+                product_code='130004',
+                items=[{'paramName': 'fresh_air_fault_status', 'value': 0}],
+            ),
+        )
+        _handle_message(msg_normal, cache)
+
+        fe.refresh_from_db()
+        self.assertFalse(fe.is_active)
+        self.assertIsNotNone(fe.recovered_at)
+
+    def test_fresh_air_fault_status_non_numeric_skipped(self):
+        """位域值非数字/None 时不展开，避免误恢复所有 bit。"""
+        from api.management.commands.fault_consumer import _handle_message
+        mac = 'e1926f76ea2db0b6'
+        cache = self._make_cache_with_mac(mac, '3-1-7-705')
+
+        for value in ('abc', None):
+            msg = self._make_msg(
+                topic=f'/screen/upload/screen/to/cloud/{mac}',
+                payload_dict=self._make_device_status_payload(
+                    device_sn='22155',
+                    product_code='130004',
+                    items=[{'paramName': 'fresh_air_fault_status', 'value': value}],
+                ),
+            )
+            _handle_message(msg, cache)
+
+        self.assertEqual(FaultEvent.objects.count(), 0)
+
 
 # ===========================================================================
 # P1-2  API + DB 集成测试（真实 SQLite + 过滤 + 排序 + 索引结构）

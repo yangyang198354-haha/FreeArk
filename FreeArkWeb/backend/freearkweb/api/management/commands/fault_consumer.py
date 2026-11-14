@@ -148,6 +148,7 @@ def _handle_message(msg, mac_cache: _MacCache) -> None:
         get_fault_type_and_severity,
         get_fault_message,
     )
+    from api.fault_consumer.constants import FRESH_AIR_FAULT_BIT_LABELS
     from api.fault_consumer.state_machine import process_fault_field
 
     received_at = timezone.now()
@@ -204,6 +205,41 @@ def _handle_message(msg, mac_cache: _MacCache) -> None:
 
         if not param_name:
             continue
+
+        # fresh_air_fault_status 是位域整体字段，fault_classifier 不把它当作
+        # 单个故障候选。这里按位展开为 fresh_air_fault_bit_<N>，逐个交给状态机，
+        # 使 PLC 位域故障同样进入 fault_event（与舰桥 Gauge 的 popcount 同口径）。
+        if param_name == 'fresh_air_fault_status':
+            if value is None:
+                continue
+            try:
+                status_val = int(value)
+            except (TypeError, ValueError):
+                logger.warning(
+                    'fresh_air_fault_status 值非数字，跳过: value=%r topic=%s',
+                    value, msg.topic,
+                )
+                continue
+            for bit, label in enumerate(FRESH_AIR_FAULT_BIT_LABELS):
+                try:
+                    process_fault_field(
+                        specific_part=specific_part,
+                        device_sn=device_sn,
+                        product_code=product_code,
+                        fault_code=f'fresh_air_fault_bit_{bit}',
+                        fault_type='fresh_air',
+                        severity='warning',
+                        fault_message=label,
+                        is_active_now=bool((status_val >> bit) & 1),
+                        received_at=received_at,
+                    )
+                except Exception as exc:
+                    logger.exception(
+                        'process_fault_field 异常: param=fresh_air_fault_bit_%d err=%s',
+                        bit, exc,
+                    )
+            continue
+
         if not is_fault_candidate(param_name):
             continue
 

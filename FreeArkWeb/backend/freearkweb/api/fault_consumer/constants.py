@@ -73,6 +73,23 @@ SUFFIX_FAULT_RULES: list = [
 # fresh_air_fault_bit_<N>（v0.6.0 新增，MQTT 上报单个位字段）
 _FRESH_AIR_BIT_PATTERN = re.compile(r'^fresh_air_fault_bit_\d+$')
 
+# fresh_air_fault_status 位域 → 9 个 bit 的中文名。
+# 与 Web DeviceCardsView.vue FRESH_AIR_FAULT_BITS、小程序 faultUtils.js
+# FRESH_AIR_FAULT_BITS 保持一致（bit 0 → bit 8）。
+# 若 MQTT 上报整体位域字段 fresh_air_fault_status，fault_consumer 按位展开为
+# fresh_air_fault_bit_<N> 后写入 fault_event，使 PLC 位域故障与舰桥 popcount 同口径。
+FRESH_AIR_FAULT_BIT_LABELS: tuple = (
+    '风机状态故障',
+    '出风温度异常状态',
+    '进风温度传感器故障',
+    '回水温度传感器故障',
+    '进水温度传感器故障',
+    '加湿器故障',
+    '新风水阀故障',
+    '防冻保护故障',
+    '出风温度传感器故障',
+)
+
 # error_<N>（与 fault_utils._ERROR_N_PATTERN 一致，此处独立定义避免循环引用）
 _ERROR_N_PATTERN = re.compile(r'^error_\d+$')
 

@@ -32,6 +32,10 @@ import {
   SYSTEM_SUB_KEYS,
   SUB_TYPE_TO_ID,
   ID_TO_SUB_TYPE,
+  sameDeviceSn,
+  filterFaultEventsByCompartment,
+  buildFreshAirRealtimeFaultEvents,
+  mergeFaultEvents,
 } from '@/utils/faultUtils'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -110,6 +114,7 @@ function _collectParamsForSubType(realtimeParams, targetSubType, enriched = fals
             displayName: p.display_name || p.param_name,
             value: p.value,
             isStale: p.is_stale || false,
+            collectedAt: p.collected_at || '',
           })
         } else {
           result.push({ paramName: p.param_name, value: p.value })
@@ -251,7 +256,7 @@ function aggregateRoomStatus(structure, faultEvents, condensationCount) {
     const devName = dev.device_name || '主温控'
     const devSn = dev.device_sn || dev.sn || ''
     // Match fault events by device_sn for this thermostat
-    const devEvents = (faultEvents || []).filter((ev) => ev.device_sn === devSn)
+    const devEvents = (faultEvents || []).filter((ev) => sameDeviceSn(ev.device_sn, devSn))
 
     let status = 'normal'
     let faultCount = 0
@@ -312,55 +317,6 @@ function computeOverallStatus(subsystems, rooms) {
   if (worst === 'fault') return { level: 'fault', text: '告警' }
   if (worst === 'warning') return { level: 'warning', text: '预警' }
   return { level: 'normal', text: '正常' }
-}
-
-/**
- * Filter fault events to match a specific compartment.
- *
- * v1.12.0: Subsystem matching changed from product_code to
- * device_sn-based matching via structure.system_devices (sub_type).
- * Room matching unchanged.
- *
- * @param {Array} faultEvents — all active faults
- * @param {object} compartment — { type, id, name }
- * @param {object} structureCache — _structureCache reference for device_sn lookup
- * @returns {Array}
- */
-function filterFaultEventsByCompartment(faultEvents, compartment, structureCache) {
-  if (!compartment || !faultEvents?.length) return []
-
-  if (compartment.type === 'subsystem') {
-    const targetSubType = ID_TO_SUB_TYPE[compartment.id]
-    if (!targetSubType) return []
-
-    // Get device_sns for this sub_type from structure cache
-    const systemDevices = structureCache?.system_devices || []
-    const matchingSns = new Set(
-      systemDevices
-        .filter((d) => d.sub_type === targetSubType)
-        .map((d) => d.device_sn || d.sn || '')
-        .filter(Boolean)
-    )
-
-    // If we have matching device_sns, filter by them; otherwise return empty
-    if (matchingSns.size > 0) {
-      return faultEvents.filter((ev) => matchingSns.has(ev.device_sn))
-    }
-    return []
-  }
-
-  if (compartment.type === 'room') {
-    // v1.13.0: thermostat pseudo-rooms match by device_sn, not room_name
-    if (compartment._thermostatDeviceSn) {
-      return faultEvents.filter((ev) => ev.device_sn === compartment._thermostatDeviceSn)
-    }
-    return faultEvents.filter((ev) =>
-      ev.room_name === compartment.name ||
-      ev.room_name === compartment.id
-    )
-  }
-
-  return []
 }
 
 // ── Composable ─────────────────────────────────────────────────
@@ -689,7 +645,7 @@ export function useBridgeDashboard() {
       if (compartment._thermostatDeviceSn) {
         const systemDevices = structure.system_devices || []
         const dev = systemDevices.find((d) =>
-          (d.device_sn || d.sn) === compartment._thermostatDeviceSn
+          sameDeviceSn(d.device_sn ?? d.sn, compartment._thermostatDeviceSn)
         )
         if (dev) {
           const subType = dev.sub_type || 'main_thermostat'
@@ -751,6 +707,7 @@ export function useBridgeDashboard() {
         displayName: p.displayName,
         value: p.value,
         isFault: isFaultValueForDisplay(p.tag, p.value),
+        collectedAt: p.collectedAt || '',
       }
 
       // v1.12.0: Expand fresh_air_fault_status bit field (ADR-007)
@@ -772,23 +729,35 @@ export function useBridgeDashboard() {
 
     // v1.12.0: type detection — SubsystemState no longer has productCode.
     // Use ID_TO_SUB_TYPE mapping to detect subsystem compartments by id.
+    const compType = compartment.type || (ID_TO_SUB_TYPE[compartment.id] ? 'subsystem' : 'room')
+
+    const mqttEvents = events.map((ev) => ({
+      id: ev.id,
+      deviceName: ev.device_name || '未知设备',
+      deviceTypeLabel: ev.device_type_label || '',
+      severity: ev.severity === 'error' ? 'fault' : (ev.severity || 'warning'),
+      faultType: ev.fault_type || '',
+      faultCode: ev.fault_code || '',
+      faultMessage: ev.fault_message || '',
+      firstSeenAt: ev.first_seen_at || '',
+      roomName: ev.room_name || '',
+    }))
+
+    // v1.15.x: fresh_air_fault_status 是 PLC 位域，不进入 fault_event。
+    // 抽屉按位置 1 的 bit 合成实时故障条目，与模块卡片 popcount 同口径；
+    // 若 MQTT 也上报了同一位（fresh_air_fault_bit_N），按 faultCode 去重。
+    const plcEvents = compType === 'subsystem' && ID_TO_SUB_TYPE[compartment.id] === 'fresh_air'
+      ? buildFreshAirRealtimeFaultEvents(params.find((b) => b.subType === 'fresh_air'))
+      : []
+
     state.activeCompartment = {
-      type: compartment.type || (ID_TO_SUB_TYPE[compartment.id] ? 'subsystem' : 'room'),
+      type: compType,
       id: compartment.id,
       name: compartment.name,
       status: compartment.status,
       // v1.13.0: carry thermostat device_sn for drawer param lookup
       _thermostatDeviceSn: compartment._thermostatDeviceSn || undefined,
-      faultEvents: events.map((ev) => ({
-        id: ev.id,
-        deviceName: ev.device_name || '未知设备',
-        deviceTypeLabel: ev.device_type_label || '',
-        severity: ev.severity === 'error' ? 'fault' : (ev.severity || 'warning'),
-        faultType: ev.fault_type || '',
-        faultMessage: ev.fault_message || '',
-        firstSeenAt: ev.first_seen_at || '',
-        roomName: ev.room_name || '',
-      })),
+      faultEvents: mergeFaultEvents(mqttEvents, plcEvents),
     }
     state.compartmentParams = params
   }
